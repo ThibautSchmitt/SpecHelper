@@ -4,7 +4,32 @@ Contributions to SpecHelper-owned code are offered under the repository's MIT li
 
 ## Setup
 
-The [README](README.md) describes Docker Compose and local development. The runtime requires Linux, Bubblewrap and namespaces. Use Docker Desktop on macOS/Windows or Docker Engine on Linux. Native development assumes Unix. Deterministic tests require no AI account.
+The [README](README.md) describes Docker Compose installation and product usage.
+The runtime requires Linux, Bubblewrap and namespaces. Use Docker Desktop on
+macOS/Windows or Docker Engine on Linux. Native development assumes Unix, Python
+3.12+, Node.js 22+ and `uv`. Deterministic tests require no AI account.
+
+Run each command block below from the repository root unless stated otherwise.
+Start the local API in one terminal:
+
+```sh
+uv sync --project backend --python 3.12 --frozen
+uv run --project backend python backend/manage.py migrate
+uv run --project backend python backend/manage.py runserver 127.0.0.1:8018
+```
+
+Set `BACKEND_URL=http://127.0.0.1:8018` in `frontend/.env.local`, then start the
+frontend in another terminal:
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+A local worker needs `RUNTIME_URL`, `RUNTIME_TOKEN` and a `SPECHELPER_DATA_DIR`
+consistent with the runtime. Compose is recommended for exercising actual
+isolation. See [implementation and runtime checks](docs/implementation.md).
 
 ## Checks
 
@@ -26,7 +51,17 @@ npm run typecheck
 npx playwright install chromium
 ```
 
-For browser tests, start the local API and frontend described in the README, then run `npm run test:e2e`. Playwright Chromium is the default; `PLAYWRIGHT_CHANNEL=chrome` selects installed Chrome. Tests use local database fixtures. Never run them against the Docker deployment connected to team accounts.
+For browser tests, start the local API and frontend described above, then run
+`npm run test:e2e` from `frontend`. Playwright Chromium is the default;
+`PLAYWRIGHT_CHANNEL=chrome` selects installed Chrome. The default frontend URL
+is `http://localhost:3000`; use `E2E_BASE_URL` for another address and add its
+origin to the API's `TRUSTED_ORIGINS` when using a different port.
+
+Tests create and remove `[E2E]` fixtures in the default local development database
+and use controlled AI results. Never run them against the Docker deployment
+connected to team accounts. For Linux isolation, provider adapters, database
+capabilities and process-reaping checks, use the commands under
+[runtime checks](docs/implementation.md#runtime-checks).
 
 ## Proposed changes
 

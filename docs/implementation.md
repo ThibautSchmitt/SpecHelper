@@ -1,8 +1,89 @@
+# Architecture and implementation notes
+
+This document describes runtime behavior, operations and deterministic runtime checks.
+Start with the [README](../README.md) for installation and usage,
+[CONTRIBUTING.md](../CONTRIBUTING.md) for local development, and
+[SECURITY.md](../SECURITY.md) for deployment access controls.
+
+## Services and runtime
+
+| Service | Purpose |
+|---|---|
+| frontend | Next.js / React / TypeScript, shadcn/ui components and Tailwind tokens |
+| backend | Django / Django Ninja, configuration and business API |
+| worker | Persistent PostgreSQL queue, synchronization and analyses |
+| database | Application data, separate from analyzed business databases |
+| agent-runtime | Codex CLI / Claude Code, isolated on Linux with Bubblewrap |
+
+One Git mirror per repository supplies detached worktrees. Each repository/environment has a fixed worktree location; older layouts are normalized at the next synchronization. Environment and request worktrees are separate. Launching a request freezes its SHAs and database selection; later synchronization preserves its context and baseline.
+
+An agent receives only its read-only request workspace, attachments and Git cache, plus its own writable session directory. It cannot access application data, GitHub credentials, PostgreSQL credentials or other requests. AI credentials are persisted separately. The runtime needs `SYS_ADMIN` and a compatible seccomp policy to create namespaces; the agent then drops all capabilities. The service uses `init: true` to reap orphaned Bubblewrap children and prevent process exhaustion. Isolation failure stops execution.
+
+Bubblewrap provides the effective sandbox. Codex's internal sandbox is disabled inside that isolation to avoid conflicting namespaces. Linux still mounts sources, cache and attachments read-only. The default Codex model is GPT-6-Luna, configurable through `CODEX_MODEL`. Understanding uses low reasoning effort and technical analysis medium effort. These settings remain internal; users simply connect their ChatGPT account.
+
+Compose networks separate the runtime from the frontend, backend and application database. The worker reaches it through an internal control network. An authenticated relay lets the backend manage connections without joining the runtime network. Internal keys are generated automatically and stored in protected volumes. The agent can reach its AI provider and, when configured, the business database through filtered temporary access. Preserve these boundaries when adapting deployment.
+
+The optional business database is accessed through a request-scoped temporary capability, PostgreSQL parser, function allowlist and read-only transaction. Owner, superuser, write-enabled and object-creation roles are rejected. Responses are limited to 200 rows and queries to five seconds. Credentials never enter prompts. A database baseline identifies the connection; it is not a data snapshot.
+
+Allowed attachments are PNG/JPEG/GIF/WebP, PDF, DOCX, TXT, Markdown, CSV, JSON and LOG, up to 25 MB each and 20 files per request. Random identifiers isolate files in request-specific directories. Their contents are not executed.
+
+Each analysis has a separate supervisor: the full job stops after 295 seconds, orchestration is bounded to 285 seconds and agent calls use the remaining budget. Errors and interruptions appear in the request and job log. Worker failures are detected on restart.
+
+The pipeline selects useful roles: Requirement Analyst, Code Analyst and Ticket / Goal Writer for simple requests; Attachment Analyst for files and Reviewer for standard, complex or database-backed requests. Code/Writer or Reviewer/Writer may share a structured terminal invocation. Only one additional targeted verification is allowed, with at most ten invocations and two provider attempts per job execution, including format repair. Exchanges are typed and persisted; agents cannot change application workflow. Internal skills cover code navigation, Git history, impacts, minimal changes, attachments, read-only PostgreSQL and Tryton/Coog conventions. Artifacts contain conclusions, never a chain of thought.
+
+The default single worker runs jobs sequentially. Different browsers can submit different requests to the persistent queue; concurrent operations on the same request are guarded. Shared visibility does not provide per-user authentication or privacy.
+
+Git network operations have a ten-minute timeout each. Full synchronization has a separate twenty-minute limit; an initial large download can take longer than an analysis.
+
+## Operations
+
+```sh
+docker compose ps
+docker compose logs --tail=100 backend worker agent-runtime
+docker compose down
+```
+
+`down` preserves volumes. Back up the application database, `app-data` (including its encryption key), uploads, AI sessions and credentials together. Keep mirrors and worktrees for historical baselines. Do not use `down -v` on an instance you need to preserve.
+
+Volume names use the `spechelper` prefix. Automatic source modification, PR creation, business writes and multi-tenant management are not implemented. Infrastructure controls access to the entire instance.
+
+## Runtime checks
+
+These commands exercise Linux isolation and the complete workflow without an AI account.
+Run them from the repository root.
+
+```sh
+docker compose run --rm --no-deps agent-runtime python -m runtime.smoke
+docker compose run --rm --no-deps agent-runtime python -m runtime.workflow_smoke
+docker compose run --rm --no-deps agent-runtime python -m runtime.workflow_smoke claude
+docker compose run --build --rm --no-deps agent-runtime python -m runtime.process_smoke
+```
+
+The workflow test uses a deterministic terminal agent that reads a real worktree and verifies clarification, session resumption and SHA exports. Its duration measures application behavior, not real AI speed. `process_smoke` performs 300 isolation checks and verifies that zombies do not accumulate. Keep the Compose service's init process and process limit; manual Docker invocations need `--init --pids-limit 256`.
+
+To also check isolated agent → temporary capability → PostgreSQL access, use an **already available disposable** database reachable from the runtime's `agent-egress` network:
+
+```sh
+docker compose run --rm --no-deps \
+  -e 'SPECHELPER_SMOKE_POSTGRES_DSN=host=test-server dbname=postgres user=postgres password=test-password' \
+  agent-runtime python -m runtime.database_smoke codex
+```
+
+Replace `codex` with `claude` to exercise the other adapter. This test creates and removes a schema and role; never target a database you need to preserve. It checks reads, rejected writes, password exclusion from prompts and capability expiration.
+
+The [v1.2 audit](acceptance-v1.2.md) distinguishes deterministic checks from
+connected-account validation. [v1.1](acceptance-v1.1.md) and
+[v1.0](acceptance.md) retain historical evidence. Public reports are anonymized,
+dated tests, not connections or latency guarantees supplied with a new installation.
+Current language behavior and checks are described in [localization](localization.md).
+
+---
+
 > Public version: session/request identifiers and instance references are anonymized. Original evidence remains local. Working PDF briefs are not distributed in this repository.
 
-> Historical v1.0 implementation notes. Current behavior, migrations and evidence are documented in the [v1.2 audit](acceptance-v1.2.md), [v1.1 audit](acceptance-v1.1.md) and README.
+> Historical v1.0 implementation notes. Current behavior, migrations and evidence are documented in the [v1.2 audit](acceptance-v1.2.md), [v1.1 audit](acceptance-v1.1.md) and the [README](../README.md).
 
-# v1.0 specification tracking
+## Historical v1.0 specification tracking
 
 Source: `SpecHelper_Cahier_des_charges_v1_0.pdf` (29 sections).
 
@@ -26,7 +107,7 @@ This document tracks the full scope. A requirement is accepted only after verifi
 
 An administrator configures real GitHub/AI accounts. Deterministic tests use controlled transports and a test agent; they do not establish a real model's analysis quality.
 
-## Checks performed on October 20, 2026
+### Checks performed on October 20, 2026
 
 - 62 backend tests passed with Django using actual PostgreSQL 17 in a disposable container. `backend/tests/test_admin.py` covers encrypted GitHub credentials, discovery and pagination. `test_git.py` uses real Git, two branches and one mirror; resynchronization preserves request workspace and SHAs. `test_postgres_integration.py` verifies read-only roles/transactions and rejection of superusers, table writes and column writes.
 - `test_workflow.py` covers isolated uploads, executable rejection, baselines, answers, session identity, export and 295-second supervision. `test_runtime.py` covers internal authentication, workspace path confinement, explicit session resumption, agent termination and database capability expiration.
@@ -40,7 +121,7 @@ An administrator configures real GitHub/AI accounts. Deterministic tests use con
 - Token-free connections: guided GitHub/ChatGPT/Claude dialogs, temporary code or Claude confirmation, progress and cancellation. Six browser scenarios use controlled responses. A disposable Compose deployment started the three real CLIs through the public API, received official authorization links on github.com, auth.openai.com and claude.com, then canceled each attempt.
 - Worker control relay is authenticated and restricted to connection/health operations. Internal secrets are generated in protected volumes outside the sandbox. Tests cover the relay, concurrent secret generation and credential renewal without overwriting a newer login.
 
-## External validation limits
+### External validation limits
 
 The user connected GitHub and ChatGPT. Discovery, a public project and both private projects in the existing environment were synchronized with those accounts. Real analyses with/without attachments produced tickets after clarification and session resumption; sources, sections, exports and timings are checked in the [detailed audit](acceptance.md).
 
