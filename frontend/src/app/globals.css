@@ -1,0 +1,122 @@
+@import "tailwindcss";
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--primary-ink, var(--primary));
+}
+:root {
+  --background: #f7f8fa;
+  --foreground: #172033;
+  --primary: #2563eb;
+  --primary-foreground: #fff;
+  --card: #fff;
+  --muted: #eef1f5;
+  --muted-foreground: #5c6678;
+  --border: #dce1e9;
+}
+* {
+  border-color: var(--border);
+}
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 15px;
+}
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+a {
+  text-underline-offset: 3px;
+}
+select {
+  width: 100%;
+  height: 40px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 7px;
+}
+h1 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+}
+h2 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+}
+h3 {
+  font-weight: 600;
+}
+.field {
+  margin-top: 20px;
+}
+.muted {
+  color: var(--muted-foreground);
+}
+.text-primary {
+  color: var(--primary-ink, var(--primary));
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--primary) 10%, white);
+  color: var(--primary-ink, var(--primary));
+}
+.badge[data-state="ERROR"] {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+.badge[data-state="READY"],
+.badge[data-state="CONNECTED"] {
+  color: #166534;
+  background: #edf9f0;
+}
+.ticket-section {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

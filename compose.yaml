@@ -1,0 +1,113 @@
+name: spechelper
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  environment: &backend-env
+    DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
+    POSTGRES_HOST: database
+    POSTGRES_DB: spechelper
+    POSTGRES_USER: spechelper
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spechelper-local}
+    SPECHELPER_DATA_DIR: /data
+    RUNTIME_URL: http://worker:8091
+    RUNTIME_TOKEN: ${RUNTIME_TOKEN:-}
+    CONTROL_TOKEN_FILE: /control/runtime.token
+    TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+  volumes:
+    - runtime-control-secrets:/control
+    - app-data:/data
+    - git-cache:/data/git-cache
+    - environment-workspaces:/data/environments
+    - analysis-workspaces:/data/analysis-workspaces
+    - uploads:/data/requests
+  networks: [app, backend-egress, runtime-control]
+  restart: unless-stopped
+services:
+  database:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: spechelper
+      POSTGRES_USER: spechelper
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spechelper-local}
+    volumes: [database-data:/var/lib/postgresql/data]
+    networks: [app]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U spechelper -d spechelper]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  backend:
+    <<: *backend
+    networks: [app, backend-egress]
+    command: [sh, -c, 'python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60']
+    depends_on:
+      database: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:8000/api/health")']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  worker:
+    <<: *backend
+    environment:
+      <<: *backend-env
+      RUNTIME_URL: http://agent-runtime:8090
+      WORKER_GATEWAY: "1"
+    command: [python, manage.py, worker]
+    depends_on:
+      backend: {condition: service_healthy}
+  agent-runtime:
+    # Bubblewrap creates namespace children; reap orphaned children between calls.
+    init: true
+    mem_limit: 2g
+    pids_limit: 256
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+    environment:
+      RUNTIME_TOKEN: ${RUNTIME_TOKEN:-}
+      CONTROL_TOKEN_FILE: /control/runtime.token
+      SPECHELPER_DATA_DIR: /data
+      SESSION_DIR: /sessions
+      CODEX_MODEL: ${CODEX_MODEL:-gpt-6-luna}
+    # Bubblewrap creates a mount/PID namespace and drops all caps for the agent.
+    # The runtime has no Docker socket, application DB or GitHub credentials.
+    cap_add: [SYS_ADMIN]
+    security_opt: [seccomp:unconfined, apparmor:unconfined]
+    volumes:
+      - runtime-control-secrets:/control:ro
+      - git-cache:/data/git-cache:ro
+      - analysis-workspaces:/data/analysis-workspaces:ro
+      - uploads:/data/requests:ro
+      - ai-credentials:/credentials
+      - ai-sessions:/sessions
+    networks: [runtime-control, agent-egress]
+    restart: unless-stopped
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports: ["${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"]
+    networks: [app, web-ingress]
+    depends_on:
+      backend: {condition: service_healthy}
+    restart: unless-stopped
+networks:
+  web-ingress: {}
+  app: {internal: true}
+  runtime-control: {internal: true}
+  backend-egress: {}
+  agent-egress: {}
+volumes:
+  runtime-control-secrets: {}
+  database-data: {}
+  app-data: {}
+  git-cache: {}
+  environment-workspaces: {}
+  analysis-workspaces: {}
+  uploads: {}
+  ai-credentials: {}
+  ai-sessions: {}

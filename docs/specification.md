@@ -1,0 +1,41 @@
+# SpecHelper functional scope
+
+SpecHelper turns a business need into a concise ticket and detailed `goal.md` using actual project sources. It prepares implementation without modifying sources or business data and without automatically creating a ticket or pull request.
+
+## Team instance
+
+One installation serves a trusted team. Requests and connections are shared; there are no application accounts, per-user permissions or private spaces. Infrastructure controls remote access.
+
+## Administration
+
+- Guided GitHub, ChatGPT and Claude connections without personal access tokens.
+- Named environments with multiple Git repositories/branches and optional PostgreSQL.
+- Environment creation, editing, synchronization and confirmed deletion.
+- Instance name, short label, color, application language and permission to compare new requests.
+- No agent or skill settings exposed to users.
+
+**Application language** under **Admin → Instance** selects English or French for the interface and newly created analyses. French is the default, preserving existing installations. A request's language is frozen at creation and used for clarification, later discussion and generated artifacts. Switching the instance language does not translate or overwrite historical artifacts.
+
+The PostgreSQL test checks connectivity, a read and read-only permissions. It returns three simple statuses without database inventory or diagnostics.
+
+## Business workflow
+
+Users select an environment, describe their need and attach files. Understanding may ask questions before full exploration. Answers resume the same request. Source SHAs and the database connection are frozen in a baseline; the database baseline is not a data snapshot.
+
+Without comparison, an available assistant is selected automatically. Comparison runs two independent analyses followed by synthesis in a third context. Two providers are used when available; a single provider suffices with separate sessions. Exchanges are structured and bounded, without open-ended debate.
+
+## Results and discussion
+
+The ticket includes a title, brief context, need, expected behavior, solution, impacts, risks and acceptance criteria. The goal details business intent, existing behavior, required behavior, technical context, repositories/SHAs, files and symbols, constraints, implementation guidance, criteria, tests and useful attachments. It requires independent source verification before modification.
+
+Both artifacts can be copied and downloaded. Discussion after a result creates a new immutable version; previous versions remain available. `PARTIAL` indicates material uncertainty, distinct from technical failure.
+
+## Execution and security
+
+The queue is persistent and the default worker runs requests sequentially. Different browsers can submit different requests. Concurrent operations on the same request are guarded.
+
+Git mirrors are shared; analysis worktrees are isolated and immutable. The Linux runtime mounts sources, cache and files read-only and does not expose credentials to agents. Temporary PostgreSQL access is filtered and read-only. Instructions in sources or attachments are untrusted data.
+
+Orchestration is bounded to 285 seconds, with a 295-second supervisor limit per job, excluding queue/capacity waits. Latency targets depend on the provider. Quotas and reset times not officially exposed remain unknown.
+
+Out of scope: multi-tenant management, request-history search, automatic PRs, business writes, proprietary graphs and advanced scheduling.

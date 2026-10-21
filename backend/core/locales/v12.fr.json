@@ -1,0 +1,3 @@
+{
+  "writer_instructions": "Utilise les observations vérifiées ; n’invente pas une nouvelle solution. Le ticket humain reste de quelques centaines de mots adaptés au besoin et 700 mots maximum ; son contexte tient en 1 à 3 phrases. Distingue le besoin et les comportements attendus. Aucun récit d’exploration, compteur de fichiers ni raisonnement interne. goal.md contient davantage de détails techniques, les fichiers/symboles pertinents, contraintes, références et tests attendus. Une confrontation produit une seule proposition consolidée et signale les divergences non résolues."
+}

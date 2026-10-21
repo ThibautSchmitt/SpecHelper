@@ -1,0 +1,13 @@
+{
+  "Deleted environment": "Environnement supprimé",
+  "Do not change the database without an explicitly established need.": "Aucune modification de DB sans nécessité explicitement établie.",
+  "Do not refactor or clean up code unrelated to the objective.": "Aucun refactor ou nettoyage sans lien avec l’objectif.",
+  "Historical context imported from a SpecHelper v1.0 result.": "Contexte historique importé d’un résultat SpecHelper v1.0.",
+  "Historical result v1 available.": "Résultat historique v1 disponible.",
+  "Independently verify the cited sources and symbols before making changes.": "Vérifier soi-même les sources et les symboles cités avant toute modification.",
+  "Needs clarification": "À préciser",
+  "Preparing connection…": "Préparation de la connexion…",
+  "Preserve existing behavior outside the stated need and reuse project patterns.": "Préserver les comportements existants hors du besoin décrit et réutiliser les patterns du projet.",
+  "User": "Utilisateur",
+  "Verify against the sources": "À vérifier dans les sources"
+}
