@@ -9,7 +9,8 @@ import {
   useState,
   Fragment,
 } from "react";
-import { Bot, CheckCircle2, CircleHelp, Clock3, FileText, GitBranch, ListOrdered, LoaderCircle, MessageCircle, PauseCircle, Ticket, UserRound, XCircle } from "lucide-react";
+import { Activity, Bot, CheckCircle2, Clock3, GitBranch, LoaderCircle, PauseCircle, ShieldCheck, Ticket, UserRound, XCircle } from "lucide-react";
+import { AssistantLogo } from "@/components/assistant-logo";
 import { api, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -153,8 +154,9 @@ export function TaskQueue() {
   return (
     <div className="task-queue">
       <h2 className="flex items-center gap-2">
-        <Clock3 size={18} />
+        <Activity size={18} aria-hidden="true" />
         {t("Task queue")}
+        <span className="queue-total">{visible.length}</span>
       </h2>
       <p className="mt-2 text-xs muted">
         {t("Shared activity across all pages and browsers.")}
@@ -179,6 +181,15 @@ export function TaskQueue() {
           const group = groups.find((group) => group.state === state)!;
           const firstInGroup =
             jobIndex === 0 || stateOf(visible[jobIndex - 1]) !== state;
+          const assignment = job.assignments?.at(-1);
+          const previous = job.assignment_state === "previous" || (job.assignment_state !== "current" && state !== "RUNNING");
+          const assistant = assignment?.connection_name || (assignment?.agent === "claude" ? "Claude" : assignment?.agent === "codex" ? "ChatGPT / Codex" : t("Recorded AI"));
+          const role = assignment?.public_role || job.public_role;
+          const roleName = role ? t(roleLabels[role] || role) : "";
+          const RoleIcon = role === "verifier" ? ShieldCheck : UserRound;
+          const warning = job.warnings?.map((value) => t(warningMessage(value))).join(" · ");
+          const description = t(job.error || job.pause_reason || job.waiting_reason || (clarification ? "A business answer is needed." : job.stage || job.operation || job.kind));
+          const identifier = `#${String(job.id).replace(/^publication:/, "").slice(0, typeof job.id === "number" ? undefined : 8)}`;
           const elapsed = job.started_at
             ? Math.max(
                 0,
@@ -193,7 +204,7 @@ export function TaskQueue() {
             <Fragment key={job.id}>
               {firstInGroup && (
                 <li className="queue-group-heading" role="presentation">
-                  <h3><group.icon size={13} aria-hidden="true" />{t(group.label)} <span className="ml-auto">{visible.filter((item) => stateOf(item) === state).length}</span></h3>
+                  <h3 data-state={state}><group.icon size={14} aria-hidden="true" />{t(group.label)} ({visible.filter((item) => stateOf(item) === state).length})</h3>
                 </li>
               )}
               <li
@@ -203,121 +214,44 @@ export function TaskQueue() {
               >
                 <Link href={job.href || "/"} className="queue-card-content">
                   <div className="queue-card-title">
-                    {job.kind === "sync" ? <GitBranch size={15} aria-hidden="true" /> : job.kind === "publication" ? <Ticket size={15} aria-hidden="true" /> : job.workflow === "question" ? <CircleHelp size={15} aria-hidden="true" /> : <FileText size={15} aria-hidden="true" />}
-                    <strong className="break-words text-sm">
-                      {job.title || t("Request")}
-                    </strong>
-                    {job.environment_name && (
-                      <span
-                        className="queue-environment"
-                        title={job.environment_name}
-                      >
-                        {job.environment_name}
-                      </span>
-                    )}
+                    <strong title={job.title || t("Request")}>{job.title || t("Request")}</strong>
+                    <span className="queue-identifier" title={t("Task {id}", { id: String(job.id) })}>{identifier}</span>
                   </div>
-                  <div className="queue-card-meta">
+                  <div className="queue-card-status">
+                    <group.icon className={state === "RUNNING" ? "queue-running-icon" : ""} size={17} aria-hidden="true" />
                     <span className="badge" data-state={state}>
                       <group.icon size={11} aria-hidden="true" />
-                      {t(
-                        clarification
-                          ? "Needs clarification"
-                          : statuses[
-                              job.publication_status === "UNCERTAIN"
-                                ? "UNCERTAIN"
-                                : state
-                            ] || state,
-                      )}
+                      {t(job.publication_status === "UNCERTAIN" ? statuses.UNCERTAIN : state === "PAUSED" ? "Paused" : state === "ERROR" ? "Error" : group.label)}
                     </span>
-                    <span className="queue-identifier">{t("Task {id}", { id: String(job.id) })}</span>
-                    {job.workflow === "question" && <span>{t("Question")}</span>}
-                    {elapsed !== null && <span className="queue-duration"><Clock3 size={11} aria-hidden="true" />{t("Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(elapsed / 60), seconds: elapsed % 60 })}</span>}
+                    <span className="queue-context" title={[job.environment_name, job.stage, elapsed !== null ? t("Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(elapsed / 60), seconds: elapsed % 60 }) : ""].filter(Boolean).join(" · ")}>
+                      {job.status === "QUEUED" && job.queue_position != null
+                        ? t("Queue position: {position}", { position: job.queue_position })
+                        : clarification ? t("Your answer is needed") : job.environment_name || t(job.operation || job.kind)}
+                    </span>
                   </div>
-                  <p className="queue-operation">{t(job.operation || job.kind)}</p>
-                  {["sync", "publication"].includes(job.kind) && (
-                    <p className="mt-1 text-xs muted">
-                      {job.executor_name ||
-                        t(
-                          job.kind === "sync"
-                            ? "Git synchronization"
-                            : "Ticket connector",
-                        )}{" "}
-                      · {t("No AI execution")}
-                    </p>
-                  )}
-                  {!["sync", "publication"].includes(job.kind) && (
-                    <div className="queue-assistants">
-                      {job.assignments?.length ? (
-                        job.assignments.map((assignment, index) => (
-                          <p
-                            key={`${assignment.connection_id}-${index}`}
-                            className="queue-assignment"
-                          >
-                            <Bot size={13} aria-hidden="true" />
-                            {job.assignment_state === "previous" && (
-                              <>{t("Previous AI")}: </>
-                            )}
-                            {assignment.connection_name ||
-                              (assignment.agent === "claude"
-                                ? "Claude"
-                                : assignment.agent === "codex"
-                                  ? "ChatGPT / Codex"
-                                  : t("Recorded AI"))}{" "}
-                            ·{" "}
-                            {!assignment.model ||
-                            assignment.model === "runtime-default"
-                              ? t("Provider default model")
-                              : assignment.model}
-                            {(assignment.public_role || job.public_role) &&
-                              <span className="queue-role"><UserRound size={11} aria-hidden="true" />{t(roleLabels[assignment.public_role || job.public_role || ""] || assignment.public_role || job.public_role || "")}</span>}
-                          </p>
-                        ))
-                      ) : (
-                        <p className="queue-assignment"><Bot size={13} aria-hidden="true" />
-                          {t("AI not assigned")}
-                          {job.public_role &&
-                            ` · ${t(roleLabels[job.public_role] || job.public_role)}`}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {(job.stage || job.pause_reason || job.waiting_reason) && (
-                    <p className="queue-stage">
-                      <MessageCircle size={12} aria-hidden="true" />{t(
-                        job.pause_reason ||
-                          job.waiting_reason ||
-                          job.stage ||
-                          "",
-                      )}
-                    </p>
-                  )}
-                  {job.status === "QUEUED" && job.queue_position != null && (
-                    <p className="queue-position"><ListOrdered size={12} aria-hidden="true" />
-                      {t("Queue position: {position}", {
-                        position: job.queue_position,
-                      })}
-                    </p>
-                  )}
-                  {clarification && !job.pause_reason && (
-                    <p className="mt-1 text-xs muted">
-                      {t("A business answer is needed.")}
-                    </p>
-                  )}
-                  {job.error && (
-                    <p className="mt-2 break-words text-xs text-red-800">
-                      {t(job.error)}
-                    </p>
-                  )}
-                  {!!job.warnings?.length && (
-                    <ul
-                      className="mt-2 space-y-1 text-xs text-amber-800"
-                      aria-label={t("Analysis warnings")}
-                    >
-                      {job.warnings.map((warning, index) => (
-                        <li key={index}>{t(warningMessage(warning))}</li>
-                      ))}
-                    </ul>
-                  )}
+                  <div className="queue-assistants">
+                    {["sync", "publication"].includes(job.kind) ? (
+                      <span className="queue-executor" title={t("No AI execution")}>
+                        {job.kind === "sync" ? <GitBranch size={17} aria-hidden="true" /> : <Ticket size={17} aria-hidden="true" />}
+                        {job.executor_name || t(job.kind === "sync" ? "Git synchronization" : "Ticket connector")} · {t("No AI execution")}
+                      </span>
+                    ) : assignment ? (
+                      <>
+                        <span className="queue-assignment" data-assignment={previous ? "previous" : "current"} title={[previous ? t("Previous AI") : "", assistant, assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model"), roleName].filter(Boolean).join(" · ")}>
+                          <AssistantLogo agent={assignment.agent} />
+                          {previous && <span className={state === "RUNNING" ? "" : "sr-only"}>{t("Previous AI")}: </span>}
+                          <span className="queue-assistant-name">{assistant}</span>
+                        </span>
+                        {roleName && <span className="queue-role" title={roleName}><RoleIcon size={13} aria-hidden="true" /><span>{roleName}</span></span>}
+                      </>
+                    ) : (
+                      <>
+                        <span className="queue-assignment"><Bot size={16} aria-hidden="true" /><span className="queue-assistant-name">{t("AI not assigned")}</span></span>
+                        {roleName && <span className="queue-role" title={roleName}><RoleIcon size={13} aria-hidden="true" /><span>{roleName}</span></span>}
+                      </>
+                    )}
+                  </div>
+                  <p className="queue-description" data-error={!!job.error} title={[description, warning].filter(Boolean).join(" · ")}>{warning && !job.error ? `${warning} · ${description}` : description}</p>
                 </Link>
               </li>
             </Fragment>

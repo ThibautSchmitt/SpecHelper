@@ -1002,5 +1002,7 @@
   "Delete connector": "Supprimer le connecteur",
   "Delete this connector? Existing publication history prevents deletion.": "Supprimer ce connecteur ? Un historique de publication empêche sa suppression.",
   "Connector deleted.": "Connecteur supprimé.",
-  "AI connections": "Connexions IA"
+  "AI connections": "Connexions IA",
+  "Paused": "En pause",
+  "Error": "Erreur"
 }

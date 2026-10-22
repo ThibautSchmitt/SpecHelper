@@ -307,10 +307,11 @@ test("queue shows the active role and historical diversity warnings remain visib
   if (await open.isVisible()) await open.click();
   const queue = page.locator(".task-queue:visible");
   await expect(
-    queue.locator(".queue-assignment").filter({ hasText: "Team assistant · gpt-review" }),
+    queue.locator(".queue-assignment").filter({ hasText: "Team assistant" }),
   ).toBeVisible();
   await expect(queue.locator(".queue-role")).toHaveText("Counter-analyst");
-  await expect(queue.getByText(warning, { exact: true })).toBeVisible();
+  await expect(queue.locator(".queue-description")).toContainText(warning);
+  expect(await queue.locator(".queue-description").getAttribute("title")).toContain(warning);
   if (await page.getByRole("dialog", { name: "Task queue" }).isVisible())
     await page.keyboard.press("Escape");
   await page.goto(`/requests/${id}`);

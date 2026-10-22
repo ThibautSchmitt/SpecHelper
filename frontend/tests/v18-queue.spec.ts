@@ -100,10 +100,10 @@ for (const reduced of [false, true])
       "2",
     );
     await expect(
-      queue.getByRole("heading", { name: /^In progress(?:\s*\d+)?$/ }),
+      queue.getByRole("heading", { name: /^In progress(?:\s*\(\d+\))?$/ }),
     ).toBeVisible();
     await expect(
-      queue.getByRole("heading", { name: /^Needs clarification(?:\s*\d+)?$/ }),
+      queue.getByRole("heading", { name: /^Needs clarification(?:\s*\(\d+\))?$/ }),
     ).toBeVisible();
     await expect(queue.locator('[data-job="1"]')).toContainText(
       "AI not assigned",
@@ -111,9 +111,8 @@ for (const reduced of [false, true])
     await expect(queue.locator('[data-job="1"]')).not.toContainText(
       "Team Claude",
     );
-    await expect(queue.locator('[data-job="2"]')).toContainText(
-      "Team Claude · selected-model",
-    );
+    await expect(queue.locator('[data-job="2"] .queue-assignment')).toContainText("Team Claude");
+    await expect(queue.locator('[data-job="2"] .queue-assignment')).toHaveAttribute("title", /selected-model/);
     await expect(queue.locator('[data-job="2"] .queue-role')).toHaveText("Verifier");
     await expect(queue.locator('[data-job="2"]')).toContainText(
       "Focused project analysis",
@@ -129,7 +128,7 @@ for (const reduced of [false, true])
     await expect(queue.locator('[data-job="5"]')).toContainText(
       "The Git server is unavailable.",
     );
-    await expect(queue.locator('[data-job="2"]')).toContainText("Task 2");
+    await expect(queue.locator('[data-job="2"]')).toContainText("#2");
     values = [
       job(2, "DONE", {
         assignments: [assignment],
@@ -251,3 +250,38 @@ test("queue loading and transient errors preserve the last observed tasks", asyn
     0,
   );
 });
+
+
+for (const theme of ["light", "dark"])
+  test(`reference cards bound long text and identify the current assistant in ${theme}`, async ({ page }) => {
+    await setup(page);
+    await page.addInitScript((value) => localStorage.setItem("spechelper-theme", value), theme);
+    const title = "Review the approval workflow for archived contracts and their associated export notifications across all configured business environments";
+    const description = "Inspect the existing approval checks, identify the impacted notification handlers and verify the acceptance conditions before proposing a focused change. Preserve the complete explanation for the task detail, including all required conditions and uncertainties.";
+    await page.route("**/api/queue", (route) => route.fulfill({ json: [
+      job(42, "RUNNING", { title, stage: description, assignment_state: "current", assignments: [{ connection_id: 1, connection_name: "ChatGPT", agent: "codex", model: "recorded-model", public_role: "analyst" }] }),
+      job(43, "DONE", { assignment_state: "previous", assignments: [{ connection_id: 2, connection_name: "Claude", agent: "claude", model: "previous-model", public_role: "counter_analyst" }], stage: "Analysis completed" }),
+    ] }));
+    await page.goto("/questions");
+    const queue = await openQueue(page, test.info().project.name === "mobile");
+    const card = queue.locator('[data-job="42"]');
+    await expect(card.getByText("#42", { exact: true })).toBeVisible();
+    await expect(card.locator(".queue-card-title strong")).toHaveAttribute("title", title);
+    await expect(card.locator(".queue-description")).toHaveAttribute("title", description);
+    await expect(card.locator('[data-provider="codex"]')).toBeVisible();
+    await expect(card.locator(".queue-assignment")).toHaveText("ChatGPT");
+    await expect(card.locator(".queue-role")).toHaveText("Analyst");
+    await expect(card.locator(".queue-assignment")).toHaveAttribute("title", /recorded-model/);
+    await expect(queue.locator('[data-job="43"] [data-provider="claude"]')).toBeVisible();
+    await expect(queue.locator('[data-job="43"] [data-assignment="previous"]')).toHaveAttribute("title", /Previous AI/);
+    const bounds = await card.evaluate((node) => {
+      const title = node.querySelector("strong")!;
+      const description = node.querySelector(".queue-description")!;
+      return { titleHeight: title.clientHeight, titleLine: parseFloat(getComputedStyle(title).lineHeight), titleClipped: title.scrollWidth > title.clientWidth, descriptionHeight: description.clientHeight, descriptionLine: parseFloat(getComputedStyle(description).lineHeight), descriptionClipped: description.scrollHeight > description.clientHeight };
+    });
+    expect(bounds.titleHeight).toBeLessThanOrEqual(bounds.titleLine + 1);
+    expect(bounds.titleClipped).toBe(true);
+    expect(bounds.descriptionHeight).toBeLessThanOrEqual(bounds.descriptionLine * 2 + 1);
+    expect(bounds.descriptionClipped).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });

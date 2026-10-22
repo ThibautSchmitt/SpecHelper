@@ -61,9 +61,13 @@ its own selected category. Historical result content is never rewritten.
 The desktop task panel stays available across Requests, Questions, Tickets and
 Settings. Smaller viewports use the **Task queue** drawer. Groups show running
 work first, then queued work, clarification pauses, completed work and errors.
-Each card identifies the task, title, state, actual assistant and public role,
-current stage or pause/error reason. Earlier participants are labeled **Previous
-AI**; queued work is not shown as if an assistant were already executing it.
+Each card shows its title on one line beside a `#` task identifier, followed by
+its state, the actual assistant's official mark/name and a public-role badge.
+The current stage or pause/error reason uses at most two visible lines. Complete
+text remains available on hover and through the task detail link; provider model,
+environment and elapsed metadata stay in contextual tooltips. Marks are bundled
+locally and do not trigger provider asset requests. Earlier participants are marked **Previous AI** in contextual information;
+queued work is not shown as if an assistant were already executing it.
 Synchronization and ticket publication show their real non-AI executor instead.
 
 Clarification entries stay visible until the answer is supplied, even after other

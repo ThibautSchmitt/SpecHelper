@@ -55,3 +55,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Provider identification artwork
+
+The small provider marks in `assistant-logo.tsx` identify the assistant actually
+used for a task. The OpenAI Blossom is from the official
+[OpenAI logo archive](https://cdn.openai.com/brand/OpenAI-Logos-2025.zip), subject
+to [OpenAI brand guidelines](https://openai.com/brand/). The Claude symbol is from
+[Claude's official site icon](https://claude.ai/favicon.svg). These marks belong
+to OpenAI and Anthropic respectively; they are not covered by SpecHelper's MIT
+license and do not imply endorsement. Artwork is bundled locally; viewing a queue
+does not request assets from either provider.

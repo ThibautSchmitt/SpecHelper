@@ -10,7 +10,7 @@ are not rewritten. See [localization verification](docs/localization.md).
 
 ## Files reviewed
 
-The publication contains 250 project-owned files, including this report. Sources,
+The publication contains 251 project-owned files, including this report. Sources,
 tests, migrations, configuration and documentation were read; both dependency locks
 were parsed. Installed dependency/cache/build files and private runtime data
 are excluded; dependency license metadata was inspected separately.
@@ -48,9 +48,11 @@ GitHub Actions workflow are supplied without account-specific links.
 - Current backend suite: **443 passed** on disposable PostgreSQL 17, including
   business database integration and language migration tests.
 - Current frontend: production build and TypeScript checks pass.
-- Browser: **118 desktop/mobile scenarios pass** against isolated local fixtures,
+- The most recent complete browser suite passed **118 desktop/mobile scenarios** against isolated local fixtures,
   including both languages, persistence, errors and workflow exports. This run
-  used installed Chrome via the documented channel override.
+  used installed Chrome via the documented channel override. The subsequent queue-card
+  refinement passes 18 focused browser scenarios, including clipped long text,
+  provider artwork, public roles, state transitions and reduced motion.
 - A restored database migration and the deployed migration preserve all sixteen
   checked historical data fingerprints. Historical request and version languages are French.
 - Linux isolation, deterministic TypeScript/Codex/Claude comparison, versioned context, question/documentation/request handoff and Claude/PostgreSQL workflow checks pass. Connected v1.6 attempts were quota-blocked; no real-model analysis quality is claimed.

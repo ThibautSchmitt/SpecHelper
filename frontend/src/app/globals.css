@@ -1073,24 +1073,43 @@ summary:focus-visible {
   }
 }
 
-/* Compact task rows retain their content while matching the reference rail. */
-.queue-card-content { display: block; padding: 10px 12px; }
-.queue-card-title { display: flex; align-items: flex-start; gap: 7px; }
-.queue-card-title > svg { flex: 0 0 auto; margin-top: 2px; color: var(--muted-foreground); }
-.queue-card-title strong { flex: 1; min-width: 0; line-height: 1.4; }
-.queue-card-title .queue-environment { font-size: 10px; max-width: 75px; }
-.queue-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; color: var(--muted-foreground); font-size: 10px; }
-.queue-card-meta .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 10px; }
-.queue-duration, .queue-role, .queue-position { display: inline-flex; align-items: center; gap: 4px; }
-.queue-operation { margin-top: 5px; font-size: 10px; color: var(--muted-foreground); }
-.queue-assistants { margin-top: 5px; font-size: 11px; color: var(--muted-foreground); }
-.queue-assignment { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 5px; overflow-wrap: anywhere; }
-.queue-assignment > svg { flex: 0 0 auto; }
-.queue-role { padding: 1px 4px; background: var(--muted); border-radius: 3px; }
-.queue-card .queue-stage { display: flex; align-items: flex-start; gap: 5px; margin-top: 6px; color: var(--muted-foreground); font-size: 11px; line-height: 1.45; }
-.queue-stage svg { flex: 0 0 auto; margin-top: 2px; }
-.queue-position { margin-top: 4px; color: var(--muted-foreground); font-size: 10px; }
-.queue-group-heading h3 { display: flex; align-items: center; gap: 6px; }
+/* Reference-style queue cards: title, status, assistant/role, two-line detail. */
+.queue-card-content { display: block; padding: 12px 13px; }
+.queue-card-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.queue-card-title strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.5; }
+.queue-card-title .queue-identifier { flex: 0 0 auto; white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 10px; }
+.queue-card-status { display: flex; align-items: center; gap: 6px; margin-top: 7px; min-width: 0; color: var(--muted-foreground); }
+.queue-card-status > svg { flex: 0 0 auto; }
+.queue-card-status .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+.queue-context { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.queue-assistants { display: flex; align-items: center; gap: 6px; margin-top: 7px; min-width: 0; }
+.queue-assignment, .queue-role, .queue-executor { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--muted-foreground); font-size: 11px; line-height: 24px; }
+.queue-assignment, .queue-role { background: var(--muted); border-radius: 5px; padding: 0 6px; }
+.queue-assignment { max-width: 56%; flex-shrink: 1; }
+.queue-assistant-name, .queue-role > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-role { max-width: 44%; flex-shrink: 1; }
+.queue-assignment > svg, .queue-role > svg, .queue-executor > svg { flex: 0 0 auto; }
+.queue-executor { line-height: 1.5; }
+.queue-provider-logo { display: inline-block; width: 19px; height: 19px; flex: 0 0 auto; }
+.queue-provider-openai { width: 27px; height: 27px; margin: -2px -3px; color: #000; }
+[data-theme="dark"] .queue-provider-openai { color: #fff; }
+.queue-description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; margin-top: 6px; color: var(--muted-foreground); font-size: 11px; line-height: 1.5; }
+.queue-description[data-error="true"] { color: var(--danger); }
+.queue-group-heading { padding-top: 12px; padding-bottom: 3px; }
+.queue-group-heading h3 { display: flex; align-items: center; gap: 6px; color: var(--foreground); }
+.queue-group-heading h3[data-state="RUNNING"] > svg, .queue-card[data-state="RUNNING"] .queue-card-status > svg { color: var(--running); }
+.queue-group-heading h3[data-state="QUEUED"] > svg, .queue-card[data-state="QUEUED"] .queue-card-status > svg { color: var(--waiting); }
+.queue-group-heading h3[data-state="PAUSED"] > svg, .queue-card[data-state="PAUSED"] .queue-card-status > svg { color: var(--paused); }
+.queue-group-heading h3[data-state="DONE"] > svg, .queue-card[data-state="DONE"] .queue-card-status > svg { color: var(--success); }
+.queue-group-heading h3[data-state="ERROR"] > svg, .queue-card[data-state="ERROR"] .queue-card-status > svg { color: var(--danger); }
+.queue-card[data-state="RUNNING"] { background: color-mix(in srgb, var(--running) 3%, var(--card)); }
+.queue-card[data-state="PAUSED"] { background: color-mix(in srgb, var(--paused) 3%, var(--card)); }
+.queue-card[data-state="ERROR"] { background: color-mix(in srgb, var(--danger) 2%, var(--card)); }
+.queue-total { margin-left: auto; background: var(--muted); color: var(--muted-foreground); padding: 1px 7px; border-radius: 12px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.queue-running-icon { animation: queue-spin 1.5s linear infinite; }
+@keyframes queue-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .queue-running-icon { animation: none; } }
+@media (min-width: 1440px) { .dashboard { grid-template-columns: 204px minmax(0, 1fr) 380px; } }
 .connection-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .icon-action[data-slot="button"] { width: 36px; height: 36px; padding: 0; flex-shrink: 0; }
 .sidebar-admin[aria-current="page"] { background: var(--muted); color: var(--primary-ink, var(--primary)); }
