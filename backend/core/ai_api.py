@@ -13,6 +13,7 @@ from pydantic import ConfigDict, Field
 from .agent import runtime_call
 from .connections import ACTIVE, start
 from .models import AIConnection, AIIdentity, AISession, ConnectionAttempt
+from .orchestration_settings import Role, validate_connection_overrides
 from .providers import (
     ensure_connections,
     identity_for,
@@ -34,6 +35,9 @@ class ConfigurationIn(Schema):
     is_default: bool = False
     preference: int = Field(default=100, ge=0, le=2147483647)
     share_identity_from: int | None = None
+    roles: list[Role] = Field(default_factory=lambda: ["analyst", "counter_analyst", "verifier"])
+    additional_instructions: str = Field(default="", max_length=12000)
+    skill_overrides: dict[str, bool] = Field(default_factory=dict)
 
 
 class ConfigurationPatch(Schema):
@@ -46,6 +50,9 @@ class ConfigurationPatch(Schema):
     enabled: bool | None = None
     is_default: bool | None = None
     preference: int | None = Field(default=None, ge=0, le=2147483647)
+    roles: list[Role] | None = None
+    additional_instructions: str | None = Field(default=None, max_length=12000)
+    skill_overrides: dict[str, bool] | None = None
 
 
 def not_processing(connection):
@@ -64,6 +71,7 @@ def list_connections(request):
 @router.post("/ai-connections")
 @transaction.atomic
 def create_connection(request, payload: ConfigurationIn):
+    validate_connection_overrides(payload.roles, payload.skill_overrides)
     values = payload.model_dump(exclude={"share_identity_from"})
     values["name"] = values["name"].strip()
     if not values["name"]:
@@ -95,6 +103,7 @@ def edit_connection(request, connection_id: int, payload: ConfigurationPatch):
     value = get_object_or_404(AIConnection.objects.select_for_update(), pk=connection_id)
     not_processing(value)
     values = payload.model_dump(exclude_unset=True)
+    validate_connection_overrides(values.get("roles"), values.get("skill_overrides"))
     if any(item is None for item in values.values()):
         raise HttpError(422, "Configuration fields cannot be null")
     if "agent" in values and values.pop("agent") != value.agent:

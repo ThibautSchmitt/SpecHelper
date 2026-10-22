@@ -17,17 +17,45 @@ def assignments_for(job, run):
             "connection_name": step.get("connection_name", ""),
             "agent": step.get("provider", step.get("agent", "")),
             "model": step.get("model", ""),
+            "public_role": step.get("public_role", ""),
+            "model_family": step.get("model_family", ""),
         }
         for step in (run.steps if run else [])
         if step.get("connection_id") or step.get("connection_name")
     ]
     if not recorded:
         recorded = job.payload.get("assignments", [])
+    if job.status == "RUNNING" and run and run.orchestration.get("version") == "1.5":
+        active = [step for step in run.steps if step.get("status") == "RUNNING"]
+        if active:
+            step = active[-1]
+            recorded = [
+                {
+                    "connection_id": step.get("connection_id"),
+                    "connection_name": step.get("connection_name", ""),
+                    "agent": step.get("provider", ""),
+                    "model": step.get("model", ""),
+                    "public_role": step.get("public_role", ""),
+                    "model_family": step.get("model_family", ""),
+                }
+            ]
+        elif job.payload.get("current_assignment"):
+            recorded = [job.payload["current_assignment"]]
     values, seen = [], set()
     for item in recorded:
         value = {
-            key: item.get(key) for key in ("connection_id", "connection_name", "agent", "model")
+            key: item.get(key)
+            for key in (
+                "connection_id",
+                "connection_name",
+                "agent",
+                "model",
+                "public_role",
+                "model_family",
+            )
         }
+        value["public_role"] = value["public_role"] or item.get("role", "")
+        value["model_family"] = value["model_family"] or item.get("family", "")
         key = tuple(value.values())
         if key not in seen:
             seen.add(key)
@@ -83,6 +111,19 @@ def snapshot():
                 "operation": "Analysis" if job.kind == "analysis" else "Synchronization",
                 "agent": (", ".join(provider_names) or None) if job.status != "QUEUED" else None,
                 "assignments": assignments,
+                "public_role": (
+                    run.orchestration.get("waiting_role")
+                    if job.status == "QUEUED"
+                    else run.orchestration.get("current_role")
+                )
+                if run
+                else None,
+                "warnings": run.warnings if run else [],
+                "waiting_reason": (
+                    run.orchestration.get("waiting_reason") or job.payload.get("waiting_reason", "")
+                )
+                if run and job.status == "QUEUED"
+                else "",
                 "connection_name": ", ".join(
                     dict.fromkeys(a["connection_name"] for a in assignments if a["connection_name"])
                 )
@@ -122,6 +163,9 @@ def snapshot():
                 "operation": "Ticket publication",
                 "agent": None,
                 "assignments": [],
+                "public_role": None,
+                "warnings": [],
+                "waiting_reason": "",
                 "connection_name": None,
                 "model": None,
                 "request_status": None,

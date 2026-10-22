@@ -18,6 +18,7 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - Business clarification before technical analysis
 - Screenshots and document attachments
 - Optional comparison of independent AI analyses, with one or two connected assistants
+- Configurable analyst/counter-analyst roles and optional independent verification
 - Concise tickets and detailed `goal.md` files
 - Continued discussion with immutable, versioned results
 - Persistent request queue
@@ -139,7 +140,8 @@ Further documentation:
 - [English and French](docs/localization.md)
 - [Ticket publication and connectors](docs/ticketing.md)
 - [Git sources, AI configurations and availability](docs/connections.md)
-- [v1.4 acceptance report](docs/acceptance-v1.4.md)
+- [Analysis roles and verification](docs/orchestration.md)
+- [v1.5 acceptance report](docs/acceptance-v1.5.md)
 
 ## License
 

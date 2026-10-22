@@ -265,6 +265,7 @@ test("named AI configs share quota windows and targeted authentication never cha
     .getByRole("dialog", { name: "Sign in with ChatGPT" })
     .getByRole("button", { name: "Cancel", exact: true })
     .click();
+  await expect(page.getByRole("dialog", { name: "Sign in with ChatGPT" })).not.toBeVisible();
   let body: Record<string, unknown> | null = null;
   await page.route("**/api/ai-connections", (r) => {
     if (r.request().method() === "POST") body = r.request().postDataJSON();
@@ -274,11 +275,14 @@ test("named AI configs share quota windows and targeted authentication never cha
     .getByLabel("Connection name", { exact: true })
     .last()
     .fill("Second review");
+  await expect(page.locator("#ai-config-name")).toHaveValue("Second review");
   await page
     .getByLabel("Authentication identity", { exact: true })
     .selectOption("11");
+  await expect(page.locator("#ai-config-name")).toHaveValue("Second review");
   await page.getByLabel("Model", { exact: true }).fill("gpt-review");
   await page.getByLabel("Default connection when available").check();
+  await expect(page.locator("#ai-config-name")).toHaveValue("Second review");
   await page
     .getByRole("button", { name: "Add AI connection", exact: true })
     .click();

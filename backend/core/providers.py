@@ -200,6 +200,9 @@ def public(connection):
         availability = "QUOTA_EXHAUSTED"
     return {
         "id": connection.id,
+        "roles": connection.roles,
+        "additional_instructions": connection.additional_instructions,
+        "skill_overrides": connection.skill_overrides,
         "name": connection.name or connection.agent,
         "agent": connection.agent,
         "model": connection.model,
@@ -380,11 +383,49 @@ def bind_session(request, connection, role="primary"):
 @transaction.atomic
 def reserve_for_job(job, exclude=()):
     request = Request.objects.select_for_update().get(pk=job.target)
+    if request.confrontation:
+        # The next public role is selected by the engine at its actual start,
+        # rather than reserving N connections for the entire request.
+        from .models import AISession, AnalysisRun
+        from .orchestration import RoleUnavailable, select_connection
+        from .orchestration_settings import get_config
+
+        run = AnalysisRun.objects.filter(job=job).first()
+        state = run.orchestration if run else {}
+        config = state.get("config") or get_config()
+        if (
+            state.get("deadline_at")
+            and datetime.fromisoformat(state["deadline_at"]) <= timezone.now()
+        ):
+            return True
+        role = state.get("waiting_role") or state.get("current_role") or "analyst"
+        order = ("analyst", "counter_analyst", "verifier")
+        prior = [
+            AISession.objects.get(pk=state["sessions"][r])
+            for r in order[: order.index(role)]
+            if r in state.get("sessions", {})
+        ]
+        try:
+            select_connection(
+                role,
+                config,
+                prior[-1].family_snapshot if prior else None,
+                [s.family_snapshot for s in prior],
+                exclude,
+            )
+        except RoleUnavailable as wait:
+            job.payload = {**job.payload, "waiting_reason": wait.reason, "current_role": role}
+            job.save(update_fields=["payload"])
+            return False
+        return True
     list(AIIdentity.objects.select_for_update().order_by("id"))
     list(AIConnection.objects.select_for_update().order_by("id"))
     choices = candidates(
         exclude=exclude, preferred=request.session.connection_id if request.session else None
     )
+    if not choices:
+        return False
+    choices = [c for c in choices if "analyst" in c.roles]
     if not choices:
         return False
     primary = choices[0]

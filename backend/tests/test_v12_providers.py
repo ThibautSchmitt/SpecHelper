@@ -159,6 +159,15 @@ def test_confrontation_uses_independent_contexts_and_resumes_every_role(
         elif role == "independent":
             assert "PRIMARY-PRIVATE-CURRENT-EVIDENCE" not in payload["prompt"]
             output = {**code_report, "evidence": ["SECONDARY-INDEPENDENT-EVIDENCE"]}
+        elif role == "reviewer_writer":
+            assert "PRIMARY-PRIVATE-CURRENT-EVIDENCE" in payload["prompt"]
+            assert "SECONDARY-INDEPENDENT-EVIDENCE" in payload["prompt"]
+            output = {
+                "status": "APPROVED",
+                "summary": "Independent evidence compared",
+                "issues": [],
+                "verification": None,
+            }
         else:
             assert role == "synthesis"
             assert "PRIMARY-PRIVATE-CURRENT-EVIDENCE" in payload["prompt"]
@@ -185,19 +194,28 @@ def test_confrontation_uses_independent_contexts_and_resumes_every_role(
         perform_job(claim_job())
     request.refresh_from_db()
     assert request.status == "READY", request.error
-    assert request.session.runtime_id == primary
+    assert request.session.runtime_id != primary
     assert request.versions.count() == 2
     assert request.versions.get(number=1).artifacts.get(name="goal.md").content == first_goal
-    assert len(sessions) == 3
-    assert request.ai_sessions.count() == 3
-    assert [p["agent"] for p in seen[:4]] == [
+    assert len(sessions) == 6
+    assert request.ai_sessions.exclude(public_role="").count() == 6
+    assert [p["agent"] for p in seen[:5]] == [
         "codex",
         "codex",
         "claude" if two_providers else "codex",
+        "claude" if two_providers else "codex",
         "codex",
     ]
-    assert seen[1]["context_id"] != seen[2]["context_id"] != seen[3]["context_id"]
-    assert [p["profile"] for p in seen[:4]] == ["requirement", "code", "independent", "synthesis"]
+    assert seen[1]["context_id"] != seen[2]["context_id"] != seen[4]["context_id"]
+    assert seen[2]["context_id"] == seen[3]["context_id"]
+    assert {p["context_id"] for p in seen[:5]}.isdisjoint({p["context_id"] for p in seen[5:]})
+    assert [p["profile"] for p in seen[:5]] == [
+        "requirement",
+        "code",
+        "independent",
+        "reviewer_writer",
+        "synthesis",
+    ]
 
 
 def test_runtime_classifies_only_failure_envelopes_without_leaking_output():

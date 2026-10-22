@@ -38,6 +38,12 @@ def main(database_config=None):
         from runtime import server
 
         call_command("migrate", verbosity=0)
+        if os.environ.get("SPECHELPER_SMOKE_VERIFIER") == "0":
+            from core.models import InstanceSettings
+
+            InstanceSettings.objects.update_or_create(
+                pk=1, defaults={"orchestration": {"verifier_enabled": False}}
+            )
         connection = connection_for(agent)
         connection.status, connection.availability = "CONNECTED", "AVAILABLE"
         connection.save()
@@ -87,13 +93,101 @@ def main(database_config=None):
             environment.save(update_fields=["database"])
         fixture = root / ("fake-" + agent)
         fixture.write_text(
-            "#!/usr/local/bin/python3\nimport json, pathlib, re, sys, uuid, urllib.error, urllib.request\nprompt = sys.stdin.read()\nassert not pathlib.Path('/session/contexts').exists(), 'Other contexts visible inside primary session'\nassert 'secret-password' not in prompt\ncapability = re.search('http://127[.]0[.]0[.]1:8090/query/[A-Za-z0-9_-]+', prompt)\nif capability:\n\n    def query(sql):\n        request = urllib.request.Request(capability[0], data=json.dumps({'sql': sql}).encode(), headers={'Content-Type': 'application/json'})\n        return json.load(urllib.request.urlopen(request, timeout=8))\n    rows = query('SELECT id, name FROM spechelper_fixture.contracts')['rows']\n    assert rows == [[1, 'Active']]\n    try:\n        query('DELETE FROM spechelper_fixture.contracts')\n    except urllib.error.HTTPError as error:\n        assert error.code == 422\n    else:\n        raise RuntimeError('Database writable')\n    pathlib.Path('/session/database-capability').write_text(capability[0])\nsource = pathlib.Path('/workspace/fixture/contracts/contracts.py')\nassert 'active_contracts' in source.read_text()\ntry:\n    source.write_text('FORBIDDEN')\nexcept OSError:\n    pass\nelse:\n    raise RuntimeError('Workspace writable')\nstate = pathlib.Path('/session/counter')\nstep = int(state.read_text()) if state.exists() else 0\nis_claude = '--output-format' in sys.argv\nsidfile = pathlib.Path('/session/fixture-session-id')\nif is_claude:\n    if step:\n        sid = sidfile.read_text()\n        assert '--resume' in sys.argv and sid in sys.argv\n    else:\n        sid = sys.argv[sys.argv.index('--session-id') + 1]\n        sidfile.write_text(sid)\nelse:\n    if step:\n        sid = sidfile.read_text()\n    else:\n        sid = str(uuid.uuid4())\n        sidfile.write_text(sid)\n    if step:\n        assert 'resume' in sys.argv and sid in sys.argv\nticket = {'title': 'Export active contracts', 'context': 'The team wants to share active contracts.', 'need': 'Share active records', 'expected_behavior': ['Active records only'], 'acceptance_criteria': ['The CSV excludes inactive contracts'], 'proposed_solution': 'Reuse active_contracts', 'technical_impact': ['fixture/contracts/contracts.py'], 'risks': ['Volume']}\ncode = {'current_behavior': 'Existing active_contracts function', 'proposed_solution': 'Reuse active_contracts', 'evidence': ['fixture/contracts/contracts.py : active_contracts'], 'impacts': ['Export'], 'database_impact': 'No migration', 'risks': [], 'tests_expected': ['Exclude an inactive contract'], 'uncertainties': []}\ngoal = {'business_intent': 'Share active records', 'current_behavior': 'Existing active_contracts function', 'required_behavior': ['Export available'], 'technical_context': ['Existing service'], 'relevant_files': ['fixture/contracts/contracts.py : active_contracts'], 'constraints': ['Read-only'], 'implementation_guidance': ['Reuse active_contracts'], 'acceptance_criteria': ['Exclude inactive records'], 'tests_expected': ['Active contract filtering'], 'useful_attachments': []}\nresult = {'status': 'READY', 'ticket': ticket, 'goal': goal, 'technical_summary': 'Reuse active_contracts'}\nif is_claude:\n    schema = json.loads(sys.argv[sys.argv.index('--json-schema') + 1])\nelse:\n    schema = json.loads(pathlib.Path(sys.argv[sys.argv.index('--output-schema') + 1]).read_text())\nname = schema.get('title')\nif name == 'RequirementAssessment':\n    output = {'status': 'NEEDS_CLARIFICATION' if step == 0 else 'READY_TO_ANALYZE', 'understanding': 'Active contract export', 'questions': [{'id': 'Q1', 'question': 'Active records only?'}] if step == 0 else [], 'ticket': None, 'complexity': 'simple'}\nelif name == 'CodeAndResult':\n    output = {'analysis': code, 'result': result}\nelif name == 'CodeReport':\n    if 'You do not have the other analysis' in prompt:\n        assert 'PRIMARY_PRIVATE_SENTINEL' not in prompt\n        code['evidence'] = ['fixture/contracts/contracts.py : SECONDARY_PRIVATE_SENTINEL']\n    else:\n        code['evidence'] = ['fixture/contracts/contracts.py : PRIMARY_PRIVATE_SENTINEL']\n    output = code\nelif name == 'SynthesisOutput':\n    assert 'PRIMARY_PRIVATE_SENTINEL' in prompt and 'SECONDARY_PRIVATE_SENTINEL' in prompt\n    output = {'agreements': ['Active records only'], 'divergences': [], 'result': result}\nelif name == 'ReviewAndResult':\n    output = {'review': {'status': 'APPROVED', 'summary': 'Sources verified', 'issues': [], 'verification': None}, 'result': result}\nelse:\n    raise RuntimeError('Unexpected schema ' + str(name))\npathlib.Path('/session/result.json').write_text(json.dumps(output))\nstate.write_text(str(step + 1))\nif is_claude:\n    print(json.dumps({'type': 'result', 'is_error': False, 'session_id': sid, 'structured_output': output, 'usage': {'input_tokens': 1, 'output_tokens': 1}}))\nelse:\n    print(json.dumps({'type': 'thread.started', 'thread_id': sid}))\n    print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 1, 'output_tokens': 1}}))\n"
+            r'''#!/usr/local/bin/python3
+import json, os, pathlib, re, sys, uuid, urllib.error, urllib.request
+prompt = sys.stdin.read()
+assert not pathlib.Path('/session/contexts').exists(), 'Other contexts visible inside primary session'
+assert 'secret-password' not in prompt
+capability = re.search('http://127[.]0[.]0[.]1:8090/query/[A-Za-z0-9_-]+', prompt)
+if capability:
+
+    def query(sql):
+        request = urllib.request.Request(capability[0], data=json.dumps({'sql': sql}).encode(), headers={'Content-Type': 'application/json'})
+        return json.load(urllib.request.urlopen(request, timeout=8))
+    rows = query('SELECT id, name FROM spechelper_fixture.contracts')['rows']
+    assert rows == [[1, 'Active']]
+    try:
+        query('DELETE FROM spechelper_fixture.contracts')
+    except urllib.error.HTTPError as error:
+        assert error.code == 422
+    else:
+        raise RuntimeError('Database writable')
+    pathlib.Path('/session/database-capability').write_text(capability[0])
+source = pathlib.Path('/workspace/fixture/contracts/contracts.py')
+assert 'active_contracts' in source.read_text()
+try:
+    source.write_text('FORBIDDEN')
+except OSError:
+    pass
+else:
+    raise RuntimeError('Workspace writable')
+state = pathlib.Path('/session/counter')
+step = int(state.read_text()) if state.exists() else 0
+is_claude = '--output-format' in sys.argv
+sidfile = pathlib.Path('/session/fixture-session-id')
+if is_claude:
+    if step:
+        sid = sidfile.read_text()
+        assert '--resume' in sys.argv and sid in sys.argv
+    else:
+        sid = sys.argv[sys.argv.index('--session-id') + 1]
+        sidfile.write_text(sid)
+else:
+    if step:
+        sid = sidfile.read_text()
+    else:
+        sid = str(uuid.uuid4())
+        sidfile.write_text(sid)
+    if step:
+        assert 'resume' in sys.argv and sid in sys.argv
+ticket = {'title': 'Export active contracts', 'context': 'The team wants to share active contracts.', 'need': 'Share active records', 'expected_behavior': ['Active records only'], 'acceptance_criteria': ['The CSV excludes inactive contracts'], 'proposed_solution': 'Reuse active_contracts', 'technical_impact': ['fixture/contracts/contracts.py'], 'risks': ['Volume']}
+code = {'current_behavior': 'Existing active_contracts function', 'proposed_solution': 'Reuse active_contracts', 'evidence': ['fixture/contracts/contracts.py : active_contracts'], 'impacts': ['Export'], 'database_impact': 'No migration', 'risks': [], 'tests_expected': ['Exclude an inactive contract'], 'uncertainties': []}
+goal = {'business_intent': 'Share active records', 'current_behavior': 'Existing active_contracts function', 'required_behavior': ['Export available'], 'technical_context': ['Existing service'], 'relevant_files': ['fixture/contracts/contracts.py : active_contracts'], 'constraints': ['Read-only'], 'implementation_guidance': ['Reuse active_contracts'], 'acceptance_criteria': ['Exclude inactive records'], 'tests_expected': ['Active contract filtering'], 'useful_attachments': []}
+result = {'status': 'READY', 'ticket': ticket, 'goal': goal, 'technical_summary': 'Reuse active_contracts'}
+if is_claude:
+    schema = json.loads(sys.argv[sys.argv.index('--json-schema') + 1])
+else:
+    schema = json.loads(pathlib.Path(sys.argv[sys.argv.index('--output-schema') + 1]).read_text())
+name = schema.get('title')
+if name == 'RequirementAssessment':
+    output = {'status': 'NEEDS_CLARIFICATION' if step == 0 and 'Yes, active records only' not in prompt else 'READY_TO_ANALYZE', 'understanding': 'Active contract export', 'questions': [{'id': 'Q1', 'question': 'Active records only?'}] if step == 0 and 'Yes, active records only' not in prompt else [], 'ticket': None, 'complexity': 'simple'}
+elif name == 'CodeAndResult':
+    output = {'analysis': code, 'result': result}
+elif name == 'CodeReport':
+    if os.environ.get('SPECHELPER_SMOKE_PROFILE') == 'independent':
+        assert 'PRIMARY_PRIVATE_SENTINEL' not in prompt
+        code['evidence'] = ['fixture/contracts/contracts.py : SECONDARY_PRIVATE_SENTINEL']
+    else:
+        code['evidence'] = ['fixture/contracts/contracts.py : PRIMARY_PRIVATE_SENTINEL']
+    output = code
+elif name == 'SynthesisOutput':
+    assert 'PRIMARY_PRIVATE_SENTINEL' in prompt and 'SECONDARY_PRIVATE_SENTINEL' in prompt
+    output = {'agreements': ['Active records only'], 'divergences': [], 'result': result}
+elif name == 'Review':
+    assert 'PRIMARY_PRIVATE_SENTINEL' in prompt and 'SECONDARY_PRIVATE_SENTINEL' in prompt
+    output = {'status': 'APPROVED', 'summary': 'Sources verified', 'issues': [], 'verification': None}
+elif name == 'ArtifactOutput':
+    output = result
+elif name == 'ReviewAndResult':
+    output = {'review': {'status': 'APPROVED', 'summary': 'Sources verified', 'issues': [], 'verification': None}, 'result': result}
+else:
+    raise RuntimeError('Unexpected schema ' + str(name))
+pathlib.Path('/session/result.json').write_text(json.dumps(output))
+state.write_text(str(step + 1))
+if is_claude:
+    print(json.dumps({'type': 'result', 'is_error': False, 'session_id': sid, 'structured_output': output, 'usage': {'input_tokens': 1, 'output_tokens': 1}}))
+else:
+    print(json.dumps({'type': 'thread.started', 'thread_id': sid}))
+    print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 1, 'output_tokens': 1}}))
+'''
         )
         fixture.chmod(0o755)
         real_sandbox = server.sandbox
+        current_call = {}
 
         def isolated_fixture(workspace, session, attachments):
             command = real_sandbox(workspace, session, attachments)
+            command += ["--setenv", "SPECHELPER_SMOKE_PROFILE", current_call["profile"]]
             for provider in ("codex", "claude") if dual_provider else (agent,):
                 command += ["--ro-bind", str(fixture), "/usr/local/bin/" + provider]
             return command
@@ -120,6 +214,7 @@ def main(database_config=None):
 
         def call_runtime(path, payload, **kwargs):
             assert path == "/run"
+            current_call["profile"] = payload["profile"]
             assert bool(payload["database"]) == (
                 bool(database_config)
                 and payload["profile"] in {"code", "code_writer", "independent"}
@@ -158,7 +253,11 @@ def main(database_config=None):
             perform_job(claim_job())
         request.refresh_from_db()
         assert request.status == "READY", request.error
-        assert request.session.runtime_id == session_id
+        if confrontation:
+            assert request.session.runtime_id != session_id
+        else:
+            assert request.session.runtime_id == session_id
+        resumed_session_id = request.session.runtime_id
         assert request.baseline[0]["sha"] == sha
         exported = client.get(f"/api/requests/{request_id}/markdown")
         assert exported.status_code == 200
@@ -179,18 +278,39 @@ def main(database_config=None):
             perform_job(claim_job())
         request.refresh_from_db()
         assert request.status == "READY", request.error
-        assert request.session.runtime_id == session_id
+        if confrontation:
+            assert request.session.runtime_id != resumed_session_id
+        else:
+            assert request.session.runtime_id == session_id
         assert request.versions.count() == 2
         if confrontation:
-            sessions = list(request.ai_sessions.order_by("role"))
-            assert len(sessions) == 3
-            assert len({s.runtime_id for s in sessions}) == 3
-            assert len({s.context_id for s in sessions}) == 3
-            assert len({s.agent for s in sessions}) == (2 if dual_provider else 1)
-            assert (
-                request.ai_sessions.get(role="primary").context_id
-                != request.ai_sessions.get(role="secondary").context_id
+            latest_run = request.analysis_runs.order_by("-number").first()
+            assignments = latest_run.orchestration["assignments"]
+            role_sessions = list(
+                request.ai_sessions.filter(pk__in=[item["session_id"] for item in assignments])
             )
+            expected = 3 if latest_run.orchestration["config"]["verifier_enabled"] else 2
+            assert len(role_sessions) == expected
+            assert len({s.runtime_id for s in role_sessions}) == expected
+            assert len({s.context_id for s in role_sessions}) == expected
+            assert len({s.agent for s in role_sessions}) == (2 if dual_provider else 1)
+            assert [item["role"] for item in assignments] == (
+                ["analyst", "counter_analyst", "verifier"]
+                if expected == 3
+                else ["analyst", "counter_analyst"]
+            )
+            families = [item["family"] for item in assignments]
+            if dual_provider:
+                assert families[0] != families[1]
+                if expected == 3:
+                    assert families[0] == families[2]
+            else:
+                assert len(set(families)) == 1
+                assert any(warning["code"] == "LIMITED_DIVERSITY" for warning in latest_run.warnings)
+            for role_session in role_sessions:
+                assert (
+                    server.SESSIONS / "contexts" / request_id / str(role_session.context_id)
+                ).is_dir()
         assert (
             client.get(f"/api/requests/{request_id}/versions/1/artifacts/goal.md").content
             == goal_export.content
@@ -208,7 +328,8 @@ def main(database_config=None):
                     "status": "PASS",
                     "acknowledgement_seconds": round(acknowledgement, 3),
                     "workflow_seconds": round(time.monotonic() - started, 3),
-                    "session_resumed": True,
+                    "same_role_history_resumed": True,
+                    "clarification_starts_fresh_roles": confrontation,
                     "confrontation": confrontation,
                     "two_providers": dual_provider,
                     "independent_contexts": request.ai_sessions.count(),

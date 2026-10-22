@@ -14,7 +14,7 @@ One installation serves a trusted team. Requests and connections are shared; the
 - Named environments with multiple Git repositories/branches and optional PostgreSQL.
 - Environment creation, editing, synchronization and confirmed deletion.
 - Instance name, short label, color, application language and permission to compare new requests.
-- No agent or skill settings exposed to users.
+- Administrative role instructions, inherited skills and bounded verification policy.
 
 **Application language** under **Settings → Instance** selects English or French for the interface and newly created analyses. French is the default, preserving existing installations. A request's language is frozen at creation and used for clarification, later discussion and generated artifacts. Switching the instance language does not translate or overwrite historical artifacts.
 
@@ -24,7 +24,14 @@ The PostgreSQL test checks connectivity, a read and read-only permissions. It re
 
 Users select an environment, describe their need and attach files. Understanding may ask questions before full exploration. Answers resume the same request. Source SHAs and the database connection are frozen in a baseline; the database baseline is not a data snapshot.
 
-Without comparison, an available assistant is selected automatically. Comparison runs two independent analyses followed by synthesis in a third context. Two providers are used when available; a single provider suffices with separate sessions. Exchanges are structured and bounded, without open-ended debate.
+Without comparison, an available analyst is selected automatically. Comparison runs
+one analyst and one independent counter-analyst, followed by comparison and an
+optional verifier. Consecutive roles prefer distinct actual model families; an
+eligible third family is preferred for verification. Same-family fallback requires
+administrative permission and a warning. Otherwise the request waits explicitly.
+Public roles use separate terminal contexts and writable directories. Only structured
+conclusions and evidence cross role boundaries; one targeted check is allowed.
+See [role configuration and verification](orchestration.md).
 
 ## Results and discussion
 

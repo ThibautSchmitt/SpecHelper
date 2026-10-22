@@ -1,6 +1,7 @@
 "use client";
 import { PublishTicket } from "@/components/publish-ticket";
 import { useI18n } from "@/lib/i18n";
+import { roleLabels, warningMessage } from "@/lib/orchestration";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, use, useEffect, useState } from "react";
@@ -543,7 +544,7 @@ function RequestContent({ params }: { params: Promise<{ id: string }> }) {
         )}
       {!!value.analysis_runs?.length && (
         <Card>
-          <details>
+          <details open={value.analysis_runs.some((run) => !!run.warnings?.length || run.steps.some((step) => !!step.warnings?.length))}>
             <summary className="cursor-pointer text-sm font-semibold">
               {t("Analysis assignment history")}
             </summary>
@@ -554,11 +555,13 @@ function RequestContent({ params }: { params: Promise<{ id: string }> }) {
                     {t("Analysis")} {run.number} ·{" "}
                     {t(statuses[run.status] || run.status)}
                   </h3>
+                  {!!run.warnings?.length && <ul className="mt-2 space-y-1 text-sm text-amber-800" aria-label={t("Analysis warnings")}>{run.warnings.map((warning, index) => <li key={index}>{t(warningMessage(warning))}</li>)}</ul>}
                   <ol className="mt-2 space-y-2 text-sm">
                     {run.steps.map((step, index) => (
                       <li key={index} className="rounded border p-3">
                         <p className="break-words">
                           {t("Step {number}", { number: index + 1 })} ·{" "}
+                          {step.public_role && `${t(roleLabels[step.public_role] || step.public_role)} · `}
                           {step.connection_name || t("AI not assigned")} ·{" "}
                           {step.provider || step.agent || t("Unknown")} ·{" "}
                           {!step.model || step.model === "runtime-default"
@@ -567,6 +570,9 @@ function RequestContent({ params }: { params: Promise<{ id: string }> }) {
                           {step.status &&
                             ` · ${t(statuses[step.status] || step.status)}`}
                         </p>
+                        {step.model_family && <p className="mt-1 text-xs muted">{t("Model family")}: {step.model_family}</p>}
+                        {!!step.warnings?.length && <ul className="mt-2 space-y-1 text-amber-800" aria-label={t("Analysis warnings")}>{step.warnings.map((warning, warningIndex) => <li key={warningIndex}>{t(warningMessage(warning))}</li>)}</ul>}
+                        {!!step.conclusions?.length && <ul className="mt-2 list-disc pl-5" aria-label={t("Verifiable conclusions")}>{step.conclusions.map((conclusion, conclusionIndex) => <li key={conclusionIndex}>{conclusion}</li>)}</ul>}
                         {(step.failure || step.error) && (
                           <p className="mt-1 text-red-700">
                             {t(

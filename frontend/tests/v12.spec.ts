@@ -123,7 +123,8 @@ test("compact admin: independent connections and targeted probe", async ({
     name: "Administration",
     exact: true,
   });
-  await expect(navigation.getByRole("button")).toHaveCount(3);
+  await expect(navigation.getByRole("button")).toHaveCount(4);
+  await expect(navigation.getByRole("button", { name: "AI & Agents", exact: true })).toBeVisible();
   await expect(
     navigation.getByRole("button", { name: "Agents and skills" }),
   ).toHaveCount(0);

@@ -49,6 +49,7 @@ def authorize(authorization: str = Header(default="")):
 class RunIn(BaseModel):
     request_id: uuid.UUID
     context_id: uuid.UUID | None = None
+    independent_context: bool = False
     session_id: uuid.UUID | None = None
     agent: Literal["codex", "claude"] = "codex"
     identity_id: uuid.UUID | None = None
@@ -252,10 +253,14 @@ def run(payload: RunIn):
     capability = None
     try:
         session = SESSIONS / request_id
-        if payload.context_id and payload.context_id != payload.request_id:
+        if payload.independent_context or (
+            payload.context_id and payload.context_id != payload.request_id
+        ):
             # Extra contexts must not sit inside the legacy primary directory:
             # that whole directory is mounted at /session for the primary CLI.
-            session = SESSIONS / "contexts" / request_id / str(payload.context_id)
+            session = SESSIONS / "contexts" / request_id / str(
+                payload.context_id or payload.request_id
+            )
         agent_home = session / payload.agent
         agent_home.mkdir(parents=True, exist_ok=True, mode=0o700)
         # Copy only the credential file, never administrator config, hooks, MCP servers or rules.

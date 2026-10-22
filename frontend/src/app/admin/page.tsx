@@ -14,6 +14,7 @@ import {
   type SourceSelection,
 } from "@/components/repository-picker";
 import { AIConnections, type AIConnection } from "@/components/ai-connections";
+import { OrchestrationSettingsForm } from "@/components/orchestration-settings";
 import {
   DatabaseConnections,
   type DatabaseConnection,
@@ -112,6 +113,7 @@ export default function Admin() {
   }
   const tabs = [
     { id: "connections", label: t("Connections") },
+    { id: "ai-agents", label: t("AI & Agents") },
     { id: "environments", label: t("Environments") },
     { id: "instance", label: t("Instance") },
   ];
@@ -165,6 +167,12 @@ export default function Admin() {
           <GitSources />
           <AIConnections values={connections?.ais || []} onChanged={refresh} />
           <TicketConnectors />
+        </div>
+      )}
+      {tab === "ai-agents" && (
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <OrchestrationSettingsForm />
+          <AIConnections onChanged={refresh} />
         </div>
       )}
       {tab === "environments" && (

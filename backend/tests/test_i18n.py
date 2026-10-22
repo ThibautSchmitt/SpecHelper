@@ -84,6 +84,13 @@ def test_every_comparison_role_receives_the_frozen_output_language(
             }
         elif payload["profile"] in {"code", "independent"}:
             output = code_report
+        elif payload["profile"] == "reviewer_writer":
+            output = {
+                "status": "APPROVED",
+                "summary": "Sourced conclusions compared",
+                "issues": [],
+                "verification": None,
+            }
         else:
             assert payload["profile"] == "synthesis"
             output = {
@@ -100,7 +107,13 @@ def test_every_comparison_role_receives_the_frozen_output_language(
         perform_job(claim_job())
     request.refresh_from_db()
     assert request.status == "READY", request.error
-    assert [p["profile"] for p in seen] == ["requirement", "code", "independent", "synthesis"]
+    assert [p["profile"] for p in seen] == [
+        "requirement",
+        "code",
+        "independent",
+        "reviewer_writer",
+        "synthesis",
+    ]
     assert len({p["context_id"] for p in seen}) == 3
     assert request.versions.get().language == language
 
@@ -161,6 +174,8 @@ def test_generated_file_bodies_follow_language_in_normal_and_comparison_flows(
             }
         elif payload["profile"] in {"code", "independent"}:
             response = code_report
+        elif payload["profile"] == "reviewer_writer":
+            response = {"status": "APPROVED", "summary": marker, "issues": [], "verification": None}
         else:
             assert (
                 "Write all narrative content of ticket.md and goal.md in output_language" in prompt

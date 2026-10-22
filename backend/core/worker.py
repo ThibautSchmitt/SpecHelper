@@ -93,6 +93,8 @@ def recover_stale_jobs():
 
 
 def perform_job(job):
+    from .orchestration import RoleUnavailable
+
     try:
         if job.kind == "sync":
             sync_environment(int(job.target), job.payload.get("changed_repositories"))
@@ -128,6 +130,16 @@ def perform_job(job):
                     Request.objects.filter(pk=job.target).update(status="QUEUED", error="")
                     return
 
+    except RoleUnavailable as wait:
+        Job.objects.filter(pk=job.pk).update(
+            status="QUEUED", started_at=None, finished_at=None, error=wait.reason
+        )
+        AnalysisRun.objects.filter(job=job).update(status="QUEUED", finished_at=None)
+        Request.objects.filter(pk=job.target).update(status="QUEUED", error="")
+        job.refresh_from_db()
+        job.payload = {**job.payload, "current_role": wait.role, "waiting_reason": wait.reason}
+        job.save(update_fields=["payload"])
+        return
     except Exception as exc:
         logger.warning("Job %s failed (%s)", job.pk, type(exc).__name__)
         if job.kind == "sync":

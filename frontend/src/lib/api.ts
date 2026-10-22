@@ -1,3 +1,5 @@
+import type { AnalysisWarning } from "@/lib/orchestration";
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     cache: "no-store",
@@ -74,7 +76,12 @@ export type RequestDetail = RequestItem & {
   analysis_runs?: {
     number: number;
     status: string;
+    warnings?: AnalysisWarning[];
     steps: {
+      public_role?: string;
+      model_family?: string;
+      warnings?: AnalysisWarning[];
+      conclusions?: string[];
       step?: string;
       role?: string;
       roles?: string[];

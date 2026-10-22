@@ -11,6 +11,7 @@ import {
 import { Clock3 } from "lucide-react";
 import { api, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { roleLabels, warningMessage, type AnalysisWarning } from "@/lib/orchestration";
 
 export type QueueJob = {
   id: number | string;
@@ -23,11 +24,15 @@ export type QueueJob = {
   agent: string;
   connection_name?: string | null;
   model?: string | null;
+  public_role?: string;
+  warnings?: AnalysisWarning[];
   assignments?: {
     connection_id: number;
     connection_name: string;
     agent: string;
     model: string;
+    public_role?: string;
+    model_family?: string;
   }[];
   request_status: string;
   queue_position: number | null;
@@ -184,10 +189,11 @@ export function TaskQueue() {
                           assignment.model === "runtime-default"
                             ? t("Provider default model")
                             : assignment.model}
+                          {(assignment.public_role || job.public_role) && ` · ${t(roleLabels[assignment.public_role || job.public_role || ""] || assignment.public_role || job.public_role || "")}`}
                         </p>
                       ))
                     ) : (
-                      <p>{t("AI not assigned")}</p>
+                      <p>{t("AI not assigned")}{job.public_role && ` · ${t(roleLabels[job.public_role] || job.public_role)}`}</p>
                     )}
                   </div>
                 )}
@@ -216,6 +222,7 @@ export function TaskQueue() {
                     {t(job.error)}
                   </p>
                 )}
+                {!!job.warnings?.length && <ul className="mt-2 space-y-1 text-xs text-amber-800" aria-label={t("Analysis warnings")}>{job.warnings.map((warning, index) => <li key={index}>{t(warningMessage(warning))}</li>)}</ul>}
               </Link>
             </li>
           );

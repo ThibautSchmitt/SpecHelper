@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import type { OrchestrationSettings } from "@/components/orchestration-settings";
+import { publicRoles, roleLabels, type PublicRole } from "@/lib/orchestration";
 import { Card } from "@/components/ui/card";
 import { ConnectButton } from "@/components/connect-button";
 import { api, send, statuses } from "@/lib/api";
@@ -30,6 +33,9 @@ export type AIConnection = {
   is_default?: boolean;
   preference?: number;
   quota_windows?: { session?: QuotaWindow; weekly?: QuotaWindow };
+  roles?: PublicRole[];
+  additional_instructions?: string;
+  skill_overrides?: Record<string, boolean>;
 };
 const emptyForm = {
   name: "",
@@ -39,6 +45,9 @@ const emptyForm = {
   is_default: false,
   preference: 100,
   share_identity_from: "",
+  roles: [...publicRoles] as PublicRole[],
+  additional_instructions: "",
+  skill_overrides: {} as Record<string, boolean>,
 };
 export function AIConnections({
   onChanged,
@@ -53,6 +62,7 @@ export function AIConnections({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [orchestration, setOrchestration] = useState<OrchestrationSettings | null>(null);
   const [removing, setRemoving] = useState<AIConnection | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   async function refresh() {
@@ -61,6 +71,13 @@ export function AIConnections({
   }
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
+    let alive = true;
+    const load = () => api<OrchestrationSettings>("/orchestration-settings")
+      .then((data) => { if (alive) setOrchestration(data); })
+      .catch(() => {});
+    load();
+    window.addEventListener("orchestration-updated", load);
+    return () => { alive = false; window.removeEventListener("orchestration-updated", load); };
   }, []);
   useEffect(() => {
     if (removing) dialog.current?.showModal();
@@ -140,6 +157,7 @@ export function AIConnections({
             {value.error && (
               <p className="mt-2 text-sm text-red-700">{t(value.error)}</p>
             )}
+            <p className="mt-2 text-xs muted">{t("Roles")}: {(value.roles ?? publicRoles).map((role) => t(roleLabels[role] || role)).join(" · ") || t("No analysis role")}</p>
             {value.availability === "MODEL_UNAVAILABLE" && (
               <p className="mt-2 text-sm text-red-700">
                 {t(
@@ -185,6 +203,9 @@ export function AIConnections({
                     is_default: !!value.is_default,
                     preference: value.preference ?? 100,
                     share_identity_from: "",
+                    roles: [...(value.roles ?? publicRoles)],
+                    additional_instructions: value.additional_instructions || "",
+                    skill_overrides: { ...value.skill_overrides },
                   });
                 }}
               >
@@ -206,6 +227,9 @@ export function AIConnections({
                         enabled: !value.enabled,
                         is_default: value.is_default,
                         preference: value.preference ?? 100,
+                        roles: value.roles ?? [...publicRoles],
+                        additional_instructions: value.additional_instructions || "",
+                        skill_overrides: value.skill_overrides || {},
                       },
                       "PUT",
                     ),
@@ -305,7 +329,7 @@ export function AIConnections({
             required
             maxLength={100}
             value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onChange={(e) => setForm((previous) => ({ ...previous, name: e.target.value }))}
           />
         </div>
         <div className="field">
@@ -336,7 +360,7 @@ export function AIConnections({
               id="ai-config-identity"
               value={form.share_identity_from}
               onChange={(e) =>
-                setForm({ ...form, share_identity_from: e.target.value })
+                setForm((previous) => ({ ...previous, share_identity_from: e.target.value }))
               }
             >
               <option value="">{t("New sign-in identity")}</option>
@@ -356,7 +380,7 @@ export function AIConnections({
             id="ai-config-model"
             maxLength={100}
             value={form.model}
-            onChange={(e) => setForm({ ...form, model: e.target.value })}
+            onChange={(e) => setForm((previous) => ({ ...previous, model: e.target.value }))}
           />
           <p className="mt-2 text-xs muted">
             {t(
@@ -376,18 +400,35 @@ export function AIConnections({
             required
             value={form.preference}
             onChange={(e) =>
-              setForm({ ...form, preference: Number(e.target.value) })
+              setForm((previous) => ({ ...previous, preference: Number(e.target.value) }))
             }
           />
           <p className="mt-2 text-xs muted">
             {t("Lower values are preferred when automatic selection is used.")}
           </p>
         </div>
+        <fieldset className="mt-5 space-y-3">
+          <legend className="text-sm font-medium">{t("Analysis roles")}</legend>
+          <p className="text-xs muted">{t("A connection can perform several roles, each in an independent session.")}</p>
+          {publicRoles.map((role) => <label key={role} className="flex gap-2 text-sm"><input type="checkbox" checked={form.roles.includes(role)} onChange={(e) => setForm({ ...form, roles: e.target.checked ? [...form.roles, role] : form.roles.filter((item) => item !== role) })} />{t(roleLabels[role])}</label>)}
+        </fieldset>
+        <details className="mt-5 rounded-lg border p-4">
+          <summary className="cursor-pointer text-sm font-medium">{t("Connection instructions and skills")}</summary>
+          <div className="field"><label htmlFor="ai-config-instructions">{t("Additional instructions")}</label><Textarea id="ai-config-instructions" maxLength={12000} value={form.additional_instructions} onChange={(e) => setForm((previous) => ({ ...previous, additional_instructions: e.target.value }))} /></div>
+          <p className="mt-3 text-xs muted">{t("Global instructions and skills are inherited. Only explicit skill overrides are stored for this connection.")}</p>
+          {orchestration ? orchestration.available_skills.map((skill) => <div className="field" key={skill.slug}><label htmlFor={`ai-skill-${skill.slug}`}>{t(skill.name)}</label><select id={`ai-skill-${skill.slug}`} value={form.skill_overrides[skill.slug] === undefined ? "inherit" : form.skill_overrides[skill.slug] ? "enabled" : "disabled"} onChange={(e) => {
+            const overrides = { ...form.skill_overrides };
+            if (e.target.value === "inherit") delete overrides[skill.slug];
+            else overrides[skill.slug] = e.target.value === "enabled";
+            setForm({ ...form, skill_overrides: overrides });
+          }}><option value="inherit">{t(orchestration.default_skills.includes(skill.slug) ? "Inherit (enabled globally)" : "Inherit (disabled globally)")}</option><option value="enabled">{t("Enable for this connection")}</option><option value="disabled">{t("Disable for this connection")}</option></select></div>) : <p className="mt-3 text-xs muted">{t("Global skill settings are unavailable. Existing overrides will be preserved.")}</p>}
+          <p className="mt-3 text-xs muted">{t("Instructions and skills cannot grant write access to analyzed repositories or databases.")}</p>
+        </details>
         <label className="mt-4 flex gap-2 text-sm">
           <input
             type="checkbox"
             checked={form.is_default}
-            onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
+            onChange={(e) => setForm((previous) => ({ ...previous, is_default: e.target.checked }))}
           />
           {t("Default connection when available")}
         </label>
@@ -395,7 +436,7 @@ export function AIConnections({
           <input
             type="checkbox"
             checked={form.enabled}
-            onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+            onChange={(e) => setForm((previous) => ({ ...previous, enabled: e.target.checked }))}
           />
           {t("Use this assistant for requests")}
         </label>

@@ -38,7 +38,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="1.4", auth=None)
+api = NinjaAPI(title="SpecHelper", version="1.5", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -228,6 +228,7 @@ def request_dict(value, full=False):
                         "started_at",
                         "finished_at",
                         "error",
+                        "warnings",
                     )
                 ),
                 "latest_version": version_dict(value.versions.order_by("-number").first()),
@@ -697,8 +698,10 @@ def queue(request):
 
 from .ai_api import router as ai_router  # noqa: E402
 from .git_source_api import router as git_source_router  # noqa: E402
+from .orchestration_settings import router as orchestration_router  # noqa: E402
 from .ticket_api import router as ticket_router  # noqa: E402
 
 api.add_router("", ticket_router)
 api.add_router("", git_source_router)
 api.add_router("", ai_router)
+api.add_router("", orchestration_router)

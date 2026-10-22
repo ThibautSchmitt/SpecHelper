@@ -5,6 +5,10 @@ from django.db import models
 from django.utils import timezone
 
 
+def default_ai_roles():
+    return ["analyst", "counter_analyst", "verifier"]
+
+
 class InstanceSettings(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     name = models.CharField(max_length=100, default="SpecHelper")
@@ -14,6 +18,7 @@ class InstanceSettings(models.Model):
     language = models.CharField(
         max_length=2, choices=[("en", "English"), ("fr", "French")], default="fr"
     )
+    orchestration = models.JSONField(default=dict)
 
 
 class GitHubConnection(models.Model):
@@ -90,6 +95,9 @@ class AIConnection(models.Model):
     model = models.CharField(max_length=100, blank=True)
     preference = models.PositiveIntegerField(default=100)
     is_default = models.BooleanField(default=False)
+    roles = models.JSONField(default=default_ai_roles)
+    additional_instructions = models.TextField(blank=True)
+    skill_overrides = models.JSONField(default=dict)
     identity = models.ForeignKey(
         AIIdentity, null=True, on_delete=models.PROTECT, related_name="configurations"
     )
@@ -210,6 +218,8 @@ class AISession(models.Model):
     model_snapshot = models.CharField(max_length=100, blank=True)
     connection_name_snapshot = models.CharField(max_length=100, blank=True)
     identity_snapshot = models.UUIDField(null=True)
+    public_role = models.CharField(max_length=30, blank=True)
+    family_snapshot = models.CharField(max_length=100, blank=True)
 
 
 class AnalysisResult(models.Model):
@@ -258,6 +268,8 @@ class AnalysisRun(models.Model):
     started_at = models.DateTimeField(null=True)
     finished_at = models.DateTimeField(null=True)
     error = models.TextField(blank=True)
+    orchestration = models.JSONField(default=dict)
+    warnings = models.JSONField(default=list)
 
     class Meta:
         constraints = [

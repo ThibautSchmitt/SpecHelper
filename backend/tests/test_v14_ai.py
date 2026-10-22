@@ -66,9 +66,23 @@ def test_separate_logins_reliable_account_key_share_quota_and_capacity(environme
     job = Job.objects.create(kind="analysis", target=str(request.pk))
     AIConnection.objects.filter(pk=1).update(enabled=False)
     assert reserve_for_job(job)
+    # Confronted requests reserve a connection at each public role boundary.
+    from core.models import AnalysisRun
+    from core.orchestration import assign_role
+    from core.orchestration_settings import get_config
+
+    run = AnalysisRun.objects.create(
+        request=request,
+        job=job,
+        number=1,
+        orchestration={"version": "1.5", "config": get_config(), "sessions": {}},
+    )
+    assign_role(request, run, "analyst")
+    job.refresh_from_db()
     assert len(job.payload["connection_ids"]) == 1
     assert not candidates()
-    assert request.ai_sessions.count() == 3
+    assert request.ai_sessions.count() == 1
+    assert request.ai_sessions.get().public_role == "analyst"
 
 
 def test_health_does_not_reset_exhausted_quota_and_reliable_reset_can_recover():
