@@ -80,7 +80,13 @@ export function WorkItemDetail(props: {
   );
 }
 
-function RequestContent({ params, workflow = "request" }: { params: Promise<{ id: string }>; workflow?: "request" | "question" }) {
+function RequestContent({
+  params,
+  workflow = "request",
+}: {
+  params: Promise<{ id: string }>;
+  workflow?: "request" | "question";
+}) {
   const isQuestion = workflow === "question";
   const base = isQuestion ? "/questions" : "/requests";
   const { t, dateLocale } = useI18n();
@@ -93,6 +99,10 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
   );
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
   const [showDiscussion, setShowDiscussion] = useState(false);
+  useEffect(() => {
+    if (isQuestion && window.location.hash === "#discussion")
+      setShowDiscussion(true);
+  }, [isQuestion]);
   const [message, setMessage] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -149,7 +159,8 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
     selectedNumber !== null && selectedVersion?.number !== selectedNumber;
   const result =
     selectedNumber === null ? value?.latest_version : selectedVersion;
-  const ticket = loadingVersion || isQuestion ? null : result?.ticket || value?.ticket;
+  const ticket =
+    loadingVersion || isQuestion ? null : result?.ticket || value?.ticket;
   async function continueDiscussion(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -177,9 +188,7 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
     setBusy(true);
     setError("");
     try {
-      setValue(
-        await send<RequestDetail>(`${base}/${id}/answers`, { answers }),
-      );
+      setValue(await send<RequestDetail>(`${base}/${id}/answers`, { answers }));
       setAnswers({});
     } catch (e) {
       setError((e as Error).message);
@@ -214,20 +223,32 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
   if (!value)
     return (
       <div role={error ? "alert" : "status"}>
-        {error ? t(error) : t(isQuestion ? "Loading question…" : "Loading request…")}
+        {error
+          ? t(error)
+          : t(isQuestion ? "Loading question…" : "Loading request…")}
       </div>
     );
   return (
     <div className="space-y-6">
-      <Link href={isQuestion ? "/questions" : "/"} className="inline-flex items-center gap-2 text-sm muted">
-        <ArrowLeft size={16} /> {t(isQuestion ? "All questions" : "All requests")}
+      <Link
+        href={isQuestion ? "/questions" : "/"}
+        className="inline-flex items-center gap-2 text-sm muted"
+      >
+        <ArrowLeft size={16} />{" "}
+        {t(isQuestion ? "All questions" : "All requests")}
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">
-            {value.environment_name} {t(isQuestion ? "· Question" : "· Request")} {value.id.slice(0, 8)}
+            {value.environment_name}{" "}
+            {t(isQuestion ? "· Question" : "· Request")} {value.id.slice(0, 8)}
           </p>
-          <h1>{(isQuestion ? (!loadingVersion && result?.explanation?.title) || value.title : ticket?.title) || t(isQuestion ? "Your question" : "Your request")}</h1>
+          <h1>
+            {(isQuestion
+              ? (!loadingVersion && result?.explanation?.title) || value.title
+              : ticket?.title) ||
+              t(isQuestion ? "Your question" : "Your request")}
+          </h1>
         </div>
         <span role="status" className="badge" data-state={value.status}>
           {t(statuses[value.status])}
@@ -242,7 +263,9 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
         </div>
       )}
       <Card>
-        <h2>{t(isQuestion ? "Your original question" : "Your original need")}</h2>
+        <h2>
+          {t(isQuestion ? "Your original question" : "Your original need")}
+        </h2>
         <p className="mt-3 whitespace-pre-wrap leading-7">{value.need}</p>
         {value.understanding && (
           <div className="mt-5 rounded-lg bg-muted p-4">
@@ -254,41 +277,106 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
           <div className="mt-4 flex flex-wrap gap-3">
             {value.attachments.map((a) => (
               <div key={a.id} className="min-w-0 rounded-md border px-3 py-2">
-              <a
-                className="flex items-center gap-1 text-sm text-primary"
-                href={`/api${base}/${id}/attachments/${a.id}`}
-              >
-                <Paperclip size={14} />
-                {a.name}
-              </a>
-              {a.internal && <p className="mt-1 text-xs muted">{t("Internal Markdown context")}</p>}
-              {a.source_question && <Link className="mt-1 inline-block text-xs text-primary underline" href={`/questions/${a.source_question.id}?version=${a.source_question.version}`}>{t("Source question")} · {t("Version")} {a.source_question.version}</Link>}
-              {value.status === "DRAFT" && <button className="mt-2 block text-xs text-red-700 underline" disabled={busy} type="button" onClick={async () => {
-                setBusy(true); setError("");
-                try { await api(`${base}/${id}/attachments/${a.id}`, { method: "DELETE" }); setValue(await api<RequestDetail>(`${base}/${id}`)); }
-                catch (e) { setError((e as Error).message); }
-                finally { setBusy(false); }
-              }}>{t("Remove attachment {name}", { name: a.name })}</button>}
+                <a
+                  className="flex items-center gap-1 text-sm text-primary"
+                  href={`/api${base}/${id}/attachments/${a.id}`}
+                >
+                  <Paperclip size={14} />
+                  {a.name}
+                </a>
+                {a.internal && (
+                  <p className="mt-1 text-xs muted">
+                    {t("Internal Markdown context")}
+                  </p>
+                )}
+                {a.source_question && (
+                  <Link
+                    className="mt-1 inline-block text-xs text-primary underline"
+                    href={`/questions/${a.source_question.id}?version=${a.source_question.version}`}
+                  >
+                    {t("Source question")} · {t("Version")}{" "}
+                    {a.source_question.version}
+                  </Link>
+                )}
+                {value.status === "DRAFT" && (
+                  <button
+                    className="mt-2 block text-xs text-red-700 underline"
+                    disabled={busy}
+                    type="button"
+                    onClick={async () => {
+                      setBusy(true);
+                      setError("");
+                      try {
+                        await api(`${base}/${id}/attachments/${a.id}`, {
+                          method: "DELETE",
+                        });
+                        setValue(await api<RequestDetail>(`${base}/${id}`));
+                      } catch (e) {
+                        setError((e as Error).message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    {t("Remove attachment {name}", { name: a.name })}
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
       </Card>
-      {value.source_question && <Card>
-        <h2>{t("Source question")}</h2>
-        <Link className="mt-2 inline-block text-primary underline" href={`/questions/${value.source_question.id}?version=${value.source_question.version}`}>{value.source_question.title || t("Question")} · {t("Version")} {value.source_question.version}</Link>
-        <p className="mt-2 text-sm muted">{t("This request has its own analysis and frozen context. Source conclusions must be checked against its Git references.")}</p>
-      </Card>}
-      {isQuestion && !!value.derived_requests?.length && <Card>
-        <h2>{t("Requests created from this question")}</h2>
-        <ul className="mt-3 space-y-2">{value.derived_requests.map(request => <li key={request.id}><Link className="text-sm text-primary underline" href={`/requests/${request.id}`}>{request.need}</Link><span className="ml-2 text-xs muted">{t(statuses[request.status] || request.status)}</span></li>)}</ul>
-      </Card>}
+      {value.source_question && (
+        <Card>
+          <h2>{t("Source question")}</h2>
+          <Link
+            className="mt-2 inline-block text-primary underline"
+            href={`/questions/${value.source_question.id}?version=${value.source_question.version}`}
+          >
+            {value.source_question.title || t("Question")} · {t("Version")}{" "}
+            {value.source_question.version}
+          </Link>
+          <p className="mt-2 text-sm muted">
+            {t(
+              "This request has its own analysis and frozen context. Source conclusions must be checked against its Git references.",
+            )}
+          </p>
+        </Card>
+      )}
+      {isQuestion && !!value.derived_requests?.length && (
+        <Card>
+          <h2>{t("Requests created from this question")}</h2>
+          <ul className="mt-3 space-y-2">
+            {value.derived_requests.map((request) => (
+              <li key={request.id}>
+                <Link
+                  className="text-sm text-primary underline"
+                  href={`/requests/${request.id}`}
+                >
+                  {request.need}
+                </Link>
+                <span className="ml-2 text-xs muted">
+                  {t(statuses[request.status] || request.status)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       {active.includes(value.status) && (
         <Card aria-live="polite">
           <h2>
             {["QUEUED", "CONTINUING_CONVERSATION"].includes(value.status)
-              ? t(isQuestion ? "Your question is queued" : "Your request is queued")
-              : t(isQuestion ? "SpecHelper is exploring your project" : "SpecHelper is preparing your ticket")}
+              ? t(
+                  isQuestion
+                    ? "Your question is queued"
+                    : "Your request is queued",
+                )
+              : t(
+                  isQuestion
+                    ? "SpecHelper is exploring your project"
+                    : "SpecHelper is preparing your ticket",
+                )}
           </h2>
           <p className="mt-2 text-sm muted">
             {["QUEUED", "CONTINUING_CONVERSATION"].includes(value.status)
@@ -325,13 +413,17 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
         <p className="text-sm muted">
           {["READY", "PARTIAL"].includes(value.status)
             ? t("This result combines two independent analyses.")
-            : t("A comparison of two independent analyses was requested.")}
+            : t("Independent analyses are enabled for this analysis.")}
         </p>
       )}
       {value.status === "DRAFT" && (
         <Card>
           <p className="mb-4">
-            {t(isQuestion ? "This question is saved and ready to start." : "This request is saved and ready to start.")}
+            {t(
+              isQuestion
+                ? "This question is saved and ready to start."
+                : "This request is saved and ready to start.",
+            )}
           </p>
           <Button
             disabled={busy}
@@ -380,7 +472,11 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
             {t("A few details before continuing")}
           </h2>
           <p className="mt-2 text-sm muted">
-            {t(isQuestion ? "Your answers will help explain the relevant behavior." : "Your answers will help prepare a suitable proposal.")}
+            {t(
+              isQuestion
+                ? "Your answers will help explain the relevant behavior."
+                : "Your answers will help prepare a suitable proposal.",
+            )}
           </p>
           <form onSubmit={submit}>
             {value.questions.map((q) => (
@@ -406,7 +502,28 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
       {loadingVersion && (
         <p role="status">{t("Loading the selected version…")}</p>
       )}
-      {isQuestion && result && !loadingVersion && <QuestionResult key={`${id}-${result.number}`} questionId={id} result={result} versions={value.versions} latestNumber={value.latest_version?.number} selectedNumber={selectedNumber} onSelect={number => { router.replace(`${base}/${id}${number === null ? "" : `?version=${number}`}`, { scroll: false }); setSelectedVersion(null); setSelectedNumber(number); }} />}
+      {isQuestion && result && !loadingVersion && (
+        <QuestionResult
+          key={`${id}-${result.number}`}
+          questionId={id}
+          onContinue={() => setShowDiscussion(true)}
+          discussionAvailable={["READY", "PARTIAL", "ERROR"].includes(
+            value.status,
+          )}
+          result={result}
+          versions={value.versions}
+          latestNumber={value.latest_version?.number}
+          selectedNumber={selectedNumber}
+          onSelect={(number) => {
+            router.replace(
+              `${base}/${id}${number === null ? "" : `?version=${number}`}`,
+              { scroll: false },
+            );
+            setSelectedVersion(null);
+            setSelectedNumber(number);
+          }}
+        />
+      )}
       {ticket && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -489,7 +606,15 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
             </div>
           </div>
           <Card className="space-y-7">
-            {result && <AnalysisContext workflow={workflow} requestId={id} runNumber={result.run_number} snapshot={result.context_snapshot} usage={result.context_usage} />}
+            {result && (
+              <AnalysisContext
+                workflow={workflow}
+                requestId={id}
+                runNumber={result.run_number}
+                snapshot={result.context_snapshot}
+                usage={result.context_usage}
+              />
+            )}
             {Object.entries(
               result?.format_version === "1.2"
                 ? currentLabels
@@ -518,9 +643,16 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
         </>
       )}
       {value.latest_version &&
-        ["READY", "PARTIAL", "ERROR"].includes(value.status) && (
-          <Card>
-            <h2>{t(isQuestion ? "Explore this explanation further" : "Refine this proposal")}</h2>
+        ["READY", "PARTIAL", "ERROR"].includes(value.status) &&
+        (!isQuestion || showDiscussion) && (
+          <Card id="discussion">
+            <h2>
+              {t(
+                isQuestion
+                  ? "Explore this explanation further"
+                  : "Refine this proposal",
+              )}
+            </h2>
             {selectedNumber !== null && (
               <p className="mt-2 text-sm muted">
                 {t("The discussion continues from the latest version (v")}
@@ -553,7 +685,13 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
                 </div>
                 <div className="mt-4 flex gap-2">
                   <Button disabled={busy || !message.trim()}>
-                    {busy ? t("Sending…") : t(isQuestion ? "Send and update explanation" : "Send and update proposal")}
+                    {busy
+                      ? t("Sending…")
+                      : t(
+                          isQuestion
+                            ? "Send and update explanation"
+                            : "Send and update proposal",
+                        )}
                   </Button>
                   <Button
                     type="button"
@@ -569,7 +707,13 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
         )}
       {!!value.analysis_runs?.length && (
         <Card>
-          <details open={value.analysis_runs.some((run) => !!run.warnings?.length || run.steps.some((step) => !!step.warnings?.length))}>
+          <details
+            open={value.analysis_runs.some(
+              (run) =>
+                !!run.warnings?.length ||
+                run.steps.some((step) => !!step.warnings?.length),
+            )}
+          >
             <summary className="cursor-pointer text-sm font-semibold">
               {t("Analysis assignment history")}
             </summary>
@@ -580,14 +724,30 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
                     {t("Analysis")} {run.number} ·{" "}
                     {t(statuses[run.status] || run.status)}
                   </h3>
-                  <AnalysisContext workflow={workflow} requestId={id} runNumber={run.number} snapshot={run.context_snapshot} usage={run.context_usage} />
-                  {!!run.warnings?.length && <ul className="mt-2 space-y-1 text-sm text-amber-800" aria-label={t("Analysis warnings")}>{run.warnings.map((warning, index) => <li key={index}>{t(warningMessage(warning))}</li>)}</ul>}
+                  <AnalysisContext
+                    workflow={workflow}
+                    requestId={id}
+                    runNumber={run.number}
+                    snapshot={run.context_snapshot}
+                    usage={run.context_usage}
+                  />
+                  {!!run.warnings?.length && (
+                    <ul
+                      className="mt-2 space-y-1 text-sm text-amber-800"
+                      aria-label={t("Analysis warnings")}
+                    >
+                      {run.warnings.map((warning, index) => (
+                        <li key={index}>{t(warningMessage(warning))}</li>
+                      ))}
+                    </ul>
+                  )}
                   <ol className="mt-2 space-y-2 text-sm">
                     {run.steps.map((step, index) => (
                       <li key={index} className="rounded border p-3">
                         <p className="break-words">
                           {t("Step {number}", { number: index + 1 })} ·{" "}
-                          {step.public_role && `${t(roleLabels[step.public_role] || step.public_role)} · `}
+                          {step.public_role &&
+                            `${t(roleLabels[step.public_role] || step.public_role)} · `}
                           {step.connection_name || t("AI not assigned")} ·{" "}
                           {step.provider || step.agent || t("Unknown")} ·{" "}
                           {!step.model || step.model === "runtime-default"
@@ -596,9 +756,35 @@ function RequestContent({ params, workflow = "request" }: { params: Promise<{ id
                           {step.status &&
                             ` · ${t(statuses[step.status] || step.status)}`}
                         </p>
-                        {step.model_family && <p className="mt-1 text-xs muted">{t("Model family")}: {step.model_family}</p>}
-                        {!!step.warnings?.length && <ul className="mt-2 space-y-1 text-amber-800" aria-label={t("Analysis warnings")}>{step.warnings.map((warning, warningIndex) => <li key={warningIndex}>{t(warningMessage(warning))}</li>)}</ul>}
-                        {!!step.conclusions?.length && <ul className="mt-2 list-disc pl-5" aria-label={t("Verifiable conclusions")}>{step.conclusions.map((conclusion, conclusionIndex) => <li key={conclusionIndex}>{conclusion}</li>)}</ul>}
+                        {step.model_family && (
+                          <p className="mt-1 text-xs muted">
+                            {t("Model family")}: {step.model_family}
+                          </p>
+                        )}
+                        {!!step.warnings?.length && (
+                          <ul
+                            className="mt-2 space-y-1 text-amber-800"
+                            aria-label={t("Analysis warnings")}
+                          >
+                            {step.warnings.map((warning, warningIndex) => (
+                              <li key={warningIndex}>
+                                {t(warningMessage(warning))}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {!!step.conclusions?.length && (
+                          <ul
+                            className="mt-2 list-disc pl-5"
+                            aria-label={t("Verifiable conclusions")}
+                          >
+                            {step.conclusions.map(
+                              (conclusion, conclusionIndex) => (
+                                <li key={conclusionIndex}>{conclusion}</li>
+                              ),
+                            )}
+                          </ul>
+                        )}
                         {(step.failure || step.error) && (
                           <p className="mt-1 text-red-700">
                             {t(

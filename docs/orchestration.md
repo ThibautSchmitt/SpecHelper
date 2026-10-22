@@ -1,13 +1,17 @@
 # Analysis roles and verification
 
-The business workflow keeps one optional **Compare multiple analyses** checkbox.
-A compared request runs one analyst and one counter-analyst, followed by an optional
+Business forms contain no comparison checkbox. New requests and questions
+automatically use the instance policy and enabled authenticated assistant roles.
+A compared analysis runs one analyst and one counter-analyst, followed by an optional
 verifier. Connecting more assistants does not create more analyses or a voting panel.
-The internal writer produces the ticket and goal.md; it is not a fourth public role.
+The internal writer produces request ticket/goal artifacts or a question explanation;
+it is not a fourth public role.
 
 ## Administration
 
-Open **Settings → AI & Agents**. Each connection can hold any combination of
+Open **Settings → AI & Agents**. The analysis policy enables independent
+counter-analysis for newly created work items; existing items keep their recorded
+choice. Each connection can hold any combination of
 **Analyst**, **Counter-analyst** and **Verifier**. Model, account availability and quota
 continue to come from its named assistant configuration.
 

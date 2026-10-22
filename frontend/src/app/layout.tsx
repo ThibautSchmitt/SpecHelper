@@ -11,7 +11,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
+    <html lang="fr" data-theme="light" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t="system";try{var v=localStorage.getItem("spechelper-theme");if(v==="light"||v==="dark")t=v}catch(e){}document.documentElement.dataset.theme=t==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):t})()`,
+          }}
+        />
+      </head>
       <body>
         <Shell>{children}</Shell>
       </body>

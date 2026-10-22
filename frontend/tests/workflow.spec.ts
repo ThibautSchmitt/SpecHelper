@@ -16,7 +16,7 @@ test("administration, theme and business navigation", async ({ page }) => {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "From need to ticket, simply." }),
+    page.getByRole("heading", { name: "Requests", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(

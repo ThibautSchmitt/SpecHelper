@@ -1,6 +1,6 @@
 import { test, expect } from "./fixtures";
 
-test("new request: optional comparison and explicit queue state", async ({
+test("new request: configured comparison and explicit queue state", async ({
   page,
 }) => {
   const id = "44444444-4444-4444-8444-444444444444";
@@ -48,7 +48,7 @@ test("new request: optional comparison and explicit queue state", async ({
       expect(r.request().postDataJSON()).toEqual({
         environment_id: 1,
         need: detail.need,
-        confrontation: true,
+        category: "auto",
       });
       return r.fulfill({ status: 201, json: detail });
     }
@@ -60,7 +60,9 @@ test("new request: optional comparison and explicit queue state", async ({
   await page.goto("/");
   await page.getByLabel("Environment", { exact: true }).selectOption("1");
   await page.getByLabel("Describe your need").fill(detail.need);
-  await page.getByLabel("Compare multiple analyses", { exact: true }).check();
+  await expect(
+    page.getByLabel("Compare multiple analyses", { exact: true }),
+  ).toHaveCount(0);
   await page
     .getByRole("button", { name: "Analyze request", exact: true })
     .click();
@@ -69,7 +71,7 @@ test("new request: optional comparison and explicit queue state", async ({
     page.getByRole("heading", { name: "Your request is queued" }),
   ).toBeVisible();
   await expect(
-    page.getByText("A comparison of two independent analyses was requested.", {
+    page.getByText("Independent analyses are enabled for this analysis.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -124,7 +126,9 @@ test("compact admin: independent connections and targeted probe", async ({
     exact: true,
   });
   await expect(navigation.getByRole("button")).toHaveCount(4);
-  await expect(navigation.getByRole("button", { name: "AI & Agents", exact: true })).toBeVisible();
+  await expect(
+    navigation.getByRole("button", { name: "AI & Agents", exact: true }),
+  ).toBeVisible();
   await expect(
     navigation.getByRole("button", { name: "Agents and skills" }),
   ).toHaveCount(0);

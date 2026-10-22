@@ -26,11 +26,12 @@ def test_disabling_confrontation_applies_to_new_requests_without_changing_saved_
     )
     assert original.status_code == 201
     InstanceSettings.objects.update_or_create(pk=1, defaults={"allow_confrontation": False})
-    refused = client.post(
+    created = client.post(
         "/api/requests", data=json.dumps(payload), content_type="application/json"
     )
-    assert refused.status_code == 409
-    assert Request.objects.count() == 1
+    assert created.status_code == 201
+    assert created.json()["confrontation"] is False
+    assert Request.objects.count() == 2
     queued = enqueue_analysis(original.json()["id"])
     assert queued.confrontation is True and queued.status == "QUEUED"
 
@@ -174,5 +175,7 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
         "code",
         "writer",
     ]
-    assert all("SKILL project-conventions" not in call.args[1]["prompt"] for call in caller.call_args_list)
+    assert all(
+        "SKILL project-conventions" not in call.args[1]["prompt"] for call in caller.call_args_list
+    )
     assert all("No commits, pushes" in call.args[1]["prompt"] for call in caller.call_args_list)

@@ -57,6 +57,7 @@ export type RequestItem = {
   title?: string;
   updated_at?: string;
   workflow?: "request" | "question";
+  category?: string;
   confrontation: boolean;
   language: "en" | "fr";
   status: string;
@@ -83,7 +84,12 @@ export type ResultVersion = {
 };
 export type RequestDetail = RequestItem & {
   source_question?: { id: string; version: number; title?: string } | null;
-  derived_requests?: { id: string; need: string; status: string; source_version?: number }[];
+  derived_requests?: {
+    id: string;
+    need: string;
+    status: string;
+    source_version?: number;
+  }[];
   analysis_runs?: {
     number: number;
     status: string;
@@ -127,7 +133,13 @@ export type RequestDetail = RequestItem & {
   understanding: string;
   progress: { label: string; at: string }[];
   error: string;
-  attachments: { id: string; name: string; size: number; internal?: boolean; source_question?: { id: string; version: number } | null }[];
+  attachments: {
+    id: string;
+    name: string;
+    size: number;
+    internal?: boolean;
+    source_question?: { id: string; version: number } | null;
+  }[];
   ticket: Record<string, string | string[]> | null;
   markdown: string | null;
   latest_version: ResultVersion | null;
@@ -169,10 +181,20 @@ export const statuses: Record<string, string> = {
 };
 
 export type QuestionDocument = {
-  id: string; kind: "business" | "technical" | "mixed"; markdown: string;
-  source_version: number; language: "en" | "fr"; created_at: string; download_url: string;
+  id: string;
+  kind: "business" | "technical" | "mixed";
+  markdown: string;
+  source_version: number;
+  language: "en" | "fr";
+  created_at: string;
+  download_url: string;
 };
 export type QuestionTransfer = {
-  name: string; content: string; source_question_id: string; source_version: number;
-  environment_id: number | null; baseline: RequestDetail["baseline"]; language: "en" | "fr";
+  name: string;
+  content: string;
+  source_question_id: string;
+  source_version: number;
+  environment_id: number | null;
+  baseline: RequestDetail["baseline"];
+  language: "en" | "fr";
 };

@@ -63,6 +63,18 @@ observations survive later calls and failures.
 
 See [environment context](environment-context.md) for administration and limits.
 
+## Appearance and creation policy
+
+The browser stores a Light/Dark/System preference. A synchronous head script sets
+the theme before paint; the client provider tracks system and cross-tab preference
+changes. Shared CSS tokens preserve the same hierarchy and adjust neutral surfaces,
+readable primary foregrounds and state colors. See [appearance](appearance.md).
+
+Business forms submit a category and no comparison choice. The backend freezes the
+creation policy from the instance setting and authenticated enabled counter-analyst
+roles; legacy payload flags cannot override it. Temporary capacity remains the
+scheduler's responsibility. Historical items and result snapshots are preserved.
+
 ## Questions and request handoff
 
 Questions use the same `Orchestrator`, comparison roles and `analysis` jobs as
@@ -85,7 +97,9 @@ independent task panel. Mobile layouts keep navigation and connection indicators
 available and put the queue in an accessible drawer. The queue endpoint reads
 persisted jobs; it does not claim work or create a second AI scheduler. Queued rows
 follow creation time and ID, active rows remain visible and terminal history is
-bounded. Publication attempts appear as short operations with their own persisted
+bounded. Clarification pauses are retained separately without holding a worker.
+Queue cards distinguish current assignments from previous execution snapshots;
+measured state-group transitions respect reduced motion. Publication attempts appear as short operations with their own persisted
 delivery state. Card transitions respect reduced-motion settings.
 
 `TicketConnector` stores encrypted configuration and an explicit destination

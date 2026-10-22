@@ -11,7 +11,10 @@ import {
   Tickets,
   PanelRightOpen,
   X,
+  ShieldCheck,
+  ChevronRight,
 } from "lucide-react";
+import { ThemeProvider, applyAccent } from "@/lib/theme";
 import { TaskQueue, TaskQueueProvider } from "@/components/task-queue";
 import { statuses } from "@/lib/api";
 import { api } from "@/lib/api";
@@ -21,9 +24,11 @@ import type { GitConnection } from "@/components/git-sources";
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
-      <TaskQueueProvider>
-        <ShellContent>{children}</ShellContent>
-      </TaskQueueProvider>
+      <ThemeProvider>
+        <TaskQueueProvider>
+          <ShellContent>{children}</ShellContent>
+        </TaskQueueProvider>
+      </ThemeProvider>
     </I18nProvider>
   );
 }
@@ -81,26 +86,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
           setName(s.name);
           setShortLabel(s.short_label || "");
           setLanguage(s.language === "en" ? "en" : "fr");
-          document.documentElement.style.setProperty(
-            "--primary",
-            s.primary_color,
-          );
-          const rgb = s.primary_color
-            .slice(1)
-            .match(/.{2}/g)!
-            .map((v) => parseInt(v, 16) / 255)
-            .map((v) =>
-              v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4,
-            );
-          const luminance = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
-          document.documentElement.style.setProperty(
-            "--primary-ink",
-            luminance > 0.179 ? "#172033" : s.primary_color,
-          );
-          document.documentElement.style.setProperty(
-            "--primary-foreground",
-            luminance > 0.179 ? "#172033" : "#ffffff",
-          );
+          applyAccent(s.primary_color);
         })
         .catch(() => {});
     };
@@ -172,6 +158,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
           className="connection-indicators"
           aria-label={t("Connection status")}
         >
+          <h2 className="connections-title">{t("Connected assistants")}</h2>
           {(connections || []).map((ai) => (
             <p key={ai.id}>
               <span
@@ -229,6 +216,16 @@ function ShellContent({ children }: { children: React.ReactNode }) {
             })}
           </div>
         </div>
+        <Link href="/admin" className="sidebar-admin">
+          <span className="admin-avatar">
+            <ShieldCheck size={18} />
+          </span>
+          <span>
+            {t("Team workspace")}
+            <small>{t("Administration")}</small>
+          </span>
+          <ChevronRight size={14} />
+        </Link>
       </aside>
       <div className="dashboard-center">
         <div className="queue-toolbar">

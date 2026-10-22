@@ -253,6 +253,8 @@ def freeze_context(request, run=None, reuse=None):
     snapshot["snapshot_id"] = str(uuid.uuid4())
     snapshot["dossier"] = {
         "request_id": str(request.id),
+        "workflow": request.workflow,
+        "category": request.category,
         "need": request.need,
         "answers": request.conversation,
         "baseline": request.baseline,

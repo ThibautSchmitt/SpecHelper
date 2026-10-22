@@ -215,6 +215,7 @@ class Request(models.Model):
     environment_name_snapshot = models.CharField(max_length=100, blank=True)
     need = models.TextField()
     workflow = models.CharField(max_length=10, choices=Workflow, default=Workflow.REQUEST)
+    category = models.CharField(max_length=20, default="auto")
     source_question_version = models.ForeignKey(
         "ResultVersion",
         null=True,

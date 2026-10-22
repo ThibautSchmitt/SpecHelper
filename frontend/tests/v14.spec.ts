@@ -233,9 +233,10 @@ test("named AI configs share quota windows and targeted authentication never cha
     r.fulfill({ json: attempt }),
   );
   await page.goto("/admin");
-  const card = page
-    .getByRole("heading", { name: "AI connections", exact: true })
-    .locator("..");
+  const card = page.getByRole("region", {
+    name: "AI connections",
+    exact: true,
+  });
   await expect(card.getByText("Session quota:", { exact: false })).toHaveCount(
     2,
   );
@@ -265,12 +266,17 @@ test("named AI configs share quota windows and targeted authentication never cha
     .getByRole("dialog", { name: "Sign in with ChatGPT" })
     .getByRole("button", { name: "Cancel", exact: true })
     .click();
-  await expect(page.getByRole("dialog", { name: "Sign in with ChatGPT" })).not.toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Sign in with ChatGPT" }),
+  ).not.toBeVisible();
   let body: Record<string, unknown> | null = null;
   await page.route("**/api/ai-connections", (r) => {
     if (r.request().method() === "POST") body = r.request().postDataJSON();
     return r.fulfill({ json: ai });
   });
+  await page
+    .getByRole("button", { name: "New AI connection", exact: true })
+    .click();
   await page
     .getByLabel("Connection name", { exact: true })
     .last()

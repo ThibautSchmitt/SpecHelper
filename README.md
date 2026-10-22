@@ -20,7 +20,7 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - Business clarification before technical analysis
 - Optional environment instructions and versioned reference documents
 - Screenshots and document attachments
-- Optional comparison of independent AI analyses, with one or two connected assistants
+- Automatic independent analyses based on configured AI roles, with one or two connected assistants
 - Configurable analyst/counter-analyst roles and optional independent verification
 - Concise tickets and detailed `goal.md` files
 - Project questions with source-backed explanations and optional documentation
@@ -28,6 +28,7 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - Continued discussion with immutable, versioned results
 - Persistent request queue
 - English and French interface and generated content
+- Persistent light, dark and system appearance preferences
 - Human-confirmed publication to GitHub Issues, GitLab Issues, Jira and GLPI
 
 SpecHelper does **not** modify source code, create pull requests or write to
@@ -70,7 +71,7 @@ Open **Settings** after starting the application. Labels follow the selected lan
    connection** verifies connectivity, a read query and read-only access. Database
    credentials are never included in AI prompts.
 5. **Set up the instance.** Choose the team name, optional short label, color,
-   application language and whether comparison is available for new requests.
+   application language. Choose light, dark or system appearance for this browser.
    The language applies to the interface and new analyses; existing requests keep
    their language and published files. See [English and French](docs/localization.md).
 6. **Optionally set up ticket publication.** Add and test a ticket connector, then
@@ -87,8 +88,11 @@ From **Requests**:
 1. Select an environment.
 2. Describe the business need.
 3. Attach screenshots or documents if useful.
-4. Optionally enable **Compare multiple analyses**.
+4. Choose a request type: automatic, feature, bug or documentation.
 5. Start the analysis and answer any clarification questions.
+
+Independent comparison is selected automatically from Settings and enabled assistant
+roles. Business forms contain no per-request comparison control.
 
 The sidebar provides **Requests**, **Questions**, **Tickets** and **Settings**. A shared task queue
 stays visible on desktop and is available in a drawer on smaller screens.
@@ -106,7 +110,8 @@ not create external tickets automatically. Use **Publish ticket** to review the
 target, fields and preview, then explicitly confirm creation. Published tickets
 remain linked to the exact result version under **Tickets**.
 
-From **Questions**, ask how the selected project works. The shared analysis engine
+From **Questions**, choose a general, technical, functional or architecture question
+and ask how the selected project works. The shared analysis engine
 can ask for clarification and produces an explanation with Git references, verified
 facts and uncertainties. Copy the displayed answer, download optional business,
 technical or mixed Markdown documentation, or choose **Create a request**. The
@@ -154,6 +159,8 @@ Further documentation:
 - [Functional specification](docs/specification.md)
 - [Environment context](docs/environment-context.md)
 - [Questions and reusable context](docs/questions.md)
+- [Appearance and analysis preferences](docs/appearance.md)
+- [v1.8 acceptance report](docs/acceptance-v1.8.md)
 - [v1.7 acceptance report](docs/acceptance-v1.7.md)
 - [v1.6 acceptance report](docs/acceptance-v1.6.md)
 - [Implementation, operations and runtime checks](docs/implementation.md)

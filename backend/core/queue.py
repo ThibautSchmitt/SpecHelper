@@ -2,6 +2,8 @@
 
 from uuid import UUID
 
+from django.db.models import OuterRef, Subquery
+
 from .models import AIConnection, AnalysisRun, Environment, Job, PublishedTicket, Request
 
 RECENT_LIMIT = 15
@@ -25,22 +27,9 @@ def assignments_for(job, run):
     ]
     if not recorded:
         recorded = job.payload.get("assignments", [])
-    if job.status == "RUNNING" and run and run.orchestration.get("version") == "1.5":
-        active = [step for step in run.steps if step.get("status") == "RUNNING"]
-        if active:
-            step = active[-1]
-            recorded = [
-                {
-                    "connection_id": step.get("connection_id"),
-                    "connection_name": step.get("connection_name", ""),
-                    "agent": step.get("provider", ""),
-                    "model": step.get("model", ""),
-                    "public_role": step.get("public_role", ""),
-                    "model_family": step.get("model_family", ""),
-                }
-            ]
-        elif job.payload.get("current_assignment"):
-            recorded = [job.payload["current_assignment"]]
+    current = current_assignment(job, run)
+    if current:
+        recorded = [current]
     values, seen = [], set()
     for item in recorded:
         value = {
@@ -63,6 +52,33 @@ def assignments_for(job, run):
     return values
 
 
+def current_assignment(job, run):
+    """Only mark an executing step or a newly reserved session as current."""
+    if job.kind != "analysis" or job.status != "RUNNING" or not run:
+        return None
+    active = [step for step in run.steps if step.get("status") == "RUNNING"]
+    if active:
+        step = active[-1]
+        return {**step, "agent": step.get("provider", step.get("agent", ""))}
+    reserved = job.payload.get("current_assignment")
+    if reserved and (
+        not run.steps
+        or (
+            reserved.get("context_id")
+            and not any(step.get("context_id") == reserved["context_id"] for step in run.steps)
+        )
+    ):
+        return reserved
+    return None
+
+
+def execution_state(job, run):
+    """Distinguish a live execution from retained historical assignment evidence."""
+    if current_assignment(job, run):
+        return "current"
+    return "previous" if assignments_for(job, run) else "unassigned"
+
+
 def snapshot():
     jobs = list(Job.objects.filter(status__in=["RUNNING", "QUEUED"]).order_by("created_at", "id"))
     jobs += list(
@@ -70,6 +86,24 @@ def snapshot():
             "-finished_at", "-created_at", "-id"
         )[:RECENT_LIMIT]
     )
+    # Clarification is not a scheduler state: retain its latest completed job even
+    # when it falls outside the bounded terminal history, without creating work.
+    latest_job = Job.objects.filter(kind="analysis", target=OuterRef("target")).order_by(
+        "-created_at", "-id"
+    )
+    paused_jobs = Job.objects.filter(
+        kind="analysis",
+        target__in=[
+            str(pk)
+            for pk in Request.objects.filter(status="NEEDS_CLARIFICATION").values_list(
+                "pk", flat=True
+            )
+        ],
+    ).filter(pk=Subquery(latest_job.values("pk")[:1]))
+    paused_jobs = list(paused_jobs)
+    paused_ids = {job.pk for job in paused_jobs}
+    seen = {job.pk for job in jobs}
+    jobs += [job for job in paused_jobs if job.pk not in seen]
     request_ids = []
     for job in jobs:
         if job.kind == "analysis":
@@ -93,17 +127,43 @@ def snapshot():
         environment = item.environment if item else environments.get(job.target)
         run = runs.get(job.pk)
         assignments = assignments_for(job, run)
+        assignment_state = execution_state(job, run)
+        paused = (
+            job.kind == "analysis"
+            and item
+            and item.status == "NEEDS_CLARIFICATION"
+            and job.status == "DONE"
+            and job.pk in paused_ids
+        )
+        queue_state = "PAUSED" if paused else job.status
+        progress = item.progress[-1].get("label", "") if item and item.progress else ""
+        stage = (progress or "Analysis in progress") if job.status == "RUNNING" else ""
+        if paused:
+            stage = "Your answer is needed"
+        elif job.status == "QUEUED":
+            stage = "Waiting for a worker"
+        elif job.status == "DONE":
+            stage = "Analysis completed" if job.kind == "analysis" else "Synchronization completed"
+        elif job.kind == "sync" and job.status == "RUNNING":
+            stage = "Synchronizing repositories"
         provider_names = list(
             dict.fromkeys(
                 step["provider"] for step in (run.steps if run else []) if step.get("provider")
             )
         ) or [agents[pk] for pk in job.payload.get("connection_ids", []) if pk in agents]
+        if assignment_state == "current":
+            provider_names = list(dict.fromkeys(a["agent"] for a in assignments if a["agent"]))
         values.append(
             {
                 "id": job.pk,
                 "kind": job.kind,
                 "workflow": item.workflow if item else None,
                 "status": job.status,
+                "queue_state": queue_state,
+                "assignment_state": assignment_state,
+                "stage": stage,
+                "pause_reason": "A business answer is needed." if paused else "",
+                "executor_name": "Git synchronization" if job.kind == "sync" else None,
                 "request_id": str(item.pk) if item else None,
                 "environment_id": environment.pk if environment else None,
                 "title": item.need[:180] if item else environment.name if environment else "Task",
@@ -114,9 +174,16 @@ def snapshot():
                 )
                 if job.kind == "analysis"
                 else "Synchronization",
-                "agent": (", ".join(provider_names) or None) if job.status != "QUEUED" else None,
+                "agent": (", ".join(provider_names) or None)
+                if job.kind == "analysis" and job.status != "QUEUED"
+                else None,
                 "assignments": assignments,
                 "public_role": (
+                    assignments[0].get("public_role")
+                    if assignment_state == "current" and assignments
+                    else None
+                )
+                or (
                     run.orchestration.get("waiting_role")
                     if job.status == "QUEUED"
                     else run.orchestration.get("current_role")
@@ -147,11 +214,13 @@ def snapshot():
             }
         )
     publications = list(
-        PublishedTicket.objects.filter(status="PUBLISHING").select_related("version", "request")
+        PublishedTicket.objects.filter(status="PUBLISHING").select_related(
+            "version", "request", "connector"
+        )
     )
     publications += list(
         PublishedTicket.objects.exclude(status="PUBLISHING")
-        .select_related("version", "request")
+        .select_related("version", "request", "connector")
         .order_by("-finished_at", "-created_at")[:RECENT_LIMIT]
     )
     for publication in publications:
@@ -163,6 +232,15 @@ def snapshot():
                 "kind": "publication",
                 "status": {"PUBLISHING": "RUNNING", "PUBLISHED": "DONE"}.get(state, "ERROR"),
                 "publication_status": state,
+                "queue_state": {"PUBLISHING": "RUNNING", "PUBLISHED": "DONE"}.get(state, "ERROR"),
+                "assignment_state": "unassigned",
+                "executor_name": publication.connector.name,
+                "stage": "Publishing ticket"
+                if state == "PUBLISHING"
+                else "Ticket published"
+                if state == "PUBLISHED"
+                else "",
+                "pause_reason": "",
                 "request_id": str(publication.request_id),
                 "environment_id": publication.request.environment_id,
                 "title": publication.title,
@@ -192,12 +270,16 @@ def snapshot():
     ordered = sorted(
         values,
         key=lambda value: (
-            {"RUNNING": 0, "QUEUED": 1}.get(value["status"], 2),
+            {"RUNNING": 0, "QUEUED": 1, "PAUSED": 2, "DONE": 3, "ERROR": 3}.get(
+                value["queue_state"], 5
+            ),
             value["queue_position"] or 0
             if value["status"] in {"RUNNING", "QUEUED"}
             else -(value["finished_at"] or value["created_at"]).timestamp(),
         ),
     )
-    active = [value for value in ordered if value["status"] in {"RUNNING", "QUEUED"}]
-    recent = [value for value in ordered if value["status"] not in {"RUNNING", "QUEUED"}]
+    active = [value for value in ordered if value["queue_state"] in {"RUNNING", "QUEUED", "PAUSED"}]
+    recent = [
+        value for value in ordered if value["queue_state"] not in {"RUNNING", "QUEUED", "PAUSED"}
+    ]
     return active + recent[:RECENT_LIMIT]

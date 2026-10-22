@@ -118,18 +118,17 @@ def test_create_upload_and_shared_queue(environment, storage):
 def test_question_comparison_and_blank_guards(environment, storage):
     client = Client()
     InstanceSettings.objects.update_or_create(pk=1, defaults={"allow_confrontation": False})
-    assert (
-        post(
-            client,
-            "/api/questions",
-            {
-                "environment_id": environment.id,
-                "need": "How is status computed?",
-                "confrontation": True,
-            },
-        ).status_code
-        == 409
+    created = post(
+        client,
+        "/api/questions",
+        {
+            "environment_id": environment.id,
+            "need": "How is status computed?",
+            "confrontation": True,
+        },
     )
+    assert created.status_code == 201
+    assert created.json()["confrontation"] is False
     assert (
         post(
             client,
@@ -141,7 +140,7 @@ def test_question_comparison_and_blank_guards(environment, storage):
         ).status_code
         == 422
     )
-    assert Request.objects.count() == 0
+    assert Request.objects.count() == 1
 
 
 def test_version_copy_and_document_formats_preserve_selected_source(answer, storage):

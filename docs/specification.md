@@ -74,7 +74,7 @@ Out of scope: multi-tenant management, request-history search, automatic PRs, bu
 ## Project questions
 
 Questions explain existing behavior through the same analysis and shared queue as
-requests. They support attachments, optional comparison, clarification during
+requests. They support attachments, configured independent comparison, clarification during
 exploration and versioned follow-ups. Answers identify verified facts, inferences,
 uncertainties and Git references. No ticket, goal or external publication is created.
 
@@ -85,3 +85,20 @@ the desired change. Derived requests have independent sessions and results, keep
 source-question provenance and recheck current sources before trusting transferred
 conclusions. Later question versions never rewrite transferred attachments.
 See [questions](questions.md) for the complete workflow.
+
+## Appearance and analysis preferences
+
+Requests and questions choose their analysis policy automatically from instance
+settings and authenticated assistant roles. Their forms collect an environment,
+a business category, text and optional attachments; no comparison checkbox is
+shown. Configuration, role instructions and skills remain in Settings. Existing
+requests retain their recorded comparison policy and immutable artifacts.
+
+The shared shell uses fixed navigation, central content and a desktop task panel.
+The task panel groups running, waiting, clarification, completed and failed work;
+measured position changes respect reduced motion. Cards distinguish the current
+assistant from previous execution records and identify non-AI connector work.
+
+Light, dark and system preferences persist in the browser. System mode follows
+live device appearance changes. Theme changes preserve the same controls and
+page hierarchy. Settings retains shared instance color and language controls.

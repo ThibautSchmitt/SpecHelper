@@ -1,11 +1,13 @@
 """Ticket connector administration and explicitly confirmed publication endpoints."""
 
 import math
+from datetime import timedelta
 from typing import Literal
 from uuid import UUID
 
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ninja import Router, Schema
 from ninja.errors import HttpError
 from pydantic import ConfigDict, Field, field_validator
@@ -164,16 +166,28 @@ def connector_projects(request, connector_id: int):
 
 @router.get("/tickets")
 def list_tickets(
-    request, platform: str = "", environment: str = "", search: str = "", page: int = 1
+    request,
+    platform: str = "",
+    environment: str = "",
+    search: str = "",
+    page: int = 1,
+    status: str = "PUBLISHED",
 ):
-    values = PublishedTicket.objects.filter(status=PublishedTicket.Status.PUBLISHED).select_related(
-        "connector", "version"
-    )
+    if status not in {"all", *PublishedTicket.Status.values}:
+        raise HttpError(422, "Unknown ticket publication status.")
+    values = PublishedTicket.objects.all().select_related("connector", "version")
     environments = list(
         values.order_by("version__environment_name")
         .values_list("version__environment_name", flat=True)
         .distinct()
     )
+    stale = Q(status="PUBLISHING", updated_at__lt=timezone.now() - timedelta(seconds=90))
+    if status == "UNCERTAIN":
+        values = values.filter(Q(status="UNCERTAIN") | stale)
+    elif status == "PUBLISHING":
+        values = values.filter(status=status).exclude(stale)
+    elif status != "all":
+        values = values.filter(status=status)
     if platform:
         values = values.filter(platform=platform)
     if environment:
@@ -192,12 +206,31 @@ def list_tickets(
         "page": page,
         "page_size": size,
         "environments": environments,
+        "statuses": PublishedTicket.Status.values,
+    }
+
+
+@router.get("/tickets/{ticket_id}")
+def ticket_detail(request, ticket_id: UUID):
+    value = get_object_or_404(
+        PublishedTicket.objects.select_related("connector", "version"), pk=ticket_id
+    )
+    labels = value.snapshot.get("labels", [])
+    return {
+        **publication_dict(value),
+        "description": value.body,
+        "labels": [label for label in labels if isinstance(label, str)]
+        if isinstance(labels, list)
+        else [],
+        "payload_available": True,
     }
 
 
 @router.get("/requests/{request_id}/versions/{number}/publications")
 def version_publications(request, request_id: UUID, number: int):
-    version = get_object_or_404(ResultVersion, request_id=request_id, number=number, request__workflow="request")
+    version = get_object_or_404(
+        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+    )
     return [
         publication_dict(value)
         for value in version.published_tickets.select_related("connector", "version")
@@ -206,13 +239,17 @@ def version_publications(request, request_id: UUID, number: int):
 
 @router.post("/requests/{request_id}/versions/{number}/publication-preview")
 def publication_preview(request, request_id: UUID, number: int, payload: PreviewIn):
-    version = get_object_or_404(ResultVersion, request_id=request_id, number=number, request__workflow="request")
+    version = get_object_or_404(
+        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+    )
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     return preview(version, connector, payload.project, payload.template_id, payload.issue_type)
 
 
 @router.post("/requests/{request_id}/versions/{number}/publications")
 def create_publication(request, request_id: UUID, number: int, payload: PublicationIn):
-    version = get_object_or_404(ResultVersion, request_id=request_id, number=number, request__workflow="request")
+    version = get_object_or_404(
+        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+    )
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     return publication_dict(publish(version, connector, payload.model_dump()))

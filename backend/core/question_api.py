@@ -23,6 +23,7 @@ class QuestionIn(Schema):
     environment_id: int
     need: str = Field(min_length=1, max_length=30000)
     confrontation: bool = False
+    category: Literal["general", "technical", "functional", "architecture"] = "general"
 
 
 class AnswersIn(Schema):
@@ -43,6 +44,7 @@ class TransferIn(QuestionIn):
     need: str = Field(min_length=10, max_length=30000)
     source_version: int = Field(ge=1)
     include_context: bool = True
+    category: Literal["auto", "feature", "bug", "documentation"] = "auto"
 
 
 def markdown_response(content, filename):
@@ -64,7 +66,9 @@ def questions(request):
 
 @router.post("/questions", response={201: dict})
 def create_question(request, payload: QuestionIn):
-    value = actions.create(payload.environment_id, payload.need, payload.confrontation)
+    value = actions.create(
+        payload.environment_id, payload.need, payload.confrontation, payload.category
+    )
     return Status(201, actions.question_dict(value, full=True))
 
 
@@ -166,5 +170,6 @@ def create_request(request, question_id: UUID, payload: TransferIn):
         payload.need,
         payload.confrontation,
         payload.include_context,
+        payload.category,
     )
     return Status(201, request_dict(value, full=True))

@@ -8,9 +8,9 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from ninja.errors import HttpError
 
+from .creation_policy import automatic_comparison, creation_settings
 from .models import (
     Environment,
-    InstanceSettings,
     QuestionDocument,
     Request,
     RequestAttachment,
@@ -40,25 +40,19 @@ def source_version(question_id, number):
     return value
 
 
-def comparison_settings(confrontation):
-    options, _ = InstanceSettings.objects.get_or_create(pk=1)
-    if confrontation and not options.allow_confrontation:
-        raise HttpError(409, "Comparison is disabled for new requests.")
-    return options
-
-
 @transaction.atomic
-def create(environment_id, need, confrontation=False):
+def create(environment_id, need, confrontation=False, category="general"):
     if not need.strip():
         raise HttpError(422, "Enter your question.")
-    options = comparison_settings(confrontation)
+    options = creation_settings()
     environment = get_object_or_404(Environment, pk=environment_id)
     value = Request.objects.create(
         workflow="question",
         environment=environment,
         environment_name_snapshot=environment.name,
         need=need.strip(),
-        confrontation=confrontation,
+        confrontation=automatic_comparison(options),
+        category=category,
         language=options.language,
     )
     RequestMessage.objects.create(request=value, role="user", kind="need", content=value.need)
@@ -192,12 +186,18 @@ def transfer_preview(question_id, number):
 
 @transaction.atomic
 def create_request(
-    question_id, number, environment_id, need, confrontation=False, include_context=True
+    question_id,
+    number,
+    environment_id,
+    need,
+    confrontation=False,
+    include_context=True,
+    category="auto",
 ):
     if not need.strip():
         raise HttpError(422, "Describe the requested change explicitly.")
     version = source_version(question_id, number)
-    options = comparison_settings(confrontation)
+    options = creation_settings()
     environment = get_object_or_404(Environment, pk=environment_id)
     preview = transfer_preview(question_id, number) if include_context else None
     value = Request.objects.create(
@@ -206,7 +206,8 @@ def create_request(
         environment=environment,
         environment_name_snapshot=environment.name,
         need=need.strip(),
-        confrontation=confrontation,
+        confrontation=automatic_comparison(options),
+        category=category,
         language=options.language,
     )
     RequestMessage.objects.create(request=value, role="user", kind="need", content=value.need)

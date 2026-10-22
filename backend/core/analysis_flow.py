@@ -143,6 +143,7 @@ def context(request):
     previous = request.versions.order_by("-number").first()
     return {
         "workflow": request.workflow,
+        "category": request.category,
         "output_language": request.language,
         "need": request.need,
         "understanding": request.understanding,

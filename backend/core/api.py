@@ -38,7 +38,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="1.7", auth=None)
+api = NinjaAPI(title="SpecHelper", version="1.8", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -96,6 +96,7 @@ class RequestIn(Schema):
     environment_id: int
     need: str = Field(min_length=10, max_length=30000)
     confrontation: bool = False
+    category: Literal["auto", "feature", "bug", "documentation"] = "auto"
 
 
 class AnswersIn(Schema):
@@ -184,6 +185,7 @@ def request_dict(value, full=False):
         "need": value.need,
         "title": value.need.splitlines()[0][:160],
         "workflow": value.workflow,
+        "category": value.category,
         "source_question": {
             "id": str(value.source_question_version.request_id),
             "version": value.source_question_version.number,
@@ -560,15 +562,16 @@ def requests(request):
 
 @api.post("/requests", response={201: dict})
 def create_request(request, payload: RequestIn):
-    options, _ = InstanceSettings.objects.get_or_create(pk=1)
-    if payload.confrontation and not options.allow_confrontation:
-        raise HttpError(409, "Comparison is disabled for new requests.")
+    from .creation_policy import automatic_comparison, creation_settings
+
+    options = creation_settings()
     environment = get_object_or_404(Environment, pk=payload.environment_id)
     value = Request.objects.create(
         environment=environment,
         environment_name_snapshot=environment.name,
         need=payload.need,
-        confrontation=payload.confrontation,
+        confrontation=automatic_comparison(options),
+        category=payload.category,
         language=options.language,
     )
     RequestMessage.objects.create(request=value, role="user", kind="need", content=value.need)

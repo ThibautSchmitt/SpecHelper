@@ -3,7 +3,26 @@ import { useI18n } from "@/lib/i18n";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Paperclip, Plus, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  Paperclip,
+  Plus,
+  Sparkles,
+  FileText,
+  CircleHelp,
+  Upload,
+  X,
+  Search,
+  SlidersHorizontal,
+  Bug,
+  Layers,
+  Wrench,
+  Briefcase,
+  BookOpen,
+  ChevronDown,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { QuestionResult } from "@/components/question-result";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,9 +33,14 @@ import {
   type Environment,
   type RequestItem,
   type QuestionTransfer,
+  type RequestDetail,
 } from "@/lib/api";
 
-export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | "question" }) {
+export function WorkItemForm({
+  workflow = "request",
+}: {
+  workflow?: "request" | "question";
+}) {
   const isQuestion = workflow === "question";
   const base = isQuestion ? "/questions" : "/requests";
   const search = useSearchParams();
@@ -30,29 +54,34 @@ export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | 
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [environment, setEnvironment] = useState("");
   const [need, setNeed] = useState("");
-  const [confrontation, setConfrontation] = useState(false);
-  const [allowConfrontation, setAllowConfrontation] = useState(true);
+  const [category, setCategory] = useState(isQuestion ? "general" : "auto");
+  const [filter, setFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<RequestDetail | null>(null);
+  const [previewError, setPreviewError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [uploaded, setUploaded] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    api<{ allow_confrontation: boolean }>("/settings")
-      .then((v) => setAllowConfrontation(v.allow_confrontation !== false))
-      .catch(() => {});
-    Promise.all([
-      api<Environment[]>("/environments"),
-      api<RequestItem[]>(base),
-    ])
+    Promise.all([api<Environment[]>("/environments"), api<RequestItem[]>(base)])
       .then(([e, r]) => {
         setEnvironments(e);
         setRequests(r);
+        setLoaded(true);
       })
       .catch((e) => setError(e.message));
   }, [base]);
   useEffect(() => {
-    if (!sourceQuestion) { setTransfer(null); return; }
+    if (!sourceQuestion) {
+      setTransfer(null);
+      return;
+    }
     let alive = true;
     setTransfer(null);
     setIncludeContext(true);
@@ -60,10 +89,21 @@ export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | 
       setError(t("Choose a valid source answer version."));
       return;
     }
-    api<QuestionTransfer>(`/questions/${sourceQuestion}/versions/${sourceVersion}/transfer`)
-      .then(value => { if (alive) { setTransfer(value); setEnvironment(String(value.environment_id || "")); } })
-      .catch(e => { if (alive) setError(e.message); });
-    return () => { alive = false; };
+    api<QuestionTransfer>(
+      `/questions/${sourceQuestion}/versions/${sourceVersion}/transfer`,
+    )
+      .then((value) => {
+        if (alive) {
+          setTransfer(value);
+          setEnvironment(String(value.environment_id || ""));
+        }
+      })
+      .catch((e) => {
+        if (alive) setError(e.message);
+      });
+    return () => {
+      alive = false;
+    };
   }, [sourceQuestion, sourceVersion]);
   async function analyze(event: React.FormEvent) {
     event.preventDefault();
@@ -72,7 +112,12 @@ export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | 
     try {
       const contextFileCount = sourceQuestion && includeContext ? 1 : 0;
       if (files.length + contextFileCount > 20)
-        throw new Error(t("A maximum of 20 attachments is allowed.") + (contextFileCount ? " " + t("The question context counts as one attachment.") : ""));
+        throw new Error(
+          t("A maximum of 20 attachments is allowed.") +
+            (contextFileCount
+              ? " " + t("The question context counts as one attachment.")
+              : ""),
+        );
       if (files.some((file) => file.size > 25 * 1024 * 1024))
         throw new Error(t("Each file must be smaller than 25 MB."));
       if (
@@ -86,12 +131,20 @@ export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | 
         throw new Error(t("One of the file formats is not allowed."));
       let id = draftId;
       if (!id) {
-        const created = await send<RequestItem>(sourceQuestion ? `/questions/${sourceQuestion}/requests` : base, {
-          environment_id: Number(environment),
-          need,
-          confrontation,
-          ...(sourceQuestion ? { source_version: sourceVersion, include_context: includeContext } : {}),
-        });
+        const created = await send<RequestItem>(
+          sourceQuestion ? `/questions/${sourceQuestion}/requests` : base,
+          {
+            environment_id: Number(environment),
+            need,
+            category,
+            ...(sourceQuestion
+              ? {
+                  source_version: sourceVersion,
+                  include_context: includeContext,
+                }
+              : {}),
+          },
+        );
         id = created.id;
         setDraftId(id);
       }
@@ -109,19 +162,102 @@ export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | 
       setBusy(false);
     }
   }
+  const types = isQuestion
+    ? [
+        { value: "general", label: "General", icon: CircleHelp },
+        { value: "technical", label: "Technical", icon: Wrench },
+        { value: "functional", label: "Functional", icon: Briefcase },
+        { value: "architecture", label: "Architecture", icon: Layers },
+      ]
+    : [
+        { value: "auto", label: "Automatic", icon: Sparkles },
+        { value: "feature", label: "Feature", icon: Plus },
+        { value: "bug", label: "Bug", icon: Bug },
+        { value: "documentation", label: "Documentation", icon: BookOpen },
+      ];
+  const filtered = requests.filter(
+    (item) =>
+      (!statusFilter || item.status === statusFilter) &&
+      `${item.title || ""} ${item.need} ${item.environment_name}`
+        .toLocaleLowerCase(dateLocale)
+        .includes(filter.toLocaleLowerCase(dateLocale)),
+  );
+  useEffect(() => {
+    if (!previewId) return;
+    let alive = true;
+    setPreview(null);
+    setPreviewError("");
+    api<RequestDetail>(`/questions/${previewId}`)
+      .then((value) => {
+        if (alive) setPreview(value);
+      })
+      .catch((e) => {
+        if (alive) setPreviewError(e.message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [previewId]);
+  function addFiles(items: File[]) {
+    setFiles((current) => [
+      ...current,
+      ...items.filter(
+        (item) =>
+          !current.some(
+            (old) =>
+              old.name === item.name &&
+              old.size === item.size &&
+              old.lastModified === item.lastModified,
+          ),
+      ),
+    ]);
+  }
+  function reset() {
+    if (busy || draftId) return;
+    setNeed("");
+    setCategory(isQuestion ? "general" : "auto");
+    setFiles([]);
+    setError("");
+    if (!sourceQuestion) setEnvironment("");
+    const input = document.getElementById(
+      "attachments",
+    ) as HTMLInputElement | null;
+    if (input) input.value = "";
+  }
+  const PageIcon = isQuestion ? CircleHelp : FileText;
   return (
-    <div className="space-y-8">
-      <div>
-        <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-primary">
-          {t(isQuestion ? "Explore your project" : "Your workspace")}
+    <div className="space-y-6">
+      <header className="page-heading">
+        <div className="page-title">
+          <span className="page-icon">
+            <PageIcon size={20} />
+          </span>
+          <div>
+            <h1>{t(isQuestion ? "Questions" : "Requests")}</h1>
+            <p className="muted">
+              {t(
+                isQuestion
+                  ? "Ask a question or explore your previous explanations."
+                  : "Create a request or review your existing analyses.",
+              )}
+            </p>
+          </div>
         </div>
-        <h1>{t(isQuestion ? "Understand how your project works." : "From need to ticket, simply.")}</h1>
-        <p className="muted mt-2">
-          {t(
-            isQuestion ? "Ask about existing behavior. SpecHelper explains it using your project sources." : "Describe your idea. SpecHelper assesses its impact and prepares an actionable ticket.",
-          )}
-        </p>
-      </div>
+        <Button
+          type="button"
+          size="sm"
+          aria-label={t(isQuestion ? "New question" : "New request")}
+          onClick={() => {
+            document
+              .getElementById("create-work-item")
+              ?.scrollIntoView({ block: "start" });
+            document.getElementById("need")?.focus();
+          }}
+        >
+          <Plus size={16} />
+          <span>{t(isQuestion ? "New question" : "New request")}</span>
+        </Button>
+      </header>
       {error && (
         <div
           role="alert"
@@ -130,13 +266,25 @@ export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | 
           {t(error)}
         </div>
       )}
-      <div className="grid items-start gap-7">
-        <Card>
-          <h2 className="flex items-center gap-2">
-            <Plus size={19} className="text-primary" /> {t(isQuestion ? "New question" : "New request")}
+      <Card id="create-work-item">
+        <div className="section-heading">
+          <h2>
+            <PageIcon size={18} />
+            {t(isQuestion ? "New question" : "New request")}
           </h2>
-          <form onSubmit={analyze}>
-            <div className="field">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy || !!draftId}
+            onClick={reset}
+          >
+            {t("Clear form")}
+          </Button>
+        </div>
+        <form onSubmit={analyze}>
+          <div className="form-top-row">
+            <div>
               <label htmlFor="environment">{t("Environment")}</label>
               <select
                 id="environment"
@@ -154,8 +302,8 @@ export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | 
                     </option>
                   ))}
               </select>
-              {!environments.some((e) => e.status === "READY") && (
-                <p className="mt-2 text-sm muted">
+              {loaded && !environments.some((e) => e.status === "READY") && (
+                <p className="mt-2 text-xs muted">
                   {t("No environment is available.")}{" "}
                   <Link href="/admin" className="text-primary underline">
                     {t("Set up the instance")}
@@ -163,148 +311,347 @@ export function WorkItemForm({ workflow = "request" }: { workflow?: "request" | 
                 </p>
               )}
             </div>
-            <div className="field">
-              <label htmlFor="need">{t(isQuestion ? "Your question" : "Describe your need")}</label>
-              <Textarea
-                id="need"
-                required
-                minLength={isQuestion ? 1 : 10}
-                maxLength={30000}
-                className="min-h-48"
-                value={need}
-                disabled={busy || !!draftId}
-                onChange={(e) => setNeed(e.target.value)}
-                placeholder={t(
-                  isQuestion ? "How does the application validate a contract?" : "When a manager updates a contract, I would like…",
-                )}
-              />
-              <p className="mt-2 text-xs muted">
+            <fieldset disabled={busy || !!draftId}>
+              <legend className="mb-2 text-sm font-semibold">
+                {t(isQuestion ? "Question type" : "Request type")}
+              </legend>
+              <div className="type-options">
+                {types.map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={category === value}
+                    onClick={() => setCategory(value)}
+                  >
+                    <Icon size={14} />
+                    {t(label)}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+          <div className="field">
+            <label htmlFor="need">
+              {t(isQuestion ? "Your question" : "Describe your need")}
+            </label>
+            <Textarea
+              id="need"
+              required
+              minLength={isQuestion ? 1 : 10}
+              maxLength={30000}
+              className="min-h-36"
+              value={need}
+              disabled={busy || !!draftId}
+              onChange={(e) => setNeed(e.target.value)}
+              placeholder={t(
+                isQuestion
+                  ? "How does the application validate a contract?"
+                  : "When a manager updates a contract, I would like…",
+              )}
+            />
+            <div className="mt-2 flex justify-between gap-3 text-xs muted">
+              <p>
                 {t(
-                  isQuestion ? "Mention the behavior, rule or part of the project you want to understand." : "Explain who is affected, the expected outcome and any special cases.",
+                  isQuestion
+                    ? "Mention the behavior, rule or part of the project you want to understand."
+                    : "Explain who is affected, the expected outcome and any special cases.",
                 )}
               </p>
+              <span className="shrink-0">{need.length} / 30 000</span>
             </div>
-            {sourceQuestion && (
-              <div className="mt-5 rounded-lg border border-primary/30 p-4">
-                <h3 className="text-sm">{t("Context from a question")}</h3>
-                <p className="mt-2 text-sm muted">{t("Describe the change you want above. The explanation is reference material that will be checked against the selected environment.")}</p>
-                <Link className="mt-2 inline-block text-sm text-primary underline" href={`/questions/${sourceQuestion}?version=${sourceVersion}`}>{t("Source question")} · {t("Version")} {sourceVersion}</Link>
-                {!transfer ? <p role="status" className="mt-3 text-sm">{t("Loading question context…")}</p> : <>
-                  <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" checked={includeContext} disabled={busy || !!draftId} onChange={e => setIncludeContext(e.target.checked)} />{t("Attach question context")}: {transfer.name}</label>
-                  <p className="mt-2 text-xs muted">{includeContext ? t("This internal Markdown attachment is frozen for the new request and read only when needed.") : t("The context attachment will not be included.")}</p>
-                  <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("Review transferred context")}</summary><pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs">{transfer.content}</pre></details>
-                </>}
-              </div>
-            )}
-            <div className="field">
-              <label htmlFor="attachments" className="flex items-center gap-2">
-                <Paperclip size={16} /> {t("Attachments")}{" "}
-                <span className="font-normal muted">{t("(optional)")}</span>
-              </label>
+          </div>
+          {sourceQuestion && (
+            <div className="mt-5 rounded-lg border p-4">
+              <h3 className="text-sm">{t("Context from a question")}</h3>
+              <p className="mt-2 text-sm muted">
+                {t(
+                  "Describe the change you want above. The explanation is reference material that will be checked against the selected environment.",
+                )}
+              </p>
+              <Link
+                className="mt-2 inline-block text-sm text-primary underline"
+                href={`/questions/${sourceQuestion}?version=${sourceVersion}`}
+              >
+                {t("Source question")} · {t("Version")} {sourceVersion}
+              </Link>
+              {!transfer ? (
+                <p role="status" className="mt-3 text-sm">
+                  {t("Loading question context…")}
+                </p>
+              ) : (
+                <>
+                  <label className="mt-3 flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={includeContext}
+                      disabled={busy || !!draftId}
+                      onChange={(e) => setIncludeContext(e.target.checked)}
+                    />
+                    {t("Attach question context")}: {transfer.name}
+                  </label>
+                  <p className="mt-2 text-xs muted">
+                    {t(
+                      includeContext
+                        ? "This internal Markdown attachment is frozen for the new request and read only when needed."
+                        : "The context attachment will not be included.",
+                    )}
+                  </p>
+                  <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer">
+                      {t("Review transferred context")}
+                    </summary>
+                    <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs">
+                      {transfer.content}
+                    </pre>
+                  </details>
+                </>
+              )}
+            </div>
+          )}
+          <div className="field">
+            <label
+              htmlFor="attachments"
+              id="attachments-label"
+              className="flex items-center gap-2"
+            >
+              <Paperclip size={15} />
+              {t("Attachments")}{" "}
+              <span className="font-normal muted">{t("(optional)")}</span>
+            </label>
+            <div
+              className="file-dropzone"
+              data-dragging={dragging}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!busy && !draftId) setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                if (!busy && !draftId)
+                  addFiles(Array.from(e.dataTransfer.files));
+              }}
+            >
               <input
                 id="attachments"
                 type="file"
                 multiple
                 disabled={busy || !!draftId}
                 accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.docx,.txt,.md,.csv,.json,.log"
-                onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                className="w-full text-sm file:mr-3 file:rounded-md file:border file:bg-muted file:px-3 file:py-2"
+                aria-describedby="attachment-limits"
+                onChange={(e) => addFiles(Array.from(e.target.files || []))}
               />
-              <p className="mt-2 text-xs muted">
+              <Upload size={19} className="muted" />
+              <span className="text-xs font-medium">
+                {t("Drop files here, or click to browse")}
+              </span>
+              <p id="attachment-limits" className="text-xs muted">
                 {t(
                   "Images, PDF, Word or text · 25 MB per file · up to 20 files.",
                 )}
               </p>
             </div>
-            {allowConfrontation && (
-              <div className="mt-6">
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <input
-                    type="checkbox"
-                    checked={confrontation}
-                    disabled={busy || !!draftId}
-                    onChange={(e) => setConfrontation(e.target.checked)}
-                  />
-                  {t("Compare multiple analyses")}
-                </label>
-                <p className="mt-2 text-xs muted">
-                  {t(
-                    isQuestion ? "Compare two independent explanations. This option may take longer." : "Compare two independent analyses before preparing the ticket. This option may take longer.",
-                  )}
-                </p>
-              </div>
+            {!!files.length && (
+              <ul className="file-selection">
+                {files.map((file, index) => (
+                  <li key={`${file.name}-${index}`}>
+                    <Paperclip size={13} />
+                    <span>{file.name}</span>
+                    <button
+                      type="button"
+                      aria-label={t("Remove file {name}", { name: file.name })}
+                      disabled={busy || !!draftId}
+                      onClick={() =>
+                        setFiles((value) => value.filter((_, i) => i !== index))
+                      }
+                    >
+                      <X size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
-            <Button className="mt-7 w-full" disabled={busy || !environment || (!!sourceQuestion && !transfer)}>
-              <Sparkles size={17} />
+          </div>
+          <div className="form-actions">
+            <p className="muted">
+              {t(
+                isQuestion
+                  ? "Analysis may take a few minutes. You can return to your questions at any time."
+                  : "Analysis may take a few minutes. You can return to your requests at any time.",
+              )}
+            </p>
+            <Button
+              disabled={busy || !environment || (!!sourceQuestion && !transfer)}
+            >
+              <Sparkles size={16} />
               {busy
-                ? t(isQuestion ? "Sending your question…" : "Sending your request…")
+                ? t(
+                    isQuestion
+                      ? "Sending your question…"
+                      : "Sending your request…",
+                  )
                 : draftId
                   ? t("Resume submission")
                   : t(isQuestion ? "Analyze question" : "Analyze request")}
-              <ArrowRight size={17} />
+              <ArrowRight size={16} />
             </Button>
-          </form>
-        </Card>
-        <div className="space-y-5">
-          <Card className="border-primary/20">
-            <h2>{t(isQuestion ? "An explanation grounded in your project" : "Analysis grounded in your project")}</h2>
-            <ol className="mt-5 space-y-5 text-sm">
-              {[
-                t(isQuestion ? "You ask about the current behavior." : "You describe the desired outcome."),
-                t("SpecHelper asks questions when needed."),
-                t("The analysis uses your environment."),
-                t(isQuestion ? "You receive an explanation with source references." : "You receive a ticket ready to share."),
-              ].map((t, i) => (
-                <li className="flex gap-3" key={t}>
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-primary text-xs font-bold">
-                    {i + 1}
-                  </span>
-                  <span>{t}</span>
-                </li>
-              ))}
-            </ol>
-          </Card>
-          <p className="px-2 text-sm muted">
+          </div>
+        </form>
+      </Card>
+      <section className="overflow-hidden rounded-xl border bg-card">
+        <div className="work-list-header">
+          <h2>
+            <PageIcon size={17} />
+            {t(isQuestion ? "My questions" : "My requests")}
+            <span className="text-xs font-normal muted">{requests.length}</span>
+          </h2>
+          <div className="work-list-search">
+            <div className="relative min-w-0">
+              <Search size={14} className="absolute left-3 top-3 muted" />
+              <Input
+                className="pl-9"
+                aria-label={t(
+                  isQuestion ? "Search questions" : "Search requests",
+                )}
+                placeholder={t(
+                  isQuestion ? "Search questions" : "Search requests",
+                )}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-expanded={showFilters}
+              onClick={() => setShowFilters((value) => !value)}
+            >
+              <SlidersHorizontal size={14} />
+              {t("Filters")}
+            </Button>
+          </div>
+        </div>
+        {showFilters && (
+          <div className="work-list-filters">
+            <label htmlFor="work-status">{t("Filter by status")}</label>
+            <select
+              id="work-status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">{t("All statuses")}</option>
+              {Array.from(new Set(requests.map((item) => item.status))).map(
+                (status) => (
+                  <option key={status} value={status}>
+                    {t(statuses[status] || status)}
+                  </option>
+                ),
+              )}
+            </select>
+          </div>
+        )}
+        {!loaded && !error && (
+          <p role="status" className="p-8 text-center muted">
+            {t("Loading…")}
+          </p>
+        )}
+        {loaded && !filtered.length && (
+          <p className="p-8 text-center text-sm muted">
             {t(
-              isQuestion ? "Analysis may take a few minutes. You can return to your questions at any time." : "Analysis may take a few minutes. You can return to your requests at any time.",
+              requests.length
+                ? isQuestion
+                  ? "No questions match these filters."
+                  : "No requests match these filters."
+                : isQuestion
+                  ? "Your questions will appear here."
+                  : "Your requests will appear here.",
             )}
           </p>
-        </div>
-      </div>
-      <section>
-        <h2 className="mb-4">
-          {t(isQuestion ? "Questions" : "Recent requests")}{" "}
-          <span className="ml-2 text-sm font-normal muted">
-            {requests.length}
-          </span>
-        </h2>
-        {requests.length ? (
-          <div className="overflow-hidden rounded-xl border bg-card">
-            {requests.map((r) => (
-              <Link
-                key={r.id}
-                href={`${base}/${r.id}`}
-                className="flex items-center justify-between gap-4 border-b p-5 last:border-0 hover:bg-muted"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{r.title || r.need}</p>
-                  <p className="mt-1 text-xs muted">
-                    {r.environment_name} ·{" "}
-                    {new Date(r.created_at).toLocaleDateString(dateLocale)}
-                    {isQuestion && r.updated_at && <span className="block mt-1">{t("Last updated")}: {new Date(r.updated_at).toLocaleString(dateLocale)}</span>}
-                  </p>
-                </div>
-                <span className="badge shrink-0" data-state={r.status}>
-                  {t(statuses[r.status] || r.status)}
-                </span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <Card className="py-10 text-center muted">
-            {t(isQuestion ? "Your questions will appear here." : "Your requests will appear here.")}
-          </Card>
         )}
+        {filtered.map((item) => (
+          <article className="work-list-row" key={item.id}>
+            <div className="work-list-main">
+              <div className="min-w-0 flex-1">
+                <Link className="work-list-title" href={`${base}/${item.id}`}>
+                  {item.title || item.need}
+                </Link>
+                <p className="row-subtitle">
+                  {item.environment_name} ·{" "}
+                  {new Date(item.created_at).toLocaleDateString(dateLocale)}
+                  {item.category &&
+                    ` · ${t(types.find((type) => type.value === item.category)?.label || item.category)}`}
+                </p>
+                {item.updated_at && (
+                  <p className="row-subtitle">
+                    {t("Last updated")}:{" "}
+                    {new Date(item.updated_at).toLocaleString(dateLocale)}
+                  </p>
+                )}
+              </div>
+              <span className="badge shrink-0" data-state={item.status}>
+                {t(statuses[item.status] || item.status)}
+              </span>
+              {isQuestion && ["READY", "PARTIAL"].includes(item.status) && (
+                <button
+                  type="button"
+                  className="p-2"
+                  aria-label={t(
+                    previewId === item.id
+                      ? "Hide answer"
+                      : "Preview answer {title}",
+                    { title: item.title || item.need },
+                  )}
+                  aria-expanded={previewId === item.id}
+                  onClick={() => {
+                    setPreview(null);
+                    setPreviewError("");
+                    setPreviewId((value) =>
+                      value === item.id ? null : item.id,
+                    );
+                  }}
+                >
+                  <ChevronDown size={16} />
+                </button>
+              )}
+            </div>
+            {previewId === item.id && (
+              <div className="mt-5 space-y-4">
+                {previewError ? (
+                  <p role="alert" className="text-sm text-red-700">
+                    {t(previewError)}
+                  </p>
+                ) : !preview ? (
+                  <p role="status" className="muted text-sm">
+                    {t("Loading…")}
+                  </p>
+                ) : preview.latest_version ? (
+                  <QuestionResult
+                    key={`${item.id}-${preview.latest_version.number}`}
+                    questionId={item.id}
+                    result={preview.latest_version}
+                    versions={preview.versions}
+                    latestNumber={preview.latest_version.number}
+                    selectedNumber={null}
+                    onSelect={(number) =>
+                      router.push(
+                        `/questions/${item.id}${number ? `?version=${number}` : ""}`,
+                      )
+                    }
+                  />
+                ) : (
+                  <Link
+                    href={`/questions/${item.id}`}
+                    className="text-primary underline"
+                  >
+                    {t("Open question")}
+                  </Link>
+                )}
+              </div>
+            )}
+          </article>
+        ))}
       </section>
     </div>
   );

@@ -22,6 +22,8 @@ export type GitConnection = {
 export function GitSources() {
   const { t } = useI18n();
   const [values, setValues] = useState<GitConnection[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const editor = useRef<HTMLFormElement>(null);
   const [editing, setEditing] = useState<GitConnection | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -61,7 +63,12 @@ export function GitSources() {
       setBusy(false);
     }
   }
+  useEffect(() => {
+    if (showForm)
+      editor.current?.querySelector<HTMLInputElement>("input")?.focus();
+  }, [showForm, editing]);
   function reset() {
+    setShowForm(false);
     setEditing(null);
     setForm({
       name: "",
@@ -72,8 +79,22 @@ export function GitSources() {
     });
   }
   return (
-    <Card className="min-w-0">
-      <h2>{t("Sources Git")}</h2>
+    <Card className="min-w-0" aria-label={t("Sources Git")}>
+      <div className="section-heading">
+        <h2>{t("Sources Git")}</h2>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={t("New Git connection")}
+          onClick={() => {
+            reset();
+            setShowForm(true);
+          }}
+        >
+          {t("Add connection")}
+        </Button>
+      </div>
       <p className="mt-2 text-sm muted">
         {t(
           "Connect source accounts for read access. Ticket publication permissions are configured separately.",
@@ -134,6 +155,7 @@ export function GitSources() {
                 variant="outline"
                 disabled={busy}
                 onClick={() => {
+                  setShowForm(true);
                   setEditing(value);
                   setForm({
                     name: value.name,
@@ -189,98 +211,103 @@ export function GitSources() {
           {t("No Git source connections yet.")}
         </p>
       )}
-      <form
-        className="mt-6 border-t pt-5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          action(async () => {
-            await send(
-              editing ? `/git-connections/${editing.id}` : "/git-connections",
-              form,
-              editing ? "PUT" : "POST",
-            );
-            reset();
-          });
-        }}
-      >
-        <h3>{t(editing ? "Edit Git connection" : "New Git connection")}</h3>
-        <div className="field">
-          <label htmlFor="git-source-name">{t("Connection name")}</label>
-          <Input
-            id="git-source-name"
-            required
-            maxLength={100}
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="git-source-provider">{t("Provider")}</label>
-          <select
-            id="git-source-provider"
-            disabled={!!editing}
-            value={form.provider}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                provider: e.target.value,
-                base_url:
-                  e.target.value === "github"
-                    ? "https://github.com"
-                    : "https://gitlab.com",
-              })
-            }
-          >
-            <option value="github">GitHub</option>
-            <option value="gitlab">GitLab</option>
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="git-source-server">{t("Server URL")}</label>
-          <Input
-            id="git-source-server"
-            type="url"
-            required
-            disabled={form.provider === "github" || !!editing}
-            value={form.base_url}
-            onChange={(e) => setForm({ ...form, base_url: e.target.value })}
-          />
-        </div>
-        {form.provider === "gitlab" && (
+      {showForm && (
+        <form
+          ref={editor}
+          className="mt-6 border-t pt-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            action(async () => {
+              await send(
+                editing ? `/git-connections/${editing.id}` : "/git-connections",
+                form,
+                editing ? "PUT" : "POST",
+              );
+              reset();
+            });
+          }}
+        >
+          <h3>{t(editing ? "Edit Git connection" : "New Git connection")}</h3>
           <div className="field">
-            <label htmlFor="git-source-secret">{t("Read access token")}</label>
+            <label htmlFor="git-source-name">{t("Connection name")}</label>
             <Input
-              id="git-source-secret"
-              type="password"
-              autoComplete="new-password"
-              value={form.secret}
-              onChange={(e) => setForm({ ...form, secret: e.target.value })}
+              id="git-source-name"
+              required
+              maxLength={100}
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
-            <p className="mt-2 text-xs muted">
+          </div>
+          <div className="field">
+            <label htmlFor="git-source-provider">{t("Provider")}</label>
+            <select
+              id="git-source-provider"
+              disabled={!!editing}
+              value={form.provider}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  provider: e.target.value,
+                  base_url:
+                    e.target.value === "github"
+                      ? "https://github.com"
+                      : "https://gitlab.com",
+                })
+              }
+            >
+              <option value="github">GitHub</option>
+              <option value="gitlab">GitLab</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="git-source-server">{t("Server URL")}</label>
+            <Input
+              id="git-source-server"
+              type="url"
+              required
+              disabled={form.provider === "github" || !!editing}
+              value={form.base_url}
+              onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+            />
+          </div>
+          {form.provider === "gitlab" && (
+            <div className="field">
+              <label htmlFor="git-source-secret">
+                {t("Read access token")}
+              </label>
+              <Input
+                id="git-source-secret"
+                type="password"
+                autoComplete="new-password"
+                value={form.secret}
+                onChange={(e) => setForm({ ...form, secret: e.target.value })}
+              />
+              <p className="mt-2 text-xs muted">
+                {t(
+                  "Use only read_api and read_repository access. Leave empty to retain an existing token.",
+                )}
+              </p>
+            </div>
+          )}
+          {form.provider === "github" && (
+            <p className="mt-3 text-sm muted">
               {t(
-                "Use only read_api and read_repository access. Leave empty to retain an existing token.",
+                "Save this connection, then choose Connect with GitHub to authorize it in your browser.",
               )}
             </p>
-          </div>
-        )}
-        {form.provider === "github" && (
-          <p className="mt-3 text-sm muted">
-            {t(
-              "Save this connection, then choose Connect with GitHub to authorize it in your browser.",
-            )}
-          </p>
-        )}
-        <div className="mt-4 flex gap-2">
-          <Button disabled={busy}>
-            {t(editing ? "Save connection" : "Add Git connection")}
-          </Button>
-          {editing && (
-            <Button type="button" variant="outline" onClick={reset}>
-              {t("Cancel")}
-            </Button>
           )}
-        </div>
-      </form>
+          <div className="mt-4 flex gap-2">
+            <Button disabled={busy}>
+              {t(editing ? "Save connection" : "Add Git connection")}
+            </Button>
+            {showForm && (
+              <Button type="button" variant="outline" onClick={reset}>
+                {t("Cancel")}
+              </Button>
+            )}
+          </div>
+        </form>
+      )}
       {error && (
         <p role="alert" className="mt-4 text-sm text-red-700">
           {t(error)}

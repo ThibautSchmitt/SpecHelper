@@ -423,6 +423,29 @@ test("changed templates require a review and tickets link to their immutable res
   expect(posts).toBe(1);
   expect(previews).toBe(2);
   await modal.getByRole("button", { name: "Close", exact: true }).click();
+  await page.route("**/api/tickets/ticket", (route) =>
+    route.fulfill({
+      json: {
+        id: "ticket",
+        title: "Reviewed export title",
+        external_id: "42",
+        external_key: "42",
+        url: "https://github.com/team/app/issues/42",
+        platform: "github",
+        project: "team/app",
+        environment_name: "Production",
+        request_id: id,
+        version_number: 1,
+        status: "PUBLISHED",
+        created_at: version.created_at,
+        updated_at: version.created_at,
+        error: "",
+        description: "Reviewed export content",
+        labels: [],
+        payload_available: true,
+      },
+    }),
+  );
   const queries: string[] = [];
   await page.route("**/api/tickets?**", (r) => {
     queries.push(r.request().url());

@@ -1,7 +1,14 @@
 "use client";
 import { useI18n } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
-import { GitBranch, Paintbrush, RefreshCw } from "lucide-react";
+import {
+  GitBranch,
+  Paintbrush,
+  RefreshCw,
+  Settings,
+  ShieldCheck,
+} from "lucide-react";
+import { ThemeControl } from "@/components/theme-control";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -120,15 +127,19 @@ export default function Admin() {
   ];
   return (
     <div className="space-y-6">
-      <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-primary">
-          {t("Team settings")}
-        </p>
-        <h1>{t("Settings")}</h1>
-        <p className="mt-2 muted">
-          {t("Connect your tools and prepare analysis environments.")}
-        </p>
-      </div>
+      <header className="page-heading">
+        <div className="page-title">
+          <span className="page-icon">
+            <Settings size={20} />
+          </span>
+          <div>
+            <h1>{t("Settings")}</h1>
+            <p className="muted">
+              {t("Connect your tools and prepare analysis environments.")}
+            </p>
+          </div>
+        </div>
+      </header>
       <nav
         className="flex flex-wrap gap-1 border-b pb-3"
         aria-label={t("Administration")}
@@ -164,16 +175,188 @@ export default function Admin() {
         </div>
       )}
       {tab === "connections" && (
-        <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="settings-overview">
           <GitSources />
-          <AIConnections values={connections?.ais || []} onChanged={refresh} />
-          <TicketConnectors />
+          <Card>
+            <h2 className="flex items-center gap-2">
+              <Paintbrush size={18} />
+              {t("Appearance")}
+            </h2>
+            <p className="mt-2 mb-5 text-xs muted">
+              {t("Change the appearance of this browser.")}
+            </p>
+            <ThemeControl />
+            <fieldset disabled={!settingsLoaded || busy} className="mt-5">
+              <label htmlFor="appearance-color">{t("Primary color")}</label>
+              <div className="color-options">
+                {[
+                  "#2563eb",
+                  "#7c3aed",
+                  "#0f766e",
+                  "#d97706",
+                  "#be123c",
+                  "#475569",
+                ].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    style={{ background: color }}
+                    aria-label={t("Choose primary color {color}", { color })}
+                    aria-pressed={settings.primary_color === color}
+                    onClick={() =>
+                      setSettings({ ...settings, primary_color: color })
+                    }
+                  />
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  id="appearance-color"
+                  type="color"
+                  className="h-9 w-12 rounded border p-1"
+                  value={settings.primary_color}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      primary_color: event.target.value,
+                    })
+                  }
+                />
+                <code className="text-xs muted">{settings.primary_color}</code>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    action(async () => {
+                      const current = await api<typeof settings>("/settings");
+                      await send(
+                        "/settings",
+                        { ...current, primary_color: settings.primary_color },
+                        "PUT",
+                      );
+                      window.dispatchEvent(new Event("settings-updated"));
+                    }, t("Color saved."))
+                  }
+                >
+                  {t("Save color")}
+                </Button>
+              </div>
+            </fieldset>
+          </Card>
+          <div className="settings-wide">
+            <AIConnections
+              values={connections?.ais || []}
+              onChanged={refresh}
+            />
+          </div>
+          <Card>
+            <div className="section-heading">
+              <h2>
+                <GitBranch size={18} />
+                {t("Environments")}
+              </h2>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTab("environments")}
+              >
+                {t("Manage")}
+              </Button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {environments.length ? (
+                environments.map((environment) => (
+                  <div
+                    className="flex items-center justify-between gap-3 border-b pb-3 last:border-0"
+                    key={environment.id}
+                  >
+                    <span className="text-sm">{environment.name}</span>
+                    <span className="badge" data-state={environment.status}>
+                      {t(statuses[environment.status] || environment.status)}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm muted">
+                  {t("No environment is available.")}
+                </p>
+              )}
+            </div>
+          </Card>
+          <Card>
+            <div className="section-heading">
+              <h2>
+                <ShieldCheck size={18} />
+                {t("AI & Agents")}
+              </h2>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTab("ai-agents")}
+              >
+                {t("Configure")}
+              </Button>
+            </div>
+            <p className="mt-4 text-sm muted">
+              {t("New analyses automatically use the configured AI roles.")}
+            </p>
+          </Card>
+          <div className="settings-wide">
+            <TicketConnectors />
+          </div>
         </div>
       )}
       {tab === "ai-agents" && (
-        <div className="grid items-start gap-6 xl:grid-cols-2">
-          <OrchestrationSettingsForm />
-          <AIConnections onChanged={refresh} />
+        <div className="space-y-6">
+          <Card>
+            <h2>{t("Analysis policy")}</h2>
+            <p className="mt-2 text-sm muted">
+              {t("New analyses automatically use the configured AI roles.")}
+            </p>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                action(async () => {
+                  const current = await api<typeof settings>("/settings");
+                  await send(
+                    "/settings",
+                    {
+                      ...current,
+                      allow_confrontation: settings.allow_confrontation,
+                    },
+                    "PUT",
+                  );
+                  window.dispatchEvent(new Event("settings-updated"));
+                }, t("Instance settings saved."));
+              }}
+            >
+              <fieldset disabled={!settingsLoaded || busy} className="mt-4">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={settings.allow_confrontation !== false}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        allow_confrontation: event.target.checked,
+                      })
+                    }
+                  />
+                  {t("Independent counter-analysis")}
+                </label>
+                <Button size="sm" className="mt-3">
+                  {t("Save analysis policy")}
+                </Button>
+              </fieldset>
+            </form>
+          </Card>
+          <div className="grid items-start gap-6 xl:grid-cols-2">
+            <OrchestrationSettingsForm />
+            <AIConnections onChanged={refresh} />
+          </div>
         </div>
       )}
       {tab === "environments" && (
@@ -334,6 +517,9 @@ export default function Admin() {
           <h2 className="flex items-center gap-2">
             <Paintbrush size={20} /> {t("Instance settings")}
           </h2>
+          <div className="mt-5">
+            <ThemeControl />
+          </div>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -409,19 +595,6 @@ export default function Admin() {
                   </span>
                 </div>
               </div>
-              <label className="mt-6 flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={settings.allow_confrontation !== false}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      allow_confrontation: e.target.checked,
-                    })
-                  }
-                />
-                {t("Allow comparison for new requests")}
-              </label>
               <Button className="mt-6" disabled={busy}>
                 {t("Save settings")}
               </Button>

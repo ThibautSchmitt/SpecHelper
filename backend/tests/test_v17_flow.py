@@ -11,6 +11,7 @@ from django.test import Client
 from core.models import (
     AnalysisResult,
     DatabaseConnection,
+    InstanceSettings,
     Job,
     QuestionDocument,
     Request,
@@ -320,6 +321,8 @@ def test_derived_request_uses_current_baseline_and_runs_ordinary_ticket_pipeline
     enqueue_analysis(question.pk)
     execute(question, storage, [assessment(), {"analysis": report(), "result": explanation}])
     original = question.versions.get()
+    # The normal single-analysis path is selected by the instance, not the form.
+    InstanceSettings.objects.update_or_create(pk=1, defaults={"allow_confrontation": False})
     request = create_request(
         question.pk, 1, question.environment_id, "Add an option for archived exports."
     )

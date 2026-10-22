@@ -103,7 +103,7 @@ test("admin language persists across navigation, reload and translated errors", 
   await page.getByRole("link", { name: fr["Requests"], exact: true }).click();
   await expect(
     page.getByRole("heading", {
-      name: fr["From need to ticket, simply."],
+      name: fr["Requests"],
       exact: true,
     }),
   ).toBeVisible();

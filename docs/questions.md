@@ -8,7 +8,8 @@ persistent FIFO queue. Questions do not create tickets, goals or code changes.
 ## Explore a project
 
 Open **Questions**, select an environment, ask a question and optionally attach
-files or compare independent analyses. A question can ask about business rules,
+files. Select a general, technical, functional or architecture question. Independent
+analysis comparison follows Settings and the configured assistant roles. A question can ask about business rules,
 source behavior, data flows or architecture; no development terminology is required.
 
 Answer clarification questions when requested. Clarification may happen before or
