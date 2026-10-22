@@ -1,12 +1,12 @@
-> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local. Working PDF briefs are not distributed in this repository.
+> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local.
 
 # SpecHelper v1.2 acceptance — October 21, 2026
 
-Reference: `SpecHelper_Cahier_des_charges_v1_2.pdf`, 11 pages, 18 sections, FR-01 through FR-17 and ten acceptance criteria. v1.2 was installed at `http://localhost:3000`. v1.0/v1.1 audits remain historical evidence. This report predates the English/French language feature; its test counts do not validate that later feature.
+v1.2 was installed at `http://localhost:3000`. v1.0/v1.1 audits remain historical evidence. This report predates the English/French language feature; its test counts do not validate that later feature.
 
 ## Overriding product decision
 
-The user requested a business-user application and removal of agents/skills from Admin. No tab, form or advanced analysis options expose these mechanisms. Roles, skills and enabled flags remain internal. This deliberately replaces the visible settings specified by FR-10 and PDF section 11. Safety contracts and essential workflow steps cannot be disabled.
+The user requested a business-user application and removal of agents/skills from Admin. No tab, form or advanced analysis options expose these mechanisms. Roles, skills and enabled flags remain internal. This deliberately replaces the earlier proposal to expose internal settings. Safety contracts and essential workflow steps cannot be disabled.
 
 ## Coverage of all 18 sections
 

@@ -1,8 +1,8 @@
-> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local. Working PDF briefs are not distributed in this repository.
+> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local.
 
 # v1.0 specification audit
 
-Source: `SpecHelper_Cahier_des_charges_v1_0.pdf`, read in full on October 20, 2026. Includes subsequent user requests for browser connections, no token entry and terminology accessible to business users.
+This report covers v1.0 implementation and validation on October 20, 2026. Includes subsequent user requests for browser connections, no token entry and terminology accessible to business users.
 
 “Verified” refers to the stated evidence scope. Deterministic agents validate orchestration software, not real-model quality or performance.
 

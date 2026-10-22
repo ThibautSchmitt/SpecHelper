@@ -79,13 +79,11 @@ Current language behavior and checks are described in [localization](localizatio
 
 ---
 
-> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local. Working PDF briefs are not distributed in this repository.
+> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local.
 
 > Historical v1.0 implementation notes. Current behavior, migrations and evidence are documented in the [v1.2 audit](acceptance-v1.2.md), [v1.1 audit](acceptance-v1.1.md) and the [README](../README.md).
 
 ## Historical v1.0 specification tracking
-
-Source: `SpecHelper_Cahier_des_charges_v1_0.pdf` (29 sections).
 
 This document tracks the full scope. A requirement is accepted only after verification. The [detailed audit](acceptance.md) distinguishes every section, thirteen criteria and outstanding evidence.
 

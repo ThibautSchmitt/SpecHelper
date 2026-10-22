@@ -1,8 +1,8 @@
-> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local. Working PDF briefs are not distributed in this repository.
+> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local.
 
 # v1.2 delivery
 
-Reference: SpecHelper_Cahier_des_charges_v1_2.pdf (11 pages, 18 sections, FR-01 through FR-17 and ten criteria).
+Scope: assistant availability, independent analysis comparison, session resumption and simplified administration.
 
 - Preserve the shared team instance without accounts, simple queue, Git/worktrees/baselines, Linux isolation, request-specific files, immutable versions and discussion.
 - AI connections: independent Codex and Claude connections, availability separate from authentication, automatic selection, exclusion of known exhausted quotas, bounded fallback and queueing when nothing can start. Never invent remaining quotas.

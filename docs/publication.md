@@ -4,7 +4,7 @@ Local preparation dated October 21, 2026, without creating a remote repository o
 
 ## Reviewed scope
 
-Sources, tests, migrations, configuration and Python/npm lockfiles were read or analyzed, along with documentation and three working PDF briefs. Installed dependencies and generated files are not project sources; their license metadata was reviewed. Local instance data is outside the distribution.
+Sources, tests, migrations, configuration, Python/npm lockfiles and documentation were read or analyzed. Installed dependencies and generated files are not project sources; their license metadata was reviewed. Local instance data is outside the distribution.
 
 Public acceptance reports are anonymized. Originals remain only in local storage excluded from Git. Request/session identifiers, validation repository references and instance-specific business names were removed. Synthetic test values remain as fixtures.
 
@@ -20,7 +20,6 @@ Dependencies retain their licenses; see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_
 - `.env` and local variants; only `.env.example` is published.
 - Credentials, tokens, keys, dumps and account-access files.
 - `node_modules`, `.venv`, `.next`, caches, test reports and generated metadata.
-- Working PDF briefs; [specification.md](specification.md) describes the public scope.
 - Generated agent instructions specific to the development environment.
 
 ## Checks and CI

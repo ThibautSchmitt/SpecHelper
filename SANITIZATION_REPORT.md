@@ -12,8 +12,7 @@ are not rewritten. See [localization verification](docs/localization.md).
 
 The publication contains 141 project-owned files, including this report. Sources,
 tests, migrations, configuration and documentation were read; both dependency locks
-were parsed. The three working PDF briefs were parsed (36 pages) and are excluded
-from distribution. Installed dependency/cache/build files and private runtime data
+were parsed. Installed dependency/cache/build files and private runtime data
 are excluded; dependency license metadata was inspected separately.
 
 ## Secrets and private references
@@ -37,8 +36,7 @@ shadcn/ui components retain the upstream MIT notice. Dependencies retain their
 licenses; see THIRD_PARTY_NOTICES.md. In particular, pglast is GPL-3.0-or-later,
 and psycopg is LGPL. The combined backend/container is not exclusively MIT.
 
-Locks refer to public package registries. Working PDF briefs and generated agent
-instructions are excluded. Docker images carry the project license/notices.
+Locks refer to public package registries. Generated agent instructions are excluded. Docker images carry the project license/notices.
 CONTRIBUTING, SECURITY, GitHub issue/PR templates and a checks-only
 GitHub Actions workflow are supplied without account-specific links.
 
@@ -68,5 +66,5 @@ but do not establish the absence of every possible vulnerability.
 
 Unreadable count: **0**.
 
-All publication files are readable UTF-8. The excluded working PDFs were readable.
+All publication files are readable UTF-8.
 There is no unreadable-file sidecar because the count is zero.

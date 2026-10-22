@@ -1,8 +1,8 @@
-> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local. Working PDF briefs are not distributed in this repository.
+> Public version: session/request identifiers and instance references are anonymized. Original evidence remains local.
 
 # v1.1 specification audit
 
-Source: `SpecHelper_Cahier_des_charges_v1_1.pdf`, read in full on October 20, 2026. Its footer still says v1.0; this audit tracks the 23 v1.1 sections. Previous evidence remains in `acceptance.md`.
+This report covers v1.1 implementation and validation on October 20, 2026. Previous evidence remains in `acceptance.md`.
 
 | Sections | Implementation and evidence |
 |---|---|

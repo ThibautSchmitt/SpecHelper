@@ -35,6 +35,6 @@ ai-sessions/
 .aws/
 .codex/
 .agents/
-/SpecHelper_Cahier_des_charges_*.pdf
+/*.pdf
 /frontend/AGENTS.md
 /frontend/next-env.d.ts
