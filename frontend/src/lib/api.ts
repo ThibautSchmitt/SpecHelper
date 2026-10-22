@@ -54,6 +54,9 @@ export type Environment = {
 export type RequestItem = {
   id: string;
   need: string;
+  title?: string;
+  updated_at?: string;
+  workflow?: "request" | "question";
   confrontation: boolean;
   language: "en" | "fr";
   status: string;
@@ -71,12 +74,16 @@ export type ResultVersion = {
   ticket: Record<string, string | string[]>;
   markdown: string;
   goal_markdown: string;
+  answer_markdown?: string;
+  explanation?: { title: string; [key: string]: unknown };
   artifacts: Record<string, string>;
   run_number?: number;
   context_snapshot?: ContextSnapshot;
   context_usage?: ContextUsage[];
 };
 export type RequestDetail = RequestItem & {
+  source_question?: { id: string; version: number; title?: string } | null;
+  derived_requests?: { id: string; need: string; status: string; source_version?: number }[];
   analysis_runs?: {
     number: number;
     status: string;
@@ -120,7 +127,7 @@ export type RequestDetail = RequestItem & {
   understanding: string;
   progress: { label: string; at: string }[];
   error: string;
-  attachments: { id: string; name: string; size: number }[];
+  attachments: { id: string; name: string; size: number; internal?: boolean; source_question?: { id: string; version: number } | null }[];
   ticket: Record<string, string | string[]> | null;
   markdown: string | null;
   latest_version: ResultVersion | null;
@@ -159,4 +166,13 @@ export const statuses: Record<string, string> = {
   MODEL_UNAVAILABLE: "Model unavailable",
   AUTH_ERROR: "Authentication error",
   DISABLED: "Disabled",
+};
+
+export type QuestionDocument = {
+  id: string; kind: "business" | "technical" | "mixed"; markdown: string;
+  source_version: number; language: "en" | "fr"; created_at: string; download_url: string;
+};
+export type QuestionTransfer = {
+  name: string; content: string; source_question_id: string; source_version: number;
+  environment_id: number | null; baseline: RequestDetail["baseline"]; language: "en" | "fr";
 };

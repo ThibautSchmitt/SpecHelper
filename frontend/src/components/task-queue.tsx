@@ -16,6 +16,7 @@ import { roleLabels, warningMessage, type AnalysisWarning } from "@/lib/orchestr
 export type QueueJob = {
   id: number | string;
   kind: string;
+  workflow?: "request" | "question";
   status: string;
   publication_status?: string;
   title: string;
@@ -170,6 +171,7 @@ export function TaskQueue() {
                     </span>
                   )}
                 </div>
+                {job.workflow === "question" && <p className="mt-2 text-xs font-medium text-primary">{t("Question")}</p>}
                 <p className="mt-2 text-xs font-semibold">
                   {t(statuses[state] || state)}
                 </p>
@@ -230,7 +232,7 @@ export function TaskQueue() {
       </ol>
       <p className="mt-5 text-xs muted">
         {t(
-          "Recent completed tasks are shown here. Open Requests or Tickets for full history.",
+          "Recent completed tasks are shown here. Open Requests, Questions or Tickets for full history.",
         )}
       </p>
     </div>

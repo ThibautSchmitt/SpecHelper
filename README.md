@@ -5,7 +5,9 @@ SpecHelper is a self-hosted application that turns a business request into:
 - a concise ticket ready to copy into Jira;
 - a detailed `goal.md` that can be given to a coding agent.
 
-It analyzes requests against actual project sources, configured Git environments,
+It also answers questions about existing project behavior without creating a ticket.
+
+It analyzes requests and questions against actual project sources, configured Git environments,
 optional PostgreSQL databases and user-provided attachments. One instance serves
 a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 
@@ -21,6 +23,8 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - Optional comparison of independent AI analyses, with one or two connected assistants
 - Configurable analyst/counter-analyst roles and optional independent verification
 - Concise tickets and detailed `goal.md` files
+- Project questions with source-backed explanations and optional documentation
+- Reviewed question context transferred to independent change requests
 - Continued discussion with immutable, versioned results
 - Persistent request queue
 - English and French interface and generated content
@@ -86,7 +90,7 @@ From **Requests**:
 4. Optionally enable **Compare multiple analyses**.
 5. Start the analysis and answer any clarification questions.
 
-The sidebar provides **Requests**, **Tickets** and **Settings**. A shared task queue
+The sidebar provides **Requests**, **Questions**, **Tickets** and **Settings**. A shared task queue
 stays visible on desktop and is available in a drawer on smaller screens.
 
 The result includes two downloadable files:
@@ -101,6 +105,14 @@ separate immutable version; previous versions remain available. SpecHelper does
 not create external tickets automatically. Use **Publish ticket** to review the
 target, fields and preview, then explicitly confirm creation. Published tickets
 remain linked to the exact result version under **Tickets**.
+
+From **Questions**, ask how the selected project works. The shared analysis engine
+can ask for clarification and produces an explanation with Git references, verified
+facts and uncertainties. Copy the displayed answer, download optional business,
+technical or mixed Markdown documentation, or choose **Create a request**. The
+normal request form opens with a removable context attachment; describe the
+change you want explicitly. Questions generate no ticket or `goal.md`. See
+[questions and reusable context](docs/questions.md).
 
 ## Architecture
 
@@ -141,6 +153,8 @@ Further documentation:
 
 - [Functional specification](docs/specification.md)
 - [Environment context](docs/environment-context.md)
+- [Questions and reusable context](docs/questions.md)
+- [v1.7 acceptance report](docs/acceptance-v1.7.md)
 - [v1.6 acceptance report](docs/acceptance-v1.6.md)
 - [Implementation, operations and runtime checks](docs/implementation.md)
 - [English and French](docs/localization.md)

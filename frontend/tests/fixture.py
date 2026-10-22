@@ -52,6 +52,11 @@ elif action == "cleanup":
     for request in requests:
         shutil.rmtree(settings.MEDIA_ROOT / str(request.id), ignore_errors=True)
     Job.objects.filter(kind="analysis", target__in=[str(r.id) for r in requests]).delete()
+    # Delete only controlled fixture artifacts and derived requests before their protected sources.
+    from core.models import QuestionDocument
+
+    QuestionDocument.objects.filter(source_version__request__in=requests).delete()
+    requests.filter(workflow="request").delete()
     requests.delete()
     environments.delete()
     if saved_ai.exists():
@@ -73,9 +78,35 @@ else:
         AISession.objects.filter(request=request).update(
             runtime_id="11111111-1111-4111-8111-111111111111"
         )
-    elif action == "result":
-        assert request.conversation[0]["answers"]["Q1"] == "Yes, active contracts only."
-        assert request.session.runtime_id == "11111111-1111-4111-8111-111111111111"
+    elif action == "question-result":
+        from core.question_outputs import QuestionOutput
+        from core.results import publish
+
+        if request.workflow != "question":
+            raise RuntimeError("Question fixtures require a question workflow")
+        output = QuestionOutput.model_validate({
+            "status": "READY",
+            "answer": {
+                "title": "Active contract validation",
+                "summary": "Active contracts are validated before export.",
+                "business_explanation": "Only active records can be exported.",
+                "technical_explanation": "The export service applies an active-record filter.",
+                "verified_facts": ["The export service checks active status."],
+                "rules": ["Inactive contracts are excluded."],
+                "steps": ["Select contracts", "Filter active records", "Export"],
+                "examples": ["An inactive contract is omitted."],
+                "dependencies": ["Contract repository"],
+                "flows": ["Contract selection to CSV download"],
+                "inferences": ["Historical imports may use this filter."],
+                "uncertainties": ["Historical imports were not checked."],
+                "references": [{"repository": "fixture/contracts", "path": "contracts/export.py", "symbol": "export_active"}],
+            },
+        })
+        publish(request.id, request.analysis_runs.order_by("-number").first(), output)
+    elif action in {"result", "derived-result"}:
+        if action == "result":
+            assert request.conversation[0]["answers"]["Q1"] == "Yes, active contracts only."
+            assert request.session.runtime_id == "11111111-1111-4111-8111-111111111111"
         from core.artifacts import ArtifactOutput
         from core.results import publish
 
@@ -103,7 +134,7 @@ else:
                     "implementation_guidance": ["Reuse the existing selection"],
                     "acceptance_criteria": ["Active contracts only"],
                     "tests_expected": ["Verify the active filter"],
-                    "useful_attachments": ["need.txt"],
+                    "useful_attachments": list(request.attachments.values_list("name", flat=True)),
                 },
             }
         )

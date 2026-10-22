@@ -63,7 +63,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
   await expect.poll(() => connectionBody).toMatchObject({ roles: ["analyst", "verifier", "counter_analyst"], additional_instructions: "Use precise references", skill_overrides: { evidence: false } });
   expect(connectionBody).not.toHaveProperty("role_instructions");
   const nav = page.getByRole("navigation", { name: "Main navigation", exact: true });
-  await expect(nav.getByRole("link")).toHaveCount(3);
+  await expect(nav.getByRole("link")).toHaveCount(4);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 

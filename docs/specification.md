@@ -70,3 +70,18 @@ Git mirrors are shared; analysis worktrees are isolated and immutable. The Linux
 Orchestration is bounded to 285 seconds, with a 295-second supervisor limit per job, excluding queue/capacity waits. Latency targets depend on the provider. Quotas and reset times not officially exposed remain unknown.
 
 Out of scope: multi-tenant management, request-history search, automatic PRs, business writes, proprietary graphs and advanced scheduling.
+
+## Project questions
+
+Questions explain existing behavior through the same analysis and shared queue as
+requests. They support attachments, optional comparison, clarification during
+exploration and versioned follow-ups. Answers identify verified facts, inferences,
+uncertainties and Git references. No ticket, goal or external publication is created.
+
+Users can copy the displayed answer, create optional business/technical/mixed
+Markdown documentation tied to that version, or open the normal request form with
+a reviewed, removable Markdown context attachment. The user explicitly describes
+the desired change. Derived requests have independent sessions and results, keep
+source-question provenance and recheck current sources before trusting transferred
+conclusions. Later question versions never rewrite transferred attachments.
+See [questions](questions.md) for the complete workflow.

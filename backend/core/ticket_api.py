@@ -197,7 +197,7 @@ def list_tickets(
 
 @router.get("/requests/{request_id}/versions/{number}/publications")
 def version_publications(request, request_id: UUID, number: int):
-    version = get_object_or_404(ResultVersion, request_id=request_id, number=number)
+    version = get_object_or_404(ResultVersion, request_id=request_id, number=number, request__workflow="request")
     return [
         publication_dict(value)
         for value in version.published_tickets.select_related("connector", "version")
@@ -206,13 +206,13 @@ def version_publications(request, request_id: UUID, number: int):
 
 @router.post("/requests/{request_id}/versions/{number}/publication-preview")
 def publication_preview(request, request_id: UUID, number: int, payload: PreviewIn):
-    version = get_object_or_404(ResultVersion, request_id=request_id, number=number)
+    version = get_object_or_404(ResultVersion, request_id=request_id, number=number, request__workflow="request")
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     return preview(version, connector, payload.project, payload.template_id, payload.issue_type)
 
 
 @router.post("/requests/{request_id}/versions/{number}/publications")
 def create_publication(request, request_id: UUID, number: int, payload: PublicationIn):
-    version = get_object_or_404(ResultVersion, request_id=request_id, number=number)
+    version = get_object_or_404(ResultVersion, request_id=request_id, number=number, request__workflow="request")
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     return publication_dict(publish(version, connector, payload.model_dump()))

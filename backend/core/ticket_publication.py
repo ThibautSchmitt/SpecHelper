@@ -213,6 +213,8 @@ def mapped_value(ticket, label):
 
 
 def preview(version, connector, project, template_id="", issue_type=""):
+    if version.request.workflow != "request":
+        raise HttpError(409, "A question cannot publish an external ticket.")
     if version.status not in {"READY", "PARTIAL"}:
         raise HttpError(409, "Only a completed result version can be published.")
     _, options = checked_options(connector, project, template_id, issue_type)
@@ -364,6 +366,8 @@ def store_success(record, result):
 def publish(version, connector, payload):
     if payload.get("confirmed") is not True:
         raise HttpError(422, "Explicit human confirmation is required to publish a ticket.")
+    if version.request.workflow != "request":
+        raise HttpError(409, "A question cannot publish an external ticket.")
     if version.status not in {"READY", "PARTIAL"}:
         raise HttpError(409, "Only a completed result version can be published.")
     project = payload["project"]

@@ -39,3 +39,12 @@ The runtime sees only verified frozen copies through a dedicated read-only volum
 and per-file sandbox bindings. Include original context resources in backups and
 apply the same access controls as source workspaces and attachments. File-read
 telemetry reports access, not semantic understanding or complete data provenance.
+
+
+Question explanations and documentation inherit the same shared-instance access
+controls as requests. Transferred context is an isolated, read-only attachment,
+not privileged agent instructions. It contains curated findings and provenance,
+not original documents or private agent reports. Review it before creating a
+request; exact configured-secret redaction cannot identify every sensitive fact.
+Later source changes require verification against the new request's current
+baseline. Referenced question versions and generated documents are retained.

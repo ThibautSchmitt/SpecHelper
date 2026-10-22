@@ -102,13 +102,18 @@ def snapshot():
             {
                 "id": job.pk,
                 "kind": job.kind,
+                "workflow": item.workflow if item else None,
                 "status": job.status,
                 "request_id": str(item.pk) if item else None,
                 "environment_id": environment.pk if environment else None,
                 "title": item.need[:180] if item else environment.name if environment else "Task",
                 "environment_name": (item.environment_name_snapshot if item else "")
                 or (environment.name if environment else ""),
-                "operation": "Analysis" if job.kind == "analysis" else "Synchronization",
+                "operation": (
+                    "Question analysis" if item and item.workflow == "question" else "Analysis"
+                )
+                if job.kind == "analysis"
+                else "Synchronization",
                 "agent": (", ".join(provider_names) or None) if job.status != "QUEUED" else None,
                 "assignments": assignments,
                 "public_role": (
@@ -136,7 +141,9 @@ def snapshot():
                 "started_at": job.started_at,
                 "finished_at": job.finished_at,
                 "error": job.error,
-                "href": f"/requests/{item.pk}" if item else "/admin",
+                "href": f"/{'questions' if item.workflow == 'question' else 'requests'}/{item.pk}"
+                if item
+                else "/admin",
             }
         )
     publications = list(

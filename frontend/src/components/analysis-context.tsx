@@ -10,8 +10,8 @@ const usageLabels = {
   unavailable: "Read telemetry unavailable",
 };
 
-export function AnalysisContext({ requestId, runNumber, snapshot, usage = [] }: {
-  requestId: string; runNumber?: number; snapshot?: ContextSnapshot; usage?: ContextUsage[];
+export function AnalysisContext({ requestId, runNumber, snapshot, usage = [], workflow = "request" }: {
+  requestId: string; runNumber?: number; snapshot?: ContextSnapshot; usage?: ContextUsage[]; workflow?: "request" | "question";
 }) {
   const { t, dateLocale } = useI18n();
   if (!snapshot?.schema_version) return <p className="mt-3 text-xs muted">{t("Environment context was not recorded for this historical analysis.")}</p>;
@@ -38,7 +38,7 @@ export function AnalysisContext({ requestId, runNumber, snapshot, usage = [] }: 
         <ul className="mt-2 space-y-1 text-xs" aria-label={t("Document read observations")}>
           {observations.length ? observations.map((item, index) => <li key={index} className={item.status === "observed" ? "text-green-700" : "muted"}>{item.public_role && `${t(roleLabels[item.public_role] || item.public_role)} · `}{t(usageLabels[item.status] || usageLabels.unavailable)}</li>) : <li className="muted">{t("Read telemetry unavailable")}</li>}
         </ul>
-        {runNumber !== undefined && <a className="mt-2 inline-block text-primary underline" href={`/api/requests/${requestId}/runs/${runNumber}/context/${resource.version_id}/download`}>{t("Download frozen document")}</a>}
+        {runNumber !== undefined && <a className="mt-2 inline-block text-primary underline" href={`/api/${workflow === "question" ? "questions" : "requests"}/${requestId}/runs/${runNumber}/context/${resource.version_id}/download`}>{t("Download frozen document")}</a>}
       </li>;
     })}</ul>
   </details>;

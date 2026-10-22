@@ -63,6 +63,21 @@ observations survive later calls and failures.
 
 See [environment context](environment-context.md) for administration and limits.
 
+## Questions and request handoff
+
+Questions use the same `Orchestrator`, comparison roles and `analysis` jobs as
+requests. Intent selects typed explanation outputs and observed-behavior instructions;
+source preparation, clarification, continuations, availability and isolation remain
+shared. A question produces `answer.md`, not an `AnalysisResult` ticket or goal.
+Question output schemas validate source paths and frozen repository identities; the
+engine verifies referenced files exist inside the selected worktree. Remaining
+focused-verification uncertainty forces a partial answer.
+
+Optional documents are immutable views of a selected answer. A derived request
+keeps a source-version link and optionally an isolated Markdown attachment. Source
+context is not inlined into every prompt; current source verification is required.
+See [questions](questions.md) for retention, export and provenance behavior.
+
 ## Dashboard and ticket publication
 
 The desktop shell has a persistent instance sidebar, central route content and an
@@ -112,6 +127,9 @@ docker compose run --rm --no-deps agent-runtime python -m runtime.workflow_smoke
 docker compose run --rm --no-deps agent-runtime python -m runtime.workflow_smoke claude
 docker compose run --build --rm --no-deps agent-runtime python -m runtime.process_smoke
 docker compose run --rm --no-deps agent-runtime python -m runtime.v16_smoke
+docker compose run --rm --no-deps agent-runtime python -m runtime.v17_smoke
+docker compose run --rm --no-deps -e SPECHELPER_SMOKE_STACK=typescript \
+  agent-runtime python -m runtime.v17_smoke
 docker compose run --rm --no-deps -e SPECHELPER_SMOKE_STACK=typescript \
   -e SPECHELPER_SMOKE_CONFRONTATION=1 -e SPECHELPER_SMOKE_DUAL_PROVIDER=1 \
   agent-runtime python -m runtime.workflow_smoke

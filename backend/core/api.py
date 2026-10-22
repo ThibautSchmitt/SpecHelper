@@ -38,7 +38,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="1.5", auth=None)
+api = NinjaAPI(title="SpecHelper", version="1.7", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -182,6 +182,16 @@ def request_dict(value, full=False):
     result = {
         "id": str(value.id),
         "need": value.need,
+        "title": value.need.splitlines()[0][:160],
+        "workflow": value.workflow,
+        "source_question": {
+            "id": str(value.source_question_version.request_id),
+            "version": value.source_question_version.number,
+            "title": value.source_question_version.explanation.get("title", "Question"),
+            "href": f"/questions/{value.source_question_version.request_id}?version={value.source_question_version.number}",
+        }
+        if value.source_question_version_id
+        else None,
         "confrontation": value.confrontation,
         "language": value.language,
         "status": value.status,
@@ -203,7 +213,22 @@ def request_dict(value, full=False):
                 "understanding": value.understanding,
                 "progress": value.progress,
                 "error": value.error,
-                "attachments": list(value.attachments.values("id", "name", "size", "content_type")),
+                "attachments": [
+                    {
+                        "id": str(a.id),
+                        "name": a.name,
+                        "size": a.size,
+                        "content_type": a.content_type,
+                        "internal": bool(a.source_question_version_id),
+                        "source_question": {
+                            "id": str(a.source_question_version.request_id),
+                            "version": a.source_question_version.number,
+                        }
+                        if a.source_question_version_id
+                        else None,
+                    }
+                    for a in value.attachments.select_related("source_question_version")
+                ],
                 "ticket": analysis.ticket if analysis else None,
                 "markdown": analysis.markdown if analysis else None,
                 "versions": list(
@@ -527,7 +552,9 @@ def delete_environment(request, environment_id: int, payload: EnvironmentDeleteI
 def requests(request):
     return [
         request_dict(r)
-        for r in Request.objects.select_related("environment").order_by("-created_at")[:100]
+        for r in Request.objects.filter(workflow="request")
+        .select_related("environment")
+        .order_by("-created_at")[:100]
     ]
 
 
@@ -551,20 +578,25 @@ def create_request(request, payload: RequestIn):
 @api.get("/requests/{request_id}")
 def get_request(request, request_id: UUID):
     return request_dict(
-        get_object_or_404(Request.objects.select_related("environment"), pk=request_id), full=True
+        get_object_or_404(
+            Request.objects.select_related("environment"), pk=request_id, workflow="request"
+        ),
+        full=True,
     )
 
 
 @api.post("/requests/{request_id}/attachments", response={201: dict})
 def upload_attachment(request, request_id: UUID, file: File[UploadedFile]):
-    get_object_or_404(Request, pk=request_id)
+    get_object_or_404(Request, pk=request_id, workflow="request")
     attachment = add_attachment(request_id, file)
     return Status(201, {"id": str(attachment.id), "name": attachment.name, "size": attachment.size})
 
 
 @api.get("/requests/{request_id}/attachments/{attachment_id}")
 def download_attachment(request, request_id: UUID, attachment_id: UUID):
-    attachment = get_object_or_404(RequestAttachment, pk=attachment_id, request_id=request_id)
+    attachment = get_object_or_404(
+        RequestAttachment, pk=attachment_id, request_id=request_id, request__workflow="request"
+    )
     response = FileResponse(
         Path(attachment.path).open("rb"),
         as_attachment=True,
@@ -575,21 +607,29 @@ def download_attachment(request, request_id: UUID, attachment_id: UUID):
     return response
 
 
+@api.delete("/requests/{request_id}/attachments/{attachment_id}")
+def remove_draft_attachment(request, request_id: UUID, attachment_id: UUID):
+    from .question_actions import remove_attachment
+
+    remove_attachment(request_id, attachment_id, "request")
+    return {"status": "DELETED"}
+
+
 @api.post("/requests/{request_id}/analyze")
 def start_analysis(request, request_id: UUID):
-    get_object_or_404(Request, pk=request_id)
+    get_object_or_404(Request, pk=request_id, workflow="request")
     return request_dict(enqueue_analysis(request_id), full=True)
 
 
 @api.post("/requests/{request_id}/answers")
 def answer_questions(request, request_id: UUID, payload: AnswersIn):
-    get_object_or_404(Request, pk=request_id)
+    get_object_or_404(Request, pk=request_id, workflow="request")
     return request_dict(enqueue_analysis(request_id, payload.answers), full=True)
 
 
 @api.get("/requests/{request_id}/markdown")
 def download_markdown(request, request_id: UUID):
-    result = get_object_or_404(AnalysisResult, request_id=request_id)
+    result = get_object_or_404(AnalysisResult, request_id=request_id, request__workflow="request")
     response = HttpResponse(result.markdown, content_type="text/markdown; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="spechelper-{request_id}.md"'
     return response
@@ -597,7 +637,7 @@ def download_markdown(request, request_id: UUID):
 
 @api.post("/requests/{request_id}/continue")
 def continue_request(request, request_id: UUID, payload: ContinuationIn):
-    get_object_or_404(Request, pk=request_id)
+    get_object_or_404(Request, pk=request_id, workflow="request")
     return request_dict(
         continue_conversation(request_id, payload.message, payload.expected_version), full=True
     )
@@ -605,7 +645,11 @@ def continue_request(request, request_id: UUID, payload: ContinuationIn):
 
 @api.get("/requests/{request_id}/versions/{number}")
 def get_version(request, request_id: UUID, number: int):
-    return version_dict(get_object_or_404(ResultVersion, request_id=request_id, number=number))
+    return version_dict(
+        get_object_or_404(
+            ResultVersion, request_id=request_id, number=number, request__workflow="request"
+        )
+    )
 
 
 @api.get("/requests/{request_id}/versions/{number}/artifacts/{name}")
@@ -613,7 +657,11 @@ def download_artifact(
     request, request_id: UUID, number: int, name: Literal["ticket.md", "goal.md"]
 ):
     artifact = get_object_or_404(
-        GeneratedArtifact, version__request_id=request_id, version__number=number, name=name
+        GeneratedArtifact,
+        version__request_id=request_id,
+        version__request__workflow="request",
+        version__number=number,
+        name=name,
     )
     response = HttpResponse(artifact.content, content_type="text/markdown; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="{name}"'
@@ -706,8 +754,10 @@ from .ai_api import router as ai_router  # noqa: E402
 from .context_api import router as context_router  # noqa: E402
 from .git_source_api import router as git_source_router  # noqa: E402
 from .orchestration_settings import router as orchestration_router  # noqa: E402
+from .question_api import router as question_router  # noqa: E402
 from .ticket_api import router as ticket_router  # noqa: E402
 
+api.add_router("", question_router)
 api.add_router("", context_router)
 api.add_router("", ticket_router)
 api.add_router("", git_source_router)

@@ -222,6 +222,7 @@ test("persistent navigation and real shared queue remain available across pages"
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await expect(nav.getByRole("link")).toHaveText([
     "Requests",
+    "Questions",
     "Tickets",
     "Settings",
   ]);

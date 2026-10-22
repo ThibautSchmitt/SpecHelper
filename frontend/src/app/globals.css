@@ -388,3 +388,18 @@ dialog::backdrop {
     transition: none !important;
   }
 }
+
+.question-markdown { line-height: 1.8; overflow-wrap: anywhere; }
+.question-markdown > * + * { margin-top: 1rem; }
+.question-markdown h1, .question-markdown h2, .question-markdown h3 { margin-top: 1.5rem; font-weight: 650; }
+.question-markdown h1 { font-size: 1.5rem; }
+.question-markdown h2 { font-size: 1.2rem; }
+.question-markdown h3 { font-size: 1rem; }
+.question-markdown ul { list-style: disc; padding-left: 1.5rem; }
+.question-markdown ol { list-style: decimal; padding-left: 1.5rem; }
+.question-markdown pre { max-width: 100%; overflow-x: auto; border-radius: .5rem; padding: 1rem; background: var(--muted); white-space: pre; }
+.question-markdown code { font-size: .85em; }
+.question-markdown a { color: var(--primary-ink); text-decoration: underline; }
+.question-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.question-markdown th, .question-markdown td { border: 1px solid var(--border); padding: .5rem; }
+.question-markdown blockquote { border-left: 3px solid var(--border); padding-left: 1rem; }

@@ -192,6 +192,10 @@ class EnvironmentRepository(models.Model):
 
 
 class Request(models.Model):
+    class Workflow(models.TextChoices):
+        REQUEST = "request", "Request"
+        QUESTION = "question", "Question"
+
     class Status(models.TextChoices):
         DRAFT = "DRAFT"
         QUEUED = "QUEUED"
@@ -210,6 +214,14 @@ class Request(models.Model):
     environment = models.ForeignKey(Environment, null=True, on_delete=models.SET_NULL)
     environment_name_snapshot = models.CharField(max_length=100, blank=True)
     need = models.TextField()
+    workflow = models.CharField(max_length=10, choices=Workflow, default=Workflow.REQUEST)
+    source_question_version = models.ForeignKey(
+        "ResultVersion",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="derived_requests",
+    )
     status = models.CharField(max_length=30, choices=Status, default=Status.DRAFT, db_index=True)
     context_snapshot = models.JSONField(default=dict)
     baseline = models.JSONField(default=list)
@@ -243,6 +255,13 @@ class RequestAttachment(models.Model):
     path = models.TextField()
     content_type = models.CharField(max_length=100)
     size = models.PositiveIntegerField()
+    source_question_version = models.ForeignKey(
+        "ResultVersion",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="transferred_attachments",
+    )
 
 
 class AISession(models.Model):
@@ -328,6 +347,7 @@ class ResultVersion(models.Model):
     )
     status = models.CharField(max_length=30, default="READY")
     ticket = models.JSONField(default=dict)
+    explanation = models.JSONField(default=dict)
     technical_summary = models.TextField(blank=True)
     context_usage = models.JSONField(default=list)
     context_snapshot = models.JSONField(default=dict)
@@ -351,7 +371,8 @@ class ResultVersion(models.Model):
 class GeneratedArtifact(models.Model):
     version = models.ForeignKey(ResultVersion, related_name="artifacts", on_delete=models.CASCADE)
     name = models.CharField(
-        max_length=20, choices=[("ticket.md", "ticket.md"), ("goal.md", "goal.md")]
+        max_length=20,
+        choices=[("ticket.md", "ticket.md"), ("goal.md", "goal.md"), ("answer.md", "answer.md")],
     )
     content = models.TextField()
 
@@ -363,6 +384,29 @@ class GeneratedArtifact(models.Model):
     def save(self, *args, **kwargs):
         if not self._state.adding:
             raise ValueError("A published artifact is immutable")
+        return super().save(*args, **kwargs)
+
+
+class QuestionDocument(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source_version = models.ForeignKey(
+        ResultVersion, related_name="documents", on_delete=models.PROTECT
+    )
+    kind = models.CharField(
+        max_length=10,
+        choices=[("business", "Business"), ("technical", "Technical"), ("mixed", "Mixed")],
+    )
+    markdown = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("A question document is immutable")
+        if self.source_version.request.workflow != Request.Workflow.QUESTION:
+            raise ValueError("Documentation requires a question answer")
         return super().save(*args, **kwargs)
 
 
