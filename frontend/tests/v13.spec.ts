@@ -100,6 +100,21 @@ const options = {
 };
 
 async function base(page: Page) {
+  await page.route("**/api/ai-connections", (r) =>
+    r.fulfill({
+      json: [
+        {
+          id: 1,
+          name: "ChatGPT",
+          agent: "codex",
+          enabled: true,
+          status: "CONNECTED",
+          availability: "AVAILABLE",
+          quota_windows: {},
+        },
+      ],
+    }),
+  );
   await page.route("**/api/connections", (r) =>
     r.fulfill({
       json: {

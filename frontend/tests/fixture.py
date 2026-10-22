@@ -8,7 +8,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 if os.environ.get("POSTGRES_HOST") or os.environ.get("SPECHELPER_DATA_DIR"):
-    raise RuntimeError("UI fixtures require the default local development database")
+    raise RuntimeError("UI fixtures require an isolated local development database")
+if os.environ.get("E2E_DATA_DIR"):
+    fixture_data = Path(os.environ["E2E_DATA_DIR"]).resolve()
+    if fixture_data.parent != ROOT / ".local" or fixture_data.name != "v14-dev-data":
+        raise RuntimeError("The UI fixture data directory is not an approved development directory")
+    os.environ["SPECHELPER_DATA_DIR"] = str(fixture_data)
 sys.path.insert(0, str(ROOT / "backend"))
 os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
 import django  # noqa: E402

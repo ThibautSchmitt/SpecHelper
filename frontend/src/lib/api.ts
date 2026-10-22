@@ -37,6 +37,13 @@ export type Environment = {
   repositories: {
     id: number;
     repository: string;
+    git_connection_id?: number;
+    connection_name?: string;
+    remote_id?: string;
+    path?: string;
+    provider?: string;
+    is_fork?: boolean;
+    parent?: { path: string; url: string } | null;
     branch: string;
     sha: string;
   }[];
@@ -64,7 +71,33 @@ export type ResultVersion = {
   artifacts: Record<string, string>;
 };
 export type RequestDetail = RequestItem & {
-  baseline: { repository: string; branch: string; sha: string }[];
+  analysis_runs?: {
+    number: number;
+    status: string;
+    steps: {
+      step?: string;
+      role?: string;
+      roles?: string[];
+      connection_name?: string;
+      agent?: string;
+      provider?: string;
+      model?: string;
+      status?: string;
+      error?: string;
+      failure?: string;
+      diagnostic?: string;
+    }[];
+    error?: string;
+  }[];
+  baseline: {
+    repository: string;
+    branch: string;
+    sha: string;
+    path?: string;
+    connection_name?: string;
+    is_fork?: boolean;
+    parent?: { path: string } | null;
+  }[];
   database: { name?: string };
   questions: { id: string; question: string }[];
   conversation: {
@@ -110,4 +143,7 @@ export const statuses: Record<string, string> = {
   QUOTA_EXHAUSTED: "Quota exhausted",
   DISCONNECTED: "Disconnected",
   UNKNOWN: "Unknown",
+  MODEL_UNAVAILABLE: "Model unavailable",
+  AUTH_ERROR: "Authentication error",
+  DISABLED: "Disabled",
 };

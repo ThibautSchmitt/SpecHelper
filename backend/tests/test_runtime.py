@@ -17,6 +17,11 @@ def runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "SESSIONS", tmp_path / "sessions")
     monkeypatch.setattr(server, "CREDENTIALS", tmp_path / "credentials")
     server.CREDENTIALS.mkdir()
+    oauth = server.CREDENTIALS / "codex"
+    oauth.mkdir()
+    (oauth / "auth.json").write_text(
+        json.dumps({"tokens": {"access_token": "synthetic-oauth-fixture"}})
+    )
     request_id = str(uuid.uuid4())
     workspace = server.DATA / "analysis-workspaces" / request_id
     workspace.mkdir(parents=True)

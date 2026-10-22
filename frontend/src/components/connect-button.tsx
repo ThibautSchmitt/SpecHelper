@@ -1,7 +1,7 @@
 "use client";
 import { useI18n } from "@/lib/i18n";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CheckCircle, Copy, ExternalLink, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,11 +28,16 @@ const active = new Set(["STARTING", "AWAITING_USER"]);
 export function ConnectButton({
   provider,
   onConnected,
+  startPath = "/connections/start",
+  identityLabel,
 }: {
   provider: Provider;
   onConnected: () => void;
+  startPath?: string;
+  identityLabel?: string;
 }) {
   const { t, dateLocale } = useI18n();
+  const elementId = useId();
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -93,7 +98,12 @@ export function ConnectButton({
     setCode("");
     setCopied(false);
     try {
-      accept(await send<Attempt>("/connections/start", { provider }));
+      accept(
+        await send<Attempt>(
+          startPath,
+          startPath === "/connections/start" ? { provider } : undefined,
+        ),
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -158,7 +168,7 @@ export function ConnectButton({
       )}
       <dialog
         ref={dialog}
-        aria-labelledby={`login-title-${provider}`}
+        aria-labelledby={`login-title-${elementId}`}
         onCancel={(e) => {
           e.preventDefault();
           close();
@@ -168,9 +178,12 @@ export function ConnectButton({
       >
         {attempt && (
           <>
-            <h2 id={`login-title-${provider}`}>
+            <h2 id={`login-title-${elementId}`}>
               {t("Sign in with")} {names[provider]}
             </h2>
+            {identityLabel && (
+              <p className="mt-2 text-sm font-medium">{identityLabel}</p>
+            )}
             <p className="mt-3 text-sm leading-6 muted">
               {attempt.status === "CONNECTED"
                 ? t(
@@ -247,7 +260,7 @@ export function ConnectButton({
             )}
             {active.has(attempt.status) && attempt.input_required && (
               <form onSubmit={submit} className="mt-5">
-                <label htmlFor={`confirmation-${provider}`}>
+                <label htmlFor={`confirmation-${elementId}`}>
                   {t("Confirmation code")}
                 </label>
                 <p className="mb-2 text-xs leading-5 muted">
@@ -255,7 +268,7 @@ export function ConnectButton({
                   {t("shows a code after sign-in, paste it here to finish.")}
                 </p>
                 <Input
-                  id={`confirmation-${provider}`}
+                  id={`confirmation-${elementId}`}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   required

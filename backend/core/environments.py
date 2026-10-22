@@ -1,6 +1,7 @@
 """Administrative mutations; historical request workspaces are never changed here."""
 
 import contextlib
+import re
 import shutil
 
 from django.conf import settings
@@ -9,17 +10,27 @@ from django.shortcuts import get_object_or_404
 from ninja.errors import HttpError
 
 from . import github
-from .git import environment_worktrees, lock, remove_environment_worktree, run
+from .git import environment_worktrees, lock, lock_key, remove_environment_worktree, run
+from .git_sources import normalize_selection
 from .models import DatabaseConnection, Environment, EnvironmentRepository, Job, Request
 
 
 def validate(payload, environment_id=None):
     if Environment.objects.filter(name=payload.name).exclude(pk=environment_id).exists():
         raise HttpError(409, "This name already exists")
+    for selection in payload.repositories:
+        normalize_selection(selection)
     names = [r.repository.lower() for r in payload.repositories]
     if len(set(names)) != len(names):
         raise HttpError(422, "Duplicate project")
     for repo in payload.repositories:
+        if not getattr(repo, "git_repository_id", None) and re.fullmatch(
+            r"git-(github|gitlab)-[0-9a-f]{16}/[1-9][0-9]{0,31}(?:-[0-9a-f]{16})?", repo.repository
+        ):
+            raise HttpError(
+                422,
+                "Select the Git connection and remote repository instead of an internal source identifier.",
+            )
         repo.repository = repo.repository.lower()
         github.validate_repository(repo.repository)
         run("check-ref-format", "refs/heads/" + repo.branch)
@@ -70,13 +81,19 @@ def update(environment_id, payload):
             repo = existing.get(name)
             if repo is None:
                 EnvironmentRepository.objects.create(
-                    environment=environment, repository=name, branch=selection.branch
+                    environment=environment,
+                    repository=name,
+                    branch=selection.branch,
+                    git_repository_id=getattr(selection, "git_repository_id", None),
                 )
                 changed.append(name)
-            elif repo.branch != selection.branch:
+            elif repo.branch != selection.branch or repo.git_repository_id != getattr(
+                selection, "git_repository_id", None
+            ):
                 repo.branch = selection.branch
+                repo.git_repository_id = getattr(selection, "git_repository_id", None)
                 repo.sha = ""
-                repo.save(update_fields=["branch", "sha"])
+                repo.save(update_fields=["branch", "sha", "git_repository"])
                 changed.append(name)
         environment.name = payload.name
         environment.database_id = payload.database_id
@@ -102,7 +119,7 @@ def delete(environment_id, confirmation):
         ] + environment.retired_worktrees
         try:
             with contextlib.ExitStack() as stack:
-                for name in sorted({r["repository"] for r in worktrees}):
+                for name in sorted({lock_key(r["repository"]) for r in worktrees}):
                     stack.enter_context(lock(name, blocking=False))
                 for name in sorted({r["repository"] for r in worktrees}):
                     for path in environment_worktrees(environment.id, name):

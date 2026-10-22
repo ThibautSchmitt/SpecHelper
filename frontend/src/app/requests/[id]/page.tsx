@@ -541,6 +541,55 @@ function RequestContent({ params }: { params: Promise<{ id: string }> }) {
             )}
           </Card>
         )}
+      {!!value.analysis_runs?.length && (
+        <Card>
+          <details>
+            <summary className="cursor-pointer text-sm font-semibold">
+              {t("Analysis assignment history")}
+            </summary>
+            <div className="mt-4 space-y-4">
+              {value.analysis_runs.map((run) => (
+                <div key={run.number}>
+                  <h3 className="text-sm">
+                    {t("Analysis")} {run.number} ·{" "}
+                    {t(statuses[run.status] || run.status)}
+                  </h3>
+                  <ol className="mt-2 space-y-2 text-sm">
+                    {run.steps.map((step, index) => (
+                      <li key={index} className="rounded border p-3">
+                        <p className="break-words">
+                          {t("Step {number}", { number: index + 1 })} ·{" "}
+                          {step.connection_name || t("AI not assigned")} ·{" "}
+                          {step.provider || step.agent || t("Unknown")} ·{" "}
+                          {!step.model || step.model === "runtime-default"
+                            ? t("Provider default model")
+                            : step.model}
+                          {step.status &&
+                            ` · ${t(statuses[step.status] || step.status)}`}
+                        </p>
+                        {(step.failure || step.error) && (
+                          <p className="mt-1 text-red-700">
+                            {t(
+                              step.diagnostic ||
+                                statuses[step.failure || ""] ||
+                                step.failure ||
+                                step.error ||
+                                "",
+                            )}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                  {run.error && (
+                    <p className="mt-2 text-sm text-red-700">{t(run.error)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        </Card>
+      )}
       {!!value.baseline.length && (
         <details className="rounded-xl border bg-card p-5">
           <summary className="cursor-pointer text-sm font-medium">
@@ -554,8 +603,19 @@ function RequestContent({ params }: { params: Promise<{ id: string }> }) {
           {value.baseline.map((r) => (
             <div key={r.repository} className="mb-3 break-all text-xs">
               <p className="font-semibold">
-                {r.repository} · {r.branch}
+                {r.path || r.repository} · {r.branch}
               </p>
+              {r.connection_name && (
+                <p className="mt-1 muted">{r.connection_name}</p>
+              )}
+              {r.is_fork && (
+                <p className="mt-1 muted">
+                  {t("Fork")}
+                  {r.parent?.path
+                    ? ` · ${t("Parent repository")}: ${r.parent.path}`
+                    : ""}
+                </p>
+              )}
               <code>{r.sha}</code>
             </div>
           ))}

@@ -15,6 +15,56 @@ export const test = base.extend({
         settings = { ...settings, ...route.request().postDataJSON() };
       await route.fulfill({ json: settings });
     });
+    await page.route("**/api/git-connections", (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({
+            json: [
+              {
+                id: 1,
+                name: "Team GitHub",
+                provider: "github",
+                base_url: "https://github.com",
+                enabled: true,
+                status: "CONNECTED",
+                account: "team",
+                referenced_environments: 0,
+              },
+            ],
+          })
+        : route.fallback(),
+    );
+    await page.route("**/api/ai-connections", (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({
+            json: [
+              {
+                id: 1,
+                name: "ChatGPT",
+                agent: "codex",
+                identity_id: "codex",
+                enabled: true,
+                status: "CONNECTED",
+                availability: "AVAILABLE",
+                model: "",
+                account: "",
+                quota_windows: {},
+              },
+              {
+                id: 2,
+                name: "Claude",
+                agent: "claude",
+                identity_id: "claude",
+                enabled: true,
+                status: "CONNECTED",
+                availability: "AVAILABLE",
+                model: "",
+                account: "",
+                quota_windows: {},
+              },
+            ],
+          })
+        : route.fallback(),
+    );
     await use(page);
   },
 });

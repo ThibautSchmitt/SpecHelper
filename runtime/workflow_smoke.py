@@ -49,6 +49,16 @@ def main(database_config=None):
         server.SESSIONS = root / "sessions"
         server.CREDENTIALS = root / "credentials"
         server.CREDENTIALS.mkdir()
+        for provider in ("codex", "claude"):
+            credentials = server.CREDENTIALS / provider
+            credentials.mkdir()
+            filename = "auth.json" if provider == "codex" else ".credentials.json"
+            value = (
+                {"tokens": {"access_token": "synthetic-oauth-fixture"}}
+                if provider == "codex"
+                else {"claudeAiOauth": {"accessToken": "synthetic-oauth-fixture"}}
+            )
+            (credentials / filename).write_text(json.dumps(value))
         source = root / "source"
         source.mkdir()
         run("init", "-b", "main", source)
@@ -160,7 +170,9 @@ def main(database_config=None):
         ):
             response = client.post(
                 f"/api/requests/{request_id}/continue",
-                data=json.dumps({"message": "Preserve existing conventions", "expected_version": 1}),
+                data=json.dumps(
+                    {"message": "Preserve existing conventions", "expected_version": 1}
+                ),
                 content_type="application/json",
             )
             assert response.status_code == 200, response.content

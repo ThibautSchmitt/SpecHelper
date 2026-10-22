@@ -8,7 +8,9 @@ One installation serves a trusted team. Requests and connections are shared; the
 
 ## Settings
 
-- Guided GitHub, ChatGPT and Claude connections without personal access tokens.
+- Named GitHub/GitLab source connections, including forks and self-hosted GitLab.
+- Guided GitHub, ChatGPT and Claude authentication; read-only GitLab tokens when needed.
+- Multiple AI configurations with model, shared identity, default and availability preference.
 - Named environments with multiple Git repositories/branches and optional PostgreSQL.
 - Environment creation, editing, synchronization and confirmed deletion.
 - Instance name, short label, color, application language and permission to compare new requests.
@@ -48,7 +50,9 @@ uncertain-write reconciliation guard against stale forms and duplicate creation.
 Tickets lists confirmed publications, with search and platform/environment filters,
 external links and the exact immutable source version. See
 [publication behavior and supported APIs](ticketing.md) and the
-[v1.3 acceptance report](acceptance-v1.3.md).
+[v1.3 acceptance report](acceptance-v1.3.md). Named Git sources, assistant models,
+account quota grouping and execution attribution are described in
+[connections and availability](connections.md).
 
 ## Execution and security
 

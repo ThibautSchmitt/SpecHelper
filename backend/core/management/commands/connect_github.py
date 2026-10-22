@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand
 from django.db import close_old_connections, transaction
 
 from core.login import TerminalLogin
-from core.models import ConnectionAttempt, GitHubConnection
+from core.models import ConnectionAttempt, GitConnection, GitHubConnection
 from core.secrets import encrypt
 
 
@@ -33,21 +33,35 @@ class Command(BaseCommand):
             token = subprocess.check_output(
                 ["gh", "auth", "token", "--hostname", "github.com"], env=env, text=True, timeout=10
             ).strip()
-            with httpx.Client(timeout=15) as client:
+            with httpx.Client(timeout=15, trust_env=False, follow_redirects=False) as client:
                 response = client.get(
                     "https://api.github.com/user", headers={"Authorization": "Bearer " + token}
                 )
             if response.status_code != 200:
                 raise ValueError("Connection refused")
             account = response.json()["login"]
+            target_id = ConnectionAttempt.objects.get(pk=attempt_id).git_connection_id
             with transaction.atomic():
-                attempt = ConnectionAttempt.objects.select_for_update().get(pk=attempt_id)
-                if attempt.status == "CANCELLED":
+                # Use the same lock order as source deletion, then revalidate the
+                # attempt so a cancelled target can never fall back to legacy auth.
+                if (
+                    target_id
+                    and not GitConnection.objects.select_for_update().filter(pk=target_id).exists()
+                ):
                     raise ValueError("Connection cancelled")
-                GitHubConnection.objects.update_or_create(
-                    pk=1,
-                    defaults={"secret": encrypt(token), "account": account, "status": "CONNECTED"},
-                )
+                attempt = ConnectionAttempt.objects.select_for_update().get(pk=attempt_id)
+                if (
+                    attempt.status not in {"STARTING", "AWAITING_USER"}
+                    or attempt.git_connection_id != target_id
+                ):
+                    raise ValueError("Connection cancelled")
+                values = {"secret": encrypt(token), "account": account, "status": "CONNECTED"}
+                if attempt.git_connection_id:
+                    GitConnection.objects.filter(pk=attempt.git_connection_id).update(
+                        **values, error=""
+                    )
+                else:
+                    GitHubConnection.objects.update_or_create(pk=1, defaults=values)
                 ConnectionAttempt.objects.filter(pk=attempt_id).update(
                     status="CONNECTED", message="Connection successful."
                 )

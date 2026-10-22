@@ -7,6 +7,34 @@ from .models import AIConnection, AnalysisRun, Environment, Job, PublishedTicket
 RECENT_LIMIT = 15
 
 
+def assignments_for(job, run):
+    """Use execution snapshots, never a configuration edited after the run."""
+    if job.kind != "analysis" or job.status == "QUEUED":
+        return []
+    recorded = [
+        {
+            "connection_id": step.get("connection_id"),
+            "connection_name": step.get("connection_name", ""),
+            "agent": step.get("provider", step.get("agent", "")),
+            "model": step.get("model", ""),
+        }
+        for step in (run.steps if run else [])
+        if step.get("connection_id") or step.get("connection_name")
+    ]
+    if not recorded:
+        recorded = job.payload.get("assignments", [])
+    values, seen = [], set()
+    for item in recorded:
+        value = {
+            key: item.get(key) for key in ("connection_id", "connection_name", "agent", "model")
+        }
+        key = tuple(value.values())
+        if key not in seen:
+            seen.add(key)
+            values.append(value)
+    return values
+
+
 def snapshot():
     jobs = list(Job.objects.filter(status__in=["RUNNING", "QUEUED"]).order_by("created_at", "id"))
     jobs += list(
@@ -36,6 +64,7 @@ def snapshot():
         item = requests.get(job.target)
         environment = item.environment if item else environments.get(job.target)
         run = runs.get(job.pk)
+        assignments = assignments_for(job, run)
         provider_names = list(
             dict.fromkeys(
                 step["provider"] for step in (run.steps if run else []) if step.get("provider")
@@ -52,7 +81,14 @@ def snapshot():
                 "environment_name": (item.environment_name_snapshot if item else "")
                 or (environment.name if environment else ""),
                 "operation": "Analysis" if job.kind == "analysis" else "Synchronization",
-                "agent": ", ".join(provider_names) or None,
+                "agent": (", ".join(provider_names) or None) if job.status != "QUEUED" else None,
+                "assignments": assignments,
+                "connection_name": ", ".join(
+                    dict.fromkeys(a["connection_name"] for a in assignments if a["connection_name"])
+                )
+                or None,
+                "model": ", ".join(dict.fromkeys(a["model"] for a in assignments if a["model"]))
+                or None,
                 "request_status": item.status if item else None,
                 "queue_position": position if job.status == "QUEUED" else None,
                 "created_at": job.created_at,
@@ -85,6 +121,9 @@ def snapshot():
                 "environment_name": publication.version.environment_name,
                 "operation": "Ticket publication",
                 "agent": None,
+                "assignments": [],
+                "connection_name": None,
+                "model": None,
                 "request_status": None,
                 "queue_position": None,
                 "created_at": publication.created_at,

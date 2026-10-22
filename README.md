@@ -11,9 +11,10 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 
 ## Features
 
-- GitHub connection, repository discovery and multiple environments with dedicated branches
+- Multiple GitHub/GitLab sources, forks and environments with dedicated branches
 - Optional read-only PostgreSQL connection per environment
 - ChatGPT / Codex and Claude / Claude Code support
+- Named assistant configurations, model selection and shared account availability
 - Business clarification before technical analysis
 - Screenshots and document attachments
 - Optional comparison of independent AI analyses, with one or two connected assistants
@@ -47,10 +48,12 @@ and serve it over HTTPS. See [deployment and security](SECURITY.md).
 
 Open **Settings** after starting the application. Labels follow the selected language.
 
-1. **Connect GitHub.** Select **Connect with GitHub** and complete the official
-   browser authorization flow to discover repositories and branches.
+1. **Connect Git sources.** Add named GitHub or GitLab connections under
+   **Sources Git**. GitHub supports browser authorization; GitLab accepts a
+   read-only token for GitLab.com or a self-hosted instance.
 2. **Connect an AI assistant.** Connect ChatGPT / Codex, Claude / Claude Code, or
-   both through the official authorization dialogs. A compatible provider
+   both through the official authorization dialogs. Add named configurations,
+   choose models and optionally share an account identity. A compatible provider
    subscription may be required. No personal access token or terminal command is
    needed in SpecHelper. An available assistant is selected automatically.
 3. **Create an environment.** Select repositories and their branches, then wait
@@ -135,7 +138,8 @@ Further documentation:
 - [Implementation, operations and runtime checks](docs/implementation.md)
 - [English and French](docs/localization.md)
 - [Ticket publication and connectors](docs/ticketing.md)
-- [v1.3 acceptance report](docs/acceptance-v1.3.md)
+- [Git sources, AI configurations and availability](docs/connections.md)
+- [v1.4 acceptance report](docs/acceptance-v1.4.md)
 
 ## License
 

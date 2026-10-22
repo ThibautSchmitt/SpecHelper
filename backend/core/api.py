@@ -6,7 +6,6 @@ from uuid import UUID
 from django.db import transaction
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from ninja import File, NinjaAPI, Schema
 from ninja.errors import HttpError
 from ninja.files import UploadedFile
@@ -39,7 +38,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="1.3", auth=None)
+api = NinjaAPI(title="SpecHelper", version="1.4", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -71,13 +70,16 @@ class DatabaseIn(Schema):
 
 
 class RepositoryIn(Schema):
-    repository: str = Field(max_length=255)
+    repository: str = Field(default="", max_length=255)
     branch: str = Field(min_length=1, max_length=255)
+    git_connection_id: int | None = None
+    remote_id: str = Field(default="", max_length=255)
+    git_repository_id: int | None = Field(default=None, exclude=True)
 
 
 class EnvironmentIn(Schema):
     name: str = Field(min_length=1, max_length=100)
-    repositories: list[RepositoryIn] = Field(min_length=1, max_length=20)
+    repositories: list[RepositoryIn] = Field(min_length=1)
     database_id: int | None = None
 
 
@@ -158,6 +160,8 @@ def settings_dict():
 
 
 def environment_dict(environment):
+    from .git_sources import repository_snapshot
+
     return {
         "id": environment.id,
         "name": environment.name,
@@ -167,7 +171,10 @@ def environment_dict(environment):
         "synced_at": environment.synced_at,
         "database_id": environment.database_id,
         "database_name": environment.database.name if environment.database_id else None,
-        "repositories": list(environment.repositories.values("id", "repository", "branch", "sha")),
+        "repositories": [
+            {"id": repo.pk, **repository_snapshot(repo)}
+            for repo in environment.repositories.select_related("git_repository__connection")
+        ],
     }
 
 
@@ -214,7 +221,13 @@ def request_dict(value, full=False):
                 ],
                 "analysis_runs": list(
                     value.analysis_runs.order_by("number").values(
-                        "number", "status", "pipeline", "started_at", "finished_at", "error"
+                        "number",
+                        "status",
+                        "pipeline",
+                        "steps",
+                        "started_at",
+                        "finished_at",
+                        "error",
                     )
                 ),
                 "latest_version": version_dict(value.versions.order_by("-number").first()),
@@ -270,13 +283,29 @@ def put_settings(request, payload: SettingsIn):
 
 @api.get("/connections")
 def connections(request):
+    from .git_sources import connection_dict
+    from .models import GitConnection
+
     gh, _ = GitHubConnection.objects.get_or_create(pk=1)
     ais = providers.ensure_connections()
-    preferred = next((c for c in ais if c.status == "CONNECTED" and c.enabled), ais[0])
+    preferred = next(
+        (c for c in ais if c.status == "CONNECTED" and c.enabled), next(iter(ais), None)
+    )
     return {
         "github": {"status": gh.status, "account": gh.account},
-        "ai": providers.public(preferred),
+        "ai": providers.public(preferred)
+        if preferred
+        else {
+            "status": "DISCONNECTED",
+            "availability": "UNKNOWN",
+            "agent": "",
+            "enabled": False,
+            "account": "",
+        },
         "ais": [providers.public(c) for c in ais],
+        "git_connections": [
+            connection_dict(c) for c in GitConnection.objects.order_by("name", "id")
+        ],
         "databases": list(
             DatabaseConnection.objects.values(
                 "id", "name", "host", "port", "database", "username", "sslmode", "status"
@@ -335,6 +364,8 @@ def branches(request, repository: str, page: int = 1):
 @api.post("/connections/ai/test")
 def test_ai(request):
     connections = providers.ensure_connections()
+    if not connections:
+        raise HttpError(404, "No AI connection is configured.")
     return test_ai_connection(
         request, next((c.pk for c in connections if c.status == "CONNECTED"), connections[0].pk)
     )
@@ -342,39 +373,16 @@ def test_ai(request):
 
 @api.post("/connections/ai/{connection_id}/test")
 def test_ai_connection(request, connection_id: int):
-    ai = get_object_or_404(AIConnection, pk=connection_id)
-    if ai.availability == "BUSY" and ai.retry_after is None:
-        raise HttpError(409, "This assistant is processing a request. Retry after the result.")
-    try:
-        result = runtime_call("/health?agent=" + ai.agent)
-    except ValueError:
-        AIConnection.objects.filter(pk=ai.pk).update(
-            availability="ERROR", checked_at=timezone.now()
-        )
-        raise HttpError(503, "The assistant connection could not be verified.")
-    previous = ai.availability
-    ai.status = result["status"]
-    # A login-status check cannot prove that a previously exhausted quota has
-    # reset. An explicit administrator retest permits a fresh attempt, while
-    # showing availability as unknown until that attempt actually runs.
-    ai.availability = (
-        ("UNKNOWN" if previous == "QUOTA_EXHAUSTED" else "AVAILABLE")
-        if ai.status == "CONNECTED"
-        else "ERROR"
-    )
-    ai.retry_after = None
-    ai.account = result.get("account", ai.account)
-    ai.checked_at = timezone.now()
-    ai.save()
-    return providers.public(ai)
+    from .ai_api import test_configuration
+
+    return test_configuration(get_object_or_404(AIConnection, pk=connection_id))
 
 
 @api.patch("/connections/ai/{connection_id}")
 def configure_ai(request, connection_id: int, payload: ConnectionOptionsIn):
-    ai = get_object_or_404(AIConnection, pk=connection_id)
-    ai.enabled = payload.enabled
-    ai.save(update_fields=["enabled"])
-    return providers.public(ai)
+    from .ai_api import ConfigurationPatch, edit_connection
+
+    return edit_connection(request, connection_id, ConfigurationPatch(enabled=payload.enabled))
 
 
 def database_values(payload):
@@ -465,22 +473,16 @@ def environments(request):
 @api.post("/environments", response={201: dict})
 @transaction.atomic
 def create_environment(request, payload: EnvironmentIn):
-    if Environment.objects.filter(name=payload.name).exists():
-        raise HttpError(409, "This name already exists")
-    if len({r.repository.lower() for r in payload.repositories}) != len(payload.repositories):
-        raise HttpError(422, "Duplicate repository")
-    for repo in payload.repositories:
-        repo.repository = repo.repository.lower()
-        github.validate_repository(repo.repository)
-        from .git import run
-
-        run("check-ref-format", "refs/heads/" + repo.branch)
-    if payload.database_id:
-        get_object_or_404(DatabaseConnection, pk=payload.database_id)
+    environment_actions.validate(payload)
     environment = Environment.objects.create(name=payload.name, database_id=payload.database_id)
     EnvironmentRepository.objects.bulk_create(
         [
-            EnvironmentRepository(environment=environment, **repo.dict())
+            EnvironmentRepository(
+                environment=environment,
+                repository=repo.repository,
+                branch=repo.branch,
+                git_repository_id=repo.git_repository_id,
+            )
             for repo in payload.repositories
         ]
     )
@@ -693,6 +695,10 @@ def queue(request):
     return snapshot()
 
 
+from .ai_api import router as ai_router  # noqa: E402
+from .git_source_api import router as git_source_router  # noqa: E402
 from .ticket_api import router as ticket_router  # noqa: E402
 
 api.add_router("", ticket_router)
+api.add_router("", git_source_router)
+api.add_router("", ai_router)

@@ -101,18 +101,28 @@ def perform_job(job):
 
             run = AnalysisRun.objects.filter(job=job).first()
             deadline = time.monotonic() + 285
-            for attempt in range(2):
+            from .models import AIConnection
+
+            attempted = set()
+            max_attempts = max(1, AIConnection.objects.filter(enabled=True).count())
+            for attempt in range(max_attempts):
                 try:
                     analyze(job.target, run.pk if run else None, deadline=deadline)
                     break
-                except ProviderUnavailable:
+                except ProviderUnavailable as unavailable:
                     job.refresh_from_db()
+                    attempted.update(job.payload.get("connection_ids", []))
                     release_connections(job.payload.get("connection_ids", []))
-                    if attempt == 0 and reserve_for_job(job):
+                    if attempt + 1 < max_attempts and reserve_for_job(job, exclude=attempted):
                         continue
                     # Provider waiting is queue time, not a failed business analysis.
+                    message = (
+                        "The selected model is unavailable for this AI connection. Choose an accepted model in Settings and retry."
+                        if unavailable.kind == "MODEL_UNAVAILABLE"
+                        else ""
+                    )
                     Job.objects.filter(pk=job.pk).update(
-                        status="QUEUED", started_at=None, finished_at=None
+                        status="QUEUED", started_at=None, finished_at=None, error=message
                     )
                     AnalysisRun.objects.filter(job=job).update(status="QUEUED", finished_at=None)
                     Request.objects.filter(pk=job.target).update(status="QUEUED", error="")

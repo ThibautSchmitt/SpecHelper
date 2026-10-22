@@ -1,13 +1,20 @@
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import threading
+import uuid
 from pathlib import Path
 
 from core.login import ACTIVE, PROVIDERS, TerminalLogin
+
+
+def identity_root(root, identity_id=None):
+    """Legacy credentials stay put; additional identities have isolated namespaces."""
+    return root / "identities" / str(uuid.UUID(str(identity_id))) if identity_id else root
 
 
 @contextlib.contextmanager
@@ -68,11 +75,13 @@ class Logins:
         self.attempts = {}
         self.lock = threading.Lock()
 
-    def start(self, attempt_id, provider):
+    def start(self, attempt_id, provider, identity_id=None):
+        target_root = identity_root(self.credential_root(), identity_id)
         with self.lock:
             for login in self.attempts.values():
                 if (
                     login.provider == provider
+                    and getattr(login, "identity_id", None) == identity_id
                     and login.public()["status"] in ACTIVE
                     and not login.cancelled.is_set()
                 ):
@@ -86,18 +95,22 @@ class Logins:
                 required = files[0]
                 if not (source / required).is_file():
                     raise ValueError("Authentication was not saved")
-                destination = self.credential_root() / provider
+                destination = target_root / provider
                 destination.mkdir(parents=True, exist_ok=True, mode=0o700)
-                with credential_lock(self.credential_root(), provider):
+                with credential_lock(target_root, provider):
                     for name in files:
                         if (source / name).is_file():
                             temporary = destination / (name + ".new")
                             shutil.copyfile(source / name, temporary)
                             temporary.chmod(0o600)
                             os.replace(temporary, destination / name)
-                return {"account": PROVIDERS[provider]}
+                return {
+                    "account": PROVIDERS[provider],
+                    "account_key": account_key(destination, provider),
+                }
 
             login = TerminalLogin(provider, complete)
+            login.identity_id = identity_id
             self.attempts[attempt_id] = login
             login.start()
             return login.public()
@@ -142,6 +155,13 @@ def credential_directory(root: Path, provider):
 
 def connection_status(root, provider):
     directory = credential_directory(root, provider)
+    if not subscription_credentials(directory, provider):
+        return {
+            "status": "DISCONNECTED",
+            "account": PROVIDERS[provider],
+            "usage": "UNKNOWN",
+            "reset": "UNKNOWN",
+        }
     env = {
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "HOME": str(directory),
@@ -161,4 +181,63 @@ def connection_status(root, provider):
         "account": PROVIDERS[provider],
         "usage": "UNKNOWN",
         "reset": "UNKNOWN",
+        "account_key": account_key(directory, provider),
     }
+
+
+def account_key(directory, provider):
+    """Opaque quota grouping from provider account IDs, never a display-name guess."""
+    try:
+        filename = "auth.json" if provider == "codex" else ".claude.json"
+        value = json.loads((directory / filename).read_text())
+        identifier = (
+            value.get("tokens", {}).get("account_id")
+            if provider == "codex"
+            else value.get("oauthAccount", {}).get("accountUuid")
+        )
+        if isinstance(identifier, str) and identifier:
+            return hashlib.sha256((provider + ":" + identifier).encode()).hexdigest()
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return ""
+
+
+def subscription_credentials(directory, provider):
+    """Subscription OAuth only: an administrator's billed API key is never inherited."""
+    try:
+        filename = "auth.json" if provider == "codex" else ".credentials.json"
+        value = json.loads((directory / filename).read_text())
+        if provider == "codex":
+            return bool(
+                isinstance(value.get("tokens"), dict)
+                and value["tokens"].get("access_token")
+                and not value.get("OPENAI_API_KEY")
+                and value.get("auth_mode") not in {"apikey", "api_key"}
+            )
+        if any(value.get(key) for key in ("ANTHROPIC_API_KEY", "apiKey", "anthropicApiKey")):
+            return False
+        return bool(
+            isinstance(value.get("claudeAiOauth"), dict)
+            and value["claudeAiOauth"].get("accessToken")
+        )
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+
+
+def claude_metadata(data):
+    """Keep OAuth identity metadata, excluding paid keys, helpers and executable config."""
+    try:
+        source = json.loads(data)
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(source, dict):
+        return {}
+    result = {}
+    account = source.get("oauthAccount")
+    if isinstance(account, dict):
+        result["oauthAccount"] = {key: value for key, value in account.items() if key in {"accountUuid", "organizationUuid", "emailAddress", "organizationName", "displayName"} and isinstance(value, str)}
+    if isinstance(source.get("hasCompletedOnboarding"), bool):
+        result["hasCompletedOnboarding"] = source["hasCompletedOnboarding"]
+    if isinstance(source.get("lastOnboardingVersion"), str):
+        result["lastOnboardingVersion"] = source["lastOnboardingVersion"]
+    return result

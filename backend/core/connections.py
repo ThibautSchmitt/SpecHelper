@@ -4,12 +4,13 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from ninja.errors import HttpError
 
 from .agent import runtime_call
-from .models import AIConnection, ConnectionAttempt, GitHubConnection
-from .providers import connection_for
+from .models import AIConnection, AIIdentity, ConnectionAttempt, GitConnection, GitHubConnection
+from .providers import connection_for, observe
 
 ACTIVE = {"STARTING", "AWAITING_USER"}
 
@@ -33,38 +34,67 @@ def update(attempt, state):
             setattr(attempt, key, state[key])
     attempt.save()
     if attempt.status == "CONNECTED" and attempt.provider != "github":
-        ai = connection_for(attempt.provider)
-        AIConnection.objects.update_or_create(
-            pk=ai.pk,
-            defaults={
-                "agent": attempt.provider,
-                "status": "CONNECTED",
-                "account": "ChatGPT" if attempt.provider == "codex" else "Claude",
-                "checked_at": timezone.now(),
-                "availability": "AVAILABLE",
-                "retry_after": None,
-            },
+        ai = (
+            AIConnection.objects.filter(identity_id=attempt.identity_id).first()
+            if attempt.identity_id
+            else connection_for(attempt.provider)
         )
+        if ai:
+            observe(
+                ai,
+                {
+                    "status": "CONNECTED",
+                    "account": state.get("account")
+                    or ("ChatGPT" if attempt.provider == "codex" else "Claude"),
+                    "account_key": state.get("account_key", ""),
+                },
+            )
     return public(attempt)
 
 
 @transaction.atomic
-def start(provider):
+def start(provider, identity_id=None, git_connection_id=None):
+    legacy_identity = identity_id is None
     if provider == "github":
-        GitHubConnection.objects.get_or_create(pk=1)
-        GitHubConnection.objects.select_for_update().get(pk=1)
+        if git_connection_id:
+            GitConnection.objects.select_for_update().get(pk=git_connection_id)
+        else:
+            GitHubConnection.objects.get_or_create(pk=1)
+            GitHubConnection.objects.select_for_update().get(pk=1)
     else:
-        ai = connection_for(provider)
+        ai = (
+            AIConnection.objects.filter(identity_id=identity_id).first()
+            if identity_id
+            else connection_for(provider)
+        )
+        if ai is None:
+            raise HttpError(404, "AI connection not found")
+        identity_id = ai.identity_id
+        identity = AIIdentity.objects.select_for_update().get(pk=identity_id)
         AIConnection.objects.select_for_update().get(pk=ai.pk)
-        if ai.availability == "BUSY" and ai.retry_after is None:
+        if (identity.availability == "BUSY" and identity.retry_after is None) or (
+            ai.availability == "BUSY" and ai.retry_after is None
+        ):
             raise HttpError(409, "This assistant is processing a request. Retry after the result.")
     existing = ConnectionAttempt.objects.filter(
-        provider=provider, status__in=ACTIVE, expires_at__gt=timezone.now()
-    ).first()
+        provider=provider,
+        git_connection_id=git_connection_id,
+        status__in=ACTIVE,
+        expires_at__gt=timezone.now(),
+    )
+    existing = (
+        existing.filter(Q(identity_id=identity_id) | Q(identity_id=None))
+        if legacy_identity and provider != "github"
+        else existing.filter(identity_id=identity_id)
+    )
+    existing = existing.first()
     if existing:
         return public(existing)
     attempt = ConnectionAttempt.objects.create(
-        provider=provider, expires_at=timezone.now() + timedelta(minutes=15)
+        provider=provider,
+        identity_id=identity_id,
+        git_connection_id=git_connection_id,
+        expires_at=timezone.now() + timedelta(minutes=15),
     )
     if provider == "github":
 
@@ -85,7 +115,10 @@ def start(provider):
         transaction.on_commit(launch)
         return public(attempt)
     try:
-        state = runtime_call("/auth/start", {"attempt_id": str(attempt.id), "provider": provider})
+        payload = {"attempt_id": str(attempt.id), "provider": provider}
+        if identity.credential_id:
+            payload["identity_id"] = str(identity.credential_id)
+        state = runtime_call("/auth/start", payload)
     except ValueError:
         state = {
             "status": "ERROR",

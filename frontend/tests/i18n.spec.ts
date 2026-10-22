@@ -56,7 +56,7 @@ test("admin language persists across navigation, reload and translated errors", 
       },
     }),
   );
-  await page.route("**/api/connections/ai/1/test", (route) =>
+  await page.route("**/api/ai-connections/1/test", (route) =>
     route.fulfill({
       status: 503,
       json: { detail: "The assistant connection could not be verified." },

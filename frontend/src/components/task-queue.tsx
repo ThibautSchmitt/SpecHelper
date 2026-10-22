@@ -21,6 +21,14 @@ export type QueueJob = {
   environment_name: string;
   operation: string;
   agent: string;
+  connection_name?: string | null;
+  model?: string | null;
+  assignments?: {
+    connection_id: number;
+    connection_name: string;
+    agent: string;
+    model: string;
+  }[];
   request_status: string;
   queue_position: number | null;
   created_at: string;
@@ -162,8 +170,27 @@ export function TaskQueue() {
                 </p>
                 <p className="mt-1 text-xs muted">
                   {t(job.operation || job.kind)}
-                  {job.agent && ` · ${job.agent}`}
                 </p>
+                {!["sync", "publication"].includes(job.kind) && (
+                  <div className="mt-1 space-y-1 text-xs muted">
+                    {job.assignments?.length ? (
+                      job.assignments.map((assignment, index) => (
+                        <p
+                          key={`${assignment.connection_id}-${index}`}
+                          className="break-words"
+                        >
+                          {assignment.connection_name} ·{" "}
+                          {!assignment.model ||
+                          assignment.model === "runtime-default"
+                            ? t("Provider default model")
+                            : assignment.model}
+                        </p>
+                      ))
+                    ) : (
+                      <p>{t("AI not assigned")}</p>
+                    )}
+                  </div>
+                )}
                 {job.status === "QUEUED" && job.queue_position != null && (
                   <p className="mt-1 text-xs muted">
                     {t("Queue position: {position}", {

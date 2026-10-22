@@ -20,7 +20,7 @@ test("administration, theme and business navigation", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "GitHub", exact: true }),
+    page.getByRole("heading", { name: "Sources Git", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Instance", exact: true }).click();
   await page.getByLabel("Instance name").fill("SpecHelper — Validation");

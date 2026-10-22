@@ -23,9 +23,76 @@ class GitHubConnection(models.Model):
     status = models.CharField(max_length=20, default="DISCONNECTED")
 
 
+class GitConnection(models.Model):
+    name = models.CharField(max_length=100)
+    provider = models.CharField(max_length=10, choices=[("github", "GitHub"), ("gitlab", "GitLab")])
+    base_url = models.URLField(max_length=1000)
+    secret = models.TextField(blank=True)
+    account = models.CharField(max_length=200, blank=True)
+    enabled = models.BooleanField(default=True)
+    legacy_source = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, default="UNKNOWN")
+    error = models.TextField(blank=True)
+    checked_at = models.DateTimeField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["legacy_source"],
+                condition=models.Q(legacy_source=True),
+                name="unique_legacy_git_source",
+            )
+        ]
+
+
+class GitRepository(models.Model):
+    connection = models.ForeignKey(
+        GitConnection, related_name="repositories", on_delete=models.PROTECT
+    )
+    provider = models.CharField(max_length=10)
+    instance = models.URLField(max_length=1000)
+    remote_id = models.CharField(max_length=255)
+    path = models.CharField(max_length=500)
+    name = models.CharField(max_length=255)
+    clone_url = models.URLField(max_length=1500)
+    default_branch = models.CharField(max_length=255, blank=True)
+    is_fork = models.BooleanField(default=False)
+    parent = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connection", "remote_id"], name="unique_connection_remote"
+            )
+        ]
+
+
+class AIIdentity(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agent = models.CharField(max_length=20)
+    credential_id = models.UUIDField(null=True, unique=True)
+    account = models.CharField(max_length=200, blank=True)
+    account_key = models.CharField(max_length=255, blank=True, db_index=True)
+    status = models.CharField(max_length=20, default="UNKNOWN")
+    availability = models.CharField(max_length=24, default="UNKNOWN")
+    retry_after = models.DateTimeField(null=True)
+    checked_at = models.DateTimeField(null=True)
+    quota_windows = models.JSONField(default=dict)
+
+
 class AIConnection(models.Model):
-    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
-    agent = models.CharField(max_length=20, default="codex", unique=True)
+    id = models.AutoField(primary_key=True)
+    agent = models.CharField(max_length=20, default="codex")
+    name = models.CharField(max_length=100, blank=True)
+    model = models.CharField(max_length=100, blank=True)
+    preference = models.PositiveIntegerField(default=100)
+    is_default = models.BooleanField(default=False)
+    identity = models.ForeignKey(
+        AIIdentity, null=True, on_delete=models.PROTECT, related_name="configurations"
+    )
     status = models.CharField(max_length=20, default="UNKNOWN")
     account = models.CharField(max_length=200, blank=True)
     checked_at = models.DateTimeField(null=True)
@@ -62,6 +129,13 @@ class EnvironmentRepository(models.Model):
         Environment, related_name="repositories", on_delete=models.CASCADE
     )
     repository = models.CharField(max_length=255)
+    git_repository = models.ForeignKey(
+        GitRepository,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="environment_repositories",
+    )
     branch = models.CharField(max_length=255)
     sha = models.CharField(max_length=40, blank=True)
     workspace = models.TextField(blank=True)
@@ -133,13 +207,9 @@ class AISession(models.Model):
     role = models.CharField(max_length=20, default="primary")
     connection = models.ForeignKey(AIConnection, null=True, on_delete=models.SET_NULL)
     context_id = models.UUIDField(default=uuid.uuid4, unique=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["request", "role", "agent"], name="unique_request_role_provider"
-            )
-        ]
+    model_snapshot = models.CharField(max_length=100, blank=True)
+    connection_name_snapshot = models.CharField(max_length=100, blank=True)
+    identity_snapshot = models.UUIDField(null=True)
 
 
 class AnalysisResult(models.Model):
@@ -258,6 +328,8 @@ class RequestMessage(models.Model):
 class ConnectionAttempt(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     provider = models.CharField(max_length=20)
+    identity = models.ForeignKey(AIIdentity, null=True, on_delete=models.PROTECT)
+    git_connection = models.ForeignKey(GitConnection, null=True, on_delete=models.PROTECT)
     status = models.CharField(max_length=20, default="STARTING")
     verification_uri = models.TextField(blank=True)
     user_code = models.CharField(max_length=30, blank=True)

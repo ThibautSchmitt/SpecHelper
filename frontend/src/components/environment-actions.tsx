@@ -5,17 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, send, type Environment } from "@/lib/api";
+import { send, type Environment } from "@/lib/api";
 
-type Selection = {
-  repository: string;
-  branch: string;
-  branches: string[];
-  page: number;
-  more: boolean;
-};
+import {
+  RepositoryPicker,
+  duplicateSources,
+  sourcePayload,
+  type SourceSelection,
+} from "@/components/repository-picker";
 type Database = { id: number; name: string };
-type Project = { full_name: string; default_branch: string };
 
 export function EnvironmentActions({
   value,
@@ -28,16 +26,13 @@ export function EnvironmentActions({
   disabled: boolean;
   onChanged: (message: string) => Promise<void>;
 }) {
-  const { t, dateLocale } = useI18n();
+  const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const [mode, setMode] = useState<"edit" | "review" | "delete" | null>(null);
   const [original, setOriginal] = useState(value);
   const [name, setName] = useState("");
   const [database, setDatabase] = useState("");
-  const [selection, setSelection] = useState<Selection[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectPage, setProjectPage] = useState(0);
-  const [moreProjects, setMoreProjects] = useState(false);
+  const [selection, setSelection] = useState<SourceSelection[]>([]);
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -51,11 +46,12 @@ export function EnvironmentActions({
     setDatabase(value.database_id ? String(value.database_id) : "");
     setSelection(
       value.repositories.map((r) => ({
-        repository: r.repository,
+        repository: r.path || r.repository,
+        git_connection_id: r.git_connection_id,
+        remote_id: r.remote_id,
         branch: r.branch,
-        branches: [r.branch],
-        page: 0,
-        more: true,
+        is_fork: r.is_fork,
+        parent: r.parent,
       })),
     );
     setConfirmation("");
@@ -73,75 +69,39 @@ export function EnvironmentActions({
       setBusy(false);
     }
   }
-  async function loadProjects() {
-    const page = projectPage + 1;
-    const found = await api<Project[]>(`/github/repositories?page=${page}`);
-    const normalized = found.map((project) => ({
-      ...project,
-      full_name: project.full_name.toLowerCase(),
-    }));
-    setProjects((old) => (page === 1 ? normalized : [...old, ...normalized]));
-    setProjectPage(page);
-    setMoreProjects(found.length === 100);
-  }
-  async function versions(index: number, repository: string, page = 1) {
-    const found = await api<{ name: string }[]>(
-      `/github/branches?repository=${encodeURIComponent(repository)}&page=${page}`,
-    );
-    setSelection((old) =>
-      old.map((row, i) =>
-        i !== index
-          ? row
-          : {
-              repository,
-              branch:
-                repository === row.repository
-                  ? row.branch
-                  : projects.find((p) => p.full_name === repository)
-                      ?.default_branch ||
-                    found[0]?.name ||
-                    "",
-              branches: Array.from(
-                new Set([
-                  ...(repository === row.repository
-                    ? [row.branch]
-                    : [
-                        projects.find((p) => p.full_name === repository)
-                          ?.default_branch ||
-                          found[0]?.name ||
-                          "",
-                      ]),
-                  ...(page > 1 ? row.branches : []),
-                  ...found.map((b) => b.name),
-                ]),
-              ),
-              page,
-              more: found.length === 100,
-            },
-      ),
-    );
-  }
   const changes: string[] = [];
   if (name !== original.name)
     changes.push(
       t("Name: {before} → {after}", { before: original.name, after: name }),
     );
   for (const previous of original.repositories) {
-    const next = selection.find((r) => r.repository === previous.repository);
+    const next = selection.find(
+      (r) =>
+        (r.git_connection_id || null) ===
+          (previous.git_connection_id || null) &&
+        (r.remote_id || r.repository) ===
+          (previous.remote_id || previous.repository),
+    );
     changes.push(
       !next
-        ? t("{repository}: removed", { repository: previous.repository })
+        ? t("{repository}: removed", {
+            repository: previous.path || previous.repository,
+          })
         : next.branch === previous.branch
           ? t("{repository}: unchanged ({branch})", {
-              repository: previous.repository,
+              repository: previous.path || previous.repository,
               branch: previous.branch,
             })
-          : `${previous.repository} : ${previous.branch} → ${next.branch}`,
+          : `${previous.path || previous.repository} : ${previous.branch} → ${next.branch}`,
     );
   }
   for (const next of selection.filter(
     (r) =>
-      !original.repositories.some((old) => old.repository === r.repository),
+      !original.repositories.some(
+        (old) =>
+          (old.git_connection_id || null) === (r.git_connection_id || null) &&
+          (old.remote_id || old.repository) === (r.remote_id || r.repository),
+      ),
   ))
     changes.push(
       t("{repository}: added ({branch})", {
@@ -162,10 +122,7 @@ export function EnvironmentActions({
       `/environments/${original.id}`,
       {
         name,
-        repositories: selection.map(({ repository, branch }) => ({
-          repository,
-          branch,
-        })),
+        repositories: selection.map(sourcePayload),
         database_id: database ? Number(database) : null,
         expected_revision: original.revision,
       },
@@ -298,11 +255,12 @@ export function EnvironmentActions({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (
-                  new Set(selection.map((r) => r.repository.toLowerCase()))
-                    .size !== selection.length
-                ) {
-                  setError(t("Choose each project only once."));
+                if (duplicateSources(selection)) {
+                  setError(
+                    t(
+                      "This connection, project and branch are already selected.",
+                    ),
+                  );
                   return;
                 }
                 setError("");
@@ -321,127 +279,12 @@ export function EnvironmentActions({
                   onChange={(e) => setName(e.target.value)}
                 />
               </div>
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                <h3>{t("Projects and versions")}</h3>
-                {(projectPage === 0 || moreProjects) && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => task(loadProjects)}
-                  >
-                    {projectPage
-                      ? t("More projects")
-                      : t("Browse my GitHub projects")}
-                  </Button>
-                )}
-              </div>
-              {selection.map((row, index) => (
-                <div
-                  key={index}
-                  className="mt-5 grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]"
-                >
-                  <div>
-                    <label htmlFor={`edit-repo-${value.id}-${index}`}>
-                      {t("Project")} {index + 1}
-                    </label>
-                    <select
-                      id={`edit-repo-${value.id}-${index}`}
-                      required
-                      value={row.repository}
-                      disabled={busy}
-                      onChange={(e) =>
-                        task(() => versions(index, e.target.value))
-                      }
-                    >
-                      <option value="">{t("Choose a project")}</option>
-                      {Array.from(
-                        new Set(
-                          [
-                            row.repository,
-                            ...projects.map((p) => p.full_name),
-                          ].filter(Boolean),
-                        ),
-                      ).map((project) => (
-                        <option key={project}>{project}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor={`edit-version-${value.id}-${index}`}>
-                      {t("Version")} {index + 1}
-                    </label>
-                    <select
-                      id={`edit-version-${value.id}-${index}`}
-                      required
-                      value={row.branch}
-                      disabled={busy}
-                      onChange={(e) =>
-                        setSelection((old) =>
-                          old.map((r, i) =>
-                            i === index ? { ...r, branch: e.target.value } : r,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="">{t("Choose a version")}</option>
-                      {row.branches.map((branch) => (
-                        <option key={branch}>{branch}</option>
-                      ))}
-                    </select>
-                    {row.repository && row.more && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() =>
-                          task(() =>
-                            versions(index, row.repository, row.page + 1),
-                          )
-                        }
-                      >
-                        {row.page ? t("More versions") : t("Load versions")}
-                      </Button>
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={busy || selection.length === 1}
-                    aria-label={t("Remove project {number}", {
-                      number: index + 1,
-                    })}
-                    onClick={() =>
-                      setSelection((old) => old.filter((_, i) => i !== index))
-                    }
-                  >
-                    {t("Remove")}
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                disabled={busy || selection.length >= 20}
-                onClick={() =>
-                  setSelection((old) => [
-                    ...old,
-                    {
-                      repository: "",
-                      branch: "",
-                      branches: [],
-                      page: 0,
-                      more: false,
-                    },
-                  ])
-                }
-              >
-                {t("Add a project")}
-              </Button>
+              <RepositoryPicker
+                prefix={`edit-source-${value.id}`}
+                values={selection}
+                onChange={setSelection}
+                disabled={busy}
+              />
               <div className="field">
                 <label htmlFor={`edit-db-${value.id}`}>{t("Database")}</label>
                 <select

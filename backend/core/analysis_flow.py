@@ -190,6 +190,12 @@ class Orchestrator:
             "context_id": str(self.session.context_id),
             "session_role": self.session.role,
             "provider": self.session.agent,
+            "connection_id": self.session.connection_id,
+            "connection_name": self.session.connection_name_snapshot,
+            "model": self.session.model_snapshot or "runtime-default",
+            "identity_id": str(self.session.identity_snapshot)
+            if self.session.identity_snapshot
+            else None,
             "attempts": 0,
             "execution": self.execution,
         }
@@ -222,6 +228,14 @@ class Orchestrator:
             else:
                 attachment_schema["maxItems"] = 0
         try:
+            if self.session.connection:
+                from .providers import identity_for, quota_exhausted
+
+                identity = identity_for(self.session.connection)
+                if identity.availability == "QUOTA_EXHAUSTED" or quota_exhausted(identity):
+                    raise ProviderUnavailable(
+                        "QUOTA_EXHAUSTED", quota_windows=identity.quota_windows
+                    )
             # One repair is permitted for final artifact formatting; no open-ended agent loop.
             for attempt in range(2 if "writer" in roles else 1):
                 remaining = int(self.deadline - time.monotonic()) - reserve
@@ -240,6 +254,12 @@ class Orchestrator:
                         "session_id": self.session.runtime_id or None,
                         "context_id": str(self.session.context_id),
                         "agent": self.session.agent,
+                        "model": self.session.model_snapshot,
+                        "identity_id": str(self.session.connection.identity.credential_id)
+                        if self.session.connection
+                        and self.session.connection.identity_id
+                        and self.session.connection.identity.credential_id
+                        else None,
                         "phase": phase,
                         "profile": role,
                         "workspace": str(self.workspace),
@@ -250,6 +270,12 @@ class Orchestrator:
                     },
                     timeout=timeout + 3,
                 )
+                if response.get("model"):
+                    step["model"] = response["model"]
+                if response.get("quota_windows") and self.session.connection:
+                    from .providers import record_quota
+
+                    record_quota(self.session.connection, response["quota_windows"])
                 if response.get("session_id"):
                     self.session.runtime_id = response["session_id"]
                     self.session.usage = response.get("usage", {})
@@ -287,7 +313,20 @@ class Orchestrator:
             if isinstance(exc, ProviderUnavailable):
                 from .providers import mark_failure
 
-                mark_failure(self.session.connection_id, exc.kind, exc.retry_seconds)
+                if exc.kind == "MODEL_UNAVAILABLE":
+                    from .models import AIConnection
+
+                    AIConnection.objects.filter(pk=self.session.connection_id).update(
+                        availability="MODEL_UNAVAILABLE"
+                    )
+                    step["diagnostic"] = (
+                        "The selected model is unavailable for this AI connection. Choose an accepted model in Settings and retry."
+                    )
+                else:
+                    mark_failure(
+                        self.session.connection_id, exc.kind, exc.retry_seconds, exc.quota_windows
+                    )
+                step["failure"] = exc.kind
             step.update(status="ERROR", finished_at=timezone.now().isoformat())
             self.run.save(update_fields=["steps"])
             raise
@@ -408,13 +447,16 @@ class Orchestrator:
         from .providers import bind_session
 
         primary = self.session
-        connection = primary.connection or AIConnection.objects.get(agent=primary.agent)
+        connection = (
+            primary.connection
+            or AIConnection.objects.filter(agent=primary.agent).order_by("id").first()
+        )
         ids = self.run.job.payload.get("connection_ids", []) if self.run.job_id else []
         secondary_connection = AIConnection.objects.get(pk=ids[-1]) if ids else connection
         secondary = bind_session(self.request, secondary_connection, "secondary")
         synthesis = bind_session(
             self.request,
-            primary.connection or AIConnection.objects.get(agent=primary.agent),
+            connection,
             "synthesis",
         )
         if has_attachments and AgentProfile.objects.filter(pk="attachment", enabled=True).exists():

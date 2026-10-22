@@ -71,9 +71,9 @@ def enqueue_analysis(request_id, answers=None):
         repos = list(environment.repositories.all())
         if not repos or any(not re.fullmatch(r"[a-f0-9]{40}", r.sha) for r in repos):
             raise HttpError(409, "The environment baseline is incomplete")
-        request.baseline = [
-            {"repository": r.repository, "branch": r.branch, "sha": r.sha} for r in repos
-        ]
+        from .git_sources import repository_snapshot
+
+        request.baseline = [repository_snapshot(repository) for repository in repos]
         request.environment_name_snapshot = environment.name
         request.database_snapshot = (
             {"id": environment.database_id, "name": environment.database.name}

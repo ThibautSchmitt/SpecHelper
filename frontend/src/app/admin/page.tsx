@@ -1,12 +1,18 @@
 "use client";
 import { useI18n } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
-import { GitBranch, Github, Paintbrush, RefreshCw } from "lucide-react";
+import { GitBranch, Paintbrush, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TicketConnectors } from "@/components/ticket-connectors";
-import { ConnectButton } from "@/components/connect-button";
+import { GitSources } from "@/components/git-sources";
+import {
+  RepositoryPicker,
+  duplicateSources,
+  sourcePayload,
+  type SourceSelection,
+} from "@/components/repository-picker";
 import { AIConnections, type AIConnection } from "@/components/ai-connections";
 import {
   DatabaseConnections,
@@ -20,7 +26,6 @@ type Connections = {
   ais: AIConnection[];
   databases: DatabaseConnection[];
 };
-type Repo = { full_name: string; default_branch: string };
 type System = {
   usage: string;
   runtime: string;
@@ -49,20 +54,9 @@ export default function Admin() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const refreshVersion = useRef(0);
   const [system, setSystem] = useState<System | null>(null);
-  const [repos, setRepos] = useState<Repo[]>([]);
-  const [orgs, setOrgs] = useState<{ login: string }[]>([]);
-  const [organization, setOrganization] = useState("");
-  const [repoPage, setRepoPage] = useState(1);
-  const [repoMore, setRepoMore] = useState(false);
-  const [selection, setSelection] = useState<
-    {
-      repository: string;
-      branch: string;
-      branches: string[];
-      page: number;
-      more: boolean;
-    }[]
-  >([{ repository: "", branch: "", branches: [], page: 1, more: false }]);
+  const [selection, setSelection] = useState<SourceSelection[]>([
+    { repository: "", branch: "" },
+  ]);
   const [envName, setEnvName] = useState("");
   const [dbId, setDbId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -116,55 +110,6 @@ export default function Admin() {
       setBusy(false);
     }
   }
-  async function loadRepos(org = organization, page = 1) {
-    const result = await api<Repo[]>(
-      `/github/repositories?organization=${encodeURIComponent(org)}&page=${page}`,
-    );
-    setRepos((old) => (page === 1 ? result : [...old, ...result]));
-    setRepoPage(page);
-    setRepoMore(result.length === 100);
-  }
-  async function discover() {
-    await loadRepos();
-    const result = await api<{ login: string }[]>("/github/organizations");
-    setOrgs(result);
-  }
-  async function selectRepo(index: number, repository: string) {
-    const result = await api<{ name: string }[]>(
-      `/github/branches?repository=${encodeURIComponent(repository)}`,
-    );
-    setSelection((old) =>
-      old.map((r, i) =>
-        i === index
-          ? {
-              repository,
-              branch: result[0]?.name || "",
-              branches: result.map((b) => b.name),
-              page: 1,
-              more: result.length === 100,
-            }
-          : r,
-      ),
-    );
-  }
-  async function moreVersions(index: number) {
-    const current = selection[index];
-    const result = await api<{ name: string }[]>(
-      `/github/branches?repository=${encodeURIComponent(current.repository)}&page=${current.page + 1}`,
-    );
-    setSelection((old) =>
-      old.map((r, i) =>
-        i === index
-          ? {
-              ...r,
-              branches: [...r.branches, ...result.map((b) => b.name)],
-              page: r.page + 1,
-              more: result.length === 100,
-            }
-          : r,
-      ),
-    );
-  }
   const tabs = [
     { id: "connections", label: t("Connections") },
     { id: "environments", label: t("Environments") },
@@ -217,45 +162,7 @@ export default function Admin() {
       )}
       {tab === "connections" && (
         <div className="grid items-start gap-6 lg:grid-cols-2">
-          <Card>
-            <div className="flex justify-between gap-4">
-              <h2 className="flex items-center gap-2">
-                <Github size={20} /> GitHub
-              </h2>
-              <span className="badge" data-state={connections?.github.status}>
-                {t(statuses[connections?.github.status || "UNKNOWN"])}
-              </span>
-            </div>
-            <p className="mt-3 text-sm muted">
-              {connections?.github.account ||
-                t("Connect your account to choose the projects to analyze.")}
-            </p>
-            <div className="mt-5 flex flex-wrap items-start gap-3">
-              <ConnectButton
-                provider="github"
-                onConnected={() => {
-                  refresh()
-                    .then(() => setNotice(t("GitHub account connected.")))
-                    .catch((e) => setError(e.message));
-                }}
-              />
-              {connections?.github.status === "CONNECTED" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    action(
-                      () => send("/connections/github/test"),
-                      t("GitHub connection verified."),
-                    )
-                  }
-                >
-                  {t("Test connection")}
-                </Button>
-              )}
-            </div>
-          </Card>
+          <GitSources />
           <AIConnections values={connections?.ais || []} onChanged={refresh} />
           <TicketConnectors />
         </div>
@@ -311,7 +218,22 @@ export default function Admin() {
                   <tbody>
                     {e.repositories.map((r) => (
                       <tr key={r.id}>
-                        <td className="py-2 pr-4">{r.repository}</td>
+                        <td className="py-2 pr-4">
+                          {r.path || r.repository}
+                          {r.connection_name && (
+                            <small className="mt-1 block muted">
+                              {r.connection_name}
+                            </small>
+                          )}
+                          {r.is_fork && (
+                            <small className="mt-1 block muted">
+                              {t("Fork")}
+                              {r.parent?.path
+                                ? ` · ${t("Parent repository")}: ${r.parent.path}`
+                                : ""}
+                            </small>
+                          )}
+                        </td>
                         <td className="pr-4">{r.branch}</td>
                         <td>
                           <code title={r.sha}>{r.sha.slice(0, 10) || "—"}</code>
@@ -336,25 +258,22 @@ export default function Admin() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (duplicateSources(selection)) {
+                  setError(
+                    t(
+                      "This connection, project and branch are already selected.",
+                    ),
+                  );
+                  return;
+                }
                 action(async () => {
                   await send("/environments", {
                     name: envName,
                     database_id: dbId ? Number(dbId) : null,
-                    repositories: selection.map(({ repository, branch }) => ({
-                      repository,
-                      branch,
-                    })),
+                    repositories: selection.map(sourcePayload),
                   });
                   setEnvName("");
-                  setSelection([
-                    {
-                      repository: "",
-                      branch: "",
-                      branches: [],
-                      page: 1,
-                      more: false,
-                    },
-                  ]);
+                  setSelection([{ repository: "", branch: "" }]);
                 }, t("Environment created. Synchronization in progress."));
               }}
             >
@@ -369,156 +288,12 @@ export default function Admin() {
                   onChange={(e) => setEnvName(e.target.value)}
                 />
               </div>
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm">{t("Projects")}</h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => action(discover, t("Projects loaded."))}
-                >
-                  {t("Browse my GitHub projects")}
-                </Button>
-              </div>
-              {orgs.length > 0 && (
-                <div className="field">
-                  <label htmlFor="organization">{t("Organization")}</label>
-                  <select
-                    id="organization"
-                    value={organization}
-                    onChange={(e) => {
-                      setOrganization(e.target.value);
-                      action(
-                        () => loadRepos(e.target.value),
-                        t("Projects loaded."),
-                      );
-                    }}
-                  >
-                    <option value="">{t("All accessible projects")}</option>
-                    {orgs.map((o) => (
-                      <option key={o.login}>{o.login}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {selection.map((r, index) => (
-                <div
-                  key={index}
-                  className="mt-4 grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]"
-                >
-                  <div>
-                    <label htmlFor={`repo-${index}`}>
-                      {t("Project")} {index + 1}
-                    </label>
-                    <select
-                      id={`repo-${index}`}
-                      required
-                      value={r.repository}
-                      onChange={(e) =>
-                        action(
-                          () => selectRepo(index, e.target.value),
-                          t("Versions loaded."),
-                        )
-                      }
-                    >
-                      <option value="">{t("Choose a project")}</option>
-                      {repos.map((repo) => (
-                        <option key={repo.full_name}>{repo.full_name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor={`branch-${index}`}>
-                      {t("Version")} {index + 1}
-                    </label>
-                    <select
-                      id={`branch-${index}`}
-                      required
-                      value={r.branch}
-                      onChange={(e) =>
-                        setSelection((old) =>
-                          old.map((item, i) =>
-                            i === index
-                              ? { ...item, branch: e.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="">{t("Choose a version")}</option>
-                      {r.branches.map((b) => (
-                        <option key={b}>{b}</option>
-                      ))}
-                    </select>
-                    {r.more && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() =>
-                          action(
-                            () => moreVersions(index),
-                            t("Versions loaded."),
-                          )
-                        }
-                      >
-                        {t("More versions")}
-                      </Button>
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={selection.length === 1}
-                    aria-label={t("Remove project {number}", {
-                      number: index + 1,
-                    })}
-                    onClick={() =>
-                      setSelection((old) => old.filter((_, i) => i !== index))
-                    }
-                  >
-                    {t("Remove")}
-                  </Button>
-                </div>
-              ))}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setSelection([
-                      ...selection,
-                      {
-                        repository: "",
-                        branch: "",
-                        branches: [],
-                        page: 1,
-                        more: false,
-                      },
-                    ])
-                  }
-                >
-                  {t("Add a project")}
-                </Button>
-                {repoMore && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      action(
-                        () => loadRepos(organization, repoPage + 1),
-                        t("Projects loaded."),
-                      )
-                    }
-                  >
-                    {t("More projects")}
-                  </Button>
-                )}
-              </div>
+              <RepositoryPicker
+                prefix="new-source"
+                values={selection}
+                onChange={setSelection}
+                disabled={busy}
+              />
               <div className="field">
                 <label htmlFor="env-db">{t("Database")}</label>
                 <select
@@ -534,7 +309,10 @@ export default function Admin() {
                   ))}
                 </select>
               </div>
-              <Button className="mt-5" disabled={busy}>
+              <Button
+                className="mt-5"
+                disabled={busy || duplicateSources(selection)}
+              >
                 {t("Create environment")}
               </Button>
             </form>

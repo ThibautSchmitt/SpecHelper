@@ -15,8 +15,8 @@ test("GitHub: guided sign-in, temporary code and cancellation", async ({
     expires_at: "2099-01-01T00:00:00Z",
   };
   let cancelled = false;
-  await page.route("**/api/connections/start", async (route) => {
-    expect(route.request().postDataJSON()).toEqual({ provider: "github" });
+  await page.route("**/api/git-connections/1/auth/start", async (route) => {
+    expect(route.request().method()).toBe("POST");
     await route.fulfill({ json: state });
   });
   await page.route(`**/api/connections/attempts/${id}**`, async (route) => {
@@ -75,8 +75,8 @@ test("ChatGPT: sign-in completes in the interface", async ({ page }) => {
     message: "Complete sign-in on the website for ChatGPT.",
     expires_at: "2099-01-01T00:00:00Z",
   };
-  await page.route("**/api/connections/start", async (route) => {
-    expect(route.request().postDataJSON()).toEqual({ provider: "codex" });
+  await page.route("**/api/ai-connections/1/auth/start", async (route) => {
+    expect(route.request().method()).toBe("POST");
     await route.fulfill({ json: state });
   });
   await page.route(`**/api/connections/attempts/${id}`, (route) =>
@@ -120,8 +120,8 @@ test("Claude: enter the confirmation code without a terminal", async ({
     message: "Complete sign-in on the website for Claude.",
     expires_at: "2099-01-01T00:00:00Z",
   };
-  await page.route("**/api/connections/start", async (route) => {
-    expect(route.request().postDataJSON()).toEqual({ provider: "claude" });
+  await page.route("**/api/ai-connections/2/auth/start", async (route) => {
+    expect(route.request().method()).toBe("POST");
     await route.fulfill({ json: state });
   });
   await page.route(`**/api/connections/attempts/${id}**`, async (route) => {

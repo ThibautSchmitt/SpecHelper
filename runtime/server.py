@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -18,7 +19,16 @@ from pydantic import BaseModel, Field
 from core.control import control_token
 from core.postgres import query
 
-from .auth import Logins, connection_status, credential_directory, publish_refresh
+from .auth import (
+    Logins,
+    claude_metadata,
+    connection_status,
+    credential_directory,
+    identity_root,
+    publish_refresh,
+    subscription_credentials,
+)
+from .quota import rollout_windows
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 DATA = Path(os.environ.get("SPECHELPER_DATA_DIR", "/data"))
@@ -41,6 +51,8 @@ class RunIn(BaseModel):
     context_id: uuid.UUID | None = None
     session_id: uuid.UUID | None = None
     agent: Literal["codex", "claude"] = "codex"
+    identity_id: uuid.UUID | None = None
+    model: str = Field(default="", max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$|^$")
     phase: Literal["understanding", "analysis"] = "analysis"
     profile: Literal[
         "requirement",
@@ -173,7 +185,7 @@ def verify_sandbox():
 
 
 @app.get("/health", dependencies=[Depends(authorize)])
-def health(agent: Literal["codex", "claude"] = "codex"):
+def health(agent: Literal["codex", "claude"] = "codex", identity_id: uuid.UUID | None = None):
     if not shutil.which(agent) or not shutil.which("bwrap"):
         return {"status": "ERROR", "account": "Incomplete runtime", "usage": "UNKNOWN"}
     if not verify_sandbox():
@@ -182,12 +194,13 @@ def health(agent: Literal["codex", "claude"] = "codex"):
             "account": "Isolation unavailable",
             "usage": "UNKNOWN",
         }
-    return connection_status(CREDENTIALS, agent)
+    return connection_status(identity_root(CREDENTIALS, identity_id), agent)
 
 
 class LoginIn(BaseModel):
     attempt_id: uuid.UUID
     provider: Literal["codex", "claude"]
+    identity_id: uuid.UUID | None = None
 
 
 class LoginCodeIn(BaseModel):
@@ -197,7 +210,11 @@ class LoginCodeIn(BaseModel):
 @app.post("/auth/start", dependencies=[Depends(authorize)])
 def start_login(payload: LoginIn):
     try:
-        return logins.start(str(payload.attempt_id), payload.provider)
+        return logins.start(
+            str(payload.attempt_id),
+            payload.provider,
+            str(payload.identity_id) if payload.identity_id else None,
+        )
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
 
@@ -242,13 +259,19 @@ def run(payload: RunIn):
         agent_home = session / payload.agent
         agent_home.mkdir(parents=True, exist_ok=True, mode=0o700)
         # Copy only the credential file, never administrator config, hooks, MCP servers or rules.
-        credential_root = credential_directory(CREDENTIALS, payload.agent)
+        root = identity_root(CREDENTIALS, payload.identity_id)
+        credential_root = credential_directory(root, payload.agent)
+        if not subscription_credentials(credential_root, payload.agent):
+            return {"failure": {"kind": "AUTH_ERROR"}}
         names = ["auth.json"] if payload.agent == "codex" else [".credentials.json", ".claude.json"]
         credential_snapshot = None
         for name in names:
             auth = credential_root / name
             if auth.is_file():
-                shutil.copyfile(auth, agent_home / name)
+                if payload.agent == "claude" and name == ".claude.json":
+                    (agent_home / name).write_text(json.dumps(claude_metadata(auth.read_bytes())))
+                else:
+                    shutil.copyfile(auth, agent_home / name)
                 (agent_home / name).chmod(0o600)
                 if name in {"auth.json", ".credentials.json"}:
                     credential_snapshot = (name, (agent_home / name).read_bytes())
@@ -280,7 +303,7 @@ def run(payload: RunIn):
             "--json",
             "--skip-git-repo-check",
             "--model",
-            os.environ.get("CODEX_MODEL", "gpt-6-luna"),
+            payload.model or os.environ.get("CODEX_MODEL", "gpt-6-luna"),
             "--output-schema",
             "/session/schema.json",
             "--output-last-message",
@@ -327,12 +350,15 @@ def run(payload: RunIn):
                 cli += ["--resume", str(payload.session_id)]
             else:
                 cli += ["--session-id", str(uuid.uuid4())]
+            if payload.model:
+                cli += ["--model", payload.model]
         elif payload.session_id:
             cli += ["resume", str(payload.session_id), "-"]
         else:
             cli += ["-"]
         command = sandbox(expected, session, attachments) + cli
         started = time.monotonic()
+        observed_after = datetime.now(UTC)
         process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
@@ -351,9 +377,7 @@ def run(payload: RunIn):
         if credential_snapshot:
             name, original = credential_snapshot
             try:
-                publish_refresh(
-                    CREDENTIALS, payload.agent, original, (agent_home / name).read_bytes()
-                )
+                publish_refresh(root, payload.agent, original, (agent_home / name).read_bytes())
             except OSError:
                 pass  # Keep a completed analysis even if credential storage becomes unavailable.
         session_id = str(payload.session_id) if payload.session_id else None
@@ -372,6 +396,9 @@ def run(payload: RunIn):
                     "session_id": result["session_id"],
                     "usage": result.get("usage", {}),
                     "elapsed": round(time.monotonic() - started, 2),
+                    "model": next(
+                        iter(result.get("modelUsage", {})), payload.model or "runtime-default"
+                    ),
                 }
             except (ValueError, KeyError):
                 return {"failure": {"kind": "ERROR"}}
@@ -384,13 +411,14 @@ def run(payload: RunIn):
                 session_id = event.get("thread_id")
             if event.get("type") == "turn.completed":
                 usage = event.get("usage", {})
+        quota_windows = rollout_windows(agent_home, session_id, observed_after)
         if timed_out:
             failure = classify_failure(stdout)
             if failure["kind"] in {"QUOTA_EXHAUSTED", "BUSY"}:
-                return {"failure": failure}
+                return {"failure": {**failure, "quota_windows": quota_windows}}
             return {"timed_out": True, "session_id": session_id, "usage": usage}
         if process.returncode or not output.exists() or not session_id:
-            return {"failure": classify_failure(stdout)}
+            return {"failure": {**classify_failure(stdout), "quota_windows": quota_windows}}
         try:
             result = json.loads(output.read_text())
         except json.JSONDecodeError:
@@ -400,6 +428,8 @@ def run(payload: RunIn):
             "session_id": session_id,
             "usage": usage,
             "elapsed": round(time.monotonic() - started, 2),
+            "model": payload.model or os.environ.get("CODEX_MODEL", "gpt-6-luna"),
+            "quota_windows": quota_windows,
         }
     finally:
         if capability:
@@ -426,7 +456,32 @@ def classify_failure(stdout):
     if any(
         term in text
         for term in (
+            "model_not_found",
+            "issue with the selected model",
+            "unsupported model",
+            "model is not available",
+            "invalid model",
+            "model does not exist",
+        )
+    ):
+        return {"kind": "MODEL_UNAVAILABLE"}
+    if any(
+        term in text
+        for term in (
+            "authentication_error",
+            "invalid_grant",
+            "unauthorized",
+            "login required",
+            "not logged in",
+            "token expired",
+        )
+    ):
+        return {"kind": "AUTH_ERROR"}
+    if any(
+        term in text
+        for term in (
             "usage_limit_reached",
+            "credits_required",
             "insufficient_quota",
             "quota_exceeded",
             "usage limit",

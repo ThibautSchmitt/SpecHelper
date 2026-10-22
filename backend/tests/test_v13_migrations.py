@@ -53,7 +53,10 @@ def test_ticket_publication_migration_preserves_analyses_sessions_and_credential
         MigrationExecutor(connection).migrate(latest)
         current = MigrationExecutor(connection).loader.project_state(latest).apps
         for name, rows in snapshots.items():
-            assert list(current.get_model("core", name).objects.order_by("pk").values()) == rows
+            assert (
+                list(current.get_model("core", name).objects.order_by("pk").values(*rows[0]))
+                == rows
+            )
         assert current.get_model("core", "PublishedTicket").objects.count() == 0
         assert current.get_model("core", "TicketConnector").objects.count() == 0
         assert (

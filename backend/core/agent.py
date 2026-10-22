@@ -121,8 +121,9 @@ def prompt(request, phase):
 
 
 class ProviderUnavailable(ValueError):
-    def __init__(self, kind, retry_seconds=None):
+    def __init__(self, kind, retry_seconds=None, quota_windows=None):
         self.kind, self.retry_seconds = kind, retry_seconds
+        self.quota_windows = quota_windows
         super().__init__("The assistant is temporarily unavailable.")
 
 
@@ -143,9 +144,11 @@ def runtime_call(path, payload=None, timeout=15):
         if path == "/run" and result.get("failure"):
             failure = result["failure"]
             kind = failure.get("kind")
-            if kind not in {"QUOTA_EXHAUSTED", "BUSY", "ERROR"}:
+            if kind not in {"QUOTA_EXHAUSTED", "BUSY", "ERROR", "AUTH_ERROR", "MODEL_UNAVAILABLE"}:
                 kind = "ERROR"
-            raise ProviderUnavailable(kind, failure.get("retry_seconds"))
+            raise ProviderUnavailable(
+                kind, failure.get("retry_seconds"), failure.get("quota_windows")
+            )
         return result
     except httpx.HTTPError as exc:
         raise ValueError("The AI runtime is not responding") from exc

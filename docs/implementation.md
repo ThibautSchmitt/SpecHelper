@@ -15,7 +15,12 @@ Start with the [README](../README.md) for installation and usage,
 | database | Application data, separate from analyzed business databases |
 | agent-runtime | Codex CLI / Claude Code, isolated on Linux with Bubblewrap |
 
-One Git mirror per repository supplies detached worktrees. Each repository/environment has a fixed worktree location; older layouts are normalized at the next synchronization. Environment and request worktrees are separate. Launching a request freezes its SHAs and database selection; later synchronization preserves its context and baseline.
+One Git mirror per remote supplies detached worktrees. Named sources use a stable
+provider/instance/remote identifier, independent of account and branch. Mirror locks
+serialize access across configurations. Environment worktrees are separated by SHA
+generation and branch selection; legacy worktree paths remain compatible. Request
+worktrees are separate. Launching a request freezes its SHAs and database selection;
+retained commit refs preserve its baseline across later fetches and force-pushes.
 
 An agent receives only its read-only request workspace, attachments and Git cache, plus its own writable session directory. It cannot access application data, GitHub credentials, PostgreSQL credentials or other requests. AI credentials are persisted separately. The runtime needs `SYS_ADMIN` and a compatible seccomp policy to create namespaces; the agent then drops all capabilities. The service uses `init: true` to reap orphaned Bubblewrap children and prevent process exhaustion. Isolation failure stops execution.
 

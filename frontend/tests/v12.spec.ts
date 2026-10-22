@@ -86,6 +86,7 @@ test("compact admin: independent connections and targeted probe", async ({
   const ais = [
     {
       id: 1,
+      name: "ChatGPT",
       agent: "codex",
       status: "CONNECTED",
       availability: "QUOTA_EXHAUSTED",
@@ -94,6 +95,7 @@ test("compact admin: independent connections and targeted probe", async ({
     },
     {
       id: 2,
+      name: "Claude",
       agent: "claude",
       status: "CONNECTED",
       availability: "AVAILABLE",
@@ -102,6 +104,7 @@ test("compact admin: independent connections and targeted probe", async ({
     },
   ];
   let tested = false;
+  await page.route("**/api/ai-connections", (r) => r.fulfill({ json: ais }));
   await page.route("**/api/connections", (r) =>
     r.fulfill({
       json: {
@@ -111,7 +114,7 @@ test("compact admin: independent connections and targeted probe", async ({
       },
     }),
   );
-  await page.route("**/api/connections/ai/2/test", (r) => {
+  await page.route("**/api/ai-connections/2/test", (r) => {
     tested = true;
     return r.fulfill({ json: ais[1] });
   });
@@ -134,9 +137,7 @@ test("compact admin: independent connections and targeted probe", async ({
   await claude
     .getByRole("button", { name: "Test connection", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText(
-    "Claude: connection verified",
-  );
+  await expect(page.getByRole("status")).toContainText("Connection checked.");
   expect(tested).toBe(true);
 });
 
