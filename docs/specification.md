@@ -6,7 +6,7 @@ SpecHelper turns a business need into a concise ticket and detailed `goal.md` us
 
 One installation serves a trusted team. Requests and connections are shared; there are no application accounts, per-user permissions or private spaces. Infrastructure controls remote access.
 
-## Administration
+## Settings
 
 - Guided GitHub, ChatGPT and Claude connections without personal access tokens.
 - Named environments with multiple Git repositories/branches and optional PostgreSQL.
@@ -14,7 +14,7 @@ One installation serves a trusted team. Requests and connections are shared; the
 - Instance name, short label, color, application language and permission to compare new requests.
 - No agent or skill settings exposed to users.
 
-**Application language** under **Admin → Instance** selects English or French for the interface and newly created analyses. French is the default, preserving existing installations. A request's language is frozen at creation and used for clarification, later discussion and generated artifacts. Switching the instance language does not translate or overwrite historical artifacts.
+**Application language** under **Settings → Instance** selects English or French for the interface and newly created analyses. French is the default, preserving existing installations. A request's language is frozen at creation and used for clarification, later discussion and generated artifacts. Switching the instance language does not translate or overwrite historical artifacts.
 
 The PostgreSQL test checks connectivity, a read and read-only permissions. It returns three simple statuses without database inventory or diagnostics.
 
@@ -29,6 +29,26 @@ Without comparison, an available assistant is selected automatically. Comparison
 The ticket includes a title, brief context, need, expected behavior, solution, impacts, risks and acceptance criteria. The goal details business intent, existing behavior, required behavior, technical context, repositories/SHAs, files and symbols, constraints, implementation guidance, criteria, tests and useful attachments. It requires independent source verification before modification.
 
 Both artifacts can be copied and downloaded. Discussion after a result creates a new immutable version; previous versions remain available. `PARTIAL` indicates material uncertainty, distinct from technical failure.
+
+## Dashboard and ticket publication
+
+Requests, Tickets and Settings share a persistent instance sidebar and live task
+queue. Desktop displays three columns; smaller screens retain navigation and a
+queue drawer. Connection indicators reflect observed status. Queue cards expose
+FIFO order, actual elapsed time, clarification, completion and failures without
+inventing quota information or completion estimates.
+
+GitHub Issues, GitLab Issues, Jira and GLPI connectors operate independently of
+analysis agents. Settings stores encrypted credentials and allowed destinations.
+A completed result opens a publication dialog with target templates, required
+fields, editable content and preview. Only explicit human confirmation creates an
+external ticket. Metadata revisions, persistent operation identifiers and
+uncertain-write reconciliation guard against stale forms and duplicate creation.
+
+Tickets lists confirmed publications, with search and platform/environment filters,
+external links and the exact immutable source version. See
+[publication behavior and supported APIs](ticketing.md) and the
+[v1.3 acceptance report](acceptance-v1.3.md).
 
 ## Execution and security
 

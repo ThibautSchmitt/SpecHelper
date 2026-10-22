@@ -1,10 +1,11 @@
 "use client";
 import { useI18n } from "@/lib/i18n";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GitBranch, Github, Paintbrush, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { TicketConnectors } from "@/components/ticket-connectors";
 import { ConnectButton } from "@/components/connect-button";
 import { AIConnections, type AIConnection } from "@/components/ai-connections";
 import {
@@ -45,6 +46,8 @@ export default function Admin() {
     allow_confrontation: true,
     language: "fr",
   });
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const refreshVersion = useRef(0);
   const [system, setSystem] = useState<System | null>(null);
   const [repos, setRepos] = useState<Repo[]>([]);
   const [orgs, setOrgs] = useState<{ login: string }[]>([]);
@@ -67,19 +70,25 @@ export default function Admin() {
   const [notice, setNotice] = useState("");
 
   async function refresh() {
+    const version = ++refreshVersion.current;
     const [c, e, s, y] = await Promise.all([
       api<Connections>("/connections"),
       api<Environment[]>("/environments"),
       api<typeof settings>("/settings"),
       api<System>("/system"),
     ]);
+    if (version !== refreshVersion.current) return;
     setConnections(c);
     setEnvironments(e);
     setSettings(s);
+    setSettingsLoaded(true);
     setSystem(y);
   }
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
+    return () => {
+      refreshVersion.current += 1;
+    };
   }, []);
   useEffect(() => {
     const timer = setInterval(() => {
@@ -167,7 +176,7 @@ export default function Admin() {
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-primary">
           {t("Team settings")}
         </p>
-        <h1>{t("Administration")}</h1>
+        <h1>{t("Settings")}</h1>
         <p className="mt-2 muted">
           {t("Connect your tools and prepare analysis environments.")}
         </p>
@@ -248,6 +257,7 @@ export default function Admin() {
             </div>
           </Card>
           <AIConnections values={connections?.ais || []} onChanged={refresh} />
+          <TicketConnectors />
         </div>
       )}
       {tab === "environments" && (
@@ -545,82 +555,89 @@ export default function Admin() {
               }, t("Instance settings saved."));
             }}
           >
-            <div className="field">
-              <label htmlFor="instance-name">{t("Instance name")}</label>
-              <Input
-                id="instance-name"
-                required
-                maxLength={100}
-                value={settings.name}
-                onChange={(e) =>
-                  setSettings({ ...settings, name: e.target.value })
-                }
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="instance-label">
-                {t("Short label (optional)")}
-              </label>
-              <Input
-                id="instance-label"
-                maxLength={80}
-                value={settings.short_label || ""}
-                onChange={(e) =>
-                  setSettings({ ...settings, short_label: e.target.value })
-                }
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="instance-language">
-                {t("Application language")}
-              </label>
-              <select
-                id="instance-language"
-                value={settings.language || "fr"}
-                onChange={(e) =>
-                  setSettings({ ...settings, language: e.target.value })
-                }
-              >
-                <option value="en">{t("English")}</option>
-                <option value="fr">{t("French")}</option>
-              </select>
-              <p className="mt-2 text-sm muted">
-                {t(
-                  "This sets the interface and the language of new analyses. Existing results are preserved.",
-                )}
-              </p>
-            </div>
-            <div className="field">
-              <label htmlFor="instance-color">{t("Primary color")}</label>
-              <div className="flex items-center gap-4">
-                <input
-                  id="instance-color"
-                  type="color"
-                  value={settings.primary_color}
+            <fieldset disabled={!settingsLoaded || busy}>
+              <div className="field">
+                <label htmlFor="instance-name">{t("Instance name")}</label>
+                <Input
+                  id="instance-name"
+                  required
+                  maxLength={100}
+                  value={settings.name}
                   onChange={(e) =>
-                    setSettings({ ...settings, primary_color: e.target.value })
+                    setSettings({ ...settings, name: e.target.value })
                   }
-                  className="h-11 w-16 cursor-pointer rounded-md border p-1"
                 />
-                <span className="text-sm muted">{settings.primary_color}</span>
               </div>
-            </div>
-            <label className="mt-6 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={settings.allow_confrontation !== false}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    allow_confrontation: e.target.checked,
-                  })
-                }
-              />
-              {t("Allow comparison for new requests")}
-            </label>
-            <Button className="mt-6" disabled={busy}>
-              {t("Save settings")}
-            </Button>
+              <div className="field">
+                <label htmlFor="instance-label">
+                  {t("Short label (optional)")}
+                </label>
+                <Input
+                  id="instance-label"
+                  maxLength={80}
+                  value={settings.short_label || ""}
+                  onChange={(e) =>
+                    setSettings({ ...settings, short_label: e.target.value })
+                  }
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="instance-language">
+                  {t("Application language")}
+                </label>
+                <select
+                  id="instance-language"
+                  value={settings.language || "fr"}
+                  onChange={(e) =>
+                    setSettings({ ...settings, language: e.target.value })
+                  }
+                >
+                  <option value="en">{t("English")}</option>
+                  <option value="fr">{t("French")}</option>
+                </select>
+                <p className="mt-2 text-sm muted">
+                  {t(
+                    "This sets the interface and the language of new analyses. Existing results are preserved.",
+                  )}
+                </p>
+              </div>
+              <div className="field">
+                <label htmlFor="instance-color">{t("Primary color")}</label>
+                <div className="flex items-center gap-4">
+                  <input
+                    id="instance-color"
+                    type="color"
+                    value={settings.primary_color}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        primary_color: e.target.value,
+                      })
+                    }
+                    className="h-11 w-16 cursor-pointer rounded-md border p-1"
+                  />
+                  <span className="text-sm muted">
+                    {settings.primary_color}
+                  </span>
+                </div>
+              </div>
+              <label className="mt-6 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.allow_confrontation !== false}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      allow_confrontation: e.target.checked,
+                    })
+                  }
+                />
+                {t("Allow comparison for new requests")}
+              </label>
+              <Button className="mt-6" disabled={busy}>
+                {t("Save settings")}
+              </Button>
+            </fieldset>
           </form>
         </Card>
       )}
@@ -646,10 +663,14 @@ export default function Admin() {
                           : t("Queued")}
                       </p>
                       {j.error && (
-                        <p className="mt-2 text-sm text-red-700">{t(j.error)}</p>
+                        <p className="mt-2 text-sm text-red-700">
+                          {t(j.error)}
+                        </p>
                       )}
                     </div>
-                    <span className="badge">{t(statuses[j.status] || j.status)}</span>
+                    <span className="badge">
+                      {t(statuses[j.status] || j.status)}
+                    </span>
                   </div>
                 ))
               ) : (

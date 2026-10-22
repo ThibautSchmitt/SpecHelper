@@ -1,6 +1,6 @@
 # English and French
 
-Select **Admin → Instance → Application language**, then save the settings. The
+Select **Settings → Instance → Application language**, then save the settings. The
 setting belongs to the shared instance. Open browsers refresh it within 15 seconds;
 the browser saving it updates immediately. French is the default.
 

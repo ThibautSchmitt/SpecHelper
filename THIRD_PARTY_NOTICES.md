@@ -16,6 +16,8 @@ The lock files record dependency versions; they do not relicense dependencies.
 | caniuse-lite | CC-BY-4.0; browser compatibility data. |
 | class-variance-authority | Apache-2.0. |
 | Lucide / Feather | ISC / MIT; icon artwork and implementation retain upstream notices. |
+| PyYAML | MIT; parses remote issue-form metadata with the safe loader. See the [upstream license](https://github.com/yaml/pyyaml/blob/main/LICENSE). |
+| react-markdown / remark-gfm | MIT; render the Markdown publication preview. Preserve their notices when distributing installed packages. |
 
 Other dependencies include software under MIT, BSD, Apache and PostgreSQL
 licenses. Preserve the licenses and notices supplied with installed packages.

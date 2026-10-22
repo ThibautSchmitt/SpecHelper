@@ -1,7 +1,9 @@
 "use client";
+import { PublishTicket } from "@/components/publish-ticket";
 import { useI18n } from "@/lib/i18n";
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, use, useEffect, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -64,13 +66,21 @@ const conciseLabels: Record<string, string> = {
   acceptance_criteria: "Acceptance criteria",
 };
 
-export default function RequestPage({
-  params,
-}: {
+export default function RequestPage(props: {
   params: Promise<{ id: string }>;
 }) {
+  return (
+    <Suspense>
+      <RequestContent {...props} />
+    </Suspense>
+  );
+}
+
+function RequestContent({ params }: { params: Promise<{ id: string }> }) {
   const { t, dateLocale } = useI18n();
   const { id } = use(params);
+  const search = useSearchParams();
+  const router = useRouter();
   const [value, setValue] = useState<RequestDetail | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<ResultVersion | null>(
     null,
@@ -83,6 +93,12 @@ export default function RequestPage({
   const [error, setError] = useState("");
   const [goalCopied, setGoalCopied] = useState(false);
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    const version = Number(search.get("version"));
+    setSelectedNumber(
+      Number.isInteger(version) && version > 0 ? version : null,
+    );
+  }, [id, search]);
   useEffect(() => {
     let alive = true;
     const load = () =>
@@ -139,6 +155,7 @@ export default function RequestPage({
           expected_version: value!.latest_version!.number,
         }),
       );
+      router.replace(`/requests/${id}`, { scroll: false });
       setMessage("");
       setShowDiscussion(false);
       setSelectedNumber(null);
@@ -323,7 +340,9 @@ export default function RequestPage({
                     {m.role === "user" ? t("You") : "SpecHelper"}
                   </p>
                   <p className="mt-1 whitespace-pre-wrap text-sm">
-                    {m.kind === "result" || m.kind === "error" ? t(m.content) : m.content}
+                    {m.kind === "result" || m.kind === "error"
+                      ? t(m.content)
+                      : m.content}
                   </p>
                 </div>
               ))}
@@ -377,6 +396,10 @@ export default function RequestPage({
                     id="result-version"
                     value={selectedNumber ?? "latest"}
                     onChange={(e) => {
+                      router.replace(
+                        `/requests/${id}${e.target.value === "latest" ? "" : `?version=${e.target.value}`}`,
+                        { scroll: false },
+                      );
                       setSelectedVersion(null);
                       setSelectedNumber(
                         e.target.value === "latest"
@@ -390,7 +413,11 @@ export default function RequestPage({
                       {value.latest_version?.number}
                     </option>
                     {value.versions
-                      .filter((v) => v.number !== value.latest_version?.number)
+                      .filter(
+                        (v) =>
+                          v.number !== value.latest_version?.number ||
+                          v.number === selectedNumber,
+                      )
                       .map((v) => (
                         <option key={v.number} value={v.number}>
                           {t("Version")} {v.number} ·{" "}
@@ -402,6 +429,9 @@ export default function RequestPage({
               )}
             </div>
             <div className="flex flex-wrap gap-2">
+              {result && !loadingVersion && (
+                <PublishTicket requestId={id} version={result.number} />
+              )}
               <Button variant="outline" onClick={copy}>
                 <Copy size={16} />
                 {copied ? t("Copied!") : t("Copy for Jira")}

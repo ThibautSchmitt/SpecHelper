@@ -1,12 +1,12 @@
 # Security
 
-SpecHelper is designed for a trusted team. An instance shares requests and connections and provides no application accounts or private spaces. Protect remote access through team infrastructure; do not expose Admin directly.
+SpecHelper is designed for a trusted team. An instance shares requests and connections and provides no application accounts or private spaces. Protect remote access through team infrastructure; do not expose Settings directly.
 
 ## Deployment
 
 The default deployment publishes only the frontend on `127.0.0.1:3000`. Neither
 the API nor the agent runtime exposes a host port. For remote access, protect the
-entire instance, including Admin, with your team's VPN, reverse proxy or SSO,
+entire instance, including Settings, with your team's VPN, reverse proxy or SSO,
 serve it over HTTPS, and configure `BIND_ADDRESS`, `TRUSTED_ORIGINS` and
 `ALLOWED_HOSTS` for the deployment.
 
@@ -14,6 +14,12 @@ Source workspaces and attachments are mounted read-only in the agent sandbox.
 Analyzed PostgreSQL databases require dedicated read-only roles. GitHub and
 database credentials are not added to AI prompts. Attachments remain untrusted
 data and must never be executed as instructions.
+
+Ticket connector credentials are encrypted on the server and are excluded from
+analysis prompts and API responses. Publication is a separate backend operation
+that requires explicit human confirmation and an allowed destination. Review
+the target and content before creating a ticket. After an uncertain response,
+verify the recorded operation rather than creating another ticket manually.
 
 The Linux sandbox requires specific namespace capabilities and network boundaries.
 Preserve those boundaries when adapting deployment; see

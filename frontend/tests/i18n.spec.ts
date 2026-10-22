@@ -110,7 +110,7 @@ test("admin language persists across navigation, reload and translated errors", 
   await expect(
     page.getByLabel(fr["Describe your need"], { exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Administration", exact: true }).click();
+  await page.getByRole("link", { name: fr["Settings"], exact: true }).click();
   await page.getByRole("button", { name: "Instance", exact: true }).click();
   await page
     .getByLabel(fr["Application language"], { exact: true })

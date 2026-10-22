@@ -1,0 +1,218 @@
+"""Ticket connector administration and explicitly confirmed publication endpoints."""
+
+import math
+from typing import Literal
+from uuid import UUID
+
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
+from ninja import Router, Schema
+from ninja.errors import HttpError
+from pydantic import ConfigDict, Field, field_validator
+
+from .models import GitHubConnection, PublishedTicket, ResultVersion, TicketConnector
+from .secrets import encrypt
+from .ticket_providers import provider_for
+from .ticket_publication import (
+    accessible_projects,
+    connector_dict,
+    preview,
+    publication_dict,
+    publish,
+    safe_provider_error,
+    validate_base_url,
+)
+
+router = Router(tags=["Ticket publication"])
+
+
+class StrictSchema(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ConnectorIn(StrictSchema):
+    name: str = Field(min_length=1, max_length=100)
+    platform: Literal["github", "gitlab", "jira", "glpi"]
+    base_url: str = Field(min_length=1, max_length=1000)
+    username: str = Field(default="", max_length=255)
+    secret: str = Field(default="", max_length=4096)
+    app_token: str = Field(default="", max_length=4096)
+    api_version: Literal["v1"] = "v1"
+    projects: list[str] = Field(default_factory=list, max_length=1000)
+    default_project: str = Field(default="", max_length=255)
+
+
+class PreviewIn(StrictSchema):
+    connector_id: int = Field(ge=1)
+    project: str = Field(min_length=1, max_length=255)
+    template_id: str = Field(default="", max_length=500)
+    issue_type: str = Field(default="", max_length=255)
+
+
+class PublicationIn(PreviewIn):
+    title: str = Field(min_length=1, max_length=500)
+    body: str = Field(default="", max_length=200000)
+    fields: dict[str, str | list[str] | int | float | bool | None] = Field(
+        default_factory=dict, max_length=100
+    )
+    labels: list[str] = Field(default_factory=list, max_length=100)
+    assignees: list[str] = Field(default_factory=list, max_length=100)
+    options_revision: str = Field(min_length=1, max_length=128)
+    idempotency_key: UUID
+    confirmed: Literal[True]
+
+    @field_validator("confirmed", mode="before")
+    @classmethod
+    def require_confirmation(cls, value):
+        if value is not True:
+            raise ValueError("Explicit human confirmation is required")
+        return value
+
+    @field_validator("fields")
+    @classmethod
+    def bound_field_values(cls, fields):
+        if len(str(fields)) > 200000:
+            raise ValueError("Ticket field values are too large")
+        if any(isinstance(value, float) and not math.isfinite(value) for value in fields.values()):
+            raise ValueError("Ticket field values must be finite numbers")
+        return fields
+
+
+def connector_values(payload, existing=None):
+    values = payload.model_dump(exclude={"secret", "app_token"})
+    values["base_url"] = validate_base_url(values["base_url"])
+    projects = values["projects"]
+    if any(not item or len(item) > 255 for item in projects) or len(set(projects)) != len(projects):
+        raise HttpError(422, "Enter unique project identifiers of at most 255 characters.")
+    if values["default_project"] and values["default_project"] not in projects:
+        raise HttpError(422, "The default project must be allowed by this connector.")
+    for key in ("secret", "app_token"):
+        value = getattr(payload, key)
+        if value:
+            values[key] = encrypt(value)
+        elif existing is None:
+            values[key] = ""
+    # GitHub can reuse the instance's encrypted OAuth credential. It never becomes
+    # part of a prompt or a public connector response.
+    if (
+        payload.platform == "github"
+        and not values.get("secret")
+        and not (existing and existing.secret)
+    ):
+        github = GitHubConnection.objects.filter(pk=1).first()
+        if github and github.secret:
+            values["secret"] = github.secret
+    if existing and payload.platform != existing.platform:
+        raise HttpError(422, "Create a new connector to change its platform.")
+    if existing and values["base_url"] != existing.base_url and existing.published_tickets.exists():
+        raise HttpError(
+            409,
+            "Create a new connector to change the URL of a destination with publication history.",
+        )
+    values.update(status="UNKNOWN", error="")
+    return values
+
+
+@router.get("/ticket-connectors")
+def list_connectors(request):
+    return [connector_dict(value) for value in TicketConnector.objects.order_by("name", "id")]
+
+
+@router.post("/ticket-connectors")
+def create_connector(request, payload: ConnectorIn):
+    return connector_dict(TicketConnector.objects.create(**connector_values(payload)))
+
+
+@router.put("/ticket-connectors/{connector_id}")
+def update_connector(request, connector_id: int, payload: ConnectorIn):
+    connector = get_object_or_404(TicketConnector, pk=connector_id)
+    values = connector_values(payload, connector)
+    for name, value in values.items():
+        setattr(connector, name, value)
+    connector.save()
+    return connector_dict(connector)
+
+
+@router.delete("/ticket-connectors/{connector_id}")
+def delete_connector(request, connector_id: int):
+    connector = get_object_or_404(TicketConnector, pk=connector_id)
+    if connector.published_tickets.exists():
+        raise HttpError(409, "This connector has publication history and cannot be deleted.")
+    connector.delete()
+    return {"status": "DELETED"}
+
+
+@router.post("/ticket-connectors/{connector_id}/test")
+def test_connector(request, connector_id: int):
+    connector = get_object_or_404(TicketConnector, pk=connector_id)
+    try:
+        provider_for(connector).test()
+    except Exception as exc:
+        connector.status = "ERROR"
+        connector.error = safe_provider_error(exc)
+    else:
+        connector.status = "CONNECTED"
+        connector.error = ""
+    connector.save(update_fields=["status", "error", "updated_at"])
+    return connector_dict(connector)
+
+
+@router.get("/ticket-connectors/{connector_id}/projects")
+def connector_projects(request, connector_id: int):
+    return accessible_projects(get_object_or_404(TicketConnector, pk=connector_id))
+
+
+@router.get("/tickets")
+def list_tickets(
+    request, platform: str = "", environment: str = "", search: str = "", page: int = 1
+):
+    values = PublishedTicket.objects.filter(status=PublishedTicket.Status.PUBLISHED).select_related(
+        "connector", "version"
+    )
+    environments = list(
+        values.order_by("version__environment_name")
+        .values_list("version__environment_name", flat=True)
+        .distinct()
+    )
+    if platform:
+        values = values.filter(platform=platform)
+    if environment:
+        values = values.filter(version__environment_name=environment)
+    if search:
+        values = values.filter(
+            Q(title__icontains=search[:500])
+            | Q(external_key__icontains=search[:500])
+            | Q(project__icontains=search[:500])
+        )
+    page = max(1, page)
+    size = 25
+    return {
+        "items": [publication_dict(value) for value in values[(page - 1) * size : page * size]],
+        "total": values.count(),
+        "page": page,
+        "page_size": size,
+        "environments": environments,
+    }
+
+
+@router.get("/requests/{request_id}/versions/{number}/publications")
+def version_publications(request, request_id: UUID, number: int):
+    version = get_object_or_404(ResultVersion, request_id=request_id, number=number)
+    return [
+        publication_dict(value)
+        for value in version.published_tickets.select_related("connector", "version")
+    ]
+
+
+@router.post("/requests/{request_id}/versions/{number}/publication-preview")
+def publication_preview(request, request_id: UUID, number: int, payload: PreviewIn):
+    version = get_object_or_404(ResultVersion, request_id=request_id, number=number)
+    connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
+    return preview(version, connector, payload.project, payload.template_id, payload.issue_type)
+
+
+@router.post("/requests/{request_id}/versions/{number}/publications")
+def create_publication(request, request_id: UUID, number: int, payload: PublicationIn):
+    version = get_object_or_404(ResultVersion, request_id=request_id, number=number)
+    connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
+    return publication_dict(publish(version, connector, payload.model_dump()))

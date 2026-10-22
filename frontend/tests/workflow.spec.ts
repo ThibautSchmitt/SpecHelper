@@ -18,7 +18,7 @@ test("administration, theme and business navigation", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "From need to ticket, simply." }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Administration", exact: true }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "GitHub", exact: true }),
   ).toBeVisible();

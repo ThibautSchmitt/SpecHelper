@@ -1,6 +1,8 @@
 import uuid
+from datetime import timedelta
 
 from django.db import models
+from django.utils import timezone
 
 
 class InstanceSettings(models.Model):
@@ -263,3 +265,96 @@ class ConnectionAttempt(models.Model):
     message = models.TextField(default="Preparing connection…")
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
+
+
+class TicketConnector(models.Model):
+    class Platform(models.TextChoices):
+        GITHUB = "github", "GitHub"
+        GITLAB = "gitlab", "GitLab"
+        JIRA = "jira", "Jira"
+        GLPI = "glpi", "GLPI"
+
+    name = models.CharField(max_length=100)
+    platform = models.CharField(max_length=10, choices=Platform)
+    base_url = models.URLField(max_length=1000)
+    username = models.CharField(max_length=255, blank=True)
+    secret = models.TextField(blank=True)
+    app_token = models.TextField(blank=True)
+    api_version = models.CharField(max_length=20, default="v1")
+    projects = models.JSONField(default=list)
+    default_project = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=20, default="UNKNOWN")
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class PublishedTicket(models.Model):
+    class Status(models.TextChoices):
+        PUBLISHING = "PUBLISHING"
+        PUBLISHED = "PUBLISHED"
+        ERROR = "ERROR"
+        UNCERTAIN = "UNCERTAIN"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request = models.ForeignKey(Request, related_name="published_tickets", on_delete=models.PROTECT)
+    version = models.ForeignKey(
+        ResultVersion, related_name="published_tickets", on_delete=models.PROTECT
+    )
+    connector = models.ForeignKey(
+        TicketConnector, related_name="published_tickets", on_delete=models.PROTECT
+    )
+    platform = models.CharField(max_length=10)
+    project = models.CharField(max_length=255)
+    destination = models.CharField(max_length=64)
+    idempotency_key = models.UUIDField(unique=True)
+    external_reference = models.CharField(max_length=80, unique=True)
+    title = models.CharField(max_length=500)
+    body = models.TextField()
+    fields = models.JSONField(default=dict)
+    snapshot = models.JSONField(default=dict)
+    payload_hash = models.CharField(max_length=64)
+    external_id = models.CharField(max_length=255, blank=True)
+    external_key = models.CharField(max_length=255, blank=True)
+    url = models.URLField(max_length=2000, blank=True)
+    status = models.CharField(
+        max_length=20, choices=Status, default=Status.PUBLISHING, db_index=True
+    )
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    finished_at = models.DateTimeField(null=True)
+
+    @property
+    def observed_status(self):
+        # A killed HTTP worker cannot finalize its state. Report the uncertainty
+        # without inventing success or authorizing another external write.
+        if self.status == self.Status.PUBLISHING and self.updated_at < timezone.now() - timedelta(
+            seconds=90
+        ):
+            return self.Status.UNCERTAIN
+        return self.status
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["version", "destination"],
+                condition=~models.Q(status="ERROR"),
+                name="unique_version_ticket_destination",
+            ),
+            models.UniqueConstraint(
+                fields=["platform", "destination", "external_id"],
+                condition=~models.Q(external_id=""),
+                name="unique_external_ticket_identity",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError(
+                "A publication snapshot is immutable; only its delivery state may change"
+            )
+        if self.request_id != self.version.request_id:
+            raise ValueError("The published version does not belong to this request")
+        return super().save(*args, **kwargs)

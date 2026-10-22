@@ -6,7 +6,7 @@ from django.db.migrations.executor import MigrationExecutor
 @pytest.mark.django_db(transaction=True)
 def test_language_migration_keeps_existing_results_and_disabled_profiles():
     previous = [("core", "0006_v12_result_format")]
-    latest = [("core", "0009_writer_output_language")]
+    latest = MigrationExecutor(connection).loader.graph.leaf_nodes("core")
     try:
         executor = MigrationExecutor(connection)
         executor.migrate(previous)

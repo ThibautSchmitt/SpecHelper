@@ -51,7 +51,7 @@ def claim_job():
     from .providers import reserve_for_job
 
     with transaction.atomic():
-        jobs = Job.objects.filter(status="QUEUED").order_by("created_at")
+        jobs = Job.objects.filter(status="QUEUED").order_by("created_at", "id")
         from django.db import connection
 
         if connection.features.has_select_for_update_skip_locked:

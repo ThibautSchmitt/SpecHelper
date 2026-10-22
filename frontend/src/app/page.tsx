@@ -106,7 +106,7 @@ export default function Home() {
           {t(error)}
         </div>
       )}
-      <div className="grid items-start gap-7 lg:grid-cols-[1.35fr_1fr]">
+      <div className="grid items-start gap-7">
         <Card>
           <h2 className="flex items-center gap-2">
             <Plus size={19} className="text-primary" /> {t("New request")}

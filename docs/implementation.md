@@ -35,6 +35,32 @@ The default single worker runs jobs sequentially. Different browsers can submit 
 
 Git network operations have a ten-minute timeout each. Full synchronization has a separate twenty-minute limit; an initial large download can take longer than an analysis.
 
+## Dashboard and ticket publication
+
+The desktop shell has a persistent instance sidebar, central route content and an
+independent task panel. Mobile layouts keep navigation and connection indicators
+available and put the queue in an accessible drawer. The queue endpoint reads
+persisted jobs; it does not claim work or create a second AI scheduler. Queued rows
+follow creation time and ID, active rows remain visible and terminal history is
+bounded. Publication attempts appear as short operations with their own persisted
+delivery state. Card transitions respect reduced-motion settings.
+
+`TicketConnector` stores encrypted configuration and an explicit destination
+allowlist. `PublishedTicket` records the exact immutable source version, edited
+payload, operation reference and delivery state. A conditional destination
+constraint prevents concurrent or repeated successful/uncertain publication;
+definitively rejected attempts can be corrected without rewriting their snapshots.
+Destination identities are hashed to keep PostgreSQL unique indexes bounded.
+
+Publication uses ordinary backend HTTP adapters, without any analysis agent or
+repository write capability. Reads and writes have bounded timeouts and response
+sizes; credentials stay on the configured origin and redirects are not followed.
+Uncertain responses remain uncertain until the external reference is found. No
+write is triggered by page loading, AI output or external template text.
+
+See [ticket publication](ticketing.md) for platform compatibility, templates,
+mandatory fields, faithful previews and recovery behavior.
+
 ## Operations
 
 ```sh

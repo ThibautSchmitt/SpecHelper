@@ -39,7 +39,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="1.2", auth=None)
+api = NinjaAPI(title="SpecHelper", version="1.3", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -684,3 +684,15 @@ def system(request):
         or "No connected assistant",
         "max_analysis_seconds": 300,
     }
+
+
+@api.get("/queue")
+def queue(request):
+    from .queue import snapshot
+
+    return snapshot()
+
+
+from .ticket_api import router as ticket_router  # noqa: E402
+
+api.add_router("", ticket_router)

@@ -21,6 +21,7 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - Continued discussion with immutable, versioned results
 - Persistent request queue
 - English and French interface and generated content
+- Human-confirmed publication to GitHub Issues, GitLab Issues, Jira and GLPI
 
 SpecHelper does **not** modify source code, create pull requests or write to
 analyzed business databases.
@@ -44,7 +45,7 @@ and serve it over HTTPS. See [deployment and security](SECURITY.md).
 
 ## Configuration
 
-Open **Admin** after starting the application. Labels follow the selected language.
+Open **Settings** after starting the application. Labels follow the selected language.
 
 1. **Connect GitHub.** Select **Connect with GitHub** and complete the official
    browser authorization flow to discover repositories and branches.
@@ -55,7 +56,7 @@ Open **Admin** after starting the application. Labels follow the selected langua
 3. **Create an environment.** Select repositories and their branches, then wait
    for synchronization. Each environment can combine several repositories and an
    optional PostgreSQL connection. Repositories and branches can later be changed
-   or synchronized from Admin.
+   or synchronized from Settings.
 4. **Optionally connect PostgreSQL.** Use a dedicated read-only account. **Test
    connection** verifies connectivity, a read query and read-only access. Database
    credentials are never included in AI prompts.
@@ -63,6 +64,9 @@ Open **Admin** after starting the application. Labels follow the selected langua
    application language and whether comparison is available for new requests.
    The language applies to the interface and new analyses; existing requests keep
    their language and published files. See [English and French](docs/localization.md).
+6. **Optionally set up ticket publication.** Add and test a ticket connector, then
+   select its allowed destinations. See [publishing tickets](docs/ticketing.md) for
+   supported API versions, credentials and template behavior.
 
 ## Usage
 
@@ -74,6 +78,9 @@ From **Requests**:
 4. Optionally enable **Compare multiple analyses**.
 5. Start the analysis and answer any clarification questions.
 
+The sidebar provides **Requests**, **Tickets** and **Settings**. A shared task queue
+stays visible on desktop and is available in a drawer on smaller screens.
+
 The result includes two downloadable files:
 
 - **Ticket:** context, requested behavior, proposed solution, technical impact,
@@ -83,7 +90,9 @@ The result includes two downloadable files:
 
 Use **Continue discussion** to refine a result. Each new result is stored as a
 separate immutable version; previous versions remain available. SpecHelper does
-not create Jira tickets automatically.
+not create external tickets automatically. Use **Publish ticket** to review the
+target, fields and preview, then explicitly confirm creation. Published tickets
+remain linked to the exact result version under **Tickets**.
 
 ## Architecture
 
@@ -125,7 +134,8 @@ Further documentation:
 - [Functional specification](docs/specification.md)
 - [Implementation, operations and runtime checks](docs/implementation.md)
 - [English and French](docs/localization.md)
-- [v1.2 acceptance report](docs/acceptance-v1.2.md)
+- [Ticket publication and connectors](docs/ticketing.md)
+- [v1.3 acceptance report](docs/acceptance-v1.3.md)
 
 ## License
 

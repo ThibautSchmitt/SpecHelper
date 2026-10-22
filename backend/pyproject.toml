@@ -5,9 +5,16 @@ description = "Self-hosted business requests analyzed against real project sourc
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-  "Django>=5.2,<5.3", "django-ninja>=1.4,<2", "psycopg[binary]>=3.2,<4",
-  "cryptography>=44", "httpx>=0.28,<1", "gunicorn>=23,<24",
-  "pglast>=7,<8", "fastapi>=0.115,<1", "uvicorn>=0.34,<1"
+  "Django>=5.2,<5.3",
+  "django-ninja>=1.4,<2",
+  "psycopg[binary]>=3.2,<4",
+  "cryptography>=44",
+  "httpx>=0.28,<1",
+  "gunicorn>=23,<24",
+  "pglast>=7,<8",
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "pyyaml>=6,<7",
 ]
 [dependency-groups]
 dev = ["pytest>=8", "pytest-django>=4.10", "ruff>=0.11"]
