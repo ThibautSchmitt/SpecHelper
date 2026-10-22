@@ -100,10 +100,10 @@ for (const reduced of [false, true])
       "2",
     );
     await expect(
-      queue.getByRole("heading", { name: "In progress", exact: true }),
+      queue.getByRole("heading", { name: /^In progress(?:\s*\d+)?$/ }),
     ).toBeVisible();
     await expect(
-      queue.getByRole("heading", { name: "Needs clarification", exact: true }),
+      queue.getByRole("heading", { name: /^Needs clarification(?:\s*\d+)?$/ }),
     ).toBeVisible();
     await expect(queue.locator('[data-job="1"]')).toContainText(
       "AI not assigned",
@@ -112,8 +112,9 @@ for (const reduced of [false, true])
       "Team Claude",
     );
     await expect(queue.locator('[data-job="2"]')).toContainText(
-      "Team Claude · selected-model · Verifier",
+      "Team Claude · selected-model",
     );
+    await expect(queue.locator('[data-job="2"] .queue-role')).toHaveText("Verifier");
     await expect(queue.locator('[data-job="2"]')).toContainText(
       "Focused project analysis",
     );

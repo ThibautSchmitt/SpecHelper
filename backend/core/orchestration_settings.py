@@ -37,6 +37,7 @@ def defaults():
 
 class OrchestrationIn(Schema):
     model_config = ConfigDict(extra="forbid")
+    allow_confrontation: bool | None = None
     verifier_enabled: bool = True
     allow_same_family_fallback: bool = True
     max_calls: int = Field(default=10, ge=2, le=20)
@@ -79,6 +80,7 @@ def get_config():
         **saved.get("role_instructions", {}),
     }
     # Stored settings are application-owned, but bound legacy/administrative input too.
+    merged["allow_confrontation"] = settings.allow_confrontation
     config = OrchestrationIn.model_validate(merged).model_dump()
     return config
 
@@ -113,7 +115,11 @@ def update_settings(request, payload: OrchestrationIn):
     values["role_instructions"] = {
         role: payload.role_instructions.get(role, "") for role in PUBLIC_ROLES
     }
-    InstanceSettings.objects.update_or_create(pk=1, defaults={"orchestration": values})
+    allow_confrontation = values.pop("allow_confrontation")
+    changes = {"orchestration": values}
+    if allow_confrontation is not None:
+        changes["allow_confrontation"] = allow_confrontation
+    InstanceSettings.objects.update_or_create(pk=1, defaults=changes)
     return public_config()
 
 

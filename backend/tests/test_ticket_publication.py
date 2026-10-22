@@ -36,6 +36,7 @@ def publication_context(environment, storage, monkeypatch):
         version=version, name="ticket.md", content="# Export contracts\n\nAudit preparation"
     )
     connector = TicketConnector.objects.create(
+        environment=environment,
         name="Team GitLab",
         platform="gitlab",
         base_url="https://gitlab.example",
@@ -394,6 +395,7 @@ def test_connector_api_encrypts_and_never_returns_secrets(publication_context):
     response = client.post(
         "/ticket-connectors",
         json={
+            "environment_id": connector.environment_id,
             "name": "New connector",
             "platform": "jira",
             "base_url": "https://jira.example",
@@ -458,6 +460,7 @@ def test_published_destination_cannot_be_silently_repointed(publication_context)
     response = TestClient(router).put(
         f"/ticket-connectors/{connector.pk}",
         json={
+            "environment_id": connector.environment_id,
             "name": connector.name,
             "platform": connector.platform,
             "base_url": "https://different.example",

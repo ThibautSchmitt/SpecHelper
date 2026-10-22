@@ -445,6 +445,10 @@ class TicketConnector(models.Model):
         JIRA = "jira", "Jira"
         GLPI = "glpi", "GLPI"
 
+    environment = models.ForeignKey(
+        Environment, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="ticket_connectors",
+    )
     name = models.CharField(max_length=100)
     platform = models.CharField(max_length=10, choices=Platform)
     base_url = models.URLField(max_length=1000)

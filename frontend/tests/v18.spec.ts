@@ -70,6 +70,7 @@ async function setup(page: Page, language = "en") {
   await page.route("**/api/orchestration-settings", (route) =>
     route.fulfill({
       json: {
+        allow_confrontation: true,
         verifier_enabled: true,
         allow_same_family_fallback: true,
         max_calls: 10,
@@ -118,10 +119,8 @@ test("light, dark and system share layout, persist across pages and track device
   ).toBeVisible();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page
-    .getByRole("navigation", { name: "Main navigation" })
-    .getByRole("link", { name: "Settings", exact: true })
-    .click();
+  await page.locator(".sidebar-admin").focus();
+  await page.locator(".sidebar-admin").press("Enter");
   await theme.getByRole("button", { name: "Light", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.emulateMedia({ colorScheme: "dark" });
@@ -276,15 +275,20 @@ test("settings alone controls independent counter-analysis and color preferences
   await setup(page);
   const writes: Record<string, unknown>[] = [];
   page.on("request", (request) => {
-    if (request.url().endsWith("/api/settings") && request.method() === "PUT")
+    if (request.url().endsWith("/api/orchestration-settings") && request.method() === "PUT")
       writes.push(request.postDataJSON());
+  });
+  let analysisSettings: Record<string, unknown> = { allow_confrontation: true, verifier_enabled: true, max_calls: 10, timeout_seconds: 285, role_instructions: {}, active_internal_agents: [], default_skills: [], available_agents: [], available_skills: [] };
+  await page.route("**/api/orchestration-settings", async (route) => {
+    if (route.request().method() === "PUT") analysisSettings = { ...analysisSettings, ...route.request().postDataJSON() };
+    await route.fulfill({ json: analysisSettings });
   });
   await page.goto("/admin");
   await page
     .getByRole("button", { name: "Choose primary color #0f766e", exact: true })
     .click();
-  await page.getByRole("button", { name: "Save color", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Color saved.");
+  await page.getByRole("button", { name: "Save settings", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Instance settings saved.");
   await page
     .getByRole("navigation", { name: "Administration", exact: true })
     .getByRole("button", { name: "AI & Agents", exact: true })
@@ -293,10 +297,12 @@ test("settings alone controls independent counter-analysis and color preferences
     .getByLabel("Independent counter-analysis", { exact: true })
     .uncheck();
   await page
-    .getByRole("button", { name: "Save analysis policy", exact: true })
+    .getByRole("button", { name: "Save analysis settings", exact: true })
     .click();
   await expect.poll(() => writes.at(-1)?.allow_confrontation).toBe(false);
-  expect(writes.at(-1)?.primary_color).toBe("#0f766e");
+  expect(writes.at(-1)).not.toHaveProperty("primary_color");
+  await page.getByRole("button", { name: "General", exact: true }).click();
+  await expect(page.getByLabel("Primary color", { exact: true })).toHaveValue("#0f766e");
 });
 
 test("theme and form type controls are translated into French", async ({

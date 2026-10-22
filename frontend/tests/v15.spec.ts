@@ -2,6 +2,7 @@ import { test, expect } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 const initial = {
+  allow_confrontation: true,
   verifier_enabled: true,
   allow_same_family_fallback: true,
   max_calls: 12,
@@ -92,7 +93,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
     .fill("Check file references");
   await page.getByLabel("Evidence review", { exact: true }).check();
   await page
-    .getByRole("button", { name: "Save orchestration settings" })
+    .getByRole("button", { name: "Save analysis settings" })
     .click();
   await expect
     .poll(() => settingsBody)
@@ -150,7 +151,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
     name: "Main navigation",
     exact: true,
   });
-  await expect(nav.getByRole("link")).toHaveCount(4);
+  await expect(nav.getByRole("link")).toHaveCount(3);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -180,7 +181,7 @@ test("French settings keep verifier policy in administration and translate publi
   await page.getByRole("button", { name: "IA & Agents", exact: true }).click();
   await expect(
     page.getByRole("heading", {
-      name: "Orchestration des analyses",
+      name: "Configuration de l’analyse",
       exact: true,
     }),
   ).toBeVisible();
@@ -306,10 +307,9 @@ test("queue shows the active role and historical diversity warnings remain visib
   if (await open.isVisible()) await open.click();
   const queue = page.locator(".task-queue:visible");
   await expect(
-    queue.getByText("Team assistant · gpt-review · Counter-analyst", {
-      exact: true,
-    }),
+    queue.locator(".queue-assignment").filter({ hasText: "Team assistant · gpt-review" }),
   ).toBeVisible();
+  await expect(queue.locator(".queue-role")).toHaveText("Counter-analyst");
   await expect(queue.getByText(warning, { exact: true })).toBeVisible();
   if (await page.getByRole("dialog", { name: "Task queue" }).isVisible())
     await page.keyboard.press("Escape");

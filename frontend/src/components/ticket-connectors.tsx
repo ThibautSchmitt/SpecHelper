@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, send, statuses } from "@/lib/api";
+import { api, send, statuses, type Environment } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Ticket, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 export type TicketConnector = {
   id: number;
+  environment_id: number | null;
   name: string;
   platform: string;
   base_url: string;
@@ -33,7 +34,8 @@ const empty = {
   default_project: "",
 };
 
-export function TicketConnectors() {
+export function TicketConnectors({ environmentId, environmentName }: { environmentId: number; environmentName: string }) {
+  const prefix = `connector-${environmentId}`;
   const { t } = useI18n();
   const [items, setItems] = useState<TicketConnector[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -43,12 +45,14 @@ export function TicketConnectors() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const refresh = () =>
-    api<TicketConnector[]>("/ticket-connectors").then(setItems);
+    api<TicketConnector[]>(`/ticket-connectors?environment_id=${environmentId}`).then(setItems);
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
-  }, []);
+  }, [environmentId]);
   function edit(item?: TicketConnector) {
+    setConfirmDelete(false);
     setShowForm(true);
     setSelected(item?.id ?? null);
     setDestinations([]);
@@ -72,8 +76,8 @@ export function TicketConnectors() {
     }
   }
   return (
-    <Card className="lg:col-span-2">
-      <h2>{t("Ticket publication connectors")}</h2>
+    <div className="environment-connectors mt-5 border-t pt-5" aria-label={t("Ticket connectors for {environment}", { environment: environmentName })}>
+      <h3 className="flex items-center gap-2"><Ticket size={17} aria-hidden="true" />{t("Ticket publication connectors")}</h3>
       <p className="mt-2 text-sm muted">
         {t(
           "Publish only after explicit confirmation. Analysis assistants never receive these credentials.",
@@ -110,6 +114,7 @@ export function TicketConnectors() {
             event.preventDefault();
             action(async () => {
               const payload: Record<string, unknown> = {
+                environment_id: environmentId,
                 name: form.name,
                 platform: form.platform,
                 base_url:
@@ -139,18 +144,18 @@ export function TicketConnectors() {
         >
           <div className="grid gap-x-5 sm:grid-cols-2">
             <div className="field">
-              <label htmlFor="connector-name">{t("Connector name")}</label>
+              <label htmlFor={`${prefix}-name`}>{t("Connector name")}</label>
               <Input
-                id="connector-name"
+                id={`${prefix}-name`}
                 required
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </div>
             <div className="field">
-              <label htmlFor="connector-platform">{t("Platform")}</label>
+              <label htmlFor={`${prefix}-platform`}>{t("Platform")}</label>
               <select
-                id="connector-platform"
+                id={`${prefix}-platform`}
                 disabled={selected !== null}
                 value={form.platform}
                 onChange={(e) =>
@@ -183,10 +188,10 @@ export function TicketConnectors() {
             {form.platform !== "github" && (
               <>
                 <div className="field">
-                  <label htmlFor="connector-url">{t("Instance URL")}</label>
+                  <label htmlFor={`${prefix}-url`}>{t("Instance URL")}</label>
                   <Input
                     type="url"
-                    id="connector-url"
+                    id={`${prefix}-url`}
                     required
                     value={form.base_url}
                     onChange={(e) =>
@@ -195,11 +200,11 @@ export function TicketConnectors() {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="connector-username">
+                  <label htmlFor={`${prefix}-username`}>
                     {t("Username / email")}
                   </label>
                   <Input
-                    id="connector-username"
+                    id={`${prefix}-username`}
                     value={form.username}
                     onChange={(e) =>
                       setForm({ ...form, username: e.target.value })
@@ -208,11 +213,11 @@ export function TicketConnectors() {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="connector-secret">
+                  <label htmlFor={`${prefix}-secret`}>
                     {t("Secret / API token")}
                   </label>
                   <Input
-                    id="connector-secret"
+                    id={`${prefix}-secret`}
                     type="password"
                     value={form.secret}
                     onChange={(e) =>
@@ -227,12 +232,12 @@ export function TicketConnectors() {
                 {form.platform === "glpi" && (
                   <>
                     <div className="field">
-                      <label htmlFor="connector-app-token">
+                      <label htmlFor={`${prefix}-app-token`}>
                         {t("Application token")}
                       </label>
                       <Input
                         type="password"
-                        id="connector-app-token"
+                        id={`${prefix}-app-token`}
                         value={form.app_token}
                         onChange={(e) =>
                           setForm({ ...form, app_token: e.target.value })
@@ -241,11 +246,11 @@ export function TicketConnectors() {
                       />
                     </div>
                     <div className="field">
-                      <label htmlFor="connector-version">
+                      <label htmlFor={`${prefix}-version`}>
                         {t("API compatibility")}
                       </label>
                       <select
-                        id="connector-version"
+                        id={`${prefix}-version`}
                         value={form.api_version}
                         onChange={(e) =>
                           setForm({ ...form, api_version: e.target.value })
@@ -314,6 +319,19 @@ export function TicketConnectors() {
               </>
             )}
           </div>
+          {selected !== null && <div className="mt-3">
+            <Button type="button" variant="ghost" className="icon-action text-red-700" disabled={busy} aria-label={t("Delete connector")} title={t("Delete connector")} onClick={() => setConfirmDelete(true)}><Trash2 size={16} aria-hidden="true" /></Button>
+            {confirmDelete && <div role="alertdialog" aria-label={t("Delete connector")} className="mt-2 rounded-lg border p-4">
+              <p className="text-sm">{t("Delete this connector? Existing publication history prevents deletion.")}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmDelete(false)}>{t("Cancel")}</Button>
+                <Button type="button" disabled={busy} onClick={() => action(async () => {
+                  await send(`/ticket-connectors/${selected}`, undefined, "DELETE");
+                  setSelected(null); setShowForm(false); setConfirmDelete(false); setNotice("Connector deleted.");
+                })}>{t("Confirm deletion")}</Button>
+              </div>
+            </div>}
+          </div>}
           {!!destinations.length && (
             <fieldset className="mt-5 rounded-lg border p-4">
               <legend className="px-2 text-sm font-semibold">
@@ -347,9 +365,9 @@ export function TicketConnectors() {
           )}
           {!!form.projects.length && (
             <div className="field">
-              <label htmlFor="connector-default">{t("Default project")}</label>
+              <label htmlFor={`${prefix}-default`}>{t("Default project")}</label>
               <select
-                id="connector-default"
+                id={`${prefix}-default`}
                 value={form.default_project}
                 onChange={(e) =>
                   setForm({ ...form, default_project: e.target.value })
@@ -380,6 +398,38 @@ export function TicketConnectors() {
           </Button>
         </form>
       )}
-    </Card>
+    </div>
   );
+}
+
+
+export function UnassignedTicketConnectors({ environments, onAssigned }: { environments: Environment[]; onAssigned: () => Promise<void> }) {
+  const { t } = useI18n();
+  const [items, setItems] = useState<TicketConnector[]>([]);
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api<TicketConnector[]>("/ticket-connectors").then((values) => setItems(values.filter((value) => value.environment_id === null))).catch((error) => setError(error.message));
+  }, []);
+  if (!items.length && !error) return null;
+  return <section className="rounded-lg border bg-card p-5">
+    <h2>{t("Unassigned ticket connectors")}</h2>
+    <p className="mt-2 text-sm muted">{t("Choose an environment for a saved connector before using it for new publications.")}</p>
+    {error && <p role="alert" className="mt-3 text-sm text-red-700">{t(error)}</p>}
+    <label htmlFor="legacy-connector-environment" className="mt-4 block">{t("Environment")}</label>
+    <select id="legacy-connector-environment" value={target} disabled={busy} onChange={(event) => setTarget(event.target.value)}>
+      <option value="">{t("Select an environment")}</option>
+      {environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.name}</option>)}
+    </select>
+    <div className="mt-3 flex flex-wrap gap-2">{items.map((item) => <Button key={item.id} disabled={busy || !target} variant="outline" onClick={async () => {
+      setBusy(true); setError("");
+      try {
+        const { name, platform, base_url, username, api_version, projects, default_project } = item;
+        await send(`/ticket-connectors/${item.id}`, { name, platform, base_url, username, api_version, projects, default_project, environment_id: Number(target) }, "PUT");
+        setItems((values) => values.filter((value) => value.id !== item.id));
+        await onAssigned();
+      } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
+    }}>{t("Assign {name}", { name: item.name })}</Button>)}</div>
+  </section>;
 }

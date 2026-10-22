@@ -83,7 +83,7 @@ async function base(page: Page) {
   await page.route("**/api/environments", (r) => r.fulfill({ json: [] }));
   await page.route("**/api/requests", (r) => r.fulfill({ json: [] }));
   await page.route("**/api/queue", (r) => r.fulfill({ json: [] }));
-  await page.route("**/api/ticket-connectors", (r) => r.fulfill({ json: [] }));
+  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, (r) => r.fulfill({ json: [] }));
   await page.route("**/api/git-connections", (r) => r.fulfill({ json: git }));
   await page.route("**/api/ai-connections", (r) => r.fulfill({ json: ai }));
 }
@@ -233,6 +233,7 @@ test("named AI configs share quota windows and targeted authentication never cha
     r.fulfill({ json: attempt }),
   );
   await page.goto("/admin");
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const card = page.getByRole("region", {
     name: "AI connections",
     exact: true,
@@ -314,6 +315,7 @@ test("referenced Git deletion requires an explicit decision and exact connection
     return r.fulfill({ json: { status: "DISABLED" } });
   });
   await page.goto("/admin");
+  await page.getByRole("button", { name: "Environments", exact: true }).click();
   await page
     .getByRole("region", { name: "GitLab internal", exact: true })
     .getByRole("button", { name: "Delete", exact: true })

@@ -55,13 +55,13 @@ test("late settings reads cannot overwrite a saved instance identity", async ({
       },
     }),
   );
-  await page.route("**/api/ticket-connectors", (route) =>
+  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, (route) =>
     route.fulfill({ json: [] }),
   );
   await page.route("**/api/queue", (route) => route.fulfill({ json: [] }));
   try {
     await page.goto("/admin");
-    await page.getByRole("button", { name: "Instance", exact: true }).click();
+    await page.getByRole("button", { name: "General", exact: true }).click();
     await expect(
       page.getByLabel("Instance name", { exact: true }),
     ).toBeEnabled();

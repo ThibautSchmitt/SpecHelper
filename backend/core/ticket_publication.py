@@ -51,6 +51,7 @@ def validate_base_url(value):
 def connector_dict(connector):
     return {
         "id": connector.pk,
+        "environment_id": connector.environment_id,
         "name": connector.name,
         "platform": connector.platform,
         "base_url": connector.base_url,
@@ -213,6 +214,7 @@ def mapped_value(ticket, label):
 
 
 def preview(version, connector, project, template_id="", issue_type=""):
+    require_environment(version, connector)
     if version.request.workflow != "request":
         raise HttpError(409, "A question cannot publish an external ticket.")
     if version.status not in {"READY", "PARTIAL"}:
@@ -363,6 +365,15 @@ def store_success(record, result):
         raise NetworkUncertain("The external identity needs reconciliation") from None
 
 
+def require_environment(version, connector):
+    """Keep new external writes within the request's configured environment."""
+    if (
+        not version.request.environment_id
+        or connector.environment_id != version.request.environment_id
+    ):
+        raise HttpError(409, "Choose a ticket connector configured for this request's environment.")
+
+
 def publish(version, connector, payload):
     if payload.get("confirmed") is not True:
         raise HttpError(422, "Explicit human confirmation is required to publish a ticket.")
@@ -417,6 +428,22 @@ def publish(version, connector, payload):
             409,
             "This result already has a publication attempt for this destination. Review that attempt first.",
         )
+    legacy_recovery = (
+        existing is not None
+        and existing.connector_id == connector.pk
+        and existing.status
+        in {
+            PublishedTicket.Status.PUBLISHED,
+            PublishedTicket.Status.PUBLISHING,
+            PublishedTicket.Status.UNCERTAIN,
+        }
+    )
+    if not legacy_recovery:
+        require_environment(version, connector)
+    if existing is not None:
+        # Recovery always uses the original destination credential, including
+        # historical shared connectors retained by the environment migration.
+        connector = existing.connector
     if existing and existing.status == PublishedTicket.Status.PUBLISHED:
         return existing
     if (

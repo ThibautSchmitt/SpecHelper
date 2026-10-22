@@ -4,6 +4,7 @@ import json
 import re
 import secrets
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -39,15 +40,32 @@ class Handler(BaseHTTPRequestHandler):
             and self.command == "POST"
         )
         if not (health or auth_get or auth_post):
-            self.respond(404, {"detail": "Commande indisponible"})
+            self.respond(404, {"detail": "Command unavailable"})
             return
         target = parsed.path
+        read_quota = False
         if health:
-            agent = parse_qs(parsed.query).get("agent", ["codex"])[0]
+            parameters = parse_qs(parsed.query, keep_blank_values=True)
+            agent = parameters.get("agent", ["codex"])[0]
             if agent not in {"codex", "claude"}:
                 self.respond(422, {"detail": "Unknown assistant"})
                 return
             target += "?agent=" + agent
+            if "identity_id" in parameters:
+                try:
+                    if len(parameters["identity_id"]) != 1:
+                        raise ValueError("Ambiguous identity")
+                    identity = str(uuid.UUID(parameters["identity_id"][0]))
+                except ValueError:
+                    self.respond(422, {"detail": "Invalid authentication identity"})
+                    return
+                target += "&identity_id=" + identity
+            if "quota" in parameters:
+                if len(parameters["quota"]) != 1 or parameters["quota"][0] not in {"true", "false"}:
+                    self.respond(422, {"detail": "Invalid quota refresh flag"})
+                    return
+                read_quota = parameters["quota"][0] == "true"
+                target += "&quota=" + ("true" if read_quota else "false")
         try:
             payload = None
             if self.command == "POST":
@@ -56,7 +74,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.respond(413, {"detail": "Request too large"})
                     return
                 payload = json.loads(self.rfile.read(length) or b"{}")
-            self.respond(200, runtime_call(target, payload))
+            result = runtime_call(target, payload, timeout=25) if read_quota else runtime_call(target, payload)
+            self.respond(200, result)
         except ValueError:
             self.respond(502, {"detail": "Connection service unavailable"})
 

@@ -1,4 +1,5 @@
 "use client";
+import { SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, send } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -9,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { publicRoles, roleLabels, type PublicRole } from "@/lib/orchestration";
 
 export type OrchestrationSettings = {
+  allow_confrontation?: boolean;
   verifier_enabled: boolean;
   allow_same_family_fallback: boolean;
   max_calls: number;
@@ -39,7 +41,7 @@ export function OrchestrationSettingsForm() {
       ? value[key].filter((item) => item !== slug) : [...value[key], slug] });
   }
   return <Card>
-    <h2>{t("Analysis orchestration")}</h2>
+    <h2 className="flex items-center gap-2"><SlidersHorizontal size={18} />{t("Analysis configuration")}</h2>
     <p className="mt-2 text-sm muted">{t("Compared requests use one analyst and one independent counter-analyst. An optional verifier consolidates the evidence.")}</p>
     <p className="mt-2 text-sm muted">{t("AI verification does not replace human approval of the ticket and goal.md.")}</p>
     {error && <p role="alert" className="mt-4 text-sm text-red-700">{t(error)}</p>}
@@ -57,6 +59,7 @@ export function OrchestrationSettingsForm() {
       finally { setBusy(false); }
     }}>
       <fieldset disabled={busy} className="mt-5 space-y-5">
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={value.allow_confrontation !== false} onChange={(e) => setValue({ ...value, allow_confrontation: e.target.checked })} />{t("Independent counter-analysis")}</label>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={value.verifier_enabled} onChange={(e) => setValue({ ...value, verifier_enabled: e.target.checked })} />
           {t("Verify compared analyses")}
@@ -79,7 +82,7 @@ export function OrchestrationSettingsForm() {
           <fieldset className="mt-5 space-y-3"><legend className="font-medium text-sm">{t("Analysis tools")}</legend><p className="text-xs muted">{t("Required tools remain active to produce a complete analysis and its documents.")}</p>{value.available_agents.map((agent) => <label key={agent.slug} className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={agent.required} checked={value.active_internal_agents.includes(agent.slug)} onChange={() => toggle("active_internal_agents", agent.slug)} /><span>{t(agent.name)}{agent.required && ` · ${t("Required")}`}{agent.description && <span className="mt-1 block text-xs muted">{t(agent.description)}</span>}</span></label>)}</fieldset>
           <fieldset className="mt-5 space-y-3"><legend className="font-medium text-sm">{t("Default skills")}</legend>{value.available_skills.map((skill) => <label key={skill.slug} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={value.default_skills.includes(skill.slug)} onChange={() => toggle("default_skills", skill.slug)} /><span>{t(skill.name)}{skill.description && <span className="mt-1 block text-xs muted">{t(skill.description)}</span>}</span></label>)}</fieldset>
         </details>
-        <Button>{t("Save orchestration settings")}</Button>
+        <Button>{t("Save analysis settings")}</Button>
       </fieldset>
     </form>}
     {notice && <p role="status" className="mt-4 text-sm text-green-800">{notice}</p>}

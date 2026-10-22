@@ -113,6 +113,11 @@ def delete(environment_id, confirmation):
         writable(environment, confirmation.expected_revision)
         if confirmation.confirm_name != environment.name:
             raise HttpError(409, "Explicitly confirm deletion of this environment.")
+        if environment.ticket_connectors.exists():
+            raise HttpError(
+                409,
+                "This environment has ticket connectors. Remove unused connectors first; connectors with publication history must be retained.",
+            )
         repos = list(environment.repositories.all())
         worktrees = [
             {"repository": r.repository, "workspace": r.workspace} for r in repos

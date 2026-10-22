@@ -63,7 +63,7 @@ test("admin language persists across navigation, reload and translated errors", 
     }),
   );
   await page.goto("/admin");
-  await page.getByRole("button", { name: "Instance", exact: true }).click();
+  await page.getByRole("button", { name: "General", exact: true }).click();
   await expect(
     page.getByLabel("Application language", { exact: true }),
   ).toHaveValue("en");
@@ -91,11 +91,11 @@ test("admin language persists across navigation, reload and translated errors", 
   });
   await page.reload();
   await page
-    .getByRole("button", { name: fr["Connections"], exact: true })
+    .getByRole("button", { name: fr["AI & Agents"], exact: true })
     .click();
   await page
     .getByRole("region", { name: "ChatGPT", exact: true })
-    .getByRole("button", { name: fr["Test connection"], exact: true })
+    .getByRole("button", { name: fr["Refresh status and quotas"], exact: true })
     .click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText(
     fr["The assistant connection could not be verified."],
@@ -110,8 +110,10 @@ test("admin language persists across navigation, reload and translated errors", 
   await expect(
     page.getByLabel(fr["Describe your need"], { exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: fr["Settings"], exact: true }).click();
-  await page.getByRole("button", { name: "Instance", exact: true }).click();
+  const settingsLink = page.getByRole("link", { name: fr["Settings"], exact: true });
+  await settingsLink.focus();
+  await settingsLink.press("Enter");
+  await page.getByRole("button", { name: fr["General"], exact: true }).click();
   await page
     .getByLabel(fr["Application language"], { exact: true })
     .selectOption("en");

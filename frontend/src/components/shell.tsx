@@ -11,7 +11,6 @@ import {
   Tickets,
   PanelRightOpen,
   X,
-  ShieldCheck,
   ChevronRight,
 } from "lucide-react";
 import { ThemeProvider, applyAccent } from "@/lib/theme";
@@ -137,12 +136,6 @@ function ShellContent({ children }: { children: React.ReactNode }) {
               icon: Tickets,
               active: pathname.startsWith("/tickets"),
             },
-            {
-              href: "/admin",
-              label: "Settings",
-              icon: Settings,
-              active: pathname.startsWith("/admin"),
-            },
           ].map((item) => (
             <Link
               key={item.href}
@@ -216,12 +209,12 @@ function ShellContent({ children }: { children: React.ReactNode }) {
             })}
           </div>
         </div>
-        <Link href="/admin" className="sidebar-admin">
+        <Link href="/admin" className="sidebar-admin" aria-label={t("Settings")} title={t("Settings")} aria-current={pathname.startsWith("/admin") ? "page" : undefined}>
           <span className="admin-avatar">
-            <ShieldCheck size={18} />
+            <Settings size={18} />
           </span>
           <span>
-            {t("Team workspace")}
+            {t("Settings")}
             <small>{t("Administration")}</small>
           </span>
           <ChevronRight size={14} />

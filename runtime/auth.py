@@ -5,11 +5,15 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from core.login import ACTIVE, PROVIDERS, TerminalLogin
+
+from .quota import app_server_windows, read_codex_quota
 
 
 def identity_root(root, identity_id=None):
@@ -153,15 +157,18 @@ def credential_directory(root: Path, provider):
     return root / provider
 
 
-def connection_status(root, provider):
+def connection_status(root, provider, include_quota=False):
     directory = credential_directory(root, provider)
     if not subscription_credentials(directory, provider):
-        return {
+        value = {
             "status": "DISCONNECTED",
             "account": PROVIDERS[provider],
             "usage": "UNKNOWN",
             "reset": "UNKNOWN",
         }
+        if include_quota:
+            value.update(quota_status(root, directory, provider, "DISCONNECTED"))
+        return value
     env = {
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "HOME": str(directory),
@@ -176,13 +183,60 @@ def connection_status(root, provider):
         else ["claude", "auth", "status", "--json"]
     )
     result = subprocess.run(command, env=env, capture_output=True, timeout=10)
-    return {
+    value = {
         "status": "CONNECTED" if result.returncode == 0 else "DISCONNECTED",
         "account": PROVIDERS[provider],
         "usage": "UNKNOWN",
         "reset": "UNKNOWN",
         "account_key": account_key(directory, provider),
     }
+    if include_quota:
+        value.update(quota_status(root, directory, provider, value["status"]))
+    return value
+
+
+def quota_status(root, directory, provider, status):
+    """Only supported non-inference account reads; never scrape private OAuth APIs."""
+    metadata = {
+        "state": "unavailable",
+        "source": "codex_app_server" if provider == "codex" else "claude_cli",
+        "checked_at": datetime.now(UTC).isoformat(),
+        "reason": "not_connected" if status != "CONNECTED" else "unsupported_cli",
+    }
+    if status != "CONNECTED" or provider != "codex":
+        return {"quota_status": metadata}
+    try:
+        # A clean home prevents project configuration, plugins and MCP startup.
+        with tempfile.TemporaryDirectory(prefix="spechelper-usage-") as temporary:
+            home = Path(temporary)
+            with credential_lock(root, provider):
+                original = (directory / "auth.json").read_bytes()
+            (home / "auth.json").write_bytes(original)
+            (home / "auth.json").chmod(0o600)
+            env = {
+                "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+                "HOME": temporary,
+                "CODEX_HOME": temporary,
+            }
+            snapshot = read_codex_quota(home, env)
+            account = json.loads(original).get("tokens", {}).get("account_id")
+            if snapshot.get("accountId") and snapshot["accountId"] != account:
+                raise ValueError("Quota identity mismatch")
+            windows = app_server_windows(snapshot)
+            # A successful read may rotate OAuth credentials; preserve only safe rotation.
+            publish_refresh(root, provider, original, (home / "auth.json").read_bytes())
+            metadata.update(
+                state="available" if windows else "unavailable",
+                reason="" if windows else "not_reported",
+            )
+            return {
+                "quota_status": metadata,
+                "quota_windows": windows,
+                "ordinary_usage_allowed": snapshot.get("ordinaryUsageAllowed") is True,
+            }
+    except (OSError, ValueError, TimeoutError, subprocess.SubprocessError):
+        metadata.update(state="error", reason="refresh_failed")
+        return {"quota_status": metadata}
 
 
 def account_key(directory, provider):
@@ -235,7 +289,19 @@ def claude_metadata(data):
     result = {}
     account = source.get("oauthAccount")
     if isinstance(account, dict):
-        result["oauthAccount"] = {key: value for key, value in account.items() if key in {"accountUuid", "organizationUuid", "emailAddress", "organizationName", "displayName"} and isinstance(value, str)}
+        result["oauthAccount"] = {
+            key: value
+            for key, value in account.items()
+            if key
+            in {
+                "accountUuid",
+                "organizationUuid",
+                "emailAddress",
+                "organizationName",
+                "displayName",
+            }
+            and isinstance(value, str)
+        }
     if isinstance(source.get("hasCompletedOnboarding"), bool):
         result["hasCompletedOnboarding"] = source["hasCompletedOnboarding"]
     if isinstance(source.get("lastOnboardingVersion"), str):

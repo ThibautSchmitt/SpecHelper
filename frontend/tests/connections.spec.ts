@@ -26,9 +26,12 @@ test("GitHub: guided sign-in, temporary code and cancellation", async ({
     });
   });
   await page.goto("/admin");
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
+  await page.getByRole("button", { name: "Environments", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Connect with GitHub", exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Connect with ChatGPT", exact: true }),
   ).toBeVisible();
@@ -39,6 +42,7 @@ test("GitHub: guided sign-in, temporary code and cancellation", async ({
   await expect(
     page.getByText("docker compose exec", { exact: false }),
   ).toHaveCount(0);
+  await page.getByRole("button", { name: "Environments", exact: true }).click();
   await page
     .getByRole("button", { name: "Connect with GitHub", exact: true })
     .click();
@@ -87,6 +91,7 @@ test("ChatGPT: sign-in completes in the interface", async ({ page }) => {
     }),
   );
   await page.goto("/admin");
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   await page
     .getByRole("button", { name: "Connect with ChatGPT", exact: true })
     .click();
@@ -143,6 +148,7 @@ test("Claude: enter the confirmation code without a terminal", async ({
     });
   });
   await page.goto("/admin");
+  await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   await page
     .getByRole("button", { name: "Connect with Claude", exact: true })
     .click();

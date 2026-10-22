@@ -113,3 +113,33 @@ def test_instructions_are_stored_as_data_and_do_not_change_capabilities(client):
 
     assert "read-only analysis only" in RULES
     assert "Never modify sources or data" in RULES
+
+
+@pytest.mark.parametrize("policy", [False, True])
+def test_unified_analysis_settings_save_policy_without_overwriting_instance(client, policy):
+    instance, _ = InstanceSettings.objects.update_or_create(
+        pk=1,
+        defaults={"name": "Shared team", "language": "en", "primary_color": "#0f766e", "allow_confrontation": not policy},
+    )
+    config = client.get("/api/orchestration-settings").json()
+    for key in ("available_agents", "available_skills"):
+        config.pop(key)
+    config.update(allow_confrontation=policy, verifier_enabled=False, max_calls=8)
+    response = client.put("/api/orchestration-settings", data=json.dumps(config), content_type="application/json")
+    assert response.status_code == 200
+    assert response.json()["allow_confrontation"] is policy
+    instance.refresh_from_db()
+    assert instance.allow_confrontation is policy
+    assert instance.orchestration["verifier_enabled"] is False
+    assert instance.orchestration["max_calls"] == 8
+    assert (instance.name, instance.language, instance.primary_color) == ("Shared team", "en", "#0f766e")
+
+
+def test_legacy_analysis_settings_save_preserves_comparison_policy(client):
+    InstanceSettings.objects.update_or_create(pk=1, defaults={"allow_confrontation": False})
+    config = client.get("/api/orchestration-settings").json()
+    for key in ("available_agents", "available_skills", "allow_confrontation"):
+        config.pop(key)
+    response = client.put("/api/orchestration-settings", data=json.dumps(config), content_type="application/json")
+    assert response.status_code == 200
+    assert response.json()["allow_confrontation"] is False

@@ -118,8 +118,14 @@ def record_quota(connection, windows):
     now = timezone.now().isoformat()
     observed = {name: {**window, "observed_at": now} for name, window in observed.items()}
     merged = {**group_windows(list(quota_group(identity))), **observed}
+    metadata = (
+        identity.quota_windows.get("_status") if isinstance(identity.quota_windows, dict) else None
+    )
     identity.quota_windows = merged
-    changes = {"quota_windows": merged, "checked_at": timezone.now()}
+    changes = {
+        "quota_windows": {**merged, **({"_status": metadata} if metadata else {})},
+        "checked_at": timezone.now(),
+    }
     if quota_exhausted(identity):
         changes["availability"] = "QUOTA_EXHAUSTED"
     identities = list(quota_group(identity).values_list("pk", flat=True))
@@ -216,6 +222,9 @@ def public(connection):
         "enabled": connection.enabled,
         "checked_at": identity.checked_at,
         "quota_windows": group_windows(group),
+        "quota_status": identity.quota_windows.get("_status", {})
+        if isinstance(identity.quota_windows, dict)
+        else {},
         "usage": "UNKNOWN",
         "reset": "UNKNOWN",
     }
@@ -244,6 +253,41 @@ def observe(connection, value):
         **{key: value for key, value in mirror_changes.items() if key != "availability"}
     )
     connection.refresh_from_db()
+    if value.get("quota_windows"):
+        record_quota(connection, value["quota_windows"])
+    metadata = value.get("quota_status")
+    if isinstance(metadata, dict) and metadata.get("state") in {
+        "available",
+        "unavailable",
+        "error",
+    }:
+        # Persist only fixed public diagnostics; provider error bodies may contain secrets.
+        safe = {
+            "state": metadata["state"],
+            "source": "codex_app_server" if connection.agent == "codex" else "claude_cli",
+            "checked_at": timezone.now().isoformat(),
+            "reason": metadata.get("reason")
+            if metadata.get("reason")
+            in {"not_connected", "unsupported_cli", "not_reported", "refresh_failed", ""}
+            else "refresh_failed",
+        }
+        for member in quota_group(identity_for(connection)):
+            windows = {**member.quota_windows, "_status": safe}
+            AIIdentity.objects.filter(pk=member.pk).update(quota_windows=windows)
+        # Only explicit backend permission establishes recovery; low percentages alone do not.
+        if (
+            connected
+            and metadata["state"] == "available"
+            and value.get("ordinary_usage_allowed") is True
+        ):
+            ids = list(quota_group(identity_for(connection)).values_list("pk", flat=True))
+            AIIdentity.objects.filter(pk__in=ids, availability="QUOTA_EXHAUSTED").update(
+                availability="AVAILABLE"
+            )
+            AIConnection.objects.filter(identity_id__in=ids, availability="QUOTA_EXHAUSTED").update(
+                availability="AVAILABLE"
+            )
+        connection.refresh_from_db()
     return public(connection)
 
 
@@ -264,7 +308,10 @@ def mark_failure(connection_id, kind, retry_seconds=None, quota_windows=None):
     if kind == "AUTH_ERROR":
         changes["status"] = "DISCONNECTED"
     if kind == "QUOTA_EXHAUSTED":
-        changes["quota_windows"] = normalize_quota_windows(quota_windows)
+        changes["quota_windows"] = {
+            **identity.quota_windows,
+            **normalize_quota_windows(quota_windows),
+        }
     group = (
         quota_group(identity)
         if kind in {"QUOTA_EXHAUSTED", "BUSY"}

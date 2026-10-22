@@ -102,8 +102,10 @@ Queue cards distinguish current assignments from previous execution snapshots;
 measured state-group transitions respect reduced motion. Publication attempts appear as short operations with their own persisted
 delivery state. Card transitions respect reduced-motion settings.
 
-`TicketConnector` stores encrypted configuration and an explicit destination
-allowlist. `PublishedTicket` records the exact immutable source version, edited
+`TicketConnector` stores encrypted configuration, an owning environment and an explicit
+destination allowlist. Preview and new publication validate ownership against the request;
+historical recovery retains the original stored connector. See [settings](settings.md)
+for the non-destructive migration and quota refresh protocol. `PublishedTicket` records the exact immutable source version, edited
 payload, operation reference and delivery state. A conditional destination
 constraint prevents concurrent or repeated successful/uncertain publication;
 definitively rejected attempts can be corrected without rewriting their snapshots.

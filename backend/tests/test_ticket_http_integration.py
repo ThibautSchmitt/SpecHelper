@@ -86,6 +86,7 @@ def test_confirmed_http_creation_and_lost_response_reconciliation(
         request = Request.objects.create(environment=environment, need="Export contracts")
         version = publish(request.pk, None, bundle)
         connector = TicketConnector.objects.create(
+            environment=environment,
             name="Controlled HTTP fixture",
             platform="gitlab",
             base_url=base,

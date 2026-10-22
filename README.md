@@ -53,13 +53,14 @@ and serve it over HTTPS. See [deployment and security](SECURITY.md).
 
 ## Configuration
 
-Open **Settings** after starting the application. Labels follow the selected language.
+Open **Settings** at the bottom left after starting the application. Its three tabs are
+**General**, **AI & Agents** and **Environments**. Labels follow the selected language.
 
 1. **Connect Git sources.** Add named GitHub or GitLab connections under
-   **Sources Git**. GitHub supports browser authorization; GitLab accepts a
+   **Environments → Git sources**. GitHub supports browser authorization; GitLab accepts a
    read-only token for GitLab.com or a self-hosted instance.
 2. **Connect an AI assistant.** Connect ChatGPT / Codex, Claude / Claude Code, or
-   both through the official authorization dialogs. Add named configurations,
+   both through **AI & Agents** using the official authorization dialogs. Add named configurations,
    choose models and optionally share an account identity. A compatible provider
    subscription may be required. No personal access token or terminal command is
    needed in SpecHelper. An available assistant is selected automatically.
@@ -74,8 +75,8 @@ Open **Settings** after starting the application. Labels follow the selected lan
    application language. Choose light, dark or system appearance for this browser.
    The language applies to the interface and new analyses; existing requests keep
    their language and published files. See [English and French](docs/localization.md).
-6. **Optionally set up ticket publication.** Add and test a ticket connector, then
-   select its allowed destinations. See [publishing tickets](docs/ticketing.md) for
+6. **Optionally set up ticket publication.** Under **Environments**, add and test a
+   ticket connector within the relevant environment, then select its allowed destinations. See [publishing tickets](docs/ticketing.md) for
    supported API versions, credentials and template behavior.
 
 Optional [environment context](docs/environment-context.md) adds short project instructions
@@ -94,7 +95,8 @@ From **Requests**:
 Independent comparison is selected automatically from Settings and enabled assistant
 roles. Business forms contain no per-request comparison control.
 
-The sidebar provides **Requests**, **Questions**, **Tickets** and **Settings**. A shared task queue
+The main sidebar provides **Requests**, **Questions** and **Tickets**; **Settings**
+is available at the bottom left. A shared task queue
 stays visible on desktop and is available in a drawer on smaller screens.
 
 The result includes two downloadable files:

@@ -12,7 +12,14 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 from pydantic import ConfigDict, Field, field_validator
 
-from .models import GitHubConnection, PublishedTicket, ResultVersion, TicketConnector
+from .models import (
+    Environment,
+    GitHubConnection,
+    PublishedTicket,
+    Request,
+    ResultVersion,
+    TicketConnector,
+)
 from .secrets import encrypt
 from .ticket_providers import provider_for
 from .ticket_publication import (
@@ -33,6 +40,7 @@ class StrictSchema(Schema):
 
 
 class ConnectorIn(StrictSchema):
+    environment_id: int = Field(ge=1)
     name: str = Field(min_length=1, max_length=100)
     platform: Literal["github", "gitlab", "jira", "glpi"]
     base_url: str = Field(min_length=1, max_length=1000)
@@ -82,6 +90,9 @@ class PublicationIn(PreviewIn):
 
 def connector_values(payload, existing=None):
     values = payload.model_dump(exclude={"secret", "app_token"})
+    get_object_or_404(Environment, pk=payload.environment_id)
+    if existing and existing.environment_id not in {None, payload.environment_id}:
+        raise HttpError(409, "Create a new connector to use a different environment.")
     values["base_url"] = validate_base_url(values["base_url"])
     projects = values["projects"]
     if any(not item or len(item) > 255 for item in projects) or len(set(projects)) != len(projects):
@@ -116,8 +127,17 @@ def connector_values(payload, existing=None):
 
 
 @router.get("/ticket-connectors")
-def list_connectors(request):
-    return [connector_dict(value) for value in TicketConnector.objects.order_by("name", "id")]
+def list_connectors(request, environment_id: int | None = None, request_id: UUID | None = None):
+    values = TicketConnector.objects.order_by("name", "id")
+    if request_id is not None:
+        item = get_object_or_404(Request, pk=request_id)
+        if item.environment_id is None:
+            return []
+        values = values.filter(environment_id=item.environment_id)
+    if environment_id is not None:
+        get_object_or_404(Environment, pk=environment_id)
+        values = values.filter(environment_id=environment_id)
+    return [connector_dict(value) for value in values]
 
 
 @router.post("/ticket-connectors")

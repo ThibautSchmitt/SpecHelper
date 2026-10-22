@@ -125,13 +125,14 @@ test("compact admin: independent connections and targeted probe", async ({
     name: "Administration",
     exact: true,
   });
-  await expect(navigation.getByRole("button")).toHaveCount(4);
+  await expect(navigation.getByRole("button")).toHaveCount(3);
   await expect(
     navigation.getByRole("button", { name: "AI & Agents", exact: true }),
   ).toBeVisible();
   await expect(
     navigation.getByRole("button", { name: "Agents and skills" }),
   ).toHaveCount(0);
+  await navigation.getByRole("button", { name: "AI & Agents", exact: true }).click();
   await expect(
     page
       .getByRole("region", { name: "ChatGPT", exact: true })
@@ -140,7 +141,7 @@ test("compact admin: independent connections and targeted probe", async ({
   const claude = page.getByRole("region", { name: "Claude", exact: true });
   await expect(claude.getByText("Available", { exact: true })).toBeVisible();
   await claude
-    .getByRole("button", { name: "Test connection", exact: true })
+    .getByRole("button", { name: "Refresh status and quotas", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText("Connection checked.");
   expect(tested).toBe(true);
@@ -214,7 +215,7 @@ test("administration: no internal agent or skill settings", async ({
     return r.fulfill({ json: { agents: [], skills: [] } });
   });
   await page.goto("/admin");
-  await page.getByRole("button", { name: "Instance", exact: true }).click();
+  await page.getByRole("button", { name: "General", exact: true }).click();
   await expect(page.getByLabel("Instance name")).toBeVisible();
   await expect(
     page.getByText("Advanced analysis options", { exact: true }),

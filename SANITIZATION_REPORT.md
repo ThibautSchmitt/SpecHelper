@@ -3,14 +3,14 @@
 Verdict: **PASS WITH WARNINGS** for the source snapshot, with third-party licensing
 scope retained below. The reviewed source is prepared in the local publication checkout; remote push status is reported separately.
 
-This report covers the refreshed publication snapshot, including v1.8 appearance, automatic role-based analysis, clearer task visibility, project questions and versioned environment context, independent analysis roles and verification and English/French
-localization. Select **Settings → Instance → Application language**; French remains
+This report covers the refreshed publication snapshot, including consolidated settings, environment-owned ticket connectors, official non-inference Codex quota reads, v1.8 appearance, automatic role-based analysis, clearer task visibility, project questions and versioned environment context, independent analysis roles and verification and English/French
+localization. Select **Settings → General → Application language**; French remains
 the default. Each request retains its creation language, and existing artifacts
 are not rewritten. See [localization verification](docs/localization.md).
 
 ## Files reviewed
 
-The publication contains 244 project-owned files, including this report. Sources,
+The publication contains 250 project-owned files, including this report. Sources,
 tests, migrations, configuration and documentation were read; both dependency locks
 were parsed. Installed dependency/cache/build files and private runtime data
 are excluded; dependency license metadata was inspected separately.
@@ -18,7 +18,7 @@ are excluded; dependency license metadata was inspected separately.
 ## Secrets and private references
 
 - `detect-secrets 1.5.0` scanned the candidate and tracked source files.
-- Twenty-six findings in eighteen files were reviewed: twenty-three are synthetic test
+- Twenty-eight findings in twenty files were reviewed: twenty-five are synthetic test
   fixtures or the disposable CI database password; three are translated "Password" labels.
   None is a live account credential.
 - Configured connection credentials were compared against the publication files without
@@ -45,10 +45,10 @@ GitHub Actions workflow are supplied without account-specific links.
 - The initial clean copy passed `npm ci --offline`, `uv sync --frozen --offline`
   and a frontend build without the original `.env.local`. The v1.3 locks also include PyYAML and Markdown preview dependencies, with
   their licenses recorded in THIRD_PARTY_NOTICES.md.
-- Current backend suite: **421 passed** on disposable PostgreSQL 17, including
+- Current backend suite: **443 passed** on disposable PostgreSQL 17, including
   business database integration and language migration tests.
 - Current frontend: production build and TypeScript checks pass.
-- Browser: **110 desktop/mobile scenarios pass** against isolated local fixtures,
+- Browser: **118 desktop/mobile scenarios pass** against isolated local fixtures,
   including both languages, persistence, errors and workflow exports. This run
   used installed Chrome via the documented channel override.
 - A restored database migration and the deployed migration preserve all sixteen
@@ -57,8 +57,8 @@ GitHub Actions workflow are supplied without account-specific links.
 - Ruff, migration application, Python lock consistency and Compose validation pass.
 - Git index whitespace check and exclusion checks pass. The publication branch is `main`. No prior external Git history was imported.
 
-The GitHub Actions workflow has not run on GitHub; it will run after a repository
-receives the source update. Scanning and review reduce exposure risk
+GitHub Actions results for this source update have not been inspected; the workflow
+runs when a repository receives the update. Scanning and review reduce exposure risk
 but do not establish the absence of every possible vulnerability.
 
 A separate deployed desktop/mobile check and an actual GLPI 11.0.7 ticket

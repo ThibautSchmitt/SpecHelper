@@ -6,7 +6,7 @@ async function base(page: Page, language = "en") {
   await page.route("**/api/connections", r => r.fulfill({ json: { github: { status: "CONNECTED" }, ais: [], databases: [] } }));
   await page.route("**/api/system", r => r.fulfill({ json: { jobs: [] } }));
   await page.route("**/api/queue", r => r.fulfill({ json: [] }));
-  await page.route("**/api/ticket-connectors", r => r.fulfill({ json: [] }));
+  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, r => r.fulfill({ json: [] }));
   await page.route("**/api/environments", r => r.fulfill({ json: [{ id: 91, name: "Java service and Python worker", status: "READY", revision: 1, repositories: [], database_id: null, database_name: null, error: "" }] }));
 }
 

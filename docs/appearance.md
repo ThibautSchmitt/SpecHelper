@@ -2,7 +2,7 @@
 
 ## Light, dark and system
 
-Open **Settings → Connections → Appearance** or **Settings → Instance** to choose
+Open **Settings → General → Appearance** to choose
 **Light**, **Dark** or **System**. The preference is saved in this browser, including
 page reloads and navigation. Other tabs in the same browser update when that
 preference changes. Different browsers can use different themes on the same
@@ -15,7 +15,7 @@ storage is unavailable, a notice explains that the preference lasts only for the
 current tab. Interface language and existing generated files are unaffected.
 
 Instance primary color remains a shared server setting. Appearance provides
-preset swatches and a custom picker; **Save color** applies it to the instance.
+preset swatches and a custom picker; **Save settings** applies it to the instance.
 Readable foregrounds and primary text are adjusted for the active theme. State
 colors remain distinct: blue running, orange waiting, muted amber clarification,
 green completed and red error. Text labels accompany colors.
@@ -37,7 +37,7 @@ follow-up and request-handoff actions remain available below it.
 
 ## Automatic independent analysis
 
-Open **Settings → AI & Agents → Analysis policy** to enable or disable independent
+Open **Settings → AI & Agents → Analysis configuration** to enable or disable independent
 counter-analysis for newly created requests and questions. Configure each
 assistant's roles through **Edit**. One authenticated assistant with analyst and
 counter-analyst roles can perform independent sessions; two accounts are not
@@ -80,8 +80,12 @@ metadata. **Refresh records** reads local records; it does not claim to fetch a
 live remote ticket status or trigger an external update. Existing publication and
 reconciliation actions remain on their source result and require human review.
 
-Settings groups Git sources, appearance, named assistant configurations,
-environments, roles/skills and publication connectors. Connection creation forms
+Settings has exactly three tabs: **General** for browser appearance and instance
+identity/language/color, **AI & Agents** for named assistant configurations and one
+analysis configuration block, and **Environments** for Git sources, databases,
+project context and environment-owned publication connectors. Connection creation forms
 open only when requested, preserving space for existing configurations. The
-sidebar's administration shortcut identifies the shared team workspace; it does
-not invent a signed-in application user or introduce application-level accounts.
+bottom-left **Settings** shortcut is the sole settings navigation entry. Main
+navigation contains Requests, Questions and Tickets. It does not invent a signed-in
+application user or introduce application-level accounts. See [settings](settings.md)
+for quota observations and connector migration behavior.

@@ -177,7 +177,6 @@ test("Questions uses the shared navigation, queue and creation form with optiona
     "Requests",
     "Questions",
     "Tickets",
-    "Settings",
   ]);
   await expect(
     page.getByRole("link", { name: /Existing contract checks/ }).first(),
@@ -215,7 +214,7 @@ test("Questions uses the shared navigation, queue and creation form with optiona
   );
   await expect(queue.getByText("Question", { exact: true })).toBeVisible();
   await expect(
-    queue.getByText("ChatGPT · gpt-example · Analyst", { exact: false }),
+    queue.getByText("ChatGPT · gpt-example", { exact: false }),
   ).toBeVisible();
 });
 

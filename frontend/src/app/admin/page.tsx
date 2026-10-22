@@ -6,13 +6,12 @@ import {
   Paintbrush,
   RefreshCw,
   Settings,
-  ShieldCheck,
 } from "lucide-react";
 import { ThemeControl } from "@/components/theme-control";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { TicketConnectors } from "@/components/ticket-connectors";
+import { TicketConnectors, UnassignedTicketConnectors } from "@/components/ticket-connectors";
 import { GitSources } from "@/components/git-sources";
 import {
   RepositoryPicker,
@@ -35,22 +34,9 @@ type Connections = {
   ais: AIConnection[];
   databases: DatabaseConnection[];
 };
-type System = {
-  usage: string;
-  runtime: string;
-  max_analysis_seconds: number;
-  jobs: {
-    id: number;
-    kind: string;
-    status: string;
-    error: string;
-    started_at: string | null;
-  }[];
-};
-
 export default function Admin() {
-  const { t, dateLocale } = useI18n();
-  const [tab, setTab] = useState("connections");
+  const { t } = useI18n();
+  const [tab, setTab] = useState("general");
   const [connections, setConnections] = useState<Connections | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [settings, setSettings] = useState({
@@ -62,7 +48,11 @@ export default function Admin() {
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const refreshVersion = useRef(0);
-  const [system, setSystem] = useState<System | null>(null);
+  const draftVersion = useRef(0);
+  function updateSettings(changes: Partial<typeof settings>) {
+    draftVersion.current += 1;
+    setSettings((previous) => ({ ...previous, ...changes }));
+  }
   const [selection, setSelection] = useState<SourceSelection[]>([
     { repository: "", branch: "" },
   ]);
@@ -74,18 +64,17 @@ export default function Admin() {
 
   async function refresh() {
     const version = ++refreshVersion.current;
-    const [c, e, s, y] = await Promise.all([
+    const draft = draftVersion.current;
+    const [c, e, s] = await Promise.all([
       api<Connections>("/connections"),
       api<Environment[]>("/environments"),
       api<typeof settings>("/settings"),
-      api<System>("/system"),
     ]);
     if (version !== refreshVersion.current) return;
     setConnections(c);
     setEnvironments(e);
-    setSettings(s);
+    if (draft === draftVersion.current) setSettings(s);
     setSettingsLoaded(true);
-    setSystem(y);
   }
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
@@ -98,10 +87,6 @@ export default function Admin() {
       api<Environment[]>("/environments")
         .then(setEnvironments)
         .catch(() => {});
-      if (tab === "instance")
-        api<System>("/system")
-          .then(setSystem)
-          .catch(() => {});
     }, 3000);
     return () => clearInterval(timer);
   }, [tab]);
@@ -120,10 +105,9 @@ export default function Admin() {
     }
   }
   const tabs = [
-    { id: "connections", label: t("Connections") },
-    { id: "ai-agents", label: t("AI & Agents") },
-    { id: "environments", label: t("Environments") },
-    { id: "instance", label: t("Instance") },
+    { id: "general", label: t("General"), icon: Paintbrush },
+    { id: "ai-agents", label: t("AI & Agents"), icon: Settings },
+    { id: "environments", label: t("Environments"), icon: GitBranch },
   ];
   return (
     <div className="space-y-6">
@@ -144,17 +128,17 @@ export default function Admin() {
         className="flex flex-wrap gap-1 border-b pb-3"
         aria-label={t("Administration")}
       >
-        {tabs.map((t) => (
+        {tabs.map((item) => (
           <Button
-            key={t.id}
-            variant={tab === t.id ? "default" : "ghost"}
+            key={item.id}
+            variant={tab === item.id ? "default" : "ghost"}
             onClick={() => {
-              setTab(t.id);
+              setTab(item.id);
               setError("");
               setNotice("");
             }}
           >
-            {t.label}
+            <item.icon size={16} aria-hidden="true" />{item.label}
           </Button>
         ))}
       </nav>
@@ -174,197 +158,20 @@ export default function Admin() {
           {t(notice)}
         </div>
       )}
-      {tab === "connections" && (
-        <div className="settings-overview">
-          <GitSources />
-          <Card>
-            <h2 className="flex items-center gap-2">
-              <Paintbrush size={18} />
-              {t("Appearance")}
-            </h2>
-            <p className="mt-2 mb-5 text-xs muted">
-              {t("Change the appearance of this browser.")}
-            </p>
-            <ThemeControl />
-            <fieldset disabled={!settingsLoaded || busy} className="mt-5">
-              <label htmlFor="appearance-color">{t("Primary color")}</label>
-              <div className="color-options">
-                {[
-                  "#2563eb",
-                  "#7c3aed",
-                  "#0f766e",
-                  "#d97706",
-                  "#be123c",
-                  "#475569",
-                ].map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    style={{ background: color }}
-                    aria-label={t("Choose primary color {color}", { color })}
-                    aria-pressed={settings.primary_color === color}
-                    onClick={() =>
-                      setSettings({ ...settings, primary_color: color })
-                    }
-                  />
-                ))}
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <input
-                  id="appearance-color"
-                  type="color"
-                  className="h-9 w-12 rounded border p-1"
-                  value={settings.primary_color}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      primary_color: event.target.value,
-                    })
-                  }
-                />
-                <code className="text-xs muted">{settings.primary_color}</code>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    action(async () => {
-                      const current = await api<typeof settings>("/settings");
-                      await send(
-                        "/settings",
-                        { ...current, primary_color: settings.primary_color },
-                        "PUT",
-                      );
-                      window.dispatchEvent(new Event("settings-updated"));
-                    }, t("Color saved."))
-                  }
-                >
-                  {t("Save color")}
-                </Button>
-              </div>
-            </fieldset>
-          </Card>
-          <div className="settings-wide">
-            <AIConnections
-              values={connections?.ais || []}
-              onChanged={refresh}
-            />
-          </div>
-          <Card>
-            <div className="section-heading">
-              <h2>
-                <GitBranch size={18} />
-                {t("Environments")}
-              </h2>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setTab("environments")}
-              >
-                {t("Manage")}
-              </Button>
-            </div>
-            <div className="mt-4 space-y-3">
-              {environments.length ? (
-                environments.map((environment) => (
-                  <div
-                    className="flex items-center justify-between gap-3 border-b pb-3 last:border-0"
-                    key={environment.id}
-                  >
-                    <span className="text-sm">{environment.name}</span>
-                    <span className="badge" data-state={environment.status}>
-                      {t(statuses[environment.status] || environment.status)}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm muted">
-                  {t("No environment is available.")}
-                </p>
-              )}
-            </div>
-          </Card>
-          <Card>
-            <div className="section-heading">
-              <h2>
-                <ShieldCheck size={18} />
-                {t("AI & Agents")}
-              </h2>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setTab("ai-agents")}
-              >
-                {t("Configure")}
-              </Button>
-            </div>
-            <p className="mt-4 text-sm muted">
-              {t("New analyses automatically use the configured AI roles.")}
-            </p>
-          </Card>
-          <div className="settings-wide">
-            <TicketConnectors />
-          </div>
-        </div>
-      )}
       {tab === "ai-agents" && (
         <div className="space-y-6">
-          <Card>
-            <h2>{t("Analysis policy")}</h2>
-            <p className="mt-2 text-sm muted">
-              {t("New analyses automatically use the configured AI roles.")}
-            </p>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                action(async () => {
-                  const current = await api<typeof settings>("/settings");
-                  await send(
-                    "/settings",
-                    {
-                      ...current,
-                      allow_confrontation: settings.allow_confrontation,
-                    },
-                    "PUT",
-                  );
-                  window.dispatchEvent(new Event("settings-updated"));
-                }, t("Instance settings saved."));
-              }}
-            >
-              <fieldset disabled={!settingsLoaded || busy} className="mt-4">
-                <label className="flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={settings.allow_confrontation !== false}
-                    onChange={(event) =>
-                      setSettings({
-                        ...settings,
-                        allow_confrontation: event.target.checked,
-                      })
-                    }
-                  />
-                  {t("Independent counter-analysis")}
-                </label>
-                <Button size="sm" className="mt-3">
-                  {t("Save analysis policy")}
-                </Button>
-              </fieldset>
-            </form>
-          </Card>
-          <div className="grid items-start gap-6 xl:grid-cols-2">
-            <OrchestrationSettingsForm />
-            <AIConnections onChanged={refresh} />
-          </div>
+          <AIConnections onChanged={refresh} />
+          <OrchestrationSettingsForm />
         </div>
       )}
       {tab === "environments" && (
         <div className="space-y-6">
+          <GitSources />
           <DatabaseConnections
             values={connections?.databases || []}
             onChanged={refresh}
           />
+          <UnassignedTicketConnectors environments={environments} onAssigned={refresh} />
           {environments.map((e) => (
             <Card key={e.id}>
               <div className="flex flex-wrap justify-between gap-3">
@@ -442,6 +249,7 @@ export default function Admin() {
                 <p className="mt-3 text-sm text-red-700">{t(e.error)}</p>
               )}
               <EnvironmentContext environmentId={e.id} />
+              <TicketConnectors environmentId={e.id} environmentName={e.name} />
             </Card>
           ))}
           <Card>
@@ -512,19 +320,22 @@ export default function Admin() {
           </Card>
         </div>
       )}
-      {tab === "instance" && (
+      {tab === "general" && (
         <Card className="max-w-2xl">
           <h2 className="flex items-center gap-2">
             <Paintbrush size={20} /> {t("Instance settings")}
           </h2>
           <div className="mt-5">
+            <h3 className="mb-3">{t("Appearance")}</h3>
             <ThemeControl />
           </div>
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              const submitted = { ...settings };
               action(async () => {
-                await send("/settings", settings, "PUT");
+                const current = await api<typeof settings>("/settings");
+                await send("/settings", { ...current, name: submitted.name, short_label: submitted.short_label, language: submitted.language, primary_color: submitted.primary_color }, "PUT");
                 window.dispatchEvent(new Event("settings-updated"));
               }, t("Instance settings saved."));
             }}
@@ -538,7 +349,7 @@ export default function Admin() {
                   maxLength={100}
                   value={settings.name}
                   onChange={(e) =>
-                    setSettings({ ...settings, name: e.target.value })
+                    updateSettings({ name: e.target.value })
                   }
                 />
               </div>
@@ -551,7 +362,7 @@ export default function Admin() {
                   maxLength={80}
                   value={settings.short_label || ""}
                   onChange={(e) =>
-                    setSettings({ ...settings, short_label: e.target.value })
+                    updateSettings({ short_label: e.target.value })
                   }
                 />
               </div>
@@ -563,7 +374,7 @@ export default function Admin() {
                   id="instance-language"
                   value={settings.language || "fr"}
                   onChange={(e) =>
-                    setSettings({ ...settings, language: e.target.value })
+                    updateSettings({ language: e.target.value })
                   }
                 >
                   <option value="en">{t("English")}</option>
@@ -577,16 +388,18 @@ export default function Admin() {
               </div>
               <div className="field">
                 <label htmlFor="instance-color">{t("Primary color")}</label>
+                <div className="color-options">
+                  {["#2563eb", "#7c3aed", "#0f766e", "#d97706", "#be123c", "#475569"].map((color) => (
+                    <button key={color} type="button" style={{ background: color }} aria-label={t("Choose primary color {color}", { color })} aria-pressed={settings.primary_color === color} onClick={() => updateSettings({ primary_color: color })} />
+                  ))}
+                </div>
                 <div className="flex items-center gap-4">
                   <input
                     id="instance-color"
                     type="color"
                     value={settings.primary_color}
                     onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        primary_color: e.target.value,
-                      })
+                      updateSettings({ primary_color: e.target.value })
                     }
                     className="h-11 w-16 cursor-pointer rounded-md border p-1"
                   />
@@ -602,45 +415,7 @@ export default function Admin() {
           </form>
         </Card>
       )}
-      {tab === "instance" && (
-        <div className="space-y-6">
-          <Card>
-            <h2>{t("Request activity")}</h2>
-            <div className="mt-4 space-y-3">
-              {system?.jobs.length ? (
-                system.jobs.map((j) => (
-                  <div
-                    key={j.id}
-                    className="flex flex-wrap items-start justify-between gap-3 border-b pb-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">
-                        #{j.id} ·{" "}
-                        {j.kind === "sync" ? t("Synchronizing") : t("Analysis")}
-                      </p>
-                      <p className="mt-1 text-xs muted">
-                        {j.started_at
-                          ? new Date(j.started_at).toLocaleString(dateLocale)
-                          : t("Queued")}
-                      </p>
-                      {j.error && (
-                        <p className="mt-2 text-sm text-red-700">
-                          {t(j.error)}
-                        </p>
-                      )}
-                    </div>
-                    <span className="badge">
-                      {t(statuses[j.status] || j.status)}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm muted">{t("No jobs yet.")}</p>
-              )}
-            </div>
-          </Card>
-        </div>
-      )}
+
     </div>
   );
 }

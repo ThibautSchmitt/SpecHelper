@@ -5,7 +5,9 @@ An explicit **Create ticket** confirmation is required for every publication.
 
 ## Set up a connector
 
-In **Settings → Connections**, add a named ticket connector and test its connection.
+In **Settings → Environments**, find the relevant environment, add a named ticket
+connector and test its connection. Each connector belongs to exactly one environment;
+publication selects only destinations configured for the request's environment.
 Select the accessible destinations allowed for publication and an optional default.
 Credentials are encrypted, masked in the interface and excluded from analysis prompts.
 
@@ -27,7 +29,7 @@ for verification boundaries and the other platforms' contract-test coverage.
 ## Review and create
 
 Open a completed result version and select **Publish ticket**. Choose a configured
-connector, an allowed project and any available template or issue type. The title
+connector belonging to that environment, an allowed project and any available template or issue type. The title
 and description come from that immutable result. Edit them, complete the target's
 required fields and inspect the preview before confirming creation.
 
@@ -86,3 +88,17 @@ connector for a different instance so recovery stays bound to the original servi
   and [issues](https://docs.gitlab.com/api/issues/)
 - [Jira Cloud issue creation and metadata](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/)
 - [GLPI legacy REST API](https://github.com/glpi-project/glpi/blob/11.0/bugfixes/apirest.md)
+
+## Existing installation migration
+
+The ownership migration keeps original connector rows and every publication link
+and snapshot. Previously shared configurations are copied into each existing
+environment, allowing subsequent changes to remain independent. With no environment,
+legacy connectors remain saved under **Unassigned ticket connectors** until explicitly
+assigned. A connector cannot be moved to another environment after assignment.
+
+Historical delivery verification uses the original stored connector even when it
+was previously shared across environments. New previews and publication attempts
+must use a connector owned by the request's environment. An environment with
+connectors cannot be deleted until unused connectors have been removed; connectors
+with publication history must remain available for recovery.

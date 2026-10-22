@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 
 const id = "88888888-8888-4888-8888-888888888888";
 const connector = {
+  environment_id: 1,
   id: 1,
   name: "Team GitHub",
   platform: "github",
@@ -139,7 +140,7 @@ async function base(page: Page) {
   );
   await page.route("**/api/requests", (r) => r.fulfill({ json: [] }));
   await page.route("**/api/queue", (r) => r.fulfill({ json: [] }));
-  await page.route("**/api/ticket-connectors", (r) =>
+  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, (r) =>
     r.fulfill({ json: [connector] }),
   );
   await page.route("**/api/ticket-connectors/1/projects", (r) =>
@@ -224,7 +225,6 @@ test("persistent navigation and real shared queue remain available across pages"
     "Requests",
     "Questions",
     "Tickets",
-    "Settings",
   ]);
   await expect(
     page
@@ -508,7 +508,7 @@ test("connector settings keep saved secrets private and expose explicit GLPI com
     default_project: "TEAM",
   };
   let payload: Record<string, unknown> | null = null;
-  await page.route("**/api/ticket-connectors", (r) =>
+  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, (r) =>
     r.fulfill({ json: [jira] }),
   );
   await page.route("**/api/ticket-connectors/2", (r) => {
@@ -516,6 +516,7 @@ test("connector settings keep saved secrets private and expose explicit GLPI com
     return r.fulfill({ json: jira });
   });
   await page.goto("/admin");
+  await page.getByRole("button", { name: "Environments", exact: true }).click();
   await page.getByRole("button", { name: /Team Jira/ }).click();
   await expect(
     page.getByLabel("Secret / API token", { exact: true }),
@@ -524,6 +525,7 @@ test("connector settings keep saved secrets private and expose explicit GLPI com
     .getByRole("button", { name: "Save connector", exact: true })
     .click();
   await expect.poll(() => payload).not.toBeNull();
+  expect(payload).toMatchObject({ environment_id: 1 });
   expect(payload).not.toHaveProperty("secret");
   expect(payload).not.toHaveProperty("app_token");
   await page

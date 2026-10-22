@@ -166,7 +166,7 @@ export function PublishTicket({
       .finally(() => {
         if (alive) setRecovering(false);
       });
-    api<TicketConnector[]>("/ticket-connectors")
+    api<TicketConnector[]>(`/ticket-connectors?request_id=${requestId}`)
       .then((v) => {
         if (alive) {
           const available = v.filter(

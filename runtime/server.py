@@ -196,7 +196,11 @@ def verify_sandbox():
 
 
 @app.get("/health", dependencies=[Depends(authorize)])
-def health(agent: Literal["codex", "claude"] = "codex", identity_id: uuid.UUID | None = None):
+def health(
+    agent: Literal["codex", "claude"] = "codex",
+    identity_id: uuid.UUID | None = None,
+    quota: bool = False,
+):
     if not shutil.which(agent) or not shutil.which("bwrap"):
         return {"status": "ERROR", "account": "Incomplete runtime", "usage": "UNKNOWN"}
     if not verify_sandbox():
@@ -205,7 +209,7 @@ def health(agent: Literal["codex", "claude"] = "codex", identity_id: uuid.UUID |
             "account": "Isolation unavailable",
             "usage": "UNKNOWN",
         }
-    return connection_status(identity_root(CREDENTIALS, identity_id), agent)
+    return connection_status(identity_root(CREDENTIALS, identity_id), agent, include_quota=quota)
 
 
 class LoginIn(BaseModel):
@@ -276,8 +280,8 @@ def run(payload: RunIn):
         ):
             # Extra contexts must not sit inside the legacy primary directory:
             # that whole directory is mounted at /session for the primary CLI.
-            session = SESSIONS / "contexts" / request_id / str(
-                payload.context_id or payload.request_id
+            session = (
+                SESSIONS / "contexts" / request_id / str(payload.context_id or payload.request_id)
             )
         agent_home = session / payload.agent
         agent_home.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -415,7 +419,11 @@ def run(payload: RunIn):
                     or not result.get("structured_output")
                     or process.returncode
                 ):
-                    return {"failure": classify_failure(stdout), "usage": result.get("usage", {}), **context_observation}
+                    return {
+                        "failure": classify_failure(stdout),
+                        "usage": result.get("usage", {}),
+                        **context_observation,
+                    }
                 return {
                     "output": result["structured_output"],
                     **context_observation,
@@ -441,10 +449,21 @@ def run(payload: RunIn):
         if timed_out:
             failure = classify_failure(stdout)
             if failure["kind"] in {"QUOTA_EXHAUSTED", "BUSY"}:
-                return {"failure": {**failure, "quota_windows": quota_windows}, **context_observation}
-            return {"timed_out": True, "session_id": session_id, "usage": usage, **context_observation}
+                return {
+                    "failure": {**failure, "quota_windows": quota_windows},
+                    **context_observation,
+                }
+            return {
+                "timed_out": True,
+                "session_id": session_id,
+                "usage": usage,
+                **context_observation,
+            }
         if process.returncode or not output.exists() or not session_id:
-            return {"failure": {**classify_failure(stdout), "quota_windows": quota_windows}, **context_observation}
+            return {
+                "failure": {**classify_failure(stdout), "quota_windows": quota_windows},
+                **context_observation,
+            }
         try:
             result = json.loads(output.read_text())
         except json.JSONDecodeError:

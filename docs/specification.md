@@ -16,7 +16,7 @@ One installation serves a trusted team. Requests and connections are shared; the
 - Instance name, short label, color, application language and permission to compare new requests.
 - Administrative role instructions, inherited skills and bounded verification policy.
 
-**Application language** under **Settings → Instance** selects English or French for the interface and newly created analyses. French is the default, preserving existing installations. A request's language is frozen at creation and used for clarification, later discussion and generated artifacts. Switching the instance language does not translate or overwrite historical artifacts.
+**Application language** under **Settings → General** selects English or French for the interface and newly created analyses. French is the default, preserving existing installations. A request's language is frozen at creation and used for clarification, later discussion and generated artifacts. Switching the instance language does not translate or overwrite historical artifacts.
 
 The PostgreSQL test checks connectivity, a read and read-only permissions. It returns three simple statuses without database inventory or diagnostics.
 
@@ -41,7 +41,7 @@ Both artifacts can be copied and downloaded. Discussion after a result creates a
 
 ## Dashboard and ticket publication
 
-Requests, Tickets and Settings share a persistent instance sidebar and live task
+Requests, Questions, Tickets and Settings share a persistent instance sidebar and live task
 queue. Desktop displays three columns; smaller screens retain navigation and a
 queue drawer. Connection indicators reflect observed status. Queue cards expose
 FIFO order, actual elapsed time, clarification, completion and failures without
@@ -102,3 +102,12 @@ assistant from previous execution records and identify non-AI connector work.
 Light, dark and system preferences persist in the browser. System mode follows
 live device appearance changes. Theme changes preserve the same controls and
 page hierarchy. Settings retains shared instance color and language controls.
+
+### Consolidated settings
+
+Main navigation contains Requests, Questions and Tickets; the bottom-left Settings
+button opens General, AI & Agents and Environments. Each setting has one editing
+location. General saves browser appearance separately from shared identity,
+language and color. AI & Agents saves comparison policy and orchestration together.
+Environment-specific ticket connectors are checked server-side during publication.
+See [settings](settings.md) for provider quota visibility and migration guarantees.

@@ -141,7 +141,7 @@ h3 {
 }
 .dashboard {
   display: grid;
-  grid-template-columns: 204px minmax(0, 1fr) 292px;
+  grid-template-columns: 204px minmax(0, 1fr) 344px;
   min-height: 100dvh;
 }
 .dashboard-sidebar {
@@ -1072,3 +1072,27 @@ summary:focus-visible {
     display: none;
   }
 }
+
+/* Compact task rows retain their content while matching the reference rail. */
+.queue-card-content { display: block; padding: 10px 12px; }
+.queue-card-title { display: flex; align-items: flex-start; gap: 7px; }
+.queue-card-title > svg { flex: 0 0 auto; margin-top: 2px; color: var(--muted-foreground); }
+.queue-card-title strong { flex: 1; min-width: 0; line-height: 1.4; }
+.queue-card-title .queue-environment { font-size: 10px; max-width: 75px; }
+.queue-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; color: var(--muted-foreground); font-size: 10px; }
+.queue-card-meta .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 10px; }
+.queue-duration, .queue-role, .queue-position { display: inline-flex; align-items: center; gap: 4px; }
+.queue-operation { margin-top: 5px; font-size: 10px; color: var(--muted-foreground); }
+.queue-assistants { margin-top: 5px; font-size: 11px; color: var(--muted-foreground); }
+.queue-assignment { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 5px; overflow-wrap: anywhere; }
+.queue-assignment > svg { flex: 0 0 auto; }
+.queue-role { padding: 1px 4px; background: var(--muted); border-radius: 3px; }
+.queue-card .queue-stage { display: flex; align-items: flex-start; gap: 5px; margin-top: 6px; color: var(--muted-foreground); font-size: 11px; line-height: 1.45; }
+.queue-stage svg { flex: 0 0 auto; margin-top: 2px; }
+.queue-position { margin-top: 4px; color: var(--muted-foreground); font-size: 10px; }
+.queue-group-heading h3 { display: flex; align-items: center; gap: 6px; }
+.connection-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.icon-action[data-slot="button"] { width: 36px; height: 36px; padding: 0; flex-shrink: 0; }
+.sidebar-admin[aria-current="page"] { background: var(--muted); color: var(--primary-ink, var(--primary)); }
+@media (pointer: coarse) { .icon-action[data-slot="button"] { width: 44px; height: 44px; } }
+@media (min-width: 1280px) and (max-width: 1350px) { .dashboard { grid-template-columns: 180px minmax(0, 1fr) 308px; } .dashboard-center { padding: 22px; } }

@@ -141,10 +141,13 @@ def test_configuration(value):
     not_processing(value)
     credential_id = runtime_identity(value)
     path = (
-        "/health?agent=" + value.agent + ("&identity_id=" + credential_id if credential_id else "")
+        "/health?agent="
+        + value.agent
+        + ("&identity_id=" + credential_id if credential_id else "")
+        + "&quota=true"
     )
     try:
-        return observe(value, runtime_call(path))
+        return observe(value, runtime_call(path, timeout=25))
     except ValueError as exc:
         raise HttpError(
             503, "The connection service is not responding. Try again shortly."

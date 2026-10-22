@@ -1,4 +1,5 @@
 "use client";
+import { Bot, Pencil, Plus, Power, RefreshCw, Trash2, Gauge, ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ export type QuotaWindow = {
   reset_at?: string;
   resets_at?: string;
   exhausted?: boolean;
+  observed_at?: string;
 };
 export type AIConnection = {
   id: number;
@@ -32,6 +34,7 @@ export type AIConnection = {
   quota_identity_id?: string | number;
   is_default?: boolean;
   preference?: number;
+  quota_status?: { state: string; source?: string; checked_at?: string; reason?: string };
   quota_windows?: { session?: QuotaWindow; weekly?: QuotaWindow };
   roles?: PublicRole[];
   additional_instructions?: string;
@@ -134,7 +137,7 @@ export function AIConnections({
   return (
     <Card className="min-w-0" aria-label={t("AI connections")}>
       <div className="section-heading">
-        <h2>{t("AI connections")}</h2>
+        <h2><Bot size={18} aria-hidden="true" />{t("AI connections")}</h2>
         <Button
           type="button"
           size="sm"
@@ -146,7 +149,7 @@ export function AIConnections({
             setShowForm(true);
           }}
         >
-          {t("Add connection")}
+          <Plus size={15} aria-hidden="true" />{t("Add connection")}
         </Button>
       </div>
       <p className="mt-2 text-sm muted">
@@ -169,11 +172,13 @@ export function AIConnections({
                   <span className="ml-2 text-xs muted">{t("Default")}</span>
                 )}
               </h3>
-              <span className="badge" data-state={value.availability}>
+              <span className="badge" data-state={!value.enabled ? "DISABLED" : value.status !== "CONNECTED" ? value.status : value.availability}>
                 {t(
                   !value.enabled
                     ? "Disabled"
-                    : statuses[value.availability] || value.availability,
+                    : value.status !== "CONNECTED"
+                      ? statuses[value.status] || value.status
+                      : statuses[value.availability] || value.availability,
                 )}
               </span>
             </div>
@@ -203,7 +208,7 @@ export function AIConnections({
                 )}
               </p>
             )}
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="connection-actions mt-3">
               <ConnectButton
                 provider={value.agent}
                 startPath={`/ai-connections/${value.id}/auth/start`}
@@ -216,6 +221,9 @@ export function AIConnections({
                 type="button"
                 size="sm"
                 variant="outline"
+                className="icon-action"
+                aria-label={t("Refresh status and quotas")}
+                title={t("Refresh status and quotas")}
                 disabled={busy || value.availability === "BUSY"}
                 onClick={() =>
                   action(
@@ -224,13 +232,16 @@ export function AIConnections({
                   )
                 }
               >
-                {t("Test connection")}
+                <RefreshCw size={16} aria-hidden="true" />
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 disabled={busy}
+                className="icon-action"
+                aria-label={t("Edit")}
+                title={t("Edit")}
                 onClick={() => {
                   setShowForm(true);
                   setEditing(value);
@@ -249,13 +260,16 @@ export function AIConnections({
                   });
                 }}
               >
-                {t("Edit")}
+                <Pencil size={16} aria-hidden="true" />
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
                 disabled={busy}
+                className="icon-action"
+                aria-label={t(value.enabled ? "Disable" : "Enable")}
+                title={t(value.enabled ? "Disable" : "Enable")}
                 onClick={() =>
                   action(() =>
                     send(
@@ -277,23 +291,26 @@ export function AIConnections({
                   )
                 }
               >
-                {t(value.enabled ? "Disable" : "Enable")}
+                <Power size={16} aria-hidden="true" />
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
                 disabled={busy}
+                className="icon-action text-red-700"
+                aria-label={t("Delete")}
+                title={t("Delete")}
                 onClick={() => setRemoving(value)}
               >
-                {t("Delete")}
+                <Trash2 size={16} aria-hidden="true" />
               </Button>
             </div>
           </section>
         ))}
       </div>
       <div className="account-quotas mt-5">
-        <h3>{t("Account quotas")}</h3>
+        <h3 className="flex items-center gap-2"><Gauge size={17} aria-hidden="true" />{t("Account quotas")}</h3>
         {Array.from(identities.entries()).map(([id, group]) => (
           <div key={id} className="rounded-lg bg-muted p-3 text-sm">
             <p className="font-medium break-words">
@@ -326,6 +343,23 @@ export function AIConnections({
                   ?.weekly,
               )}
             </p>
+            <p className="mt-2 text-xs muted">
+              {t("Last observed")}: {(() => {
+                const timestamps = group.flatMap((value) => Object.values(value.quota_windows || {}).map((window) => window?.observed_at)).filter((value): value is string => !!value && !Number.isNaN(Date.parse(value)));
+                const latest = timestamps.sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+                return latest ? new Date(latest).toLocaleString(dateLocale) : t("Unknown");
+              })()}
+            </p>
+            {group.some((value) => value.quota_status?.state === "error") ? (
+              <p className="mt-2 text-xs text-red-700">{t("Quota refresh failed. Last known observations are preserved.")}</p>
+            ) : group.some((value) => value.quota_status?.state === "unavailable") ? (
+              <p className="mt-2 text-xs muted">{t(group[0].agent === "claude" ? "This Claude Code version does not expose account quotas. Check your provider usage page." : "The provider did not return account quotas.")}</p>
+            ) : null}
+            {group.some((value) => value.quota_status?.checked_at) && <p className="mt-1 text-xs muted">{t("Last checked")}: {(() => {
+              const checked = group.map((value) => value.quota_status?.checked_at).filter((value): value is string => !!value && !Number.isNaN(Date.parse(value))).sort((a,b) => Date.parse(b) - Date.parse(a))[0];
+              return checked ? new Date(checked).toLocaleString(dateLocale) : t("Unknown");
+            })()}</p>}
+            {group[0].agent === "claude" && <a className="mt-2 inline-flex items-center gap-1 text-xs text-primary underline" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">{t("Provider usage")}<ExternalLink size={12} aria-hidden="true" /></a>}
             {group.length > 1 && (
               <p className="mt-2 text-xs muted">
                 {t(
