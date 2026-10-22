@@ -32,3 +32,10 @@ persistent volumes.
 Do not disclose vulnerabilities containing secrets or real data in a public issue. Once the GitHub repository exists, use **Report a vulnerability** if private reporting is enabled. Otherwise, ask the maintainer for a private channel without disclosing exploit details. No temporary personal contact is listed before the GitHub account is selected.
 
 A useful report includes the version, minimal reproduction, impact and prerequisites, using fictional data. Never send AI, GitHub or database credentials or private team attachments.
+
+Environment reference documents are untrusted input. Original versions are retained
+for historical analyses; removal from an environment does not erase those versions.
+The runtime sees only verified frozen copies through a dedicated read-only volume
+and per-file sandbox bindings. Include original context resources in backups and
+apply the same access controls as source workspaces and attachments. File-read
+telemetry reports access, not semantic understanding or complete data provenance.

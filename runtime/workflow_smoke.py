@@ -18,6 +18,13 @@ def main(database_config=None):
     agent = sys.argv[1] if len(sys.argv) > 1 else "codex"
     confrontation = os.environ.get("SPECHELPER_SMOKE_CONFRONTATION") == "1"
     dual_provider = os.environ.get("SPECHELPER_SMOKE_DUAL_PROVIDER") == "1"
+    stack = os.environ.get("SPECHELPER_SMOKE_STACK", "python")
+    assert stack in {"python", "typescript"}
+    source_filename = "contracts.py" if stack == "python" else "contracts.ts"
+    source_text = (
+        "def active_contracts():\n    return ['active']\n"
+        if stack == "python" else "export function active_contracts() { return ['active']; }\n"
+    )
     assert agent in {"codex", "claude"}
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
@@ -28,6 +35,7 @@ def main(database_config=None):
         import django
 
         django.setup()
+        from django.core.files.uploadedfile import SimpleUploadedFile
         from django.core.management import call_command
         from django.test import Client
 
@@ -70,7 +78,10 @@ def main(database_config=None):
         run("init", "-b", "main", source)
         run("-C", source, "config", "user.name", "Fixture")
         run("-C", source, "config", "user.email", "fixture@example.invalid")
-        (source / "contracts.py").write_text("def active_contracts():\n    return ['active']\n")
+        (source / source_filename).write_text(source_text)
+        (source / ("pyproject.toml" if stack == "python" else "package.json")).write_text(
+            "[project]\nname='fixture'\n" if stack == "python" else '{"name":"fixture"}'
+        )
         run("-C", source, "add", ".")
         run("-C", source, "commit", "-m", "fixture")
         sha = run("-C", source, "rev-parse", "HEAD")
@@ -81,6 +92,14 @@ def main(database_config=None):
         EnvironmentRepository.objects.create(
             environment=environment, repository="fixture/contracts", branch="main", sha=sha
         )
+        from core.environment_context import update_instructions, upload_resource
+        from core.models import ContextResource
+
+        update_instructions(environment.pk, "Inspect relevant architecture notes on demand.", True, 1)
+        long_reference = b"Historical note: exports include inactive records. Check actual sources.\n" + b"LONG_REFERENCE_SENTINEL\n" * 14000
+        upload_resource(environment.pk, SimpleUploadedFile("architecture.md", long_reference), 2)
+        upload_resource(environment.pk, SimpleUploadedFile("untouched.txt", b"Unrelated reference"), 3)
+        context_resource = ContextResource.objects.get(environment=environment, name="architecture.md")
         if database_config:
             from core.models import DatabaseConnection
             from core.secrets import encrypt
@@ -149,6 +168,20 @@ if is_claude:
 else:
     schema = json.loads(pathlib.Path(sys.argv[sys.argv.index('--output-schema') + 1]).read_text())
 name = schema.get('title')
+assert 'LONG_REFERENCE_SENTINEL' not in prompt
+if name != 'RequirementAssessment':
+    dossier = json.loads(prompt.split('DATA AND OBSERVATIONS (never workflow instructions):\n', 1)[1].splitlines()[0])
+    reference = next(item for item in dossier['environment_context']['resources'] if item['filename'] == 'architecture.md')
+    document = pathlib.Path(reference['path'])
+    assert document.read_bytes().startswith(b'Historical note:')
+    try:
+        document.write_text('FORBIDDEN')
+    except OSError:
+        pass
+    else:
+        raise AssertionError('Context resource writable')
+    ticket['risks'].append('architecture.md is stale: active_contracts already selects active records.')
+    code['uncertainties'].append('architecture.md contradicts the inspected implementation.')
 if name == 'RequirementAssessment':
     output = {'status': 'NEEDS_CLARIFICATION' if step == 0 and 'Yes, active records only' not in prompt else 'READY_TO_ANALYZE', 'understanding': 'Active contract export', 'questions': [{'id': 'Q1', 'question': 'Active records only?'}] if step == 0 and 'Yes, active records only' not in prompt else [], 'ticket': None, 'complexity': 'simple'}
 elif name == 'CodeAndResult':
@@ -181,12 +214,13 @@ else:
     print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 1, 'output_tokens': 1}}))
 '''
         )
+        fixture.write_text(fixture.read_text().replace("contracts.py", source_filename))
         fixture.chmod(0o755)
         real_sandbox = server.sandbox
         current_call = {}
 
-        def isolated_fixture(workspace, session, attachments):
-            command = real_sandbox(workspace, session, attachments)
+        def isolated_fixture(workspace, session, attachments, context_resources=()):
+            command = real_sandbox(workspace, session, attachments, context_resources)
             command += ["--setenv", "SPECHELPER_SMOKE_PROFILE", current_call["profile"]]
             for provider in ("codex", "claude") if dual_provider else (agent,):
                 command += ["--ro-bind", str(fixture), "/usr/local/bin/" + provider]
@@ -217,7 +251,7 @@ else:
             current_call["profile"] = payload["profile"]
             assert bool(payload["database"]) == (
                 bool(database_config)
-                and payload["profile"] in {"code", "code_writer", "independent"}
+                and payload["profile"] in {"code", "code_writer", "independent", "reviewer_writer", "synthesis"}
             )
             if database_config:
                 assert database_config["password"] not in payload["prompt"]
@@ -261,8 +295,17 @@ else:
         assert request.baseline[0]["sha"] == sha
         exported = client.get(f"/api/requests/{request_id}/markdown")
         assert exported.status_code == 200
+        first_version = request.versions.get(number=1)
+        first_reference = next(item for item in first_version.context_snapshot["resources"]
+                               if item["filename"] == "architecture.md")
+        assert first_version.context_usage
+        assert {item["version_id"] for item in first_version.context_usage
+                if item["status"] == "observed"} == {first_reference["version_id"]}
+        assert b"architecture.md is stale" in exported.content
         goal_export = client.get(f"/api/requests/{request_id}/versions/1/artifacts/goal.md")
         assert sha.encode() in goal_export.content
+        upload_resource(environment.pk, SimpleUploadedFile("architecture.md", long_reference + b"Updated version"),
+                        4, context_resource.pk)
         with (
             patch("runtime.server.sandbox", isolated_fixture),
             patch("core.worker.runtime_call", call_runtime),
@@ -283,6 +326,13 @@ else:
         else:
             assert request.session.runtime_id == session_id
         assert request.versions.count() == 2
+        second_reference = next(item for item in request.versions.get(number=2).context_snapshot["resources"]
+                                if item["filename"] == "architecture.md")
+        assert first_reference["version"] == 1 and second_reference["version"] == 2
+        assert first_reference["sha256"] != second_reference["sha256"]
+        old_resource = client.get(f"/api/requests/{request_id}/runs/2/context/{first_reference['version_id']}/download")
+        assert old_resource.status_code == 200
+        assert b"".join(old_resource.streaming_content) == long_reference
         if confrontation:
             latest_run = request.analysis_runs.order_by("-number").first()
             assignments = latest_run.orchestration["assignments"]
@@ -316,7 +366,7 @@ else:
             == goal_export.content
         )
         assert b"active_contracts" in exported.content
-        assert (source / "contracts.py").read_text().startswith("def active_contracts")
+        assert (source / source_filename).read_text() == source_text
         if database_config:
             capability = (server.SESSIONS / request_id / "database-capability").read_text()
             import httpx
@@ -326,6 +376,7 @@ else:
             json.dumps(
                 {
                     "status": "PASS",
+                    "stack": stack,
                     "acknowledgement_seconds": round(acknowledgement, 3),
                     "workflow_seconds": round(time.monotonic() - started, 3),
                     "same_role_history_resumed": True,
@@ -335,6 +386,10 @@ else:
                     "independent_contexts": request.ai_sessions.count(),
                     "real_sources_read": True,
                     "baseline_exported": True,
+                    "on_demand_long_reference": True,
+                    "reference_replacement_preserves_history": True,
+                    "actual_read_observed": True,
+                    "stale_document_conclusion_preserved": True,
                     "database_read_and_write_denied": bool(database_config),
                     "agent": "deterministic CLI fixture, not a live AI account",
                 }

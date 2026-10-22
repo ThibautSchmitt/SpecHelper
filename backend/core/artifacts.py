@@ -89,7 +89,7 @@ def render_human(ticket, language="en"):
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_goal(goal, baseline, attachments, language="en"):
+def render_goal(goal, baseline, attachments, language="en", context_snapshot=None):
     known = {a.name: a for a in attachments}
     if set(goal["useful_attachments"]) - set(known):
         raise ValueError("The goal references an unknown attachment")
@@ -119,4 +119,15 @@ def render_goal(goal, baseline, attachments, language="en"):
     lines += localized_section("Acceptance criteria", goal["acceptance_criteria"])
     lines += localized_section("Tests expected", goal["tests_expected"])
     lines += localized_section("Attachments", goal["useful_attachments"])
+    if context_snapshot:
+        references = []
+        instructions = context_snapshot.get("instructions", {})
+        if instructions.get("text"):
+            references.append("instructions · SHA-256 `" + instructions["sha256"] + "`")
+        references += [
+            f"{item['name']} · {item['filename']} · v{item['version']} · SHA-256 `{item['sha256']}`"
+            for item in context_snapshot.get("resources", [])
+        ]
+        if references:
+            lines += localized_section("Frozen environment context", references)
     return "\n".join(lines).rstrip() + "\n"

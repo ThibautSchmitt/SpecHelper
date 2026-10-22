@@ -1,4 +1,5 @@
 import type { AnalysisWarning } from "@/lib/orchestration";
+import type { ContextSnapshot, ContextUsage } from "@/lib/context";
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -71,12 +72,17 @@ export type ResultVersion = {
   markdown: string;
   goal_markdown: string;
   artifacts: Record<string, string>;
+  run_number?: number;
+  context_snapshot?: ContextSnapshot;
+  context_usage?: ContextUsage[];
 };
 export type RequestDetail = RequestItem & {
   analysis_runs?: {
     number: number;
     status: string;
     warnings?: AnalysisWarning[];
+    context_snapshot?: ContextSnapshot;
+    context_usage?: ContextUsage[];
     steps: {
       public_role?: string;
       model_family?: string;

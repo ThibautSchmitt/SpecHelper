@@ -1,5 +1,6 @@
 "use client";
 import { PublishTicket } from "@/components/publish-ticket";
+import { AnalysisContext } from "@/components/analysis-context";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels, warningMessage } from "@/lib/orchestration";
 import Link from "next/link";
@@ -465,6 +466,7 @@ function RequestContent({ params }: { params: Promise<{ id: string }> }) {
             </div>
           </div>
           <Card className="space-y-7">
+            {result && <AnalysisContext requestId={id} runNumber={result.run_number} snapshot={result.context_snapshot} usage={result.context_usage} />}
             {Object.entries(
               result?.format_version === "1.2"
                 ? currentLabels
@@ -555,6 +557,7 @@ function RequestContent({ params }: { params: Promise<{ id: string }> }) {
                     {t("Analysis")} {run.number} ·{" "}
                     {t(statuses[run.status] || run.status)}
                   </h3>
+                  <AnalysisContext requestId={id} runNumber={run.number} snapshot={run.context_snapshot} usage={run.context_usage} />
                   {!!run.warnings?.length && <ul className="mt-2 space-y-1 text-sm text-amber-800" aria-label={t("Analysis warnings")}>{run.warnings.map((warning, index) => <li key={index}>{t(warningMessage(warning))}</li>)}</ul>}
                   <ol className="mt-2 space-y-2 text-sm">
                     {run.steps.map((step, index) => (

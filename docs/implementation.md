@@ -22,7 +22,7 @@ generation and branch selection; legacy worktree paths remain compatible. Reques
 worktrees are separate. Launching a request freezes its SHAs and database selection;
 retained commit refs preserve its baseline across later fetches and force-pushes.
 
-An agent receives only its read-only request workspace, attachments and Git cache, plus its own writable session directory. It cannot access application data, GitHub credentials, PostgreSQL credentials or other requests. AI credentials are persisted separately. The runtime needs `SYS_ADMIN` and a compatible seccomp policy to create namespaces; the agent then drops all capabilities. The service uses `init: true` to reap orphaned Bubblewrap children and prevent process exhaustion. Isolation failure stops execution.
+An agent receives only its read-only request workspace, attachments, explicitly allowed frozen context files and Git cache, plus its own writable session directory. It cannot access application data, GitHub credentials, PostgreSQL credentials or other requests. AI credentials are persisted separately. The runtime needs `SYS_ADMIN` and a compatible seccomp policy to create namespaces; the agent then drops all capabilities. The service uses `init: true` to reap orphaned Bubblewrap children and prevent process exhaustion. Isolation failure stops execution.
 
 Bubblewrap provides the effective sandbox. Codex's internal sandbox is disabled inside that isolation to avoid conflicting namespaces. Linux still mounts sources, cache and attachments read-only. The default Codex model is GPT-6-Luna, configurable through `CODEX_MODEL`. Understanding uses low reasoning effort and technical analysis medium effort. These settings remain internal; users simply connect their ChatGPT account.
 
@@ -34,11 +34,34 @@ Allowed attachments are PNG/JPEG/GIF/WebP, PDF, DOCX, TXT, Markdown, CSV, JSON a
 
 Each analysis has a separate supervisor: the full job stops after 295 seconds, orchestration is bounded to 285 seconds and agent calls use the remaining budget. Errors and interruptions appear in the request and job log. Worker failures are detected on restart.
 
-The pipeline selects useful roles: Requirement Analyst, Code Analyst and Ticket / Goal Writer for simple requests; Attachment Analyst for files and Reviewer for standard, complex or database-backed requests. Code/Writer or Reviewer/Writer may share a structured terminal invocation. Only one additional targeted verification is allowed, with at most ten invocations and two provider attempts per job execution, including format repair. Exchanges are typed and persisted; agents cannot change application workflow. Internal skills cover code navigation, Git history, impacts, minimal changes, attachments, read-only PostgreSQL and Tryton/Coog conventions. Artifacts contain conclusions, never a chain of thought.
+The pipeline selects useful roles: Requirement Analyst, Code Analyst and Ticket / Goal Writer for simple requests; Attachment Analyst for files and Reviewer for standard, complex or database-backed requests. Code/Writer or Reviewer/Writer may share a structured terminal invocation. Only one additional targeted verification is allowed, with at most ten invocations and two provider attempts per job execution, including format repair. Exchanges are typed and persisted; agents cannot change application workflow. Internal skills cover code navigation, Git history, impacts, minimal changes, attachments, read-only PostgreSQL and project conventions. Artifacts contain conclusions, never a chain of thought.
 
 The default single worker runs jobs sequentially. Different browsers can submit different requests to the persistent queue; concurrent operations on the same request are guarded. Shared visibility does not provide per-user authentication or privacy.
 
 Git network operations have a ten-minute timeout each. Full synchronization has a separate twenty-minute limit; an initial large download can take longer than an analysis.
+
+## Environment context
+
+Optional instructions and immutable document versions belong to an environment.
+Each launch records a logical manifest with content hashes, Git baseline, business
+answers and request-specific attachment references. Clarification keeps the same
+reference versions while recording the new answers. A later discussion uses the
+current environment references and retains the original Git baseline.
+
+Reference originals live in `app-data/context-resources`. Verified copies use the
+separate `analysis-context` volume, writable by the backend/worker and read-only
+in the runtime. Bubblewrap binds only the allowlisted files under `/context`.
+Removing a resource or deleting an environment keeps historical versions and
+request-scoped downloads. No document bodies are inserted into the initial prompt.
+
+Linux `IN_ACCESS` observation records reads of the frozen files by document version
+and public role. Validation runs before observation starts; downloads read separate
+original files. An observed read does not prove comprehension. Missing observations
+do not prove that a resource was unused: memory-mapped reads may be missed, and
+unsupported kernels or event overflow report telemetry as unavailable. Positive
+observations survive later calls and failures.
+
+See [environment context](environment-context.md) for administration and limits.
 
 ## Dashboard and ticket publication
 
@@ -74,7 +97,7 @@ docker compose logs --tail=100 backend worker agent-runtime
 docker compose down
 ```
 
-`down` preserves volumes. Back up the application database, `app-data` (including its encryption key), uploads, AI sessions and credentials together. Keep mirrors and worktrees for historical baselines. Do not use `down -v` on an instance you need to preserve.
+`down` preserves volumes. Back up the application database, `app-data` (including its encryption key), uploads, AI sessions, context documents and credentials together. Keep mirrors and worktrees for historical baselines. Do not use `down -v` on an instance you need to preserve.
 
 Volume names use the `spechelper` prefix. Automatic source modification, PR creation, business writes and multi-tenant management are not implemented. Infrastructure controls access to the entire instance.
 
@@ -88,6 +111,10 @@ docker compose run --rm --no-deps agent-runtime python -m runtime.smoke
 docker compose run --rm --no-deps agent-runtime python -m runtime.workflow_smoke
 docker compose run --rm --no-deps agent-runtime python -m runtime.workflow_smoke claude
 docker compose run --build --rm --no-deps agent-runtime python -m runtime.process_smoke
+docker compose run --rm --no-deps agent-runtime python -m runtime.v16_smoke
+docker compose run --rm --no-deps -e SPECHELPER_SMOKE_STACK=typescript \
+  -e SPECHELPER_SMOKE_CONFRONTATION=1 -e SPECHELPER_SMOKE_DUAL_PROVIDER=1 \
+  agent-runtime python -m runtime.workflow_smoke
 ```
 
 The workflow test uses a deterministic terminal agent that reads a real worktree and verifies clarification, session resumption and SHA exports. Its duration measures application behavior, not real AI speed. `process_smoke` performs 300 isolation checks and verifies that zombies do not accumulate. Keep the Compose service's init process and process limit; manual Docker invocations need `--init --pids-limit 256`.

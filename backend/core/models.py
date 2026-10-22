@@ -130,6 +130,43 @@ class Environment(models.Model):
     synced_at = models.DateTimeField(null=True)
     revision = models.PositiveIntegerField(default=1)
     retired_worktrees = models.JSONField(default=list)
+    context_instructions = models.TextField(blank=True)
+    instructions_enabled = models.BooleanField(default=True)
+    context_revision = models.PositiveIntegerField(default=1)
+
+
+class ContextResource(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    environment = models.ForeignKey(
+        Environment, null=True, on_delete=models.SET_NULL, related_name="context_resources"
+    )
+    name = models.CharField(max_length=255)
+    enabled = models.BooleanField(default=True)
+    removed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class ContextResourceVersion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    resource = models.ForeignKey(ContextResource, on_delete=models.PROTECT, related_name="versions")
+    version = models.PositiveIntegerField()
+    filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+    path = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["resource", "version"], name="unique_context_version")
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("A context resource version is immutable")
+        return super().save(*args, **kwargs)
 
 
 class EnvironmentRepository(models.Model):
@@ -174,6 +211,7 @@ class Request(models.Model):
     environment_name_snapshot = models.CharField(max_length=100, blank=True)
     need = models.TextField()
     status = models.CharField(max_length=30, choices=Status, default=Status.DRAFT, db_index=True)
+    context_snapshot = models.JSONField(default=dict)
     baseline = models.JSONField(default=list)
     database_snapshot = models.JSONField(default=dict)
     conversation = models.JSONField(default=list)
@@ -270,6 +308,8 @@ class AnalysisRun(models.Model):
     error = models.TextField(blank=True)
     orchestration = models.JSONField(default=dict)
     warnings = models.JSONField(default=list)
+    context_snapshot = models.JSONField(default=dict)
+    context_usage = models.JSONField(default=list)
 
     class Meta:
         constraints = [
@@ -289,6 +329,8 @@ class ResultVersion(models.Model):
     status = models.CharField(max_length=30, default="READY")
     ticket = models.JSONField(default=dict)
     technical_summary = models.TextField(blank=True)
+    context_usage = models.JSONField(default=list)
+    context_snapshot = models.JSONField(default=dict)
     baseline = models.JSONField(default=list)
     database_snapshot = models.JSONField(default=dict)
     environment_name = models.CharField(max_length=100)

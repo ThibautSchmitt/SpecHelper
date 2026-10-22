@@ -110,7 +110,11 @@ def test_runtime_rejects_api_key_mode_instead_of_billed_fallback(isolated_runtim
             json={**payload, "identity_id": identity},
             headers={"Authorization": "Bearer test-v14-control"},
         )
-    assert response.json() == {"failure": {"kind": "AUTH_ERROR"}}
+    assert response.json() == {
+        "failure": {"kind": "AUTH_ERROR"},
+        "context_usage": [],
+        "context_audit": "unavailable",
+    }
     process.assert_not_called()
 
 
@@ -119,7 +123,17 @@ def test_claude_explicit_model_is_passed_without_api_key_environment(isolated_ru
     identity = str(uuid.uuid4())
     oauth(identity, "claude")
     metadata = identity_root(server.CREDENTIALS, identity) / "claude/.claude.json"
-    original = {"oauthAccount": {"accountUuid": "fixture-account", "organizationUuid": "fixture-organization"}, "hasCompletedOnboarding": True, "primaryApiKey": "synthetic-paid-key", "apiKeyHelper": "do-not-execute", "mcpServers": {"unsafe": {"command": "do-not-execute"}}, "hooks": {"SessionStart": "do-not-execute"}}
+    original = {
+        "oauthAccount": {
+            "accountUuid": "fixture-account",
+            "organizationUuid": "fixture-organization",
+        },
+        "hasCompletedOnboarding": True,
+        "primaryApiKey": "synthetic-paid-key",
+        "apiKeyHelper": "do-not-execute",
+        "mcpServers": {"unsafe": {"command": "do-not-execute"}},
+        "hooks": {"SessionStart": "do-not-execute"},
+    }
     metadata.write_text(json.dumps(original))
     commands = []
 
@@ -130,7 +144,10 @@ def test_claude_explicit_model_is_passed_without_api_key_environment(isolated_ru
             commands.append(command)
             session = Path(command[command.index("--bind") + 1])
             copied = json.loads((session / "claude/.claude.json").read_text())
-            assert copied == {"oauthAccount": original["oauthAccount"], "hasCompletedOnboarding": True}
+            assert copied == {
+                "oauthAccount": original["oauthAccount"],
+                "hasCompletedOnboarding": True,
+            }
             assert "synthetic-paid-key" not in json.dumps(copied)
 
         def communicate(self, *args, **kwargs):

@@ -20,6 +20,7 @@ import {
   type DatabaseConnection,
 } from "@/components/database-connections";
 import { EnvironmentActions } from "@/components/environment-actions";
+import { EnvironmentContext } from "@/components/environment-context";
 import { api, send, statuses, type Environment } from "@/lib/api";
 
 type Connections = {
@@ -257,6 +258,7 @@ export default function Admin() {
               {e.error && (
                 <p className="mt-3 text-sm text-red-700">{t(e.error)}</p>
               )}
+              <EnvironmentContext environmentId={e.id} />
             </Card>
           ))}
           <Card>

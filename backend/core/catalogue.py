@@ -1,5 +1,5 @@
 from .models import AgentProfile, SkillDefinition
-from .presets_v14 import PROFILES, SKILLS
+from .presets_v16 import PROFILES, SKILLS
 
 
 def ensure_catalogue():

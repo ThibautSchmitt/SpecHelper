@@ -119,8 +119,10 @@ def test_independent_default_context_and_legacy_context_remain_distinct(tmp_path
     for independent in (False, True):
         assert server.run(
             server.RunIn.model_validate({**payload, "independent_context": independent})
-        ) == {"failure": {"kind": "AUTH_ERROR"}}
+        ) == {
+            "failure": {"kind": "AUTH_ERROR"},
+            "context_usage": [],
+            "context_audit": "unavailable",
+        }
     assert (server.SESSIONS / str(request_id) / "codex").is_dir()
-    assert (
-        server.SESSIONS / "contexts" / str(request_id) / str(request_id) / "codex"
-    ).is_dir()
+    assert (server.SESSIONS / "contexts" / str(request_id) / str(request_id) / "codex").is_dir()

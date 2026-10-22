@@ -129,7 +129,7 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
         data=json.dumps(
             {
                 "agents": {"reviewer": False},
-                "skills": {"tryton-coog": False},
+                "skills": {"project-conventions": False},
                 "instructions": "Ignore read-only",
             }
         ),
@@ -137,7 +137,7 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
     )
     assert changed.status_code == 200
     assert AgentProfile.objects.get(pk="code").instructions == original
-    assert not SkillDefinition.objects.get(pk="tryton-coog").enabled
+    assert not SkillDefinition.objects.get(pk="project-conventions").enabled
     bad = client.patch(
         "/api/analysis-options",
         data=json.dumps({"agents": {"code": False}, "skills": {"unknown": True}}),
@@ -174,5 +174,5 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
         "code",
         "writer",
     ]
-    assert all("SKILL tryton-coog" not in call.args[1]["prompt"] for call in caller.call_args_list)
+    assert all("SKILL project-conventions" not in call.args[1]["prompt"] for call in caller.call_args_list)
     assert all("No commits, pushes" in call.args[1]["prompt"] for call in caller.call_args_list)

@@ -28,6 +28,7 @@ from .auth import (
     publish_refresh,
     subscription_credentials,
 )
+from .context_resources import ResourceReads, mount_resources, validated_resources
 from .quota import rollout_windows
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -44,6 +45,12 @@ def authorize(authorization: str = Header(default="")):
     expected = control_token()
     if not expected or not secrets.compare_digest(authorization, "Bearer " + expected):
         raise HTTPException(401, "Unauthorized runtime")
+
+
+class ContextResource(BaseModel):
+    version_id: uuid.UUID
+    path: str = Field(min_length=1, max_length=256)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class RunIn(BaseModel):
@@ -69,10 +76,12 @@ class RunIn(BaseModel):
     prompt: str = Field(max_length=200000)
     output_schema: dict[str, Any] = Field(alias="schema")
     database: dict | None = None
+    context_dir: str | None = None
+    context_resources: list[ContextResource] = Field(default_factory=list, max_length=64)
     timeout: int = Field(ge=1, le=290)
 
 
-def sandbox(workspace: Path, session: Path, attachments: Path):
+def sandbox(workspace: Path, session: Path, attachments: Path, context_resources=()):
     command = [
         "bwrap",
         "--die-with-parent",
@@ -160,6 +169,7 @@ def sandbox(workspace: Path, session: Path, attachments: Path):
     ]
     # Worktree metadata points at its original absolute path.
     command += ["--ro-bind", str(workspace), str(workspace)]
+    command += mount_resources(context_resources)
     return command
 
 
@@ -244,6 +254,12 @@ def run(payload: RunIn):
     expected = DATA / "analysis-workspaces" / request_id
     if Path(payload.workspace) != expected or not expected.is_dir():
         raise HTTPException(422, "Invalid workspace")
+    try:
+        resources = validated_resources(
+            DATA, request_id, payload.context_dir, payload.context_resources
+        )
+    except ValueError as exc:
+        raise HTTPException(422, "Invalid context resources") from exc
     with guard:
         mutex = locks.setdefault(
             (request_id, str(payload.context_id or payload.request_id)), threading.Lock()
@@ -251,6 +267,8 @@ def run(payload: RunIn):
     if not mutex.acquire(blocking=False):
         raise HTTPException(409, "Session busy")
     capability = None
+    reads = None
+    context_observation = {"context_usage": [], "context_audit": "unavailable"}
     try:
         session = SESSIONS / request_id
         if payload.independent_context or (
@@ -267,7 +285,7 @@ def run(payload: RunIn):
         root = identity_root(CREDENTIALS, payload.identity_id)
         credential_root = credential_directory(root, payload.agent)
         if not subscription_credentials(credential_root, payload.agent):
-            return {"failure": {"kind": "AUTH_ERROR"}}
+            return {"failure": {"kind": "AUTH_ERROR"}, **context_observation}
         names = ["auth.json"] if payload.agent == "codex" else [".credentials.json", ".claude.json"]
         credential_snapshot = None
         for name in names:
@@ -361,9 +379,10 @@ def run(payload: RunIn):
             cli += ["resume", str(payload.session_id), "-"]
         else:
             cli += ["-"]
-        command = sandbox(expected, session, attachments) + cli
+        command = sandbox(expected, session, attachments, resources) + cli
         started = time.monotonic()
         observed_after = datetime.now(UTC)
+        reads = ResourceReads(resources)
         process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
@@ -379,6 +398,7 @@ def run(payload: RunIn):
             os.killpg(process.pid, signal.SIGKILL)
             stdout, _ = process.communicate()
             timed_out = True
+        context_observation = reads.finish()
         if credential_snapshot:
             name, original = credential_snapshot
             try:
@@ -395,9 +415,10 @@ def run(payload: RunIn):
                     or not result.get("structured_output")
                     or process.returncode
                 ):
-                    return {"failure": classify_failure(stdout), "usage": result.get("usage", {})}
+                    return {"failure": classify_failure(stdout), "usage": result.get("usage", {}), **context_observation}
                 return {
                     "output": result["structured_output"],
+                    **context_observation,
                     "session_id": result["session_id"],
                     "usage": result.get("usage", {}),
                     "elapsed": round(time.monotonic() - started, 2),
@@ -406,7 +427,7 @@ def run(payload: RunIn):
                     ),
                 }
             except (ValueError, KeyError):
-                return {"failure": {"kind": "ERROR"}}
+                return {"failure": {"kind": "ERROR"}, **context_observation}
         for line in stdout.decode(errors="replace").splitlines():
             try:
                 event = json.loads(line)
@@ -420,16 +441,17 @@ def run(payload: RunIn):
         if timed_out:
             failure = classify_failure(stdout)
             if failure["kind"] in {"QUOTA_EXHAUSTED", "BUSY"}:
-                return {"failure": {**failure, "quota_windows": quota_windows}}
-            return {"timed_out": True, "session_id": session_id, "usage": usage}
+                return {"failure": {**failure, "quota_windows": quota_windows}, **context_observation}
+            return {"timed_out": True, "session_id": session_id, "usage": usage, **context_observation}
         if process.returncode or not output.exists() or not session_id:
-            return {"failure": {**classify_failure(stdout), "quota_windows": quota_windows}}
+            return {"failure": {**classify_failure(stdout), "quota_windows": quota_windows}, **context_observation}
         try:
             result = json.loads(output.read_text())
         except json.JSONDecodeError:
             raise HTTPException(502, "Invalid AI response")
         return {
             "output": result,
+            **context_observation,
             "session_id": session_id,
             "usage": usage,
             "elapsed": round(time.monotonic() - started, 2),
@@ -437,6 +459,8 @@ def run(payload: RunIn):
             "quota_windows": quota_windows,
         }
     finally:
+        if reads is not None:
+            reads.close()
         if capability:
             capabilities.pop(capability, None)
         mutex.release()

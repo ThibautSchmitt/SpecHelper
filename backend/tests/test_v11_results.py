@@ -112,6 +112,6 @@ def test_profiles_and_skills_are_available_but_not_editable_by_agents(client):
         "minimal-change",
         "postgres-readonly-analysis",
         "attachment-analysis",
-        "tryton-coog",
+        "project-conventions",
     } <= {s["slug"] for s in skills}
     assert client.post("/api/agents", data="{}", content_type="application/json").status_code == 405

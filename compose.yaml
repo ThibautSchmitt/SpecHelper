@@ -21,6 +21,7 @@ x-backend: &backend
     - git-cache:/data/git-cache
     - environment-workspaces:/data/environments
     - analysis-workspaces:/data/analysis-workspaces
+    - analysis-context:/data/analysis-context
     - uploads:/data/requests
   networks: [app, backend-egress, runtime-control]
   restart: unless-stopped
@@ -81,6 +82,7 @@ services:
       - runtime-control-secrets:/control:ro
       - git-cache:/data/git-cache:ro
       - analysis-workspaces:/data/analysis-workspaces:ro
+      - analysis-context:/data/analysis-context:ro
       - uploads:/data/requests:ro
       - ai-credentials:/credentials
       - ai-sessions:/sessions
@@ -108,6 +110,7 @@ volumes:
   git-cache: {}
   environment-workspaces: {}
   analysis-workspaces: {}
+  analysis-context: {}
   uploads: {}
   ai-credentials: {}
   ai-sessions: {}

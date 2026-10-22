@@ -409,5 +409,6 @@
   "✓ Connection OK": "✓ Connexion OK",
   "✓ Read query OK": "✓ Requête de lecture OK",
   "✓ Read-only": "✓ Lecture seule",
-  "Unknown assistant": "Assistant inconnu"
+  "Unknown assistant": "Assistant inconnu",
+  "Frozen environment context": "Contexte figé de l’environnement"
 }

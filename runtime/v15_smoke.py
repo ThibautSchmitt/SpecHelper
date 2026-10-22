@@ -112,8 +112,8 @@ def main():
             (directory / filename).write_text(json.dumps(content))
         real_sandbox = server.sandbox
 
-        def fixture_sandbox(workspace, session, attachments):
-            command = real_sandbox(workspace, session, attachments)
+        def fixture_sandbox(workspace, session, attachments, context_resources=()):
+            command = real_sandbox(workspace, session, attachments, context_resources)
             for provider in ("codex", "claude"):
                 command += ["--ro-bind", str(fixture), "/usr/local/bin/" + provider]
             return command

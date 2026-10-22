@@ -1,0 +1,15 @@
+export type ContextResource = {
+  id: string; version_id: string; name: string; filename: string;
+  version: number; sha256: string; size: number; content_type: string;
+  agent_readable: boolean;
+};
+export type ContextSnapshot = {
+  schema_version?: number; snapshot_id?: string;
+  environment?: { id: number; name: string; revision: number };
+  instructions?: { text: string; enabled: boolean; sha256: string };
+  resources?: ContextResource[];
+};
+export type ContextUsage = {
+  version_id: string; public_role?: string;
+  status: "observed" | "not_observed" | "unavailable";
+};

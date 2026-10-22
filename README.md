@@ -16,6 +16,7 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - ChatGPT / Codex and Claude / Claude Code support
 - Named assistant configurations, model selection and shared account availability
 - Business clarification before technical analysis
+- Optional environment instructions and versioned reference documents
 - Screenshots and document attachments
 - Optional comparison of independent AI analyses, with one or two connected assistants
 - Configurable analyst/counter-analyst roles and optional independent verification
@@ -71,6 +72,9 @@ Open **Settings** after starting the application. Labels follow the selected lan
 6. **Optionally set up ticket publication.** Add and test a ticket connector, then
    select its allowed destinations. See [publishing tickets](docs/ticketing.md) for
    supported API versions, credentials and template behavior.
+
+Optional [environment context](docs/environment-context.md) adds short project instructions
+and reference documents. Existing analyses retain their original document versions.
 
 ## Usage
 
@@ -136,6 +140,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, tests and linting.
 Further documentation:
 
 - [Functional specification](docs/specification.md)
+- [Environment context](docs/environment-context.md)
+- [v1.6 acceptance report](docs/acceptance-v1.6.md)
 - [Implementation, operations and runtime checks](docs/implementation.md)
 - [English and French](docs/localization.md)
 - [Ticket publication and connectors](docs/ticketing.md)

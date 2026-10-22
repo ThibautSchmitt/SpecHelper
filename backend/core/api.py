@@ -195,6 +195,7 @@ def request_dict(value, full=False):
         analysis = AnalysisResult.objects.filter(request=value).first()
         result.update(
             {
+                "context_snapshot": value.context_snapshot,
                 "baseline": value.baseline,
                 "database": value.database_snapshot,
                 "questions": value.questions,
@@ -229,6 +230,8 @@ def request_dict(value, full=False):
                         "finished_at",
                         "error",
                         "warnings",
+                        "context_snapshot",
+                        "context_usage",
                     )
                 ),
                 "latest_version": version_dict(value.versions.order_by("-number").first()),
@@ -245,6 +248,9 @@ def version_dict(version):
         "id": str(version.id),
         "number": version.number,
         "format_version": version.format_version,
+        "run_number": version.run.number if version.run_id else None,
+        "context_snapshot": version.context_snapshot,
+        "context_usage": version.context_usage,
         "language": version.language,
         "status": version.status,
         "created_at": version.created_at,
@@ -697,10 +703,12 @@ def queue(request):
 
 
 from .ai_api import router as ai_router  # noqa: E402
+from .context_api import router as context_router  # noqa: E402
 from .git_source_api import router as git_source_router  # noqa: E402
 from .orchestration_settings import router as orchestration_router  # noqa: E402
 from .ticket_api import router as ticket_router  # noqa: E402
 
+api.add_router("", context_router)
 api.add_router("", ticket_router)
 api.add_router("", git_source_router)
 api.add_router("", ai_router)

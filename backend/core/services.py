@@ -23,7 +23,15 @@ def queue_run(request, continuing=False):
         )
     job = Job.objects.create(kind="analysis", target=str(request.id))
     number = (request.analysis_runs.aggregate(last=Max("number"))["last"] or 0) + 1
-    AnalysisRun.objects.create(request=request, job=job, number=number)
+    from .environment_context import freeze_context
+
+    reuse = (
+        request.context_snapshot
+        if (request.status == Request.Status.NEEDS_CLARIFICATION or not request.environment_id)
+        else None
+    )
+    run = AnalysisRun.objects.create(request=request, job=job, number=number)
+    freeze_context(request, run, reuse=reuse)
     request.status = Request.Status.CONTINUING_CONVERSATION if continuing else Request.Status.QUEUED
     request.error, request.progress = "", []
     request.save()
