@@ -1,25 +1,25 @@
 > Public version: session/request identifiers and instance references are anonymized. Original evidence remains local.
 
-# v1.1 specification audit
+# v1.1 implementation audit
 
 This report covers v1.1 implementation and validation on October 20, 2026. Previous evidence remains in `acceptance.md`.
 
-| Sections | Implementation and evidence |
+| Area | Implementation and evidence |
 |---|---|
-| 1–3 | Business application, trusted team, five Compose services, one primary assistant, no application accounts or multi-tenancy. Only local port 3000 exposed. |
-| 4 | Guided GitHub/ChatGPT/Claude connections, environments, identity with short label, job log. User connections preserved after migration. |
-| 5 | Edit name/projects/versions/database with preview/confirmation; delete with typed name and revision guard. API and desktop/mobile checks. |
-| 6 | Shared mirror, fixed project/environment path, targeted fetch after edit, worktree verification. Legacy layouts cleaned at next sync. Real Git tests preserve historical requests after rename, version change and deletion. |
-| 7–8 | Need, environment and attachments; no tokens/commands requested. File references in prompts, read-only access, executable formats rejected. |
-| 9 | Persistent messages, same-session continuation after results/clarification. Immutable selectable ticket/goal versions. API/browser and real ChatGPT session. |
-| 10–11 | Human ticket capped at 700 words; separate goal with context, exact SHAs, constraints, guidance, criteria, expected tests and independent source verification. Structured public fields, no exported chain of thought. |
-| 12–13 | Five persisted profiles: Requirement Analyst, Code Analyst, Attachment Analyst, Reviewer, Ticket / Goal Writer. Seven skills including PostgreSQL and Tryton/Coog. Internal catalog; agents cannot edit it. |
-| 14–15 | Typed messages, dynamic pipeline, at most one targeted Code or Attachment verification. Maximum seven invocations including format repair. Tests cover both targets, simple path, resumption and invalid output. |
-| 16 | Minimal-change/pattern-reuse instructions; read-only Linux mounts, no push capability, filtered SQL/limited role. Actual runtime and database smokes. |
-| 17 | Fast acknowledgment, progress, global 295 s limit, 285 s orchestration and per-call remaining budgets. Explicit errors, atomic publication and preserved previous result on failure. Actual timings below. |
-| 18–20 | Stack retained; migrations for six new models; new states and compatible historical data. Django/PostgreSQL suite and migration checks. |
-| 21 | Network/volume separation, credentials outside prompts, no agent access to workflow. Actual read-only source/cache/files and PostgreSQL rights checked on Linux. |
-| 22–23 | Thirteen criteria mapped below; orchestration in the existing worker, no additional agent microservices. |
+| Product and deployment | Business application, trusted team, five Compose services, one primary assistant, no application accounts or multi-tenancy. Only local port 3000 exposed. |
+| Guided administration | Guided GitHub/ChatGPT/Claude connections, environments, identity with short label, job log. User connections preserved after migration. |
+| Environment editing | Edit name/projects/versions/database with preview/confirmation; delete with typed name and revision guard. API and desktop/mobile checks. |
+| Git storage and history | Shared mirror, fixed project/environment path, targeted fetch after edit, worktree verification. Legacy layouts cleaned at next sync. Real Git tests preserve historical requests after rename, version change and deletion. |
+| Requests and attachments | Need, environment and attachments; no tokens/commands requested. File references in prompts, read-only access, executable formats rejected. |
+| Discussion and result versions | Persistent messages, same-session continuation after results/clarification. Immutable selectable ticket/goal versions. API/browser and real ChatGPT session. |
+| Ticket and goal content | Human ticket capped at 700 words; separate goal with context, exact SHAs, constraints, guidance, criteria, expected tests and independent source verification. Structured public fields, no exported chain of thought. |
+| Internal profiles and skills | Five persisted profiles: Requirement Analyst, Code Analyst, Attachment Analyst, Reviewer, Ticket / Goal Writer. Seven skills including PostgreSQL and Tryton/Coog. Internal catalog; agents cannot edit it. |
+| Bounded orchestration | Typed messages, dynamic pipeline, at most one targeted Code or Attachment verification. Maximum seven invocations including format repair. Tests cover both targets, simple path, resumption and invalid output. |
+| Read-only execution | Minimal-change/pattern-reuse instructions; read-only Linux mounts, no push capability, filtered SQL/limited role. Actual runtime and database smokes. |
+| Progress and time limits | Fast acknowledgment, progress, global 295 s limit, 285 s orchestration and per-call remaining budgets. Explicit errors, atomic publication and preserved previous result on failure. Actual timings below. |
+| Data and compatibility | Stack retained; migrations for six new models; new states and compatible historical data. Django/PostgreSQL suite and migration checks. |
+| Security boundaries | Network/volume separation, credentials outside prompts, no agent access to workflow. Actual read-only source/cache/files and PostgreSQL rights checked on Linux. |
+| Acceptance and architecture | Thirteen criteria mapped below; orchestration in the existing worker, no additional agent microservices. |
 
 ## Acceptance criteria
 

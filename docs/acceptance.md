@@ -1,44 +1,44 @@
 > Public version: session/request identifiers and instance references are anonymized. Original evidence remains local.
 
-# v1.0 specification audit
+# v1.0 implementation audit
 
 This report covers v1.0 implementation and validation on October 20, 2026. Includes subsequent user requests for browser connections, no token entry and terminology accessible to business users.
 
 “Verified” refers to the stated evidence scope. Deterministic agents validate orchestration software, not real-model quality or performance.
 
-| Section | Requirements and evidence | Status |
+| Area | Implementation and evidence | Status |
 |---|---|---|
-| 1 | Consistent environment, business need, files, clarification, ticket: API, worker, workflow tests, Playwright and actual analysis | Verified |
-| 2 | GitHub, primary assistant, environments, files, tickets; no accounts, multi-tenancy, code changes, PRs or business writes: models, routes, runtime, README reviewed | Verified |
-| 3 | Five services/persistent volumes, infrastructure access control; Compose running with frontend only on localhost | Verified |
-| 4 | Connections, Environments, Instance, System tabs; job states/log: interface and Playwright | Verified |
-| 5 | Persistent name/color; shared CSS variables for header, buttons, badges, focus/navigation: shell.tsx, globals.css, browser theme test | Verified |
-| 6 | Actual GitHub connection; paginated organizations/projects/branches; clone/fetch/SHA resolution; askpass credentials outside prompts: actual API, admin/Git tests, public environment synced | Verified |
-| 7 | Actual ChatGPT connection; Claude alternative; persistent credentials, request-specific session/resume: auth.py, models, tests and actual analysis | ChatGPT verified; Claude tested without real account |
-| 8 | Optional database; limited role, encrypted secrets, SELECT AST, read-only transaction/time/row limits: actual PostgreSQL 17 and database smoke | Verified |
-| 9 | Multiple sources/optional database encapsulated by Environment; users select only environment: model/API/UI review | Verified |
-| 10 | Name, multiple projects/versions, existing database or None; create/sync job: API/browser | Verified |
-| 11 | One owner/project mirror, detached worktrees; two environments/two branches without extra clone: real Git test | Verified |
-| 12 | Fetch, SHA resolution, materialization, Git/database checks, READY/ERROR; actual public synchronization | Verified |
-| 13 | Frozen baseline/request workspace; later sync changes neither files nor exported SHAs: test_git.py | Verified |
-| 14 | Environment, text and files; no Git/database choice in business form: desktop/mobile | Verified |
-| 15 | Images/PDF/DOCX/text/allowed formats, isolated UUID paths, neutralized names, prompt references only, attachment downloads: upload/sandbox/browser tests | Verified |
-| 16 | Persistent job, per-request session, terminal in immutable selected workspace snapshot: worker/runtime/workflow smoke/actual request | Verified |
-| 17 | Analysis-only instructions, no commits/push/writes, pattern reuse, risks/uncertainty; read-only source/cache/file mounts and protected database | Verified |
-| 18 | Understanding before exploration; NEEDS_CLARIFICATION or READY_TO_ANALYZE schema; stops on question: worker/tests/actual ChatGPT question and resumption | Verified |
-| 19 | Persisted questions/answers, same terminal ID resumed: backend, both deterministic adapters and actual session through ticket | Verified |
-| 20 | Git/log/show, rg, shell tools/files/attachments; optional database only through temporary capability: real sandbox/database smokes | Verified |
-| 21 | Fast acknowledgment/progress; 295 s supervision, maximum 290 s agent budget; actual Linux interruption, fast acknowledgment, simple 45.786 s/standard 73.546 s after clarification | Safeguards verified; targets/limitations below |
-| 22 | Complete business/technical sections, criteria, risks, tests, SHAs/attachments: schema/Markdown/export tests and actual ticket | Verified |
-| 23 | Result, Jira copy/Markdown download, frozen references, prior questions: desktop/mobile Playwright | Verified |
-| 24 | Next/React/TypeScript/shadcn/Tailwind, Django/Ninja, PostgreSQL/Git/Docker, Codex/Claude; builds/five-service startup | Verified |
-| 25 | Ten specified models; Job/ConnectionAttempt persist execution/connections; migrations applied | Verified |
-| 26 | DRAFT, QUEUED, UNDERSTANDING, NEEDS_CLARIFICATION, ANALYZING, GENERATING_TICKET, READY, PARTIAL, ERROR: models/worker/schema/UI | Verified |
-| 27 | Trusted infrastructure, secrets outside prompts, protected volumes, network separation, read-only code/database, isolated files, no automatic attachment execution | Verified locally |
-| 28 | Thirteen criteria below | Verified within stated scope |
-| 29 | Frontend → API/worker → terminal session → sources/optional database/files → questions → ticket; no proprietary graph dependency | Inspection/integration verified |
+| Request workflow | Consistent environment, business need, files, clarification, ticket: API, worker, workflow tests, Playwright and actual analysis | Verified |
+| Product scope | GitHub, primary assistant, environments, files, tickets; no accounts, multi-tenancy, code changes, PRs or business writes: models, routes, runtime, README reviewed | Verified |
+| Deployment | Five services/persistent volumes, infrastructure access control; Compose running with frontend only on localhost | Verified |
+| Administration | Connections, Environments, Instance, System tabs; job states/log: interface and Playwright | Verified |
+| Instance identity | Persistent name/color; shared CSS variables for header, buttons, badges, focus/navigation: shell.tsx, globals.css, browser theme test | Verified |
+| GitHub integration | Actual GitHub connection; paginated organizations/projects/branches; clone/fetch/SHA resolution; askpass credentials outside prompts: actual API, admin/Git tests, public environment synced | Verified |
+| AI connections | Actual ChatGPT connection; Claude alternative; persistent credentials, request-specific session/resume: auth.py, models, tests and actual analysis | ChatGPT verified; Claude tested without real account |
+| Read-only databases | Optional database; limited role, encrypted secrets, SELECT AST, read-only transaction/time/row limits: actual PostgreSQL 17 and database smoke | Verified |
+| Environment selection | Multiple sources/optional database encapsulated by Environment; users select only environment: model/API/UI review | Verified |
+| Environment configuration | Name, multiple projects/versions, existing database or None; create/sync job: API/browser | Verified |
+| Git mirrors and worktrees | One owner/project mirror, detached worktrees; two environments/two branches without extra clone: real Git test | Verified |
+| Source synchronization | Fetch, SHA resolution, materialization, Git/database checks, READY/ERROR; actual public synchronization | Verified |
+| Immutable baselines | Frozen baseline/request workspace; later sync changes neither files nor exported SHAs: test_git.py | Verified |
+| Business request form | Environment, text and files; no Git/database choice in business form: desktop/mobile | Verified |
+| Attachments | Images/PDF/DOCX/text/allowed formats, isolated UUID paths, neutralized names, prompt references only, attachment downloads: upload/sandbox/browser tests | Verified |
+| Persistent execution | Persistent job, per-request session, terminal in immutable selected workspace snapshot: worker/runtime/workflow smoke/actual request | Verified |
+| Analysis-only access | Analysis-only instructions, no commits/push/writes, pattern reuse, risks/uncertainty; read-only source/cache/file mounts and protected database | Verified |
+| Clarification | Understanding before exploration; NEEDS_CLARIFICATION or READY_TO_ANALYZE schema; stops on question: worker/tests/actual ChatGPT question and resumption | Verified |
+| Session resumption | Persisted questions/answers, same terminal ID resumed: backend, both deterministic adapters and actual session through ticket | Verified |
+| Source exploration | Git/log/show, rg, shell tools/files/attachments; optional database only through temporary capability: real sandbox/database smokes | Verified |
+| Progress and time limits | Fast acknowledgment/progress; 295 s supervision, maximum 290 s agent budget; actual Linux interruption, fast acknowledgment, simple 45.786 s/standard 73.546 s after clarification | Safeguards verified; targets/limitations below |
+| Generated content | Complete business/technical sections, criteria, risks, tests, SHAs/attachments: schema/Markdown/export tests and actual ticket | Verified |
+| Result exports | Result, Jira copy/Markdown download, frozen references, prior questions: desktop/mobile Playwright | Verified |
+| Technology stack | Next/React/TypeScript/shadcn/Tailwind, Django/Ninja, PostgreSQL/Git/Docker, Codex/Claude; builds/five-service startup | Verified |
+| Data model | Ten core models; Job/ConnectionAttempt persist execution/connections; migrations applied | Verified |
+| Request states | DRAFT, QUEUED, UNDERSTANDING, NEEDS_CLARIFICATION, ANALYZING, GENERATING_TICKET, READY, PARTIAL, ERROR: models/worker/schema/UI | Verified |
+| Security boundaries | Trusted infrastructure, secrets outside prompts, protected volumes, network separation, read-only code/database, isolated files, no automatic attachment execution | Verified locally |
+| Acceptance checks | Thirteen criteria below | Verified within stated scope |
+| End-to-end architecture | Frontend → API/worker → terminal session → sources/optional database/files → questions → ticket; no proprietary graph dependency | Inspection/integration verified |
 
-| Criterion 28 | Evidence | Status |
+| Acceptance check | Evidence | Status |
 |---|---|---|
 | 1 | GitHub/ChatGPT connected through new buttons; actual discovery | Verified |
 | 2 | Name/color persisted through API and checked in browser | Verified |
@@ -89,7 +89,7 @@ The final version adds a strict understanding schema preventing ticket generatio
 
 Both use distinct sessions resumed with the same IDs after answers. Cited sources exist and main behavior was independently checked. The first ticket correctly notes no scheduler or detached-mode supervision. The second preserves the existing example/language and limits scope to one help sentence. Repositories remain clean. The final notification ticket also passed desktop/mobile copy/download checks.
 
-Acknowledgments remain below two seconds. Durations exclude human wait and distinguish processing from queue time. The 60 s simple and 180 s standard targets were met in these trials. **The ideal 15 s first clarification was not met in either trial.** This is observed latency, not a promised guarantee. The source describes this target as ideal, whereas exceeding five minutes explicitly requires interruption, protected by the 295 s supervisor and remaining agent budget.
+Acknowledgments remain below two seconds. Durations exclude human wait and distinguish processing from queue time. The 60 s simple and 180 s standard targets were met in these trials. **The ideal 15 s first clarification was not met in either trial.** This is observed latency, not a promised guarantee. The first-clarification target is indicative. The five-minute execution limit is enforced by the 295 s supervisor and remaining agent budget.
 
 An additional Linux trial launched a slow CLI in Bubblewrap with a one-second budget: stopped in **1.006 s**, process group removed and temporary capabilities cleaned. Production uses the same execution path; unit tests separately check the full 295 s supervisor. No benchmark guarantees all external-provider timings.
 

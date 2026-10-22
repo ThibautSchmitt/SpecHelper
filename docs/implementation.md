@@ -114,25 +114,25 @@ Current language behavior and checks are described in [localization](localizatio
 
 > Historical v1.0 implementation notes. Current behavior, migrations and evidence are documented in the [v1.2 audit](acceptance-v1.2.md), [v1.1 audit](acceptance-v1.1.md) and the [README](../README.md).
 
-## Historical v1.0 specification tracking
+## Historical v1.0 implementation coverage
 
-This document tracks the full scope. A requirement is accepted only after verification. The [detailed audit](acceptance.md) distinguishes every section, thirteen criteria and outstanding evidence.
+The [detailed audit](acceptance.md) records historical feature coverage, acceptance checks and remaining validation limits.
 
-| Requirement | Expected implementation | Expected evidence |
+| Area | Implementation | Evidence |
 |---|---|---|
-| 1, 6, 28.1 | GitHub connection, organizations, repositories, branches | Controlled GitHub transport API and integration test |
-| 5, 28.2, 28.13 | Name/color, shadcn/Tailwind tokens | API persistence and browser checks |
-| 7, 19, 28.6 | ChatGPT/Claude, persistent credentials, per-request sessions and resume | Isolated runtime and clarification/resumption scenario |
-| 8, 28.4, 28.8–9 | Optional database, read-only role/transactions | Actual PostgreSQL: reject privileged roles and writes |
-| 9–12, 28.3 | Multiple environments, shared mirror/worktrees, sync/health check | Real Git with two branches |
-| 13, 28.12 | Immutable baseline and workspace | Synchronize after analysis without changing the snapshot |
-| 14–15, 28.5 | Business workflow, isolated attachments | Browser and upload/path traversal tests |
-| 16–20, 26 | Persistent queue, clarification, analysis and states | Worker tests and browser workflow |
-| 17, 27, 28.9 | Read-only sources, secrets outside prompts, no database writes | Isolation tests inside Docker runtime |
-| 21, 28.11 | Fast acknowledgment, progress, interruption before 300 s | Timeout test and integration timings |
-| 22–23, 28.10 | Complete ticket, Jira copy, Markdown download | Schema, export and browser validation |
-| 24–25 | Required stack, Compose/volumes, ten models | Build, migrations, Compose startup |
-| 2–4 | Trusted team, no accounts, Admin panel, system | Interface and deployment documentation |
+| GitHub integration | GitHub connection, organizations, repositories, branches | Controlled GitHub transport API and integration test |
+| Instance identity | Name/color, shadcn/Tailwind tokens | API persistence and browser checks |
+| AI connections and sessions | ChatGPT/Claude, persistent credentials, per-request sessions and resume | Isolated runtime and clarification/resumption scenario |
+| Read-only database access | Optional database, read-only role/transactions | Actual PostgreSQL: reject privileged roles and writes |
+| Environment sources | Multiple environments, shared mirror/worktrees, sync/health check | Real Git with two branches |
+| Immutable analysis baseline | Immutable baseline and workspace | Synchronize after analysis without changing the snapshot |
+| Business requests and attachments | Business workflow, isolated attachments | Browser and upload/path traversal tests |
+| Analysis workflow | Persistent queue, clarification, analysis and states | Worker tests and browser workflow |
+| Runtime isolation | Read-only sources, secrets outside prompts, no database writes | Isolation tests inside Docker runtime |
+| Progress and time limits | Fast acknowledgment, progress, interruption before 300 s | Timeout test and integration timings |
+| Ticket and goal exports | Complete ticket, Jira copy, Markdown download | Schema, export and browser validation |
+| Application stack | Required stack, Compose/volumes, ten models | Build, migrations, Compose startup |
+| Shared administration | Trusted team, no accounts, Admin panel, system | Interface and deployment documentation |
 
 An administrator configures real GitHub/AI accounts. Deterministic tests use controlled transports and a test agent; they do not establish a real model's analysis quality.
 
@@ -156,4 +156,4 @@ The user connected GitHub and ChatGPT. Discovery, a public project and both priv
 
 Final post-answer jobs took 45.786 and 73.546 s. First clarification took 23–26 s, exceeding the indicative 15-second ideal. Simple/standard targets and the mandatory five-minute limit are distinct. These results do not guarantee external-provider latency. A reduced-budget real Linux timeout supplemented the 295-second supervisor tests.
 
-Claude remains an alternative. Its official authorization startup and adapter were tested; no analysis using a real Claude account is claimed. The specification requires at least one of the two terminal agents; connected analyses above used Codex.
+Claude remains an alternative. Its official authorization startup and adapter were tested; no analysis using a real Claude account is claimed. Connected analyses above used Codex; either supported terminal agent can be configured.
