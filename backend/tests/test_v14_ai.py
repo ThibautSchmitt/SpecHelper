@@ -248,6 +248,10 @@ def test_invalid_model_has_actionable_diagnostic_without_silent_substitution(env
 
 
 def test_config_crud_multiple_same_provider_and_shared_identity(client):
+    from core.models import AIModel
+
+    for agent, identifier in (("codex", "model-a"), ("codex", "model-b"), ("claude", "model-a")):
+        AIModel.objects.create(agent=agent, identifier=identifier, name=identifier)
     def create(**values):
         response = client.post(
             "/api/ai-connections",
@@ -299,6 +303,9 @@ def test_shared_account_capacity_and_quota_do_not_reenable_a_rejected_model(envi
 
 
 def test_history_protects_config_delete_and_preserves_model_snapshot(client, environment):
+    from core.models import AIModel
+
+    AIModel.objects.create(agent="codex", identifier="new-model", name="New model")
     value = configuration("Audit")
     request = Request.objects.create(environment=environment, need="Analyze")
     session = bind_session(request, value)

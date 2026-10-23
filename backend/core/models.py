@@ -133,6 +133,8 @@ class Environment(models.Model):
     context_instructions = models.TextField(blank=True)
     instructions_enabled = models.BooleanField(default=True)
     context_revision = models.PositiveIntegerField(default=1)
+    library_selection = models.JSONField(default=dict)
+    library_revision = models.PositiveIntegerField(default=1)
 
 
 class ContextResource(models.Model):
@@ -303,6 +305,11 @@ class SkillDefinition(models.Model):
     name = models.CharField(max_length=100)
     instructions = models.TextField()
     enabled = models.BooleanField(default=True)
+    objective = models.TextField(blank=True)
+    compatibility = models.JSONField(default=list)
+    required_capabilities = models.JSONField(default=list)
+    version = models.PositiveIntegerField(default=1)
+    deleted = models.BooleanField(default=False)
 
 
 class AgentProfile(models.Model):
@@ -312,6 +319,32 @@ class AgentProfile(models.Model):
     instructions = models.TextField()
     enabled = models.BooleanField(default=True)
     skills = models.ManyToManyField(SkillDefinition, related_name="agents")
+    compatibility = models.JSONField(default=list)
+    required_capabilities = models.JSONField(default=list)
+    version = models.PositiveIntegerField(default=1)
+    deleted = models.BooleanField(default=False)
+
+
+class LibraryRevision(models.Model):
+    """Immutable declarative definitions; no runtime commands or credentials."""
+
+    kind = models.CharField(max_length=10, choices=[("agent", "Agent"), ("skill", "Skill")])
+    slug = models.SlugField()
+    version = models.PositiveIntegerField()
+    definition = models.JSONField()
+    action = models.CharField(max_length=20, default="created")
+    editor = models.CharField(max_length=100, default="administrator")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["kind", "slug", "version"], name="unique_library_revision")
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("A library revision is immutable")
+        return super().save(*args, **kwargs)
 
 
 class AnalysisRun(models.Model):
@@ -536,3 +569,42 @@ class PublishedTicket(models.Model):
 
 # Register security tables while keeping shared workspace models independent.
 from .security_models import AccessSession, SecurityBucket, SecurityEvent  # noqa: E402,F401
+
+
+class AIModel(models.Model):
+    """Provider model identifiers from adapter metadata or explicit administration."""
+
+    agent = models.CharField(max_length=20)
+    identifier = models.CharField(max_length=100)
+    name = models.CharField(max_length=100)
+    family = models.CharField(max_length=100, blank=True)
+    source = models.CharField(max_length=20, default="administered")
+    enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["agent", "identifier"], name="unique_provider_model")
+        ]
+
+
+class AIModelObservation(models.Model):
+    """Account-scoped availability evidence, distinct from account quota."""
+
+    model = models.ForeignKey(AIModel, on_delete=models.CASCADE, related_name="observations")
+    identity = models.ForeignKey(AIIdentity, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, default="UNKNOWN")
+    reason = models.CharField(max_length=40, blank=True)
+    checked_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["model", "identity"], name="unique_identity_model_status")
+        ]
+
+
+class AIModelDiscovery(models.Model):
+    identity = models.OneToOneField(AIIdentity, on_delete=models.CASCADE)
+    state = models.CharField(max_length=20, default="unknown")
+    reason = models.CharField(max_length=40, blank=True)
+    checked_at = models.DateTimeField(auto_now=True)

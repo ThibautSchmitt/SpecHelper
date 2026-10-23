@@ -5,7 +5,7 @@ terminal assistant authentication and ticket publication permissions.
 
 ## Git sources
 
-Use **Settings → Sources Git** to add named GitHub or GitLab connections. GitHub
+Use **Settings → Environments → Sources Git** to add named GitHub or GitLab connections. GitHub
 supports its official browser authorization flow. GitLab.com and self-hosted
 instances accept an appropriate read-only token; configure the server URL and
 grant only the repository/API read permissions required by the instance.
@@ -33,6 +33,10 @@ Add named Codex CLI or Claude Code configurations, set a model, and choose a
 default or numeric preference. A configuration can share an existing provider
 identity or authorize another account through the official browser flow. Credential
 namespaces and session contexts remain isolated between identities.
+
+Use **Settings → AI & Agents → Models** to refresh adapter metadata or register a
+documented model before selecting it. Model access is identity-scoped; a listed
+model does not prove subscription entitlement. See the [model and library guide](ai-library.md).
 
 The runtime passes the selected model to the CLI. Provider rejection makes that
 configuration unavailable with an explicit diagnostic; another eligible configuration

@@ -25,6 +25,16 @@ export function AnalysisContext({ requestId, runNumber, snapshot, usage = [], wo
       <p className="mt-2 whitespace-pre-wrap break-words">{snapshot.instructions.text || t("No environment instructions.")}</p>
       <p className="mt-2 break-all text-xs muted">SHA-256: <code>{snapshot.instructions.sha256}</code></p>
     </details>}
+    {snapshot.library && <section className="mt-4 text-sm">
+      <h4 className="font-medium">{t("Frozen agent and skill versions")}</h4>
+      <p className="mt-1 text-xs muted">{t("These definitions were available to this analysis. Later library changes do not replace them.")}</p>
+      {(["agents", "skills"] as const).map(kind => <div key={kind} className="mt-3">
+        <h5 className="text-xs font-medium">{t(kind === "agents" ? "Agents" : "Skills")}</h5>
+        <ul className="mt-2 space-y-2">{snapshot.library![kind].map(item => <li key={`${item.slug}:${item.version}`}>
+          <details className="rounded border p-2"><summary className="cursor-pointer break-words">{item.name} · v{item.version}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs">{item.instructions}</p></details>
+        </li>)}</ul>
+      </div>)}
+    </section>}
     <h4 className="mt-3 text-sm font-medium">{t("Environment reference documents")}</h4>
     <p className="mt-1 text-xs muted">{t("Read status comes from runtime observations, not from an assistant’s claims. A missing observation does not prove that a file was unused.")}</p>
     {!resources.length && <p className="mt-2 text-sm muted">{t("No active reference documents in this snapshot.")}</p>}

@@ -71,6 +71,9 @@ def list_connections(request):
 @router.post("/ai-connections")
 @transaction.atomic
 def create_connection(request, payload: ConfigurationIn):
+    from .model_catalog import validate_model
+
+    validate_model(payload.agent, payload.model)
     validate_connection_overrides(payload.roles, payload.skill_overrides)
     values = payload.model_dump(exclude={"share_identity_from"})
     values["name"] = values["name"].strip()
@@ -103,6 +106,10 @@ def edit_connection(request, connection_id: int, payload: ConfigurationPatch):
     value = get_object_or_404(AIConnection.objects.select_for_update(), pk=connection_id)
     not_processing(value)
     values = payload.model_dump(exclude_unset=True)
+    if "model" in values and values["model"] != value.model:
+        from .model_catalog import validate_model
+
+        validate_model(value.agent, values["model"])
     validate_connection_overrides(values.get("roles"), values.get("skill_overrides"))
     if any(item is None for item in values.values()):
         raise HttpError(422, "Configuration fields cannot be null")

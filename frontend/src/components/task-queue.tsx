@@ -243,6 +243,9 @@ export function TaskQueue() {
                           <span className="queue-assistant-name">{assistant}</span>
                         </span>
                         {roleName && <span className="queue-role" title={roleName}><RoleIcon size={13} aria-hidden="true" /><span>{roleName}</span></span>}
+                        <span className="queue-model" title={[assignment.agent === "codex" ? "ChatGPT / Codex" : assignment.agent === "claude" ? "Claude Code" : assignment.agent, assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model")].join(" · ")}>
+                          {assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model")}
+                        </span>
                       </>
                     ) : (
                       <>

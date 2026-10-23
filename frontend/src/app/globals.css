@@ -1083,6 +1083,7 @@ summary:focus-visible {
 .queue-card-status .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; font-size: 11px; white-space: nowrap; flex-shrink: 0; }
 .queue-context { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .queue-assistants { display: flex; align-items: center; gap: 6px; margin-top: 7px; min-width: 0; }
+.queue-model { min-width: 0; max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 10px; }
 .queue-assignment, .queue-role, .queue-executor { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--muted-foreground); font-size: 12px; line-height: 24px; }
 .queue-assignment, .queue-role { background: var(--muted); border-radius: 5px; padding: 0 6px; }
 .queue-assignment { max-width: 56%; flex-shrink: 1; }

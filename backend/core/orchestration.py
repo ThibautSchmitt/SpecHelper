@@ -21,7 +21,13 @@ class RoleUnavailable(Exception):
 
 
 def family(connection):
-    """Families follow the actual runtime provider, never accounts or display names."""
+    """Use explicit model-family metadata; identities and display names are unrelated."""
+    if connection.model:
+        from .models import AIModel
+
+        model = AIModel.objects.filter(agent=connection.agent, identifier=connection.model).first()
+        if model and model.family:
+            return model.family
     return {"codex": "openai", "claude": "anthropic"}.get(connection.agent, connection.agent)
 
 
@@ -44,6 +50,16 @@ def select_connection(role, config, previous_family=None, used_families=(), excl
 
 
 def role_instructions(config, connection, public_role, internal_roles, has_database=False):
+    if "library" in config:
+        from .library import effective
+
+        adapted = effective(config["library"], connection, internal_roles, config, has_database)
+        if not adapted["compatible"]:
+            raise ValueError("The selected agent or skill is incompatible. Review the environment library preview.")
+        return "\n".join([
+            adapted["instructions"], config["role_instructions"].get(public_role, ""),
+            connection.additional_instructions if connection else "",
+        ])
     from .catalogue import ensure_catalogue
     from .models import AgentProfile
 

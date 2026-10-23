@@ -9,6 +9,7 @@ import type { OrchestrationSettings } from "@/components/orchestration-settings"
 import { publicRoles, roleLabels, type PublicRole } from "@/lib/orchestration";
 import { Card } from "@/components/ui/card";
 import { ConnectButton } from "@/components/connect-button";
+import { ModelSelect } from "@/components/ai-models";
 import { api, send, statuses } from "@/lib/api";
 
 export type QuotaWindow = {
@@ -461,12 +462,12 @@ export function AIConnections({
           )}
           <div className="field">
             <label htmlFor="ai-config-model">{t("Model")}</label>
-            <Input
-              id="ai-config-model"
-              maxLength={100}
+            <ModelSelect
+              agent={form.agent}
+              connectionId={editing?.id || (form.share_identity_from ? Number(form.share_identity_from) : undefined)}
               value={form.model}
-              onChange={(e) =>
-                setForm((previous) => ({ ...previous, model: e.target.value }))
+              onChange={(model) =>
+                setForm((previous) => ({ ...previous, model }))
               }
             />
             <p className="mt-2 text-xs muted">

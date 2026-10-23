@@ -87,7 +87,7 @@ test("French context form shows unreadable files and recovers from stale revisio
 test("historical result context remains versioned and distinguishes observed reads from missing telemetry", async ({ page }) => {
   await base(page);
   const id = "66666666-6666-4666-8666-666666666666";
-  const snapshot = (version: number) => ({ schema_version: 1, snapshot_id: `snapshot-${version}`, environment: { id: 91, name: "Java service and Python worker", revision: version }, instructions: { text: `Architecture rules ${version}`, enabled: true, sha256: String(version).repeat(64) }, resources: [{ id: "architecture", version_id: `document-${version}`, name: "architecture.md", filename: "architecture.md", version, sha256: String(version).repeat(64), content_type: "text/markdown", size: 77, agent_readable: true }] });
+  const snapshot = (version: number) => ({ library: {agents: [], skills: [{slug: "rules-audit", name: "Rules audit", version, instructions: `Procedure for snapshot ${version}`}]}, schema_version: 1, snapshot_id: `snapshot-${version}`, environment: { id: 91, name: "Java service and Python worker", revision: version }, instructions: { text: `Architecture rules ${version}`, enabled: true, sha256: String(version).repeat(64) }, resources: [{ id: "architecture", version_id: `document-${version}`, name: "architecture.md", filename: "architecture.md", version, sha256: String(version).repeat(64), content_type: "text/markdown", size: 77, agent_readable: true }] });
   const usage = [{ version_id: "document-1", public_role: "analyst", status: "observed" }, { version_id: "document-1", public_role: "counter_analyst", status: "not_observed" }, { version_id: "document-1", public_role: "verifier", status: "unavailable" }];
   const result = (version: number) => ({ id: `result-${version}`, number: version, run_number: version, format_version: "1.2", language: "en", status: "READY", created_at: "2026-10-22T12:00:00Z", ticket: { title: `Proposal ${version}`, context: "Preserve compatibility" }, markdown: `Proposal ${version}`, goal_markdown: "", artifacts: {}, context_snapshot: snapshot(version), context_usage: version === 1 ? usage : [] });
   await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: { id, need: "Review the event delivery", status: "READY", environment_name: "Java service and Python worker", language: "en", confrontation: true, baseline: [], database: {}, questions: [], conversation: [], understanding: "", progress: [], error: "", attachments: [{ id: "request-only", name: "request-screenshot.png", size: 15 }], ticket: result(2).ticket, markdown: "Proposal 2", latest_version: result(2), versions: [{ number: 1 }, { number: 2 }], messages: [], analysis_runs: [{ number: 1, status: "DONE", context_snapshot: snapshot(1), context_usage: usage, steps: [] }, { number: 2, status: "DONE", context_snapshot: snapshot(2), context_usage: [], steps: [] }] } }));
@@ -97,6 +97,9 @@ test("historical result context remains versioned and distinguishes observed rea
   const context = page.getByText("Frozen analysis context", { exact: true }).first().locator("..");
   await context.locator("summary").first().click();
   await expect(context.getByText("Context revision 1", { exact: false })).toBeVisible();
+  await expect(context.getByText("Rules audit · v1", {exact: true})).toBeVisible();
+  await context.getByText("Rules audit · v1", {exact: true}).click();
+  await expect(context.getByText("Procedure for snapshot 1", {exact: true})).toBeVisible();
   await expect(context.getByRole("link", { name: "Download frozen document" })).toHaveAttribute("href", `/api/requests/${id}/runs/1/context/document-1/download`);
   await expect(context.getByText("Analyst · Read observed", { exact: true })).toBeVisible();
   await expect(context.getByText("Counter-analyst · No read observed", { exact: true })).toBeVisible();
@@ -108,5 +111,7 @@ test("historical result context remains versioned and distinguishes observed rea
   const latest = page.getByText("Frozen analysis context", { exact: true }).first().locator("..");
   await expect(latest.getByRole("link", { name: "Download frozen document" })).toHaveAttribute("href", `/api/requests/${id}/runs/2/context/document-2/download`);
   await expect(latest.getByText("Read telemetry unavailable", { exact: true })).toBeVisible();
+  await expect(latest.getByText("Rules audit · v2", {exact: true})).toBeVisible();
+  await expect(latest.getByText("Rules audit · v1", {exact: true})).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

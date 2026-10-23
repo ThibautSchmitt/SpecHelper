@@ -287,7 +287,9 @@ test("named AI configs share quota windows and targeted authentication never cha
     .getByLabel("Authentication identity", { exact: true })
     .selectOption("11");
   await expect(page.locator("#ai-config-name")).toHaveValue("Second review");
-  await page.getByLabel("Model", { exact: true }).fill("gpt-review");
+  await page.route("**/api/ai-models?*", r => r.fulfill({json:{items:[{id:1,agent:"codex",identifier:"gpt-review",name:"Review fixture",family:"openai",source:"admin",status:"UNKNOWN",enabled:true}],discovery:{state:"unknown",reason:"not_refreshed"}}}));
+  await page.evaluate(() => window.dispatchEvent(new Event("models-updated")));
+  await page.getByLabel("Model", { exact: true }).selectOption("gpt-review");
   await page.getByLabel("Default connection when available").check();
   await expect(page.locator("#ai-config-name")).toHaveValue("Second review");
   await page

@@ -8,6 +8,10 @@ export type ContextSnapshot = {
   environment?: { id: number; name: string; revision: number };
   instructions?: { text: string; enabled: boolean; sha256: string };
   resources?: ContextResource[];
+  library?: {
+    agents: {slug: string; name: string; version: number; instructions: string}[];
+    skills: {slug: string; name: string; version: number; instructions: string}[];
+  };
 };
 export type ContextUsage = {
   version_id: string; public_role?: string;

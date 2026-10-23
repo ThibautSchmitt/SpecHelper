@@ -38,6 +38,8 @@ RESOURCES = {
     "system",
     "agents",
     "skills",
+    "library",
+    "ai-models",
     "queue",
     "access",
     "health",

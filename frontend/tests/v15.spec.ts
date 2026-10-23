@@ -76,6 +76,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
   });
   await page.goto("/admin");
   await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
+  await page.getByRole("button", { name: "Roles and orchestration", exact: true }).click();
   await page.getByLabel("Verify compared analyses", { exact: true }).uncheck();
   await page.getByLabel("Maximum AI calls per analysis").fill("10");
   await page.getByLabel("Analysis time limit (seconds)").fill("200");
@@ -105,6 +106,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
     });
   expect(settingsBody).not.toHaveProperty("available_agents");
   expect(settingsBody).not.toHaveProperty("available_skills");
+  await page.getByRole("navigation", {name:"AI settings"}).getByRole("button", {name:"Connections",exact:true}).click();
   await page
     .getByRole("region", { name: "Team assistant", exact: true })
     .getByRole("button", { name: "Edit", exact: true })
@@ -179,6 +181,7 @@ test("French settings keep verifier policy in administration and translate publi
   );
   await page.goto("/admin");
   await page.getByRole("button", { name: "IA & Agents", exact: true }).click();
+  await page.getByRole("button", { name: "Rôles et orchestration", exact: true }).click();
   await expect(
     page.getByRole("heading", {
       name: "Configuration de l’analyse",
@@ -194,6 +197,7 @@ test("French settings keep verifier policy in administration and translate publi
       { exact: true },
     ),
   ).toBeVisible();
+  await page.getByRole("navigation", {name:"Paramètres IA"}).getByRole("button",{name:"Connexions",exact:true}).click();
   await page
     .getByRole("button", { name: "Nouvelle connexion IA", exact: true })
     .click();

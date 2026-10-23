@@ -3,6 +3,7 @@ export { expect } from "@playwright/test";
 
 export const test = base.extend({
   page: async ({ page }, use) => {
+    await page.route("**/api/ai-models?*", (route) => route.fulfill({json:{items:[],discovery:{state:"unknown",reason:"not_refreshed"}}}));
     await page.route("**/api/access/session", (route) => route.fulfill({ json: { mode: "local", authenticated: true, csrf_token: "", expires_at: null } }));
     let settings = {
       name: "SpecHelper",

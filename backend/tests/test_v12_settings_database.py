@@ -169,12 +169,11 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
     ):
         perform_job(claim_job())
     request.refresh_from_db()
-    assert request.status == "READY"
-    assert [call.args[1]["profile"] for call in caller.call_args_list] == [
-        "requirement",
-        "code",
-        "writer",
-    ]
+    # v2.0 treats a disabled required skill as an actionable incompatibility;
+    # the older configuration must never silently reactivate it.
+    assert request.status == "ERROR"
+    assert "incompatible" in request.error.lower()
+    assert all(call.args[1]["profile"] == "requirement" for call in caller.call_args_list)
     assert all(
         "SKILL project-conventions" not in call.args[1]["prompt"] for call in caller.call_args_list
     )

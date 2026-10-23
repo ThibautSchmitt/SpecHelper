@@ -282,6 +282,13 @@ def health(
     return connection_status(identity_root(CREDENTIALS, identity_id), agent, include_quota=quota)
 
 
+@app.get("/models", dependencies=[Depends(authorize)])
+def models(agent: Literal["codex", "claude"], identity_id: uuid.UUID | None = None):
+    from .model_discovery import discover
+
+    return discover(identity_root(CREDENTIALS, identity_id), agent)
+
+
 class LoginIn(BaseModel):
     attempt_id: uuid.UUID
     provider: Literal["codex", "claude"]

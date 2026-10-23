@@ -1,5 +1,6 @@
 """Bounded independent public roles, durable typed observations and public artifacts."""
 
+import copy
 import json
 import time
 from datetime import datetime
@@ -221,6 +222,12 @@ class Orchestrator:
         from .orchestration_settings import get_config
 
         self.config = self.run.orchestration.get("config") or get_config()
+        if "library" not in self.config:
+            from .library import snapshot as library_snapshot
+
+            self.config["library"] = self.run.context_snapshot.get("library") or library_snapshot(request.environment)
+            self.run.orchestration["config"] = self.config
+            self.run.save(update_fields=["orchestration"])
         self.deadline = min(self.deadline, time.monotonic() + self.config["timeout_seconds"])
         self.database = (
             parameters(DatabaseConnection.objects.get(pk=request.database_snapshot["id"]))
@@ -364,13 +371,33 @@ class Orchestrator:
             raise FlowError("The context is too large. Narrow the discussion before retrying.")
         from .orchestration import role_instructions
 
-        effective_instructions = role_instructions(
-            self.config,
-            self.session.connection,
-            getattr(self, "public_role", "analyst"),
-            roles,
-            bool(self.database),
-        )
+        connection = self.session.connection
+        if connection:
+            snapshots = self.run.orchestration.setdefault("connection_snapshots", {})
+            key = str(self.session.pk)
+            if key not in snapshots:
+                snapshots[key] = {
+                    "additional_instructions": connection.additional_instructions,
+                    "skill_overrides": connection.skill_overrides,
+                    "agent": self.session.agent,
+                    "model": self.session.model_snapshot,
+                }
+                self.run.save(update_fields=["orchestration"])
+            connection = copy.copy(connection)
+            for field_name, value in snapshots[key].items():
+                setattr(connection, field_name, copy.deepcopy(value))
+        try:
+            effective_instructions = role_instructions(
+                self.config,
+                connection,
+                getattr(self, "public_role", "analyst"),
+                roles,
+                bool(self.database),
+            )
+        except ValueError as exc:
+            step.update(status="ERROR", finished_at=timezone.now().isoformat(), diagnostic=str(exc))
+            self.run.save(update_fields=["steps"])
+            raise FlowError(str(exc)) from exc
         prompt = (
             RULES
             + "\n"
@@ -395,6 +422,10 @@ class Orchestrator:
                 "Do not copy the source question's solution or bypass ordinary clarification."
             )
         prompt = redact(prompt, self.secret_values)
+        if len(prompt) > 195000:
+            step.update(status="ERROR", finished_at=timezone.now().isoformat())
+            self.run.save(update_fields=["steps"])
+            raise FlowError("The effective instructions are too large. Reduce the selected agents or skills.")
         response_schema = schema.model_json_schema()
         reference_schema = response_schema.get("$defs", {}).get("QuestionReference")
         if reference_schema:
@@ -504,6 +535,10 @@ class Orchestrator:
             step.update(
                 status="DONE", finished_at=timezone.now().isoformat(), output=output.model_dump()
             )
+            if self.session.connection:
+                from .model_catalog import record_execution
+
+                record_execution(self.session.connection, response.get("model") or self.session.model_snapshot, True)
             self.run.orchestration.setdefault("structured_outputs", []).append(
                 {"roles": roles, "public_role": step["public_role"], "output": output.model_dump()}
             )
@@ -515,8 +550,11 @@ class Orchestrator:
                 from .providers import mark_failure
 
                 if exc.kind == "MODEL_UNAVAILABLE":
+                    from .model_catalog import record_execution
                     from .models import AIConnection
 
+                    if self.session.connection:
+                        record_execution(self.session.connection, self.session.model_snapshot, False)
                     AIConnection.objects.filter(pk=self.session.connection_id).update(
                         availability="MODEL_UNAVAILABLE"
                     )

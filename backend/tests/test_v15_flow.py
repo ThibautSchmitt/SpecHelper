@@ -70,6 +70,37 @@ def outputs(code_report, bundle, verifier=True):
     ]
 
 
+def test_frozen_custom_library_survives_edits_and_deletion_during_execution(client, environment, storage, bundle, code_report):
+    from core.library import DefinitionIn, save_definition
+
+    original = DefinitionIn(slug="audit-evidence", name="Audit evidence", objective="Trace evidence", instructions="FROZEN_LIBRARY_SENTINEL")
+    save_definition("skill", original)
+    config = get_config()
+    config["default_skills"].append("audit-evidence")
+    InstanceSettings.objects.update_or_create(pk=1, defaults={"orchestration": config})
+    request = Request.objects.create(environment=environment, need="Export active records", confrontation=True)
+    enqueue_analysis(request.pk)
+    responses = outputs(code_report, bundle)
+    calls = []
+
+    def invoke(path, payload, **kwargs):
+        calls.append(payload)
+        if len(calls) == 1:
+            save_definition("skill", original.model_copy(update={"instructions": "REPLACED_LIBRARY_SENTINEL", "enabled": False, "expected_version": 1}), "audit-evidence")
+            assert client.delete("/api/library/skill/audit-evidence?expected_version=2").status_code == 200
+        assert "FROZEN_LIBRARY_SENTINEL" in payload["prompt"]
+        assert "REPLACED_LIBRARY_SENTINEL" not in payload["prompt"]
+        return {"session_id": str(uuid.uuid4()), "output": responses.pop(0)}
+
+    with patch("core.worker.request_workspace", return_value=storage), patch("core.worker.runtime_call", side_effect=invoke):
+        perform_job(claim_job())
+    request.refresh_from_db()
+    assert request.status == "READY", request.error
+    assert len(calls) == 5
+    run = request.analysis_runs.get()
+    assert next(item for item in run.orchestration["config"]["library"]["skills"] if item["slug"] == "audit-evidence")["version"] == 1
+
+
 @pytest.mark.parametrize("two_families", [False, True])
 def test_exact_pair_distinct_role_sessions_and_independent_counter_context(
     environment, storage, bundle, code_report, two_families
@@ -264,14 +295,14 @@ def test_configuration_inheritance_and_explicit_skill_overrides_affect_actual_pr
         slug="explicit-skill",
         name="Explicit",
         instructions="EXPLICIT_SKILL_SENTINEL",
-        enabled=False,
+        enabled=True,
     )
     excluded = SkillDefinition.objects.create(
         slug="disabled-skill", name="Excluded", instructions="DISABLED_SKILL_SENTINEL"
     )
     profile = AgentProfile.objects.get(pk="reviewer")
     profile.instructions = "EXPLICIT_INTERNAL_AGENT_SENTINEL"
-    profile.enabled = False
+    profile.enabled = True
     profile.save(update_fields=["instructions", "enabled"])
     config["default_skills"] = [excluded.pk]
     config["role_instructions"]["counter_analyst"] = "GLOBAL_COUNTER_SENTINEL"

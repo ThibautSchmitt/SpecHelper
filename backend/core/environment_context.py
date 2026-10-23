@@ -228,6 +228,8 @@ def snapshot_environment(environment):
         version = resource.versions.order_by("-version").first()
         if version:
             resources.append(version_dict(version, resource, source=checked_path(version)))
+    from .library import snapshot as library_snapshot
+
     return {
         "schema_version": 1,
         "environment": {
@@ -241,6 +243,7 @@ def snapshot_environment(environment):
             "sha256": hashlib.sha256(instructions.encode()).hexdigest(),
         },
         "resources": resources,
+        "library": library_snapshot(environment),
     }
 
 

@@ -174,6 +174,11 @@ def candidates(exclude=(), preferred=None):
     for connection in (
         AIConnection.objects.filter(enabled=True).exclude(pk__in=exclude).select_related("identity")
     ):
+        if connection.model:
+            from .models import AIModel
+
+            if AIModel.objects.filter(agent=connection.agent, identifier=connection.model, enabled=False).exists():
+                continue
         identity = identity_for(connection)
         if connection.status != "CONNECTED" or identity.status != "CONNECTED":
             continue
@@ -204,6 +209,11 @@ def public(connection):
     )
     if exhausted:
         availability = "QUOTA_EXHAUSTED"
+    if connection.model:
+        from .models import AIModel
+
+        if AIModel.objects.filter(agent=connection.agent, identifier=connection.model, enabled=False).exists():
+            availability = "MODEL_UNAVAILABLE"
     return {
         "id": connection.id,
         "roles": connection.roles,

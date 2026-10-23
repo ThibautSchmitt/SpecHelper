@@ -19,8 +19,9 @@ import {
   sourcePayload,
   type SourceSelection,
 } from "@/components/repository-picker";
-import { AIConnections, type AIConnection } from "@/components/ai-connections";
-import { OrchestrationSettingsForm } from "@/components/orchestration-settings";
+import { type AIConnection } from "@/components/ai-connections";
+import { AISettings } from "@/components/ai-settings";
+import { EnvironmentLibrary } from "@/components/environment-library";
 import {
   DatabaseConnections,
   type DatabaseConnection,
@@ -159,10 +160,7 @@ export default function Admin() {
         </div>
       )}
       {tab === "ai-agents" && (
-        <div className="space-y-6">
-          <AIConnections onChanged={refresh} />
-          <OrchestrationSettingsForm />
-        </div>
+        <AISettings onChanged={refresh} />
       )}
       {tab === "environments" && (
         <div className="space-y-6">
@@ -249,6 +247,7 @@ export default function Admin() {
                 <p className="mt-3 text-sm text-red-700">{t(e.error)}</p>
               )}
               <EnvironmentContext environmentId={e.id} />
+              <EnvironmentLibrary environmentId={e.id} />
               <TicketConnectors environmentId={e.id} environmentName={e.name} />
             </Card>
           ))}

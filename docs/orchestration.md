@@ -9,7 +9,7 @@ it is not a fourth public role.
 
 ## Administration
 
-Open **Settings → AI & Agents**. The analysis policy enables independent
+Open **Settings → AI & Agents → Roles and orchestration**. The analysis policy enables independent
 counter-analysis for newly created work items; existing items keep their recorded
 choice. Each connection can hold any combination of
 **Analyst**, **Counter-analyst** and **Verifier**. Model, account availability and quota
@@ -20,6 +20,9 @@ invocation/time limits, verifier activation and permission for same-family fallb
 Understanding, source analysis and writing remain required internal functions.
 Connection instructions add to the inherited instructions. Skill overrides store only
 explicit enable/disable decisions; an empty override inherits the global selection.
+The [versioned library](ai-library.md) and environment references constrain these
+choices. Disabled required skills produce an explicit incompatibility, rather than
+being silently reactivated by an override. Analyses retain their frozen definitions.
 
 Instructions cannot grant repository or business database write access. The runtime
 still imposes read-only sources, isolated writable contexts and filtered database
@@ -31,9 +34,9 @@ ticket publication.
 At each public-role boundary, SpecHelper rechecks allowed roles, availability and
 quota. It prefers a different actual model family from the previous role and an
 unused family for verification. Two accounts running the same family do not provide
-diversity. Current terminal adapters represent OpenAI and Anthropic families; a
-third-family selection rule is covered by a controlled future-provider fixture,
-without claiming an additional installed provider.
+diversity. Family metadata from the model catalog takes precedence over provider
+defaults (OpenAI/Anthropic). Three-family selection is tested with explicit catalog
+metadata and three eligible connections; it does not claim an installed third provider.
 
 With two eligible families the sequence is normally A → B → A. With one family,
 same-family fallback uses separate sessions and displays a limited-diversity warning,

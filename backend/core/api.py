@@ -38,7 +38,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="1.9", auth=None)
+api = NinjaAPI(title="SpecHelper", version="2.0", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -699,7 +699,7 @@ def agents(request):
                 for skill in profile.skills.all()
             ],
         }
-        for profile in AgentProfile.objects.prefetch_related("skills").order_by("slug")
+        for profile in AgentProfile.objects.filter(deleted=False).prefetch_related("skills").order_by("slug")
     ]
 
 
@@ -709,7 +709,7 @@ def skills(request):
 
     ensure_catalogue()
     return list(
-        SkillDefinition.objects.order_by("slug").values("slug", "name", "instructions", "enabled")
+        SkillDefinition.objects.filter(deleted=False).order_by("slug").values("slug", "name", "instructions", "enabled")
     )
 
 
@@ -728,13 +728,20 @@ def get_analysis_options(request):
 @transaction.atomic
 def set_analysis_options(request, payload: AnalysisOptionsIn):
     from .catalogue import ensure_catalogue
+    from .library import preserve, record
 
     ensure_catalogue()
     for model, values in ((AgentProfile, payload.agents), (SkillDefinition, payload.skills)):
         if set(values) - set(model.objects.values_list("slug", flat=True)):
             raise HttpError(422, "Unknown analysis option.")
+        kind = "agent" if model is AgentProfile else "skill"
         for slug, enabled in values.items():
-            model.objects.filter(pk=slug).update(enabled=enabled)
+            item = get_object_or_404(model.objects.select_for_update(), pk=slug, deleted=False)
+            if item.enabled != enabled:
+                preserve(item, kind)
+                item.enabled, item.version = enabled, item.version + 1
+                item.save(update_fields=["enabled", "version"])
+                record(item, kind, "edited")
     return get_analysis_options(request)
 
 
@@ -766,6 +773,8 @@ def queue(request):
 from .ai_api import router as ai_router  # noqa: E402
 from .context_api import router as context_router  # noqa: E402
 from .git_source_api import router as git_source_router  # noqa: E402
+from .library import router as library_router  # noqa: E402
+from .model_catalog import router as model_router  # noqa: E402
 from .orchestration_settings import router as orchestration_router  # noqa: E402
 from .question_api import router as question_router  # noqa: E402
 from .ticket_api import router as ticket_router  # noqa: E402
@@ -776,3 +785,6 @@ api.add_router("", ticket_router)
 api.add_router("", git_source_router)
 api.add_router("", ai_router)
 api.add_router("", orchestration_router)
+
+api.add_router("", library_router)
+api.add_router("", model_router)

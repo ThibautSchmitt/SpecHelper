@@ -293,6 +293,7 @@ test("settings alone controls independent counter-analysis and color preferences
     .getByRole("navigation", { name: "Administration", exact: true })
     .getByRole("button", { name: "AI & Agents", exact: true })
     .click();
+  await page.getByRole("button", { name: "Roles and orchestration", exact: true }).click();
   await page
     .getByLabel("Independent counter-analysis", { exact: true })
     .uncheck();

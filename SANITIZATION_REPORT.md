@@ -3,7 +3,8 @@
 Verdict: **PASS WITH WARNINGS** for the source snapshot, with third-party licensing
 scope retained below. The reviewed source is prepared in the local publication checkout; remote push status is reported separately.
 
-This report covers the refreshed publication snapshot, including v1.9 access protection,
+This report covers the refreshed publication candidate, including the v2.0 versioned
+library, environment assignments and provider model catalog, alongside v1.9 access protection,
 encrypted CLI credentials, isolated provider execution, hostile-file validation and
 security CI, together with consolidated settings, environment-owned ticket connectors,
 official non-inference Codex quota reads, v1.8 appearance, automatic role-based analysis,
@@ -15,7 +16,7 @@ are not rewritten. See [localization verification](docs/localization.md).
 
 ## Files reviewed
 
-The publication contains 291 project-owned files, including this report. Sources,
+The publication candidate contains 307 project-owned files, including this report. Sources,
 tests, migrations, configuration and documentation were read; both dependency locks
 were parsed. Installed dependency/cache/build files and private runtime data
 are excluded; dependency license metadata was inspected separately.
@@ -75,6 +76,13 @@ The [v1.9 acceptance report](docs/acceptance-v1.9.md) records the current 510-te
 backend result, browser re-tests, encrypted-credential and database-copy rehearsals,
 real HTTPS checks and executed security scans. Image reports retain their OS findings
 under exact, expiring applicability reviews; no zero-vulnerability claim is made.
+
+The [v2.0 acceptance report](docs/acceptance-v2.0.md) records the subsequent 536-test
+backend run, final focused security checks, all 138 browser cases across the full
+run/re-tests and copy-based migration preservation. Gitleaks reports no candidate
+secrets; Semgrep covers 149 production files with no findings or parse errors,
+including all new library/model/runtime interfaces. Publication candidate preparation
+does not imply a commit, remote push or production deployment.
 
 A separate deployed desktop/mobile check and an actual GLPI 11.0.7 ticket
 creation/reconciliation check pass. See [v1.8 acceptance](docs/acceptance-v1.8.md), [v1.7 acceptance](docs/acceptance-v1.7.md), [v1.6 acceptance](docs/acceptance-v1.6.md) and

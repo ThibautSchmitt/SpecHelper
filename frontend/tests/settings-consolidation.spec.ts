@@ -45,6 +45,9 @@ test("settings have one bottom access point and exactly three nonduplicated sect
   await expect(page.getByRole("heading", { name: "Request activity", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "AI connections", exact: true })).toHaveCount(0);
   await tabs.getByRole("button", { name: "AI & Agents", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "AI settings", exact: true }).getByRole("button")).toHaveText(["Connections", "Models", "Roles and orchestration", "Agents", "Skills"]);
+  await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Roles and orchestration", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Independent counter-analysis", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Save analysis settings", exact: true })).toHaveCount(1);

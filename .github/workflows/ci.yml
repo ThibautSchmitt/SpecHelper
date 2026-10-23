@@ -62,7 +62,7 @@ jobs:
       - name: Install browser for security regressions
         run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - name: Verify access gate and hostile Markdown in desktop and mobile browsers
+      - name: Verify access, library and model regressions in desktop and mobile browsers
         working-directory: frontend
         env:
           E2E_BASE_URL: http://127.0.0.1:3000
@@ -81,4 +81,4 @@ jobs:
           else:
               raise SystemExit("Security-test frontend did not start")
           PY
-          npx playwright test tests/v19-security.spec.ts
+          npx playwright test tests/v19-security.spec.ts tests/v20-library.spec.ts tests/v20-models.spec.ts

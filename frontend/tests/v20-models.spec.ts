@@ -1,0 +1,43 @@
+import { test, expect } from "./fixtures";
+
+test("model catalog preserves unknown access and restricts connection selection to listed options", async ({ page }) => {
+  const connections = [{id:11,name:"Team assistant",agent:"codex",model:"",enabled:true,status:"CONNECTED",availability:"AVAILABLE",account:"fixture",roles:["analyst","counter_analyst","verifier"]}];
+  let items = [{id:1,agent:"codex",identifier:"documented-model",name:"Documented model",family:"openai",source:"administered",status:"UNKNOWN",checked_at:null,enabled:true}];
+  let refreshed = 0;
+  let edited = false;
+  let body: Record<string, unknown> | null = null;
+  await page.route("**/api/connections", r => r.fulfill({json:{github:{status:"DISCONNECTED",account:""},ais:connections,databases:[]}}));
+  await page.route("**/api/environments", r => r.fulfill({json:[]}));
+  await page.route("**/api/queue", r => r.fulfill({json:[]}));
+  await page.route("**/api/ai-connections", r => {
+    if(r.request().method()==="POST") body=r.request().postDataJSON();
+    return r.fulfill({json:connections});
+  });
+  await page.route("**/api/ai-models?*", r => r.fulfill({json:{items,discovery:{state:refreshed?"supported":"unknown",reason:refreshed?"catalog_not_entitlement":"not_refreshed"}}}));
+  await page.route("**/api/ai-models/1", r => {const data=r.request().postDataJSON(); expect(data).toEqual({name:"Clear model label",family:"openai"});edited=true;items=items.map(item=>({...item,...data}));return r.fulfill({json:items[0]});});
+  await page.route("**/api/ai-connections/11/models/refresh", r => {refreshed++; items=items.map(item=>({...item,status:"SUPPORTED"})); return r.fulfill({json:{items,discovery:{state:"supported",reason:"catalog_not_entitlement"}}});});
+  await page.goto("/admin");
+  await page.getByRole("button", {name:"AI & Agents",exact:true}).click();
+  await page.getByRole("button", {name:"Models",exact:true}).click();
+  await expect(page.getByRole("main").getByText("Unverified",{exact:false})).toBeVisible();
+  await expect(page.getByRole("main").getByText("Available",{exact:true})).toHaveCount(0);
+  await page.getByRole("button",{name:"Edit Documented model",exact:true}).click();
+  await expect(page.getByLabel("Model identifier",{exact:true})).toBeDisabled();
+  await page.getByLabel("Name",{exact:true}).fill("Clear model label");
+  await page.getByRole("button",{name:"Save model",exact:true}).click();
+  await expect.poll(()=>edited).toBe(true);
+  await page.getByLabel("AI connection",{exact:true}).selectOption("11");
+  await page.getByRole("button",{name:"Refresh models",exact:true}).click();
+  await expect.poll(()=>refreshed).toBe(1);
+  await expect(page.getByRole("main").getByRole("listitem").filter({hasText:"Clear model label"})).toContainText("Supported");
+  await expect(page.getByRole("main").getByText("Available",{exact:true})).toHaveCount(0);
+  await page.getByRole("navigation",{name:"AI settings"}).getByRole("button",{name:"Connections",exact:true}).click();
+  await page.getByRole("button",{name:"New AI connection",exact:true}).click();
+  await page.getByLabel("Connection name",{exact:true}).fill("Independent review");
+  const choice=page.getByLabel("Model",{exact:true});
+  await expect(choice.locator("option")).toHaveCount(2);
+  await choice.selectOption("documented-model");
+  await page.getByRole("button",{name:"Add AI connection",exact:true}).click();
+  await expect.poll(()=>body).toMatchObject({model:"documented-model",name:"Independent review"});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

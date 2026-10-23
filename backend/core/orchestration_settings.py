@@ -60,8 +60,8 @@ def validate_lists(value):
         set(value.default_skills)
     ) != len(value.default_skills):
         raise HttpError(422, "Select each internal agent and skill only once.")
-    agents = set(AgentProfile.objects.values_list("slug", flat=True))
-    skills = set(SkillDefinition.objects.values_list("slug", flat=True))
+    agents = set(AgentProfile.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True))
+    skills = set(SkillDefinition.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True))
     if not set(value.active_internal_agents) <= agents or not set(value.default_skills) <= skills:
         raise HttpError(422, "The selected internal agent or skill is unavailable.")
     if not REQUIRED_AGENTS <= set(value.active_internal_agents):
@@ -94,11 +94,11 @@ def public_config():
             "description": item.mission,
             "required": item.slug in REQUIRED_AGENTS,
         }
-        for item in AgentProfile.objects.order_by("slug")
+        for item in AgentProfile.objects.filter(deleted=False).order_by("slug")
     ]
     config["available_skills"] = [
         {"slug": item.slug, "name": item.name, "description": ""}
-        for item in SkillDefinition.objects.order_by("slug")
+        for item in SkillDefinition.objects.filter(deleted=False).order_by("slug")
     ]
     return config
 
@@ -128,7 +128,7 @@ def validate_connection_overrides(roles=None, skills=None):
         raise HttpError(422, "Select each supported AI role only once.")
     if skills is not None:
         ensure_catalogue()
-        known = set(SkillDefinition.objects.values_list("slug", flat=True))
+        known = set(SkillDefinition.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True))
         if not set(skills) <= known or any(
             type(enabled) is not bool for enabled in skills.values()
         ):
