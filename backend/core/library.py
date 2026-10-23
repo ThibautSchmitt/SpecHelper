@@ -1,12 +1,14 @@
 """Portable, versioned instructions; permissions belong exclusively to the runtime."""
 
 import copy
+import re
+import unicodedata
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
 from ninja.errors import HttpError
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field, ValidationError, field_validator
 
 from .catalogue import ensure_catalogue
 from .environment_context import reject_credentials
@@ -35,6 +37,7 @@ class DefinitionIn(Schema):
     compatibility: list[str] = Field(default_factory=list, max_length=2)
     required_capabilities: list[str] = Field(default_factory=list, max_length=4)
     skills: list[str] = Field(default_factory=list, max_length=100)
+    expected_checks: list[str] = Field(default_factory=list, max_length=20)
     expected_version: int | None = Field(default=None, ge=1)
 
     @field_validator("name", "objective", "instructions")
@@ -43,6 +46,13 @@ class DefinitionIn(Schema):
         if not text.strip() or "\x00" in text:
             raise ValueError("Enter nonempty text without null characters.")
         return text.strip()
+
+    @field_validator("expected_checks")
+    @classmethod
+    def safe_checks(cls, checks):
+        if any(not value.strip() or len(value) > 1000 or "\x00" in value for value in checks):
+            raise ValueError("Enter at most 20 nonempty checks of at most 1000 characters.")
+        return [value.strip() for value in checks]
 
 
 class SelectionIn(Schema):
@@ -67,6 +77,7 @@ def definition(item, kind):
         "enabled": item.enabled,
         "compatibility": item.compatibility,
         "required_capabilities": item.required_capabilities,
+        "expected_checks": item.expected_checks,
         "version": item.version,
         "deleted": item.deleted,
     }
@@ -97,6 +108,7 @@ def preserve(item, kind):
 
 
 def validate_definition(payload, kind):
+    model_for(kind)
     if (
         len(set(payload.compatibility)) != len(payload.compatibility)
         or not set(payload.compatibility) <= PROVIDERS
@@ -116,12 +128,109 @@ def validate_definition(payload, kind):
     )
     if len(set(payload.skills)) != len(payload.skills) or not set(payload.skills) <= known:
         raise HttpError(422, "Select active library skills only once.")
-    for text in (payload.slug, payload.name, payload.objective, payload.instructions):
+    for text in (
+        payload.slug,
+        payload.name,
+        payload.objective,
+        payload.instructions,
+        *payload.expected_checks,
+    ):
         reject_credentials(text)
+        validate_instruction_policy(text)
+    compatible = set(payload.compatibility or PROVIDERS)
+    for skill in SkillDefinition.objects.filter(pk__in=payload.skills):
+        if not compatible <= set(skill.compatibility or PROVIDERS):
+            raise HttpError(
+                422,
+                "Required skills do not support every selected assistant. Choose a common provider or create an explicit restricted variant.",
+            )
+
+
+def validate_instruction_policy(text):
+    """Reject explicit forbidden requests; the runtime still enforces the actual boundary.
+
+    This is a deterministic review aid, not a claim to recognize arbitrary natural-language
+    attacks. No definition can replace the central runtime policy or grant a capability.
+    """
+    from .sensitive_data import configured_secrets, redact
+
+    if redact(text, configured_secrets()) != text:
+        raise HttpError(422, "Remove credentials and authenticated URLs from the definition.")
+    text = "".join(
+        c for c in unicodedata.normalize("NFKD", text).casefold() if not unicodedata.combining(c)
+    )
+    text = re.sub(r"[\u200b-\u200f\u202a-\u202e\u2060-\u206f]", "", text)
+    if re.search(
+        r"(?:/credentials\b|/control\b|/etc/(?:passwd|shadow)|/proc/|/root/|~/|\.\./|auth\.json\b|credentials\.json\b)",
+        text,
+    ):
+        raise HttpError(
+            422, "Definitions cannot request private files or paths outside the analysis sandbox."
+        )
+    if re.search(
+        r"(?:```\s*(?:python|bash|sh|javascript|js)\b|\b(?:eval|exec)\s*\(|\b(?:pretooluse|posttooluse|bypasspermissions|dangerously-skip-permissions)\b)",
+        text,
+    ):
+        raise HttpError(422, "Use declarative instructions without executable scripts or hooks.")
+    for clause in re.split(r"\.(?=\s|$)|[;\n]|\b(?:but|instead|then|mais|puis)\b", text):
+        clause = clause.strip(" -:*!`")
+        if re.match(
+            r"^(?:never\b|do not\b|don't\b|must not\b|no\b|ne\b.*\b(?:pas|jamais)\b|n['’].*\b(?:pas|jamais)\b|interdit\b|sans\b)",
+            clause,
+        ):
+            continue
+        forbidden = (
+            r"\b(?:read|reveal|extract|expose|fetch|print|show|send|access|dump|lire|reveler|extraire|afficher|envoyer|acceder)\b.{0,70}\b(?:tokens?|secrets?|credentials?|passwords?|mots? de passe|jetons?)\b",
+            r"\b(?:write|modify|update|delete|insert|drop|alter|truncate|ecrire|modifier|supprimer)\b.{0,60}\b(?:repositories|repository|repo|sources|databases?|db|tables?|depot|bases? de donnees)\b",
+            r"\b(?:git\s+(?:push|commit|reset)|sudo\b|chmod\b|rm\s+-|curl\s+|wget\s+|pip\s+install|npm\s+install)\b",
+            r"\b(?:execute|run|launch|executer|lancer)\b.{0,50}\b(?:scripts?|bash|shell|python|javascript|hooks?|commands?|commandes?)\b",
+            r"\b(?:arbitrary|unrestricted|any|all|arbitraire|illimite|tous? les|autres?|other|another)\b.{0,35}\b(?:network|reseau|environments?|environnements?|hosts?|domains?|urls?)\b",
+            r"\b(?:disable|bypass|ignore|override|desactiver|contourner|ignorer)\b.{0,50}\b(?:sandbox|central policy|security|permissions|regles|securite)\b",
+            r"\b(?:push|commit|publish|create|pousser|publier|creer)\b.{0,55}\b(?:git|pull request|merge request|tickets?|issues?)\b",
+        )
+        if any(re.search(pattern, clause) for pattern in forbidden):
+            raise HttpError(
+                422,
+                "Remove requests for secrets, writes, executable scripts or access outside the analysis sandbox.",
+            )
+
+
+def check_definition(kind, raw):
+    """Validate an untrusted draft without creating or activating a library entry."""
+    ensure_catalogue()
+    try:
+        payload = DefinitionIn.model_validate(raw)
+        validate_definition(payload, kind)
+    except ValidationError as error:
+        # Do not return Pydantic's input values, which can contain untrusted credentials.
+        return {
+            "valid": False,
+            "errors": [
+                "Invalid field: " + ".".join(map(str, item["loc"])) for item in error.errors()
+            ],
+            "definition": None,
+            "compatibility": {},
+        }
+    except HttpError as error:
+        return {
+            "valid": False,
+            "errors": [str(error.message)],
+            "definition": None,
+            "compatibility": {},
+        }
+    return {
+        "valid": True,
+        "errors": [],
+        "definition": payload.model_dump(),
+        "compatibility": {
+            provider: provider in (payload.compatibility or PROVIDERS)
+            for provider in sorted(PROVIDERS)
+        },
+    }
 
 
 @transaction.atomic
-def save_definition(kind, payload, slug=None, editor="administrator"):
+def save_definition(kind, payload, slug=None, editor="administrator", action_name=None):
     ensure_catalogue()
     model = model_for(kind)
     validate_definition(payload, kind)
@@ -149,12 +258,58 @@ def save_definition(kind, payload, slug=None, editor="administrator"):
         payload.compatibility,
         payload.required_capabilities,
     )
+    item.expected_checks = payload.expected_checks
     setattr(item, "mission" if kind == "agent" else "objective", payload.objective)
     item.save()
     if kind == "agent":
         item.skills.set(payload.skills)
-    record(item, kind, action, editor)
+    record(item, kind, action_name or action, editor)
     return definition(item, kind)
+
+
+class ValidationIn(Schema):
+    model_config = ConfigDict(extra="forbid")
+    kind: str = Field(pattern="^(agent|skill)$")
+    definition: dict
+
+
+class ImportIn(ValidationIn):
+    schema_version: int = Field(ge=1, le=1)
+
+
+class RestoreIn(Schema):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1)
+    expected_version: int = Field(ge=1)
+
+
+@router.post("/library/validate")
+def validate_preview(request, payload: ValidationIn):
+    return check_definition(payload.kind, payload.definition)
+
+
+@router.post("/library/import/preview")
+def import_preview(request, payload: ImportIn):
+    result = check_definition(payload.kind, payload.definition)
+    result["activation_required"] = True
+    return result
+
+
+@router.post("/library/import")
+def import_definition(request, payload: ImportIn):
+    checked = check_definition(payload.kind, payload.definition)
+    if not checked["valid"]:
+        raise HttpError(422, "; ".join(checked["errors"]))
+    value = DefinitionIn.model_validate(checked["definition"])
+    value.enabled = False
+    existing = model_for(payload.kind).objects.filter(pk=value.slug).exists()
+    return save_definition(
+        payload.kind,
+        value,
+        value.slug if existing else None,
+        editor_for(request),
+        action_name="imported",
+    )
 
 
 @router.get("/library/{kind}")
@@ -172,6 +327,34 @@ def create_definition(request, kind: str, payload: DefinitionIn):
 @router.put("/library/{kind}/{slug}")
 def edit_definition(request, kind: str, slug: str, payload: DefinitionIn):
     return save_definition(kind, payload, slug, editor_for(request))
+
+
+@router.get("/library/{kind}/{slug}/export")
+def export_definition(request, kind: str, slug: str):
+    item = get_object_or_404(model_for(kind), pk=slug, deleted=False)
+    raw = definition(item, kind)
+    for key in ("version", "deleted"):
+        raw.pop(key, None)
+    raw["enabled"] = False
+    return {"schema_version": 1, "kind": kind, "definition": raw}
+
+
+@router.post("/library/{kind}/{slug}/restore")
+@transaction.atomic
+def restore_definition(request, kind: str, slug: str, payload: RestoreIn):
+    item = get_object_or_404(model_for(kind).objects.select_for_update(), pk=slug, deleted=False)
+    if item.version != payload.expected_version:
+        raise HttpError(409, "The definition has changed. Refresh before editing.")
+    preserve(item, kind)
+    previous = get_object_or_404(LibraryRevision, kind=kind, slug=slug, version=payload.version)
+    raw = copy.deepcopy(previous.definition)
+    for key in ("version", "deleted"):
+        raw.pop(key, None)
+    raw.update(enabled=False, expected_version=item.version)
+    result = save_definition(
+        kind, DefinitionIn.model_validate(raw), slug, editor_for(request), action_name="restored"
+    )
+    return result
 
 
 @router.get("/library/{kind}/{slug}/versions")
@@ -334,6 +517,8 @@ def effective(library, connection, internal_roles, config, has_database=False):
         lines.extend(
             [f"{label} {item['slug']}: {item['name']} (v{item['version']})", item["instructions"]]
         )
+        if item.get("expected_checks"):
+            lines.append("EXPECTED CHECKS: " + "; ".join(item["expected_checks"]))
 
     from .presets_v16 import PROFILES
 

@@ -3,8 +3,10 @@
 Verdict: **PASS WITH WARNINGS** for the source snapshot, with third-party licensing
 scope retained below. The reviewed source is prepared in the local publication checkout; remote push status is reported separately.
 
-This report covers the refreshed publication candidate, including the v2.0 versioned
-library, environment assignments and provider model catalog, alongside v1.9 access protection,
+This report covers the refreshed publication candidate, including the v2.1 conversational
+library assistant, inactive drafts, shared-queue demonstrations, declaration import/export
+and historical restoration, alongside the v2.0 versioned library, environment assignments
+and provider model catalog and v1.9 access protection,
 encrypted CLI credentials, isolated provider execution, hostile-file validation and
 security CI, together with consolidated settings, environment-owned ticket connectors,
 official non-inference Codex quota reads, v1.8 appearance, automatic role-based analysis,
@@ -16,7 +18,7 @@ are not rewritten. See [localization verification](docs/localization.md).
 
 ## Files reviewed
 
-The publication candidate contains 307 project-owned files, including this report. Sources,
+The publication candidate contains 315 project-owned files, including this report. Sources,
 tests, migrations, configuration and documentation were read; both dependency locks
 were parsed. Installed dependency/cache/build files and private runtime data
 are excluded; dependency license metadata was inspected separately.
@@ -83,6 +85,15 @@ run/re-tests and copy-based migration preservation. Gitleaks reports no candidat
 secrets; Semgrep covers 149 production files with no findings or parse errors,
 including all new library/model/runtime interfaces. Publication candidate preparation
 does not imply a commit, remote push or production deployment.
+
+The [v2.1 acceptance report](docs/acceptance-v2.1.md) records 585 passing backend
+tests, the 146-case full browser run and subsequent coverage of four additional
+queue-localization cases, plus 28 passing production-build browser checks.
+Migration 0025 preserves all original values in 34 checked tables and 384 rows on
+a protected copy. Current candidate scans find no secrets; six Semgrep rules cover
+153 production files without findings or parse errors. The real Linux containment
+probe passes again. Provider generation/demo responses are controlled test fixtures;
+these checks do not claim a successful live paid-inference run.
 
 A separate deployed desktop/mobile check and an actual GLPI 11.0.7 ticket
 creation/reconciliation check pass. See [v1.8 acceptance](docs/acceptance-v1.8.md), [v1.7 acceptance](docs/acceptance-v1.7.md), [v1.6 acceptance](docs/acceptance-v1.6.md) and

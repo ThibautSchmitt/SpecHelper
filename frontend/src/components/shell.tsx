@@ -25,9 +25,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
       <ThemeProvider>
-        <AccessGate><TaskQueueProvider>
-          <ShellContent>{children}</ShellContent>
-        </TaskQueueProvider></AccessGate>
+        <AccessGate>
+          <TaskQueueProvider>
+            <ShellContent>{children}</ShellContent>
+          </TaskQueueProvider>
+        </AccessGate>
       </ThemeProvider>
     </I18nProvider>
   );
@@ -210,7 +212,13 @@ function ShellContent({ children }: { children: React.ReactNode }) {
             })}
           </div>
         </div>
-        <Link href="/admin" className="sidebar-admin" aria-label={t("Settings")} title={t("Settings")} aria-current={pathname.startsWith("/admin") ? "page" : undefined}>
+        <Link
+          href="/admin"
+          className="sidebar-admin"
+          aria-label={t("Settings")}
+          title={t("Settings")}
+          aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+        >
           <span className="admin-avatar">
             <Settings size={18} />
           </span>
@@ -245,7 +253,11 @@ function ShellContent({ children }: { children: React.ReactNode }) {
         className="queue-drawer"
         aria-label={t("Task queue")}
         onClick={(e) => {
-          if (e.target === e.currentTarget) drawer.current?.close();
+          if (
+            e.target === e.currentTarget ||
+            (e.target instanceof Element && e.target.closest("a"))
+          )
+            drawer.current?.close();
         }}
       >
         <button

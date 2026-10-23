@@ -18,6 +18,7 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - ChatGPT / Codex and Claude / Claude Code support
 - Named assistant configurations, model selection and shared account availability
 - Versioned agent/skill library with environment selection and compatibility preview
+- Guided agent/skill creation with clarification, editable drafts and sandbox tests
 - Business clarification before technical analysis
 - Optional environment instructions and versioned reference documents
 - Screenshots and document attachments
@@ -167,6 +168,7 @@ Further documentation:
 
 - [Functional specification](docs/specification.md)
 - [AI connections, models and shared agent/skill library](docs/ai-library.md)
+- [v2.1 acceptance report](docs/acceptance-v2.1.md)
 - [v2.0 acceptance report](docs/acceptance-v2.0.md)
 - [Environment context](docs/environment-context.md)
 - [Questions and reusable context](docs/questions.md)

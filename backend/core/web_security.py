@@ -39,6 +39,7 @@ RESOURCES = {
     "agents",
     "skills",
     "library",
+    "library-assistant",
     "ai-models",
     "queue",
     "access",

@@ -57,7 +57,7 @@ def claim_job():
         if connection.features.has_select_for_update_skip_locked:
             jobs = jobs.select_for_update(skip_locked=True)
         for job in jobs[:100]:
-            if job.kind == "analysis" and not reserve_for_job(job):
+            if job.kind in {"analysis", "library_assistant"} and not reserve_for_job(job):
                 continue
             if Job.objects.filter(pk=job.pk, status="QUEUED").update(
                 status="RUNNING", started_at=timezone.now()
@@ -73,10 +73,19 @@ def recover_stale_jobs():
     from .providers import release_connections
 
     stale = Job.objects.filter(status="RUNNING").filter(
-        Q(kind="analysis", started_at__lt=timezone.now() - timedelta(seconds=310))
+        Q(
+            kind__in=["analysis", "library_assistant"],
+            started_at__lt=timezone.now() - timedelta(seconds=310),
+        )
         | Q(kind="sync", started_at__lt=timezone.now() - timedelta(seconds=1210))
     )
     for job in stale:
+        if job.kind == "library_assistant":
+            from .library_assistant import fail_job
+
+            fail_job(job, "Worker interrupted; assistant work unfinished.")
+            release_connections(job.payload.get("connection_ids", []))
+            continue
         if job.kind == "analysis":
             fail_analysis(job, "Worker interrupted; analysis unfinished.")
             release_connections(job.payload.get("connection_ids", []))
@@ -98,6 +107,10 @@ def perform_job(job):
     try:
         if job.kind == "sync":
             sync_environment(int(job.target), job.payload.get("changed_repositories"))
+        elif job.kind == "library_assistant":
+            from .library_assistant import run_job
+
+            run_job(job)
         else:
             from .providers import release_connections, reserve_for_job
 
@@ -159,6 +172,11 @@ def perform_job(job):
                 if isinstance(exc, FlowError)
                 else "Analysis interrupted. Check connections and the runtime."
             )
+        if job.kind == "library_assistant":
+            from .library_assistant import fail_job
+
+            fail_job(job, "Assistant work interrupted. Check the selected connection and retry.")
+            return
         if job.kind == "analysis":
             fail_analysis(job, message)
             return
@@ -166,9 +184,11 @@ def perform_job(job):
             status="ERROR", error=message, finished_at=timezone.now()
         )
     else:
-        Job.objects.filter(pk=job.pk).update(status="DONE", finished_at=timezone.now())
+        Job.objects.filter(pk=job.pk, status="RUNNING").update(
+            status="DONE", finished_at=timezone.now()
+        )
     finally:
-        if job.kind == "analysis":
+        if job.kind in {"analysis", "library_assistant"}:
             from .providers import release_connections
 
             job.refresh_from_db()
@@ -196,11 +216,15 @@ def work_once():
         start_new_session=True,
     )
     try:
-        process.wait(timeout=295 if job.kind == "analysis" else 1200)
+        process.wait(timeout=295 if job.kind in {"analysis", "library_assistant"} else 1200)
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
         process.wait()
-        if job.kind == "analysis":
+        if job.kind == "library_assistant":
+            from .library_assistant import fail_job
+
+            fail_job(job, "The assistant time limit was reached.")
+        elif job.kind == "analysis":
             fail_analysis(job, "The five-minute limit was reached.")
         else:
             from .models import Environment
@@ -208,7 +232,7 @@ def work_once():
             Environment.objects.filter(pk=job.target).update(
                 status="ERROR", error="The synchronization time limit was reached."
             )
-        if job.kind != "analysis":
+        if job.kind not in {"analysis", "library_assistant"}:
             Job.objects.filter(pk=job.pk).update(
                 status="ERROR", error="Time limit reached", finished_at=timezone.now()
             )
@@ -216,7 +240,9 @@ def work_once():
         Job.objects.filter(pk=job.pk).update(
             status="ERROR", error="Process interrupted", finished_at=timezone.now()
         )
-        if job.kind == "analysis":
+        if job.kind == "library_assistant":
+            pass  # The terminal queue state already carries the interrupted-process error.
+        elif job.kind == "analysis":
             fail_analysis(job, "Analysis process interrupted.")
         else:
             from .models import Environment
@@ -224,7 +250,7 @@ def work_once():
             Environment.objects.filter(pk=job.target).update(
                 status="ERROR", error="Synchronization process interrupted."
             )
-    if job.kind == "analysis":
+    if job.kind in {"analysis", "library_assistant"}:
         job.refresh_from_db()
         release_connections(job.payload.get("connection_ids", []))
     return True

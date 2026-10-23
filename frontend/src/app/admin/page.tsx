@@ -1,17 +1,16 @@
 "use client";
 import { useI18n } from "@/lib/i18n";
-import { useEffect, useRef, useState } from "react";
-import {
-  GitBranch,
-  Paintbrush,
-  RefreshCw,
-  Settings,
-} from "lucide-react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { GitBranch, Paintbrush, RefreshCw, Settings } from "lucide-react";
 import { ThemeControl } from "@/components/theme-control";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { TicketConnectors, UnassignedTicketConnectors } from "@/components/ticket-connectors";
+import {
+  TicketConnectors,
+  UnassignedTicketConnectors,
+} from "@/components/ticket-connectors";
 import { GitSources } from "@/components/git-sources";
 import {
   RepositoryPicker,
@@ -36,7 +35,17 @@ type Connections = {
   databases: DatabaseConnection[];
 };
 export default function Admin() {
+  return (
+    <Suspense fallback={null}>
+      <AdminPanel />
+    </Suspense>
+  );
+}
+function AdminPanel() {
   const { t } = useI18n();
+  const searchParams = useSearchParams();
+  const libraryDraft = searchParams.get("library_draft");
+  const libraryKind = searchParams.get("library_kind");
   const [tab, setTab] = useState("general");
   const [connections, setConnections] = useState<Connections | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -83,6 +92,9 @@ export default function Admin() {
       refreshVersion.current += 1;
     };
   }, []);
+  useEffect(() => {
+    if (libraryDraft) setTab("ai-agents");
+  }, [libraryDraft]);
   useEffect(() => {
     const timer = setInterval(() => {
       api<Environment[]>("/environments")
@@ -139,7 +151,8 @@ export default function Admin() {
               setNotice("");
             }}
           >
-            <item.icon size={16} aria-hidden="true" />{item.label}
+            <item.icon size={16} aria-hidden="true" />
+            {item.label}
           </Button>
         ))}
       </nav>
@@ -160,7 +173,10 @@ export default function Admin() {
         </div>
       )}
       {tab === "ai-agents" && (
-        <AISettings onChanged={refresh} />
+        <AISettings
+          key={`${libraryKind}:${libraryDraft}`}
+          onChanged={refresh}
+        />
       )}
       {tab === "environments" && (
         <div className="space-y-6">
@@ -169,7 +185,10 @@ export default function Admin() {
             values={connections?.databases || []}
             onChanged={refresh}
           />
-          <UnassignedTicketConnectors environments={environments} onAssigned={refresh} />
+          <UnassignedTicketConnectors
+            environments={environments}
+            onAssigned={refresh}
+          />
           {environments.map((e) => (
             <Card key={e.id}>
               <div className="flex flex-wrap justify-between gap-3">
@@ -334,7 +353,17 @@ export default function Admin() {
               const submitted = { ...settings };
               action(async () => {
                 const current = await api<typeof settings>("/settings");
-                await send("/settings", { ...current, name: submitted.name, short_label: submitted.short_label, language: submitted.language, primary_color: submitted.primary_color }, "PUT");
+                await send(
+                  "/settings",
+                  {
+                    ...current,
+                    name: submitted.name,
+                    short_label: submitted.short_label,
+                    language: submitted.language,
+                    primary_color: submitted.primary_color,
+                  },
+                  "PUT",
+                );
                 window.dispatchEvent(new Event("settings-updated"));
               }, t("Instance settings saved."));
             }}
@@ -347,9 +376,7 @@ export default function Admin() {
                   required
                   maxLength={100}
                   value={settings.name}
-                  onChange={(e) =>
-                    updateSettings({ name: e.target.value })
-                  }
+                  onChange={(e) => updateSettings({ name: e.target.value })}
                 />
               </div>
               <div className="field">
@@ -372,9 +399,7 @@ export default function Admin() {
                 <select
                   id="instance-language"
                   value={settings.language || "fr"}
-                  onChange={(e) =>
-                    updateSettings({ language: e.target.value })
-                  }
+                  onChange={(e) => updateSettings({ language: e.target.value })}
                 >
                   <option value="en">{t("English")}</option>
                   <option value="fr">{t("French")}</option>
@@ -388,8 +413,22 @@ export default function Admin() {
               <div className="field">
                 <label htmlFor="instance-color">{t("Primary color")}</label>
                 <div className="color-options">
-                  {["#2563eb", "#7c3aed", "#0f766e", "#d97706", "#be123c", "#475569"].map((color) => (
-                    <button key={color} type="button" style={{ background: color }} aria-label={t("Choose primary color {color}", { color })} aria-pressed={settings.primary_color === color} onClick={() => updateSettings({ primary_color: color })} />
+                  {[
+                    "#2563eb",
+                    "#7c3aed",
+                    "#0f766e",
+                    "#d97706",
+                    "#be123c",
+                    "#475569",
+                  ].map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      style={{ background: color }}
+                      aria-label={t("Choose primary color {color}", { color })}
+                      aria-pressed={settings.primary_color === color}
+                      onClick={() => updateSettings({ primary_color: color })}
+                    />
                   ))}
                 </div>
                 <div className="flex items-center gap-4">
@@ -414,7 +453,6 @@ export default function Admin() {
           </form>
         </Card>
       )}
-
     </div>
   );
 }

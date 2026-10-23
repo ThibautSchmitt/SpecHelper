@@ -38,7 +38,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="2.0", auth=None)
+api = NinjaAPI(title="SpecHelper", version="2.1", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -774,6 +774,7 @@ from .ai_api import router as ai_router  # noqa: E402
 from .context_api import router as context_router  # noqa: E402
 from .git_source_api import router as git_source_router  # noqa: E402
 from .library import router as library_router  # noqa: E402
+from .library_assistant import router as library_assistant_router  # noqa: E402
 from .model_catalog import router as model_router  # noqa: E402
 from .orchestration_settings import router as orchestration_router  # noqa: E402
 from .question_api import router as question_router  # noqa: E402
@@ -787,4 +788,5 @@ api.add_router("", ai_router)
 api.add_router("", orchestration_router)
 
 api.add_router("", library_router)
+api.add_router("", library_assistant_router)
 api.add_router("", model_router)

@@ -308,6 +308,7 @@ class SkillDefinition(models.Model):
     objective = models.TextField(blank=True)
     compatibility = models.JSONField(default=list)
     required_capabilities = models.JSONField(default=list)
+    expected_checks = models.JSONField(default=list)
     version = models.PositiveIntegerField(default=1)
     deleted = models.BooleanField(default=False)
 
@@ -321,6 +322,7 @@ class AgentProfile(models.Model):
     skills = models.ManyToManyField(SkillDefinition, related_name="agents")
     compatibility = models.JSONField(default=list)
     required_capabilities = models.JSONField(default=list)
+    expected_checks = models.JSONField(default=list)
     version = models.PositiveIntegerField(default=1)
     deleted = models.BooleanField(default=False)
 
@@ -338,7 +340,9 @@ class LibraryRevision(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["kind", "slug", "version"], name="unique_library_revision")
+            models.UniqueConstraint(
+                fields=["kind", "slug", "version"], name="unique_library_revision"
+            )
         ]
 
     def save(self, *args, **kwargs):
@@ -479,7 +483,10 @@ class TicketConnector(models.Model):
         GLPI = "glpi", "GLPI"
 
     environment = models.ForeignKey(
-        Environment, null=True, blank=True, on_delete=models.PROTECT,
+        Environment,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
         related_name="ticket_connectors",
     )
     name = models.CharField(max_length=100)
@@ -567,6 +574,7 @@ class PublishedTicket(models.Model):
             raise ValueError("The published version does not belong to this request")
         return super().save(*args, **kwargs)
 
+
 # Register security tables while keeping shared workspace models independent.
 from .security_models import AccessSession, SecurityBucket, SecurityEvent  # noqa: E402,F401
 
@@ -599,7 +607,9 @@ class AIModelObservation(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["model", "identity"], name="unique_identity_model_status")
+            models.UniqueConstraint(
+                fields=["model", "identity"], name="unique_identity_model_status"
+            )
         ]
 
 
@@ -608,3 +618,40 @@ class AIModelDiscovery(models.Model):
     state = models.CharField(max_length=20, default="unknown")
     reason = models.CharField(max_length=40, blank=True)
     checked_at = models.DateTimeField(auto_now=True)
+
+
+class LibraryDraft(models.Model):
+    """Human-reviewed declarative proposals, separate from the active library."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=5)
+    connection = models.ForeignKey(AIConnection, on_delete=models.PROTECT)
+    language = models.CharField(max_length=2, default="en")
+    status = models.CharField(max_length=24, default="DRAFT")
+    revision = models.PositiveIntegerField(default=1)
+    definition = models.JSONField(null=True)
+    messages = models.JSONField(default=list)
+    recommendations = models.JSONField(default=list)
+    test_result = models.JSONField(null=True)
+    activated_definition = models.JSONField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class LibraryDraftRevision(models.Model):
+    draft = models.ForeignKey(LibraryDraft, on_delete=models.PROTECT, related_name="versions")
+    revision = models.PositiveIntegerField()
+    definition = models.JSONField(null=True)
+    action = models.CharField(max_length=24)
+    editor = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["draft", "revision"], name="unique_draft_revision")
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("A draft revision is immutable")
+        return super().save(*args, **kwargs)

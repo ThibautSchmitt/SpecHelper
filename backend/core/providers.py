@@ -177,7 +177,9 @@ def candidates(exclude=(), preferred=None):
         if connection.model:
             from .models import AIModel
 
-            if AIModel.objects.filter(agent=connection.agent, identifier=connection.model, enabled=False).exists():
+            if AIModel.objects.filter(
+                agent=connection.agent, identifier=connection.model, enabled=False
+            ).exists():
                 continue
         identity = identity_for(connection)
         if connection.status != "CONNECTED" or identity.status != "CONNECTED":
@@ -212,7 +214,9 @@ def public(connection):
     if connection.model:
         from .models import AIModel
 
-        if AIModel.objects.filter(agent=connection.agent, identifier=connection.model, enabled=False).exists():
+        if AIModel.objects.filter(
+            agent=connection.agent, identifier=connection.model, enabled=False
+        ).exists():
             availability = "MODEL_UNAVAILABLE"
     return {
         "id": connection.id,
@@ -351,9 +355,9 @@ def release_connections(ids):
 def recover_orphaned_leases():
     active = {
         pk
-        for payload in Job.objects.filter(kind="analysis", status="RUNNING").values_list(
-            "payload", flat=True
-        )
+        for payload in Job.objects.filter(
+            kind__in=["analysis", "library_assistant"], status="RUNNING"
+        ).values_list("payload", flat=True)
         for pk in payload.get("connection_ids", [])
     }
     active_identity_ids = AIConnection.objects.filter(pk__in=active).values_list(
@@ -439,6 +443,10 @@ def bind_session(request, connection, role="primary"):
 
 @transaction.atomic
 def reserve_for_job(job, exclude=()):
+    if job.kind == "library_assistant":
+        from .library_assistant import reserve_job
+
+        return reserve_job(job)
     request = Request.objects.select_for_update().get(pk=job.target)
     if request.confrontation:
         # The next public role is selected by the engine at its actual start,

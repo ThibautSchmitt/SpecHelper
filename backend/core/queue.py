@@ -11,6 +11,25 @@ RECENT_LIMIT = 15
 
 def assignments_for(job, run):
     """Use execution snapshots, never a configuration edited after the run."""
+    if job.kind == "library_assistant":
+        return (
+            []
+            if job.status == "QUEUED"
+            else [
+                {
+                    key: item.get(key, "")
+                    for key in (
+                        "connection_id",
+                        "connection_name",
+                        "agent",
+                        "model",
+                        "public_role",
+                        "model_family",
+                    )
+                }
+                for item in job.payload.get("assignments", [])
+            ]
+        )
     if job.kind != "analysis" or job.status == "QUEUED":
         return []
     recorded = [
@@ -54,6 +73,8 @@ def assignments_for(job, run):
 
 def current_assignment(job, run):
     """Only mark an executing step or a newly reserved session as current."""
+    if job.kind == "library_assistant" and job.status == "RUNNING":
+        return next(iter(assignments_for(job, run)), None)
     if job.kind != "analysis" or job.status != "RUNNING" or not run:
         return None
     active = [step for step in run.steps if step.get("status") == "RUNNING"]
@@ -146,6 +167,18 @@ def snapshot():
             stage = "Analysis completed" if job.kind == "analysis" else "Synchronization completed"
         elif job.kind == "sync" and job.status == "RUNNING":
             stage = "Synchronizing repositories"
+        if job.kind == "library_assistant":
+            stage = {
+                "RUNNING": "Testing the draft in a sandbox"
+                if job.payload.get("operation") == "test"
+                else "Preparing a library proposal",
+                "QUEUED": "Waiting for the selected AI connection",
+                "DONE": "Sandbox demonstration completed"
+                if job.payload.get("operation") == "test"
+                else "Library proposal ready for review",
+            }.get(job.status, "")
+            if job.status == "DONE" and job.payload.get("outcome") == "NEEDS_CLARIFICATION":
+                stage = "Your answer is needed"
         provider_names = list(
             dict.fromkeys(
                 step["provider"] for step in (run.steps if run else []) if step.get("provider")
@@ -166,16 +199,26 @@ def snapshot():
                 "executor_name": "Git synchronization" if job.kind == "sync" else None,
                 "request_id": str(item.pk) if item else None,
                 "environment_id": environment.pk if environment else None,
-                "title": item.need[:180] if item else environment.name if environment else "Task",
+                "title": item.need[:180]
+                if item
+                else environment.name
+                if environment
+                else job.payload.get("title", "Task"),
                 "environment_name": (item.environment_name_snapshot if item else "")
                 or (environment.name if environment else ""),
                 "operation": (
                     "Question analysis" if item and item.workflow == "question" else "Analysis"
                 )
                 if job.kind == "analysis"
+                else (
+                    "Library sandbox test"
+                    if job.payload.get("operation") == "test"
+                    else "Library generation"
+                )
+                if job.kind == "library_assistant"
                 else "Synchronization",
                 "agent": (", ".join(provider_names) or None)
-                if job.kind == "analysis" and job.status != "QUEUED"
+                if job.kind in {"analysis", "library_assistant"} and job.status != "QUEUED"
                 else None,
                 "assignments": assignments,
                 "public_role": (
@@ -189,12 +232,16 @@ def snapshot():
                     else run.orchestration.get("current_role")
                 )
                 if run
+                else job.payload.get("current_role")
+                if job.kind == "library_assistant"
                 else None,
                 "warnings": run.warnings if run else [],
                 "waiting_reason": (
                     run.orchestration.get("waiting_reason") or job.payload.get("waiting_reason", "")
                 )
                 if run and job.status == "QUEUED"
+                else job.payload.get("waiting_reason", "")
+                if job.kind == "library_assistant"
                 else "",
                 "connection_name": ", ".join(
                     dict.fromkeys(a["connection_name"] for a in assignments if a["connection_name"])
@@ -210,6 +257,8 @@ def snapshot():
                 "error": job.error,
                 "href": f"/{'questions' if item.workflow == 'question' else 'requests'}/{item.pk}"
                 if item
+                else f"/admin?library_draft={job.target}&library_kind={job.payload.get('draft_kind', 'agent')}"
+                if job.kind == "library_assistant"
                 else "/admin",
             }
         )
