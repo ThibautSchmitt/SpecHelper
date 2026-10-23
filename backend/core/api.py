@@ -1,6 +1,5 @@
 import re
-from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from django.db import transaction
@@ -16,6 +15,7 @@ from . import connections as connection_flows
 from . import environments as environment_actions
 from . import github, providers
 from .agent import runtime_call
+from .file_validation import attachment_path
 from .models import (
     AgentProfile,
     AIConnection,
@@ -38,12 +38,22 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="1.8", auth=None)
+api = NinjaAPI(title="SpecHelper", version="1.9", auth=None)
 
 
 @api.exception_handler(ValueError)
 def invalid(request, exc):
-    return api.create_response(request, {"detail": str(exc)}, status=422)
+    from .sensitive_data import configured_secrets, redact
+
+    return api.create_response(request, {"detail": redact(str(exc), configured_secrets())[:500]}, status=422)
+
+
+@api.exception_handler(Exception)
+def unexpected(request, exc):
+    import logging
+
+    logging.getLogger(__name__).error("API operation failed (%s)", type(exc).__name__)
+    return api.create_response(request, {"detail": "The operation could not be completed. Try again."}, status=500)
 
 
 class SettingsIn(Schema):
@@ -79,7 +89,7 @@ class RepositoryIn(Schema):
 
 class EnvironmentIn(Schema):
     name: str = Field(min_length=1, max_length=100)
-    repositories: list[RepositoryIn] = Field(min_length=1)
+    repositories: list[RepositoryIn] = Field(min_length=1, max_length=100)
     database_id: int | None = None
 
 
@@ -100,7 +110,7 @@ class RequestIn(Schema):
 
 
 class AnswersIn(Schema):
-    answers: dict[str, str]
+    answers: dict[Annotated[str, Field(max_length=100)], Annotated[str, Field(max_length=10000)]] = Field(max_length=100)
 
 
 class ContinuationIn(Schema):
@@ -601,7 +611,7 @@ def download_attachment(request, request_id: UUID, attachment_id: UUID):
         RequestAttachment, pk=attachment_id, request_id=request_id, request__workflow="request"
     )
     response = FileResponse(
-        Path(attachment.path).open("rb"),
+        attachment_path(attachment).open("rb"),
         as_attachment=True,
         filename=attachment.name,
         content_type="application/octet-stream",

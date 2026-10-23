@@ -39,6 +39,15 @@ def readonly_config():
 def test_real_role_and_transaction_enforcement(readonly_config):
     result = query(readonly_config, "SELECT id, name FROM fixture.contracts")
     assert result["rows"] == [(1, "Active")]
+    # Remove client transaction protection: PostgreSQL grants must still refuse writes.
+    unrestricted_transaction = {key: value for key, value in readonly_config.items() if key != "options"}
+    with psycopg.connect(**unrestricted_transaction) as db:
+        db.read_only = False
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            db.execute("DELETE FROM fixture.contracts")
+    with psycopg.connect(**unrestricted_transaction) as db:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            db.execute("CREATE TABLE fixture.forbidden (id int)")
     with psycopg.connect(**readonly_config) as db:
         with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
             db.execute("DELETE FROM fixture.contracts")
@@ -51,8 +60,25 @@ def test_real_role_and_transaction_enforcement(readonly_config):
         query(readonly_config, "SELECT * FROM fixture.contracts")
 
     with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute("REVOKE UPDATE(name) ON fixture.contracts FROM fixture_reader")
+        db.execute("REVOKE UPDATE ON fixture.contracts FROM fixture_reader")
+        db.execute("INSERT INTO fixture.contracts SELECT value, 'Fixture' FROM generate_series(2,205) value")
+    bounded = query(readonly_config, "SELECT id FROM fixture.contracts ORDER BY id")
+    assert len(bounded["rows"]) == 200 and bounded["truncated"]
+
+    with psycopg.connect(DSN, autocommit=True) as db:
         db.execute("REVOKE UPDATE ON fixture.contracts FROM fixture_reader")
         db.execute("GRANT UPDATE(name) ON fixture.contracts TO fixture_reader")
+    with pytest.raises(ValueError, match="write"):
+        query(readonly_config, "SELECT * FROM fixture.contracts")
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute("REVOKE UPDATE(name) ON fixture.contracts FROM fixture_reader")
+        db.execute("GRANT CREATE ON SCHEMA fixture TO fixture_reader")
+    with pytest.raises(ValueError, match="create"):
+        query(readonly_config, "SELECT * FROM fixture.contracts")
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute("ALTER TABLE fixture.contracts OWNER TO fixture_reader")
+        db.execute("REVOKE CREATE ON SCHEMA fixture FROM fixture_reader")
     with pytest.raises(ValueError, match="write"):
         query(readonly_config, "SELECT * FROM fixture.contracts")
 

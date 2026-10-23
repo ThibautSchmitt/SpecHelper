@@ -95,6 +95,7 @@ pathlib.Path(os.environ['GH_CONFIG_DIR'],'hosts.yml').write_text('fixture-token'
 
 
 def test_claude_login_accepts_confirmation_and_persists_credentials(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNTIME_TOKEN", "fixture-login-vault-key")
     executable(
         tmp_path,
         monkeypatch,
@@ -114,6 +115,10 @@ pathlib.Path(os.environ['CLAUDE_CONFIG_DIR'],'.credentials.json').write_text(jso
     assert manager.get("attempt")["status"] == "CONNECTED"
     stored = tmp_path / "credentials/claude/.credentials.json"
     assert stored.exists() and stored.stat().st_mode & 0o777 == 0o600
+    from runtime.vault import read as read_credential
+
+    assert b"fixture-secret" not in stored.read_bytes()
+    assert json.loads(read_credential(stored))["claudeAiOauth"]["accessToken"] == "fixture-secret"
     assert "fixture-secret" not in json.dumps(manager.get("attempt"))
 
 

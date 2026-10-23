@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { SafeMarkdown } from "@/components/safe-markdown";
+import { secureFetch } from "@/lib/access";
 import { api, send } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -289,7 +289,7 @@ export function PublishTicket({
     setPending(payload);
     remember(storageKey, payload);
     try {
-      const response = await fetch(`/api${endpoint}/publications`, {
+      const response = await secureFetch(`/api${endpoint}/publications`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -768,20 +768,9 @@ export function PublishTicket({
                 <h3 className="mt-6">{t("Publication preview")}</h3>
                 <div className="markdown-preview mt-3 rounded border bg-muted p-4">
                   {preview.format === "markdown" ? (
-                    <Markdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        a: (props) => (
-                          <a
-                            {...props}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          />
-                        ),
-                      }}
-                    >
+                    <SafeMarkdown>
                       {renderedBody}
-                    </Markdown>
+                    </SafeMarkdown>
                   ) : (
                     <p className="whitespace-pre-wrap">{renderedBody}</p>
                   )}

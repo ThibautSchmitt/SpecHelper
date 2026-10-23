@@ -152,15 +152,27 @@ def add_attachment(request_id, upload):
         path = directory / (str(attachment_id) + Path(name).suffix.lower())
         try:
             with path.open("xb") as stream:
+                size = 0
                 for chunk in upload.chunks():
+                    size += len(chunk)
+                    if size > 25 * 1024 * 1024:
+                        raise HttpError(422, "The maximum size is 25 MB")
                     stream.write(chunk)
+            from .environment_context import reject_credentials
+            from .file_validation import inspect_file
+
+            content_type = inspect_file(path, name)
+            reject_credentials(name)
+            if path.suffix in {".txt", ".md", ".csv", ".json", ".log"}:
+                reject_credentials(path.read_text(encoding="utf-8-sig"))
+            path.chmod(0o444)
             return RequestAttachment.objects.create(
                 id=attachment_id,
                 request=request,
                 name=name,
                 path=str(path),
-                content_type=upload.content_type or "application/octet-stream",
-                size=upload.size,
+                content_type=content_type,
+                size=size,
             )
         except Exception:
             path.unlink(missing_ok=True)

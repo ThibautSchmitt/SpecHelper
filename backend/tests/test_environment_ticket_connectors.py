@@ -37,7 +37,7 @@ def test_connector_list_and_creation_are_environment_scoped(publication_context)
     ] == [second.pk]
     missing = Request.objects.create(need="Detached historical request")
     assert client.get(f"/ticket-connectors?request_id={missing.pk}").json() == []
-    data = {"name": "New tracker", "platform": "gitlab", "base_url": "https://new.example"}
+    data = {"name": "New tracker", "platform": "gitlab", "base_url": "https://new.example", "secret": "fixture-dedicated-destination-token"}
     assert client.post("/ticket-connectors", json=data).status_code == 422
     data["environment_id"] = other.pk
     assert client.post("/ticket-connectors", json=data).json()["environment_id"] == other.pk

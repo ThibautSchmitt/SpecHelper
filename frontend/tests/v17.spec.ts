@@ -212,10 +212,11 @@ test("Questions uses the shared navigation, queue and creation form with optiona
     test.info().project.name === "mobile" ? "dialog" : "complementary",
     { name: "Task queue", exact: true },
   );
-  await expect(queue.getByText("Question", { exact: true })).toBeVisible();
+  await expect(queue.getByText("Question analysis", { exact: true })).toBeVisible();
   await expect(
-    queue.getByText("ChatGPT · gpt-example", { exact: false }),
+    queue.getByText("ChatGPT", { exact: true }),
   ).toBeVisible();
+  await expect(queue.locator('[data-job="7"] .queue-assignment')).toHaveAttribute("title", /gpt-example/);
 });
 
 test("copy and download use exactly the displayed historical explanation with no ticket or goal actions", async ({

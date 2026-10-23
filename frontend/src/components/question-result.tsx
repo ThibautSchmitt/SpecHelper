@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import { Copy, Download, FileText, Plus, MessageCircle } from "lucide-react";
 import { AnalysisContext } from "@/components/analysis-context";
 import { Button } from "@/components/ui/button";
@@ -205,7 +204,7 @@ export function QuestionResult({
           className="question-markdown mt-5 break-words"
           data-testid="question-explanation"
         >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
+          <SafeMarkdown>{markdown}</SafeMarkdown>
         </div>
         <div className="answer-actions" aria-label={t("Answer actions")}>
           {onContinue ? (
@@ -330,9 +329,9 @@ export function QuestionResult({
                     {t("Preview documentation")}
                   </summary>
                   <div className="question-markdown mt-3 break-words">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <SafeMarkdown>
                       {document.markdown}
-                    </ReactMarkdown>
+                    </SafeMarkdown>
                   </div>
                 </details>
               </li>

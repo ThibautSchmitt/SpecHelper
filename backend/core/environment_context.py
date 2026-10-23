@@ -150,6 +150,9 @@ def store_upload(resource, upload):
                     raise HttpError(422, "The maximum size is 25 MB")
                 digest.update(chunk)
                 stream.write(chunk)
+        from .file_validation import inspect_file
+
+        content_type = inspect_file(path, name)
         if Path(name).suffix.lower() in TEXT_EXTENSIONS:
             try:
                 reject_credentials(path.read_text(encoding="utf-8"))
@@ -162,7 +165,7 @@ def store_upload(resource, upload):
             resource=resource,
             version=number,
             filename=name,
-            content_type=(upload.content_type or "application/octet-stream")[:100],
+            content_type=content_type,
             size=size,
             sha256=digest.hexdigest(),
             path=str(path),

@@ -1,6 +1,5 @@
 """Question workflow routes share request services while keeping their intent explicit."""
 
-from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
@@ -12,6 +11,7 @@ from ninja.responses import Status
 from pydantic import ConfigDict, Field
 
 from . import question_actions as actions
+from .file_validation import attachment_path
 from .models import GeneratedArtifact, QuestionDocument, Request, RequestAttachment
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
@@ -108,7 +108,7 @@ def download_attachment(request, question_id: UUID, attachment_id: UUID):
     actions.question(question_id)
     attachment = get_object_or_404(RequestAttachment, request_id=question_id, pk=attachment_id)
     response = FileResponse(
-        Path(attachment.path).open("rb"),
+        attachment_path(attachment).open("rb"),
         as_attachment=True,
         filename=attachment.name,
         content_type="application/octet-stream",

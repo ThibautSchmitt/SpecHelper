@@ -381,8 +381,9 @@ test("queue names actual model assignments and labels an unassigned request expl
   if (await open.isVisible()) await open.click();
   const queue = page.locator(".task-queue:visible");
   await expect(
-    queue.getByText("Careful review · gpt-review", { exact: true }),
+    queue.getByText("Careful review", { exact: true }),
   ).toBeVisible();
+  await expect(queue.locator('[data-job="1"] .queue-assignment')).toHaveAttribute("title", /gpt-review/);
   await expect(queue.getByText("AI not assigned", { exact: true })).toHaveCount(
     1,
   );

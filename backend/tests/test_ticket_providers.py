@@ -44,7 +44,7 @@ def transport(monkeypatch):
             lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs),
         )
         monkeypatch.setattr(adapters, "decrypt", lambda value: value)
-        monkeypatch.setattr(adapters.github, "token", lambda: "shared-test-token")
+        monkeypatch.setattr("core.sensitive_data.git_credentials", lambda: {"repository-only-test-token"})
         return calls
 
     return install
@@ -124,7 +124,7 @@ body:
     assert provider.create("org/app", payload, "spechelper:123")["external_key"] == "7"
     sent = json.loads(calls[-1].content)
     assert "Correct result" in sent["body"] and "spechelper:123" in sent["body"]
-    assert calls[-1].headers["Authorization"] == "Bearer shared-test-token"
+    assert calls[-1].headers["Authorization"] == "Bearer test-secret"
     assert sent["body"].count("### Expected behavior") == 1
     assert sent["body"] == adapters.render_body(payload, options, "spechelper:123")
 

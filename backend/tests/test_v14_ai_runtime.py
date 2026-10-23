@@ -10,6 +10,12 @@ from fastapi.testclient import TestClient
 from runtime import server
 from runtime.auth import account_key, identity_root, publish_refresh, subscription_credentials
 from runtime.quota import codex_windows, rollout_windows
+from runtime.vault import read as read_credential
+
+
+@pytest.fixture(autouse=True)
+def vault_key(monkeypatch):
+    monkeypatch.setenv("RUNTIME_TOKEN", "fixture-key")
 
 
 @pytest.fixture
@@ -89,7 +95,10 @@ def test_runtime_credential_namespaces_and_selected_models_are_isolated(isolated
             )
             assert response.status_code == 200
             assert response.json()["model"] == "accepted-model"
-    assert observed == [("synthetic-" + identity, "accepted-model") for identity in identities]
+    assert len(observed) == 2
+    assert len({token for token, _ in observed}) == 2
+    assert all(model == "accepted-model" for _, model in observed)
+    assert all(not token.startswith("synthetic-") for token, _ in observed)
 
 
 def test_runtime_rejects_api_key_mode_instead_of_billed_fallback(isolated_runtime):
@@ -192,7 +201,7 @@ def test_namespaced_refresh_never_changes_other_account_or_legacy(tmp_path):
         directory.mkdir(parents=True)
         (directory / "auth.json").write_bytes(original)
     assert publish_refresh(identity_root(tmp_path, first), "codex", original, candidate)
-    assert (identity_root(tmp_path, first) / "codex/auth.json").read_bytes() == candidate
+    assert read_credential(identity_root(tmp_path, first) / "codex/auth.json") == candidate
     assert (identity_root(tmp_path, second) / "codex/auth.json").read_bytes() == original
     assert (tmp_path / "codex/auth.json").read_bytes() == original
 

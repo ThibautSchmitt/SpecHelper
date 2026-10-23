@@ -189,13 +189,15 @@ def main():
         current, calls = {}, []
         original_sandbox = server.sandbox
 
-        def sandbox(workspace, session, attachments, resources=()):
-            command = original_sandbox(workspace, session, attachments, resources)
+        def sandbox(workspace, session, attachments, resources=(), broker=None):
+            command = original_sandbox(workspace, session, attachments, resources, broker)
+            boundary = command.index("setpriv")
+            tail, command = command[boundary:], command[:boundary]
             command += ["--setenv", "FIXTURE_SOURCE", name, "--setenv", "FIXTURE_PROFILE", current["profile"],
                         "--setenv", "FIXTURE_UNFILTERED", "return list(rows)" if stack == "python" else "return rows.slice()"]
             for provider in ("codex", "claude"):
                 command += ["--ro-bind", str(fixture), "/usr/local/bin/" + provider]
-            return command
+            return command + tail
 
         def invoke(path, payload, **kwargs):
             calls.append(payload)

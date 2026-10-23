@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { Shell } from "@/components/shell";
 import "./globals.css";
@@ -5,15 +6,16 @@ export const metadata: Metadata = {
   title: "SpecHelper",
   description: "From business needs to implementation-ready tickets.",
 };
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const nonce = (await headers()).get("x-nonce") || undefined;
   return (
     <html lang="fr" data-theme="light" suppressHydrationWarning>
       <head>
-        <script
+        <script nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `(function(){var t="system";try{var v=localStorage.getItem("spechelper-theme");if(v==="light"||v==="dark")t=v}catch(e){}document.documentElement.dataset.theme=t==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):t})()`,
           }}

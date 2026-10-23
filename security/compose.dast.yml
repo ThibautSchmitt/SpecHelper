@@ -1,0 +1,100 @@
+# Only synthetic, disposable data. No host ports or application/runtime volumes.
+services:
+  database:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: security_scan
+      POSTGRES_USER: security_scan
+      POSTGRES_PASSWORD: disposable-scan-only
+    tmpfs:
+      - /var/lib/postgresql/data:size=256m
+    networks: [scan]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U security_scan -d security_scan]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 256m
+    pids_limit: 128
+  credentials:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    user: "0:0"
+    command:
+      - python
+      - -c
+      - |
+        import os
+        from pathlib import Path
+        source = Path("/source/access-password").read_bytes()
+        path = Path("/run/scan-auth/access-password")
+        path.write_bytes(source)
+        path.chmod(0o400)
+        os.chown(path, 10000, 10000)
+    volumes:
+      - ${SPECHELPER_DAST_PASSWORD_FILE:?Set the disposable password file}:/source/access-password:ro
+      - scan-auth:/run/scan-auth
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      credentials: {condition: service_completed_successfully}
+      database: {condition: service_healthy}
+    command: [sh, -c, 'python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60']
+    environment:
+      SPECHELPER_DATA_DIR: /data
+      POSTGRES_HOST: database
+      POSTGRES_DB: security_scan
+      POSTGRES_USER: security_scan
+      POSTGRES_PASSWORD: disposable-scan-only
+      SPECHELPER_ACCESS_PASSWORD_FILE: /run/scan-auth/access-password
+      SPECHELPER_REQUIRE_HTTPS: ${SPECHELPER_DAST_REQUIRE_HTTPS:-0}
+      SPECHELPER_TRUST_PROXY: ${SPECHELPER_DAST_TRUST_PROXY:-0}
+      TRUSTED_ORIGINS: ${SPECHELPER_DAST_ORIGINS:-http://frontend:3000}
+      ALLOWED_HOSTS: backend,frontend,localhost
+    tmpfs:
+      - /data:mode=0700,size=128m,uid=10000,gid=10000
+      - /tmp:size=64m
+    volumes:
+      - scan-auth:/run/scan-auth:ro
+    networks: [scan]
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:8000/api/health")']
+      interval: 2s
+      timeout: 3s
+      retries: 40
+    mem_limit: 512m
+    pids_limit: 128
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      backend: {condition: service_healthy}
+    environment:
+      BACKEND_URL: http://backend:8000
+    networks: [scan]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:size=32m
+      - /app/.next/cache:size=32m,uid=1000,gid=1000
+    mem_limit: 512m
+    pids_limit: 128
+networks:
+  scan:
+    internal: true
+
+volumes:
+  scan-auth: {}

@@ -3,6 +3,7 @@ export { expect } from "@playwright/test";
 
 export const test = base.extend({
   page: async ({ page }, use) => {
+    await page.route("**/api/access/session", (route) => route.fulfill({ json: { mode: "local", authenticated: true, csrf_token: "", expires_at: null } }));
     let settings = {
       name: "SpecHelper",
       primary_color: "#2563eb",

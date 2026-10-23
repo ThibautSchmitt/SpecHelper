@@ -1,7 +1,16 @@
 import json
 import stat
 
+import pytest
+
 from runtime.auth import publish_refresh
+from runtime.vault import PREFIX
+from runtime.vault import read as read_credential
+
+
+@pytest.fixture(autouse=True)
+def vault_key(monkeypatch):
+    monkeypatch.setenv("RUNTIME_TOKEN", "fixture-vault-key")
 
 
 def credentials(token, account="same-account"):
@@ -26,7 +35,9 @@ def test_official_token_rotation_persists_for_future_sessions(tmp_path):
     path = directory / "auth.json"
     path.write_bytes(original)
     assert publish_refresh(tmp_path, "codex", original, candidate)
-    assert path.read_bytes() == candidate
+    assert read_credential(path) == candidate
+    assert path.read_bytes().startswith(PREFIX)
+    assert candidate not in path.read_bytes()
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 

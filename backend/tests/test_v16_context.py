@@ -79,11 +79,10 @@ def test_preview_is_bounded_and_binary_text_is_reported(environment, storage):
     assert len(resource["preview"]) == 6000
     assert resource["preview_truncated"] is True
     assert resource["agent_readable"] is True
-    value = upload(environment, b"\xff\x00", "broken.txt", revision=2)
-    assert value["resources"][1]["preview"] is None
-    assert value["resources"][1]["agent_readable"] is False
-    value = upload(environment, "é".encode() * 20000, "utf8.txt", revision=3)
-    assert value["resources"][2]["agent_readable"] is True
+    with pytest.raises(HttpError, match="content"):
+        upload(environment, b"\xff\x00", "broken.txt", revision=2)
+    value = upload(environment, "é".encode() * 20000, "utf8.txt", revision=2)
+    assert value["resources"][1]["agent_readable"] is True
 
 
 def test_snapshot_has_no_document_body_or_host_paths(environment, storage):

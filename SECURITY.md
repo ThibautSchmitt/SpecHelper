@@ -1,6 +1,9 @@
 # Security
 
-SpecHelper is designed for a trusted team. An instance shares requests and connections and provides no application accounts or private spaces. Protect remote access through team infrastructure; do not expose Settings directly.
+SpecHelper is designed for a trusted team. An instance shares requests and connections
+and provides no individual accounts or private spaces. Remote instances require
+application access authentication; protect the deployment with HTTPS and trusted
+team infrastructure as well.
 
 ## Deployment
 
@@ -9,6 +12,24 @@ the API nor the agent runtime exposes a host port. For remote access, protect th
 entire instance, including Settings, with your team's VPN, reverse proxy or SSO,
 serve it over HTTPS, and configure `BIND_ADDRESS`, `TRUSTED_ORIGINS` and
 `ALLOWED_HOSTS` for the deployment.
+
+Set `SPECHELPER_ACCESS_PASSWORD_HASH` to a Django password hash, or mount a protected
+password file and set `SPECHELPER_ACCESS_PASSWORD_FILE` to its container path. A
+password file must be a private regular file with mode 0400/0600 and contain 16–4096
+characters. Do not commit it. Both frontend and backend/worker must use the same
+deployment settings. A non-loopback instance without valid access configuration
+fails closed. Local access without a password requires verified loopback settings.
+
+For HTTPS, set `SPECHELPER_REQUIRE_HTTPS=1`. Enable `SPECHELPER_TRUST_PROXY=1` only
+behind an isolated, trusted proxy that replaces forwarded headers and prevents
+direct backend access. Session cookies are HttpOnly and SameSite Strict, Secure
+under HTTPS. Password changes invalidate existing sessions. The default session
+duration is eight hours; `SPECHELPER_SESSION_SECONDS` accepts 300–86400 seconds.
+CSRF protection remains required for changes even in localhost mode.
+
+The [threat model](docs/threat-model.md) documents data transfers, encryption keys,
+CLI credential handling, retention, trusted components and residual host privileges.
+The [security campaign](docs/security-testing.md) documents scanner and pentest scope.
 
 Source workspaces and attachments are mounted read-only in the agent sandbox.
 Analyzed PostgreSQL databases require dedicated read-only roles. GitHub and
@@ -29,7 +50,9 @@ persistent volumes.
 
 ## Reporting a vulnerability
 
-Do not disclose vulnerabilities containing secrets or real data in a public issue. Once the GitHub repository exists, use **Report a vulnerability** if private reporting is enabled. Otherwise, ask the maintainer for a private channel without disclosing exploit details. No temporary personal contact is listed before the GitHub account is selected.
+Do not disclose vulnerabilities containing secrets or real data in a public issue.
+Use GitHub's **Report a vulnerability** if private reporting is enabled. Otherwise,
+ask the maintainer for a private channel without disclosing exploit details.
 
 A useful report includes the version, minimal reproduction, impact and prerequisites, using fictional data. Never send AI, GitHub or database credentials or private team attachments.
 

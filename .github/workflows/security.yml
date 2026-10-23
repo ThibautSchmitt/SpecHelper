@@ -1,0 +1,183 @@
+name: Security campaign
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      active_dast:
+        description: Run the bounded active scan against a new disposable instance
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: mkdir -p security-reports
+      - name: Scan Git history for secrets
+        id: secrets
+        continue-on-error: true
+        run: >-
+          docker run --rm --network none -v "$PWD:/repo:ro"
+          -v "$PWD/security-reports:/reports" ghcr.io/gitleaks/gitleaks:v8.30.1
+          git /repo --config /repo/security/gitleaks.toml --redact
+          --report-format json --report-path /reports/gitleaks.json
+      - name: Scan source with local SAST rules
+        id: sast
+        continue-on-error: true
+        run: >-
+          docker run --rm --network none -e SEMGREP_SEND_METRICS=off
+          -v "$PWD:/src:ro" -v "$PWD/security-reports:/reports"
+          semgrep/semgrep:1.143.0 semgrep scan --config /src/security/semgrep.yml
+          --metrics off --disable-version-check --error --json
+          --output /reports/semgrep.json /src/backend/core /src/backend/config /src/runtime /src/frontend/src
+      - name: Audit Python lock dependencies
+        id: python_audit
+        continue-on-error: true
+        run: |
+          python -m pip install uv==0.13.4
+          uv export --project backend --frozen --all-groups --no-emit-project --no-hashes --format requirements-txt --output-file security-reports/requirements.txt
+          uv tool run --from pip-audit==2.9.0 pip-audit -r security-reports/requirements.txt --no-deps --disable-pip --format json --output security-reports/pip-audit.json
+      - name: Audit npm lock dependencies
+        id: npm_audit
+        continue-on-error: true
+        run: npm audit --package-lock-only --json > ../security-reports/npm-audit.json
+        working-directory: frontend
+      - name: Scan infrastructure definitions
+        id: iac
+        continue-on-error: true
+        run: >-
+          docker run --rm -v "$PWD:/src:ro" -v "$PWD/security-reports:/reports"
+          aquasec/trivy:0.67.2 config --format json --output /reports/trivy-iac.json
+          --severity HIGH,CRITICAL --exit-code 0 --skip-dirs /src/.git
+          --skip-dirs /src/security-reports /src
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-security-reports
+          path: security-reports/
+          retention-days: 14
+      - name: Enforce all source security gates
+        if: always()
+        env:
+          SECRETS: ${{ steps.secrets.outcome }}
+          SAST: ${{ steps.sast.outcome }}
+          PYTHON_AUDIT: ${{ steps.python_audit.outcome }}
+          NPM_AUDIT: ${{ steps.npm_audit.outcome }}
+          IAC: ${{ steps.iac.outcome }}
+        run: |
+          python - <<'PY'
+          import os
+          failed = [name for name in ("SECRETS", "SAST", "PYTHON_AUDIT", "NPM_AUDIT", "IAC") if os.environ[name] != "success"]
+          if failed:
+              raise SystemExit("Security review failed: " + ", ".join(failed))
+          PY
+          python scripts/security/check_reports.py security-reports
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, frontend, runtime]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: mkdir -p security-reports
+      - name: Build exact source image
+        run: docker build -f "${{ matrix.component }}/Dockerfile" -t "spechelper-security:${{ matrix.component }}" .
+      - name: Record exact-image applicability controls
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          docker image inspect "spechelper-security:$COMPONENT" --format '{{.Id}}' > security-reports/image-id.txt
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+            -v "$PWD/scripts/security/image-probe.sh:/probe.sh:ro" \
+            "spechelper-security:$COMPONENT" sh /probe.sh > security-reports/image-probe.json
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path("security-reports")
+          evidence = {"component": os.environ["COMPONENT"], "image_id": (root / "image-id.txt").read_text().strip(), "checks": json.loads((root / "image-probe.json").read_text())}
+          (root / "image-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
+          PY
+      - name: Verify Linux analysis boundaries from the exact runtime image
+        if: matrix.component == 'runtime'
+        run: >-
+          docker run --rm --network none --read-only
+          --cap-add SYS_ADMIN --cap-add NET_ADMIN
+          --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+          --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777
+          --memory 2g --cpus 2 --pids-limit 256
+          spechelper-security:runtime python -m runtime.v19_smoke
+          > security-reports/runtime-boundaries.jsonl
+      - name: Export image without exposing Docker socket to scanner
+        run: docker save "spechelper-security:${{ matrix.component }}" -o security-reports/image.tar
+      - name: Scan container packages and image configuration
+        run: >-
+          docker run --rm -v "$PWD/security-reports:/reports"
+          aquasec/trivy:0.67.2 image --input /reports/image.tar
+          --scanners vuln,secret --image-config-scanners secret
+          --exit-code 0 --timeout 15m --format json
+          --output /reports/trivy-image.json
+      - name: Enforce image findings and exact applicability evidence
+        run: python3 scripts/security/check_image_report.py security-reports "${{ matrix.component }}" security/image-applicability.json
+      - name: Remove image archive from report artifacts
+        if: always()
+        run: rm -f security-reports/image.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: image-security-${{ matrix.component }}
+          path: security-reports/
+          retention-days: 14
+
+  dast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Baseline scan of disposable authenticated instance
+        env:
+          SPECHELPER_SECURITY_REPORT_DIR: ${{ github.workspace }}/security-reports/baseline
+        run: scripts/security/dast.sh baseline
+      - name: Verify TLS cookies, CSRF and revoked-session replay
+        env:
+          SPECHELPER_SECURITY_REPORT_DIR: ${{ github.workspace }}/security-reports/https
+        run: scripts/security/dast.sh https
+      - name: Periodic bounded active scan of a separate disposable instance
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.active_dast)
+        env:
+          SPECHELPER_SECURITY_REPORT_DIR: ${{ github.workspace }}/security-reports/active
+        run: scripts/security/dast.sh active
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: disposable-dast-reports
+          path: security-reports/
+          retention-days: 7

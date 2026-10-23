@@ -14,13 +14,12 @@ from pydantic import ConfigDict, Field, field_validator
 
 from .models import (
     Environment,
-    GitHubConnection,
     PublishedTicket,
     Request,
     ResultVersion,
     TicketConnector,
 )
-from .secrets import encrypt
+from .secrets import decrypt, encrypt
 from .ticket_providers import provider_for
 from .ticket_publication import (
     accessible_projects,
@@ -105,16 +104,13 @@ def connector_values(payload, existing=None):
             values[key] = encrypt(value)
         elif existing is None:
             values[key] = ""
-    # GitHub can reuse the instance's encrypted OAuth credential. It never becomes
-    # part of a prompt or a public connector response.
-    if (
-        payload.platform == "github"
-        and not values.get("secret")
-        and not (existing and existing.secret)
-    ):
-        github = GitHubConnection.objects.filter(pk=1).first()
-        if github and github.secret:
-            values["secret"] = github.secret
+    from .sensitive_data import git_credentials
+
+    candidate = payload.secret or (existing.secret and decrypt(existing.secret) if existing else "")
+    if not candidate:
+        raise HttpError(422, "Configure a dedicated ticket publication credential.")
+    if candidate in git_credentials():
+        raise HttpError(422, "Ticket publication must use a credential distinct from Git source access.")
     if existing and payload.platform != existing.platform:
         raise HttpError(422, "Create a new connector to change its platform.")
     if existing and values["base_url"] != existing.base_url and existing.published_tickets.exists():

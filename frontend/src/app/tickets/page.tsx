@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import { RefreshCw, Tickets } from "lucide-react";
 import { api, type Environment } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -452,7 +452,7 @@ export default function TicketsPage() {
                     className="markdown-preview text-sm"
                     data-testid="ticket-description"
                   >
-                    <ReactMarkdown>{detail.description}</ReactMarkdown>
+                    <SafeMarkdown>{detail.description}</SafeMarkdown>
                   </div>
                 ) : (
                   <p className="text-sm muted">

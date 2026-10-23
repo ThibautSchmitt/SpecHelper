@@ -1,0 +1,13 @@
+{
+  "exceptions": [
+    {
+      "id": "V19-RUNTIME-BROKER",
+      "scanner_id": "DS002",
+      "target": "runtime/Dockerfile",
+      "expires": "2027-01-23",
+      "owner": "SpecHelper maintainers",
+      "reason": "The trusted runtime supervisor needs mount/network namespace setup and remains root; each analysis process uses a distinct unprivileged UID/GID with zero capabilities, read-only mounts and an allowlisted credential broker. This exception does not apply to the backend, frontend or analysis child.",
+      "required_evidence": "Runtime sandbox UID/capability/credential/network rejection probes must pass for the same image before release."
+    }
+  ]
+}

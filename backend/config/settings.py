@@ -15,7 +15,10 @@ INSTALLED_APPS = ["django.contrib.contenttypes", "core"]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.boundary_response.BoundaryResponseMiddleware",
     "core.middleware.SameOriginMiddleware",
+    "core.middleware.SecureCsrfMiddleware",
+    "core.middleware.AccessMiddleware",
 ]
 ROOT_URLCONF = "config.urls"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -44,6 +47,37 @@ TRUSTED_ORIGINS = os.environ.get(
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "filters": {"content_free_web": {"()": "core.security_logging.ContentFreeWebLogFilter"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "filters": ["content_free_web"]}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# Remote deployments use shared application access; localhost-only mode has no user tenancy.
+ACCESS_PASSWORD_HASH = os.environ.get("SPECHELPER_ACCESS_PASSWORD_HASH", "")
+ACCESS_PASSWORD_FILE = os.environ.get("SPECHELPER_ACCESS_PASSWORD_FILE", "")
+ACCESS_LOCAL_ONLY = os.environ.get("SPECHELPER_LOCAL_ONLY", "1") == "1"
+ACCESS_BIND_ADDRESS = os.environ.get("BIND_ADDRESS", "127.0.0.1")
+ACCESS_REQUIRE_HTTPS = os.environ.get("SPECHELPER_REQUIRE_HTTPS", "0") == "1"
+ACCESS_COOKIE_NAME = "spechelper_session"
+ACCESS_SESSION_SECONDS = max(
+    300, min(86400, int(os.environ.get("SPECHELPER_SESSION_SECONDS", "28800")))
+)
+ACCESS_LOGIN_RATE = max(1, min(30, int(os.environ.get("SPECHELPER_LOGIN_RATE", "5"))))
+ACCESS_READ_RATE = max(30, min(10000, int(os.environ.get("SPECHELPER_READ_RATE", "600"))))
+ACCESS_WRITE_RATE = max(10, min(1000, int(os.environ.get("SPECHELPER_WRITE_RATE", "120"))))
+ACCESS_CONCURRENCY = max(1, min(64, int(os.environ.get("SPECHELPER_CONCURRENCY", "16"))))
+ACCESS_LEASE_SECONDS = 90
+ACCESS_MAX_REQUEST_BYTES = 26 * 1024 * 1024
+SECURITY_AUDIT_RETENTION_DAYS = max(
+    1, min(365, int(os.environ.get("SPECHELPER_AUDIT_RETENTION_DAYS", "30")))
+)
+CSRF_COOKIE_NAME = "spechelper_csrf"
+CSRF_COOKIE_SAMESITE = "Strict"
+CSRF_COOKIE_SECURE = ACCESS_REQUIRE_HTTPS
+CSRF_COOKIE_HTTPONLY = True
+CSRF_TRUSTED_ORIGINS = TRUSTED_ORIGINS
+# Forwarded TLS is trusted only when the deployment explicitly enables its trusted proxy.
+if os.environ.get("SPECHELPER_TRUST_PROXY", "0") == "1":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"

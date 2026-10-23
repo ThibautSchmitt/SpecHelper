@@ -14,7 +14,8 @@ def private_value(path, create=False):
         except OSError:
             return ""
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    os.fchmod(fd, 0o600)
     with os.fdopen(fd, "r+") as stream:
         fcntl.flock(stream, fcntl.LOCK_EX)
         value = stream.read().strip()

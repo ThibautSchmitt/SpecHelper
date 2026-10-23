@@ -1,0 +1,711 @@
+{
+  "scope": "Reference Compose images only; raw findings remain visible. Exact purl/component, no available fix, evidence and expiry are mandatory. Not an independent human pentest or a general vulnerability ignore list.",
+  "reviews": [
+    {
+      "cve": "CVE-2025-69720",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2025-69720",
+      "reason": "Affected analyze_string code belongs to infocmp, which is removed. Runtime ncurses libraries remain for terminal compatibility; affected executable is absent.",
+      "required_checks": [
+        "no_infocmp"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libncursesw6@6.5%2B20250216-2?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libtinfo6@6.5%2B20250216-2?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/ncurses-base@6.5%2B20250216-2?arch=all&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/ncurses-bin@6.5%2B20250216-2?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-12064",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-12064",
+      "reason": "Upstream states this affects the curl CLI only, not libcurl. Trusted services never invoke schemeless SFTP/SCP curl. Analysis has isolated networking and can reach only its loopback broker; SFTP/SCP destinations cannot be reached.",
+      "required_checks": [
+        "no_new_privileges"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-16742",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-16742",
+      "reason": "Affected systemd-homed daemon is absent; source-package findings on libsystemd/libudev do not install the daemon. No homed service, system bus or host home is exposed.",
+      "required_checks": [
+        "no_homed"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libsystemd0@257.13-1~deb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libudev1@257.13-1~deb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-24882",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-24882",
+      "reason": "Affected TPM decryption daemon is not installed. No TPM device or host GPG socket is mounted; unrelated GnuPG package metadata remains in the raw scan.",
+      "required_checks": [
+        "no_tpm_daemon"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/dirmngr@2.4.7-21%2Bdeb13u1%2Bb5?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/gnupg@2.4.7-21%2Bdeb13u1?arch=all&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/gnupg-l10n@2.4.7-21%2Bdeb13u1?arch=all&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/gpg@2.4.7-21%2Bdeb13u1%2Bb5?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/gpg-agent@2.4.7-21%2Bdeb13u1%2Bb5?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/gpgconf@2.4.7-21%2Bdeb13u1%2Bb5?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/gpgsm@2.4.7-21%2Bdeb13u1%2Bb5?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-36849",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-36849",
+      "reason": "Large TIFF sample-count denial of service is confined to analysis. TIFF uploads are not accepted; any document image decoding occurs in the non-root namespace with process/time/memory/file limits, read-only sources and restricted broker networking. No trusted web/credential process decodes TIFF data. Residual job denial of service remains bounded by the documented runtime limits.",
+      "required_checks": [
+        "no_new_privileges",
+        "no_suid_sgid"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-48501",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-48501",
+      "reason": "Debian source-package tracking reports the official vendor gh package as unfixed, but upstream fixed this before the installed 2.103.0 version (fix is 2.93.0). The official signed-repository package and actual binary version are checked; attestation/release-verification commands are not used by the application.",
+      "required_checks": [
+        "github_fixed_version"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/gh@2.103.0?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-52490",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-52490",
+      "reason": "Affected tiffcrop command-line tool is not installed. The finding on libtiff source-package metadata does not make that tool available.",
+      "required_checks": [
+        "no_tiffcrop"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libtiff6@4.7.0-3%2Bdeb13u3?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-54369",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-54369",
+      "reason": "Requires a privileged pathname-based ACL caller on attacker-controlled paths. No service performs ACL operations on uploads, no SUID tools exist, backend/frontend run non-root, and analysis UID has no capabilities. The supervisor does not call ACL tools.",
+      "required_checks": [
+        "no_suid_sgid",
+        "no_new_privileges"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libacl1@2.3.2-2%2Bb1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-76642",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-76642",
+      "reason": "Mount helper post-hook privilege escalation requires privileged mount execution. No SUID/SGID tools, no fstab mounts, no-new-privileges; analysis has no capabilities and seccomp denies mounts. Supervisor never invokes mount helpers from content.",
+      "required_checks": [
+        "no_suid_sgid",
+        "no_fstab_mounts",
+        "no_new_privileges"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/bsdutils@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libblkid1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/liblastlog2-2@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libmount1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libsmartcols1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libuuid1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/login@4.16.0-2%2Breally2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/mount@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/util-linux@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-78408",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-78408",
+      "reason": "Requires a privileged nsenter --join-cgroup invocation against attacker-controlled targets. No such invocation exists; child cannot change namespaces, has no capabilities, no inherited cgroup FD and no SUID tools.",
+      "required_checks": [
+        "no_suid_sgid",
+        "no_fstab_mounts",
+        "no_new_privileges"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/bsdutils@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libblkid1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/liblastlog2-2@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libmount1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libsmartcols1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libuuid1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/login@4.16.0-2%2Breally2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/mount@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/util-linux@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-78409",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-78409",
+      "reason": "Requires an fstab-authorized X-mount.subdir entry and privileged mount path. No fstab entries or SUID/SGID tools exist; child mount/namespace operations are denied.",
+      "required_checks": [
+        "no_suid_sgid",
+        "no_fstab_mounts",
+        "no_new_privileges"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/bsdutils@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libblkid1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/liblastlog2-2@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libmount1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libsmartcols1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libuuid1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/login@4.16.0-2%2Breally2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/mount@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/util-linux@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-78410",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-78410",
+      "reason": "Requires an attacker-controlled authorized fstab mount source and privileged mount helper. No fstab entries or SUID/SGID tools exist; child mount/namespace operations are denied.",
+      "required_checks": [
+        "no_suid_sgid",
+        "no_fstab_mounts",
+        "no_new_privileges"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/bsdutils@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libblkid1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/liblastlog2-2@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libmount1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libsmartcols1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libuuid1@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/login@4.16.0-2%2Breally2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/mount@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/util-linux@2.41.5-0%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-8458",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-8458",
+      "reason": "Requires Negotiate connection reuse across differing service names. Provider calls use httpx, not libcurl. Git synchronization uses a fresh process for one validated HTTP(S) source, with no shared connection pool across sources, identities or processes; analysis has no arbitrary network.",
+      "required_checks": [
+        "no_new_privileges"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/curl@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libcurl4t64@8.14.1-2%2Bdeb13u7?arch=amd64&distro=debian-13.7",
+          "components": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-88806",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-88806",
+      "reason": "Requires an attached malicious X server. The application does not connect to X11, has no DISPLAY or X socket; analysis receives neither and has no arbitrary network access.",
+      "required_checks": [
+        "no_x_server"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libx11-6@1.8.12-1?arch=amd64&distro=debian-13.7&epoch=2",
+          "components": [
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/libx11-data@1.8.12-1?arch=all&distro=debian-13.7&epoch=2",
+          "components": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-88807",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-88807",
+      "reason": "Requires an attached malicious X server. The application does not connect to X11, has no DISPLAY or X socket; analysis receives neither and has no arbitrary network access.",
+      "required_checks": [
+        "no_x_server"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libxrender1@0.9.12-1?arch=amd64&distro=debian-13.7&epoch=1",
+          "components": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-9538",
+      "owner": "SpecHelper maintainers; agent-assisted applicability review",
+      "reviewed": "2026-10-23",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-9538",
+      "reason": "Affected Perl Archive::Tar module is absent/removed. Application archive validation uses bounded Python ZIP inspection; no Perl tar reader handles uploads.",
+      "required_checks": [
+        "no_perl_tar"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libperl5.40@5.40.1-6%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/perl@5.40.1-6%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/perl-base@5.40.1-6%2Bdeb13u1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        },
+        {
+          "purl": "pkg:deb/debian/perl-modules-5.40@5.40.1-6%2Bdeb13u1?arch=all&distro=debian-13.7",
+          "components": [
+            "backend",
+            "runtime"
+          ]
+        }
+      ]
+    }
+  ]
+}

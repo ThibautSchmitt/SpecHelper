@@ -30,6 +30,7 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - English and French interface and generated content
 - Persistent light, dark and system appearance preferences
 - Human-confirmed publication to GitHub Issues, GitLab Issues, Jira and GLPI
+- Shared-team access protection, encrypted connections and isolated read-only AI execution
 
 SpecHelper does **not** modify source code, create pull requests or write to
 analyzed business databases.
@@ -47,9 +48,10 @@ docker compose up --build -d
 
 Open <http://localhost:3000>.
 
-SpecHelper has no application-level user accounts or private user spaces. For
-remote access, protect the entire instance with your VPN, reverse proxy or SSO
-and serve it over HTTPS. See [deployment and security](SECURITY.md).
+SpecHelper has no individual user accounts or private user spaces. Localhost works
+without a password. Remote exposure requires the shared access password and HTTPS;
+an exposed instance without authentication fails closed. See
+[deployment and security](SECURITY.md) for configuration and trusted proxy settings.
 
 ## Configuration
 
@@ -76,7 +78,9 @@ Open **Settings** at the bottom left after starting the application. Its three t
    The language applies to the interface and new analyses; existing requests keep
    their language and published files. See [English and French](docs/localization.md).
 6. **Optionally set up ticket publication.** Under **Environments**, add and test a
-   ticket connector within the relevant environment, then select its allowed destinations. See [publishing tickets](docs/ticketing.md) for
+   ticket connector within the relevant environment, then select its allowed destinations.
+   Use a dedicated publication credential, separate from repository-read credentials.
+   See [publishing tickets](docs/ticketing.md) for
    supported API versions, credentials and template behavior.
 
 Optional [environment context](docs/environment-context.md) adds short project instructions
@@ -150,7 +154,9 @@ and business database access are read-only. GitHub and database credentials are
 not added to prompts, attachments are isolated by request, and AI execution is sandboxed.
 
 Read [SECURITY.md](SECURITY.md) before exposing an instance outside a local environment.
-Application access must be protected by infrastructure-level authentication.
+Code excerpts, selected documents and permitted database results may be sent to the
+configured AI provider. Review the [threat model and retention boundaries](docs/threat-model.md)
+and [security validation](docs/security-testing.md) for details.
 
 ## Development
 
@@ -162,6 +168,7 @@ Further documentation:
 - [Environment context](docs/environment-context.md)
 - [Questions and reusable context](docs/questions.md)
 - [Appearance and analysis preferences](docs/appearance.md)
+- [v1.9 security acceptance report](docs/acceptance-v1.9.md)
 - [v1.8 acceptance report](docs/acceptance-v1.8.md)
 - [v1.7 acceptance report](docs/acceptance-v1.7.md)
 - [v1.6 acceptance report](docs/acceptance-v1.6.md)

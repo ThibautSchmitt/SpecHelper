@@ -1,0 +1,13 @@
+title = "SpecHelper secret scanning"
+[extend]
+useDefault = true
+
+# Generated/install artifacts are not source. Tests remain scanned.
+[[allowlists]]
+description = "Generated dependencies and private local artifacts"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+  '''(^|/)\.venv/''',
+  '''(^|/)\.local/''',
+]

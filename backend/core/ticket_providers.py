@@ -327,11 +327,15 @@ class GitHubProvider(Provider):
     def __init__(self, connector):
         super().__init__(connector)
         if self.base != "https://api.github.com":
-            raise TicketProviderError("GitHub publication uses the shared github.com connection")
-        try:
-            self.headers["Authorization"] = "Bearer " + github.token()
-        except ValueError:
-            raise TicketProviderError("Configure the GitHub connection") from None
+            raise TicketProviderError("GitHub publication requires api.github.com")
+        from .sensitive_data import git_credentials
+
+        if not connector.secret:
+            raise TicketProviderError("Configure a dedicated ticket publication credential.")
+        credential = decrypt(connector.secret)
+        if credential in git_credentials():
+            raise TicketProviderError("Ticket publication must use a credential distinct from Git source access.")
+        self.headers["Authorization"] = "Bearer " + credential
         self.headers["Accept"] = "application/vnd.github+json"
         self.headers["X-GitHub-Api-Version"] = "2022-11-28"
 

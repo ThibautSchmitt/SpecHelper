@@ -238,7 +238,7 @@ test("persistent navigation and real shared queue remain available across pages"
   await expect(
     panel.getByText("Queue position: 1", { exact: true }),
   ).toBeVisible();
-  await expect(panel.getByText(/Elapsed: 1m/)).toBeVisible();
+  await expect(panel.locator('[data-job="1"] .queue-context')).toHaveAttribute("title", /Elapsed: 1m/);
   if (await page.getByRole("dialog").isVisible())
     await panel.getByRole("button", { name: "Close", exact: true }).click();
   await nav.getByRole("link", { name: "Tickets", exact: true }).click();

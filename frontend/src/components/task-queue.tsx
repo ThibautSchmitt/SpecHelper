@@ -9,7 +9,7 @@ import {
   useState,
   Fragment,
 } from "react";
-import { Activity, Bot, CheckCircle2, Clock3, GitBranch, LoaderCircle, PauseCircle, ShieldCheck, Ticket, UserRound, XCircle } from "lucide-react";
+import { Activity, Bot, CheckCircle2, Clock3, GitBranch, LoaderCircle, PauseCircle, ShieldCheck, Ticket, UserRound, UsersRound, XCircle } from "lucide-react";
 import { AssistantLogo } from "@/components/assistant-logo";
 import { api, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -186,7 +186,7 @@ export function TaskQueue() {
           const assistant = assignment?.connection_name || (assignment?.agent === "claude" ? "Claude" : assignment?.agent === "codex" ? "ChatGPT / Codex" : t("Recorded AI"));
           const role = assignment?.public_role || job.public_role;
           const roleName = role ? t(roleLabels[role] || role) : "";
-          const RoleIcon = role === "verifier" ? ShieldCheck : UserRound;
+          const RoleIcon = role === "verifier" ? ShieldCheck : role === "counter_analyst" ? UsersRound : UserRound;
           const warning = job.warnings?.map((value) => t(warningMessage(value))).join(" · ");
           const description = t(job.error || job.pause_reason || job.waiting_reason || (clarification ? "A business answer is needed." : job.stage || job.operation || job.kind));
           const identifier = `#${String(job.id).replace(/^publication:/, "").slice(0, typeof job.id === "number" ? undefined : 8)}`;
@@ -237,7 +237,7 @@ export function TaskQueue() {
                       </span>
                     ) : assignment ? (
                       <>
-                        <span className="queue-assignment" data-assignment={previous ? "previous" : "current"} title={[previous ? t("Previous AI") : "", assistant, assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model"), roleName].filter(Boolean).join(" · ")}>
+                        <span className="queue-assignment" data-assignment={previous ? "previous" : "current"} title={[t(previous ? "Previous AI" : "Current AI"), assistant, assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model"), roleName].filter(Boolean).join(" · ")}>
                           <AssistantLogo agent={assignment.agent} />
                           {previous && <span className={state === "RUNNING" ? "" : "sr-only"}>{t("Previous AI")}: </span>}
                           <span className="queue-assistant-name">{assistant}</span>

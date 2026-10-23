@@ -533,3 +533,6 @@ class PublishedTicket(models.Model):
         if self.request_id != self.version.request_id:
             raise ValueError("The published version does not belong to this request")
         return super().save(*args, **kwargs)
+
+# Register security tables while keeping shared workspace models independent.
+from .security_models import AccessSession, SecurityBucket, SecurityEvent  # noqa: E402,F401

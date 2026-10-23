@@ -12,7 +12,7 @@ from runtime.auth import identity_root
 
 
 @pytest.mark.parametrize("provider", ["codex", "claude"])
-def test_independent_roles_have_separate_mounts_history_and_credential_refresh(
+def test_independent_roles_have_separate_mounts_and_cannot_rotate_real_credentials(
     tmp_path, monkeypatch, provider
 ):
     monkeypatch.setattr(server, "DATA", tmp_path / "data")
@@ -98,7 +98,7 @@ def test_independent_roles_have_separate_mounts_history_and_credential_refresh(
         assert value == credential("synthetic-original")
     assert json.loads(
         (identity_root(server.CREDENTIALS, identity) / provider / filename).read_text()
-    ) == credential("synthetic-refreshed")
+    ) == credential("synthetic-original")
 
 
 def test_independent_default_context_and_legacy_context_remain_distinct(tmp_path, monkeypatch):

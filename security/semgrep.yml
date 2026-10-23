@@ -1,0 +1,54 @@
+rules:
+  - id: no-python-eval
+    languages: [python]
+    message: Untrusted input must not be evaluated as Python code.
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+    paths:
+      exclude: ["**/runtime/*smoke.py"]
+  - id: no-shell-subprocess
+    languages: [python]
+    message: Use argument arrays without shell=True for process execution.
+    severity: ERROR
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+  - id: no-unsafe-deserialization
+    languages: [python]
+    message: Do not deserialize executable or unsafe data formats.
+    severity: ERROR
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: yaml.unsafe_load(...)
+      - pattern: yaml.load(...)
+  - id: no-disabled-tls-verification
+    languages: [python]
+    message: External service TLS verification must remain enabled.
+    severity: ERROR
+    pattern: $CLIENT(..., verify=False, ...)
+  - id: no-executable-html
+    languages: [typescript, javascript]
+    message: Render untrusted content through the safe Markdown component, never raw HTML.
+    severity: ERROR
+    mode: taint
+    pattern-sources:
+      - pattern: api(...)
+      - pattern: await $RESPONSE.json()
+      - pattern: $EVENT.target.value
+      - pattern: window.location.$PART
+      - pattern: document.location.$PART
+    pattern-sinks:
+      - pattern: <$TAG ... dangerouslySetInnerHTML=$VALUE ... />
+  - id: no-browser-token-storage
+    languages: [typescript, javascript]
+    message: Authentication secrets must use HttpOnly session cookies, not browser storage.
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($KEY, $VALUE)
+          - pattern: sessionStorage.setItem($KEY, $VALUE)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(token|password|secret|authorization).*

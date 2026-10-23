@@ -13,6 +13,7 @@ import {
   X,
   ChevronRight,
 } from "lucide-react";
+import { AccessGate } from "@/components/access-gate";
 import { ThemeProvider, applyAccent } from "@/lib/theme";
 import { TaskQueue, TaskQueueProvider } from "@/components/task-queue";
 import { statuses } from "@/lib/api";
@@ -24,9 +25,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
       <ThemeProvider>
-        <TaskQueueProvider>
+        <AccessGate><TaskQueueProvider>
           <ShellContent>{children}</ShellContent>
-        </TaskQueueProvider>
+        </TaskQueueProvider></AccessGate>
       </ThemeProvider>
     </I18nProvider>
   );

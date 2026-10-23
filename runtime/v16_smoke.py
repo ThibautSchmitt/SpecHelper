@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import uuid
@@ -39,6 +40,8 @@ def main():
         (other / "secret.txt").write_text("Other request resource")
         watcher = ResourceReads(files)
         assert watcher.status == "observed", "Linux access observation unavailable"
+        os.chown(primary, 10001, 10001)
+        os.chown(secondary, 10001, 10001)
         command = server.sandbox(workspace, primary, attachments, files)
         result = subprocess.run(command + ["/bin/sh", "-ec", """
             test $(wc -c </context/architecture.md) -gt 200000

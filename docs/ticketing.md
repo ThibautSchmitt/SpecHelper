@@ -10,10 +10,14 @@ connector and test its connection. Each connector belongs to exactly one environ
 publication selects only destinations configured for the request's environment.
 Select the accessible destinations allowed for publication and an optional default.
 Credentials are encrypted, masked in the interface and excluded from analysis prompts.
+Publication credentials must be distinct from repository-read credentials, including
+when both accounts belong to the same person. Existing GitHub connectors that relied
+on the shared source connection need a dedicated issue-publication token before
+publishing again. Repository discovery and analysis continue independently.
 
 | Platform | Supported connection |
 |---|---|
-| GitHub Issues | The instance's existing github.com connection; its permissions must permit issue creation. |
+| GitHub Issues | A dedicated github.com publication token restricted to allowed repositories and required issue permissions. |
 | GitLab Issues | Cloud or self-hosted REST v4 endpoint and an access token with appropriate project issue permissions. |
 | Jira | Jira Cloud REST v3, instance URL, account email and API token. |
 | GLPI | Legacy REST v1 (`apirest.php`), enabled API access and a user token or username/password; application token when required. |

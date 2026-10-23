@@ -22,15 +22,34 @@ generation and branch selection; legacy worktree paths remain compatible. Reques
 worktrees are separate. Launching a request freezes its SHAs and database selection;
 retained commit refs preserve its baseline across later fetches and force-pushes.
 
-An agent receives only its read-only request workspace, attachments, explicitly allowed frozen context files and Git cache, plus its own writable session directory. It cannot access application data, GitHub credentials, PostgreSQL credentials or other requests. AI credentials are persisted separately. The runtime needs `SYS_ADMIN` and a compatible seccomp policy to create namespaces; the agent then drops all capabilities. The service uses `init: true` to reap orphaned Bubblewrap children and prevent process exhaustion. Isolation failure stops execution.
+An agent receives its read-only request workspace, attachments, explicitly allowed
+frozen context files and Git cache, plus its own writable session directory. It
+cannot access application data, real Git/AI/database credentials or other request
+sessions. The trusted runtime supervisor needs `SYS_ADMIN`/`NET_ADMIN` for namespace
+setup. The child runs as UID/GID 10001 with zero capabilities, no-new-privileges and
+an inherited syscall filter. `init: true` reaps orphaned Bubblewrap children.
+Isolation or syscall-filter failure stops execution. See the
+[threat model](threat-model.md) for the supervisor's residual host privileges.
 
 Bubblewrap provides the effective sandbox. Codex's internal sandbox is disabled inside that isolation to avoid conflicting namespaces. Linux still mounts sources, cache and attachments read-only. The default Codex model is GPT-6-Luna, configurable through `CODEX_MODEL`. Understanding uses low reasoning effort and technical analysis medium effort. These settings remain internal; users simply connect their ChatGPT account.
 
-Compose networks separate the runtime from the frontend, backend and application database. The worker reaches it through an internal control network. An authenticated relay lets the backend manage connections without joining the runtime network. Internal keys are generated automatically and stored in protected volumes. The agent can reach its AI provider and, when configured, the business database through filtered temporary access. Preserve these boundaries when adapting deployment.
+Compose networks separate the runtime from the frontend, backend and application
+database. The worker reaches it through an internal control network; the backend
+uses a restricted authenticated control relay. A separate per-run Unix broker
+injects real provider OAuth into a fixed upstream endpoint allowlist. The child
+receives only a synthetic expiring capability and a loopback relay in an isolated
+network namespace. It cannot select arbitrary remote destinations or follow
+redirects. A request-scoped database capability uses the same broker. Internal
+keys and encrypted CLI credentials are outside the child's mounts.
 
 The optional business database is accessed through a request-scoped temporary capability, PostgreSQL parser, function allowlist and read-only transaction. Owner, superuser, write-enabled and object-creation roles are rejected. Responses are limited to 200 rows and queries to five seconds. Credentials never enter prompts. A database baseline identifies the connection; it is not a data snapshot.
 
-Allowed attachments are PNG/JPEG/GIF/WebP, PDF, DOCX, TXT, Markdown, CSV, JSON and LOG, up to 25 MB each and 20 files per request. Random identifiers isolate files in request-specific directories. Their contents are not executed.
+Allowed attachments are PNG/JPEG/GIF/WebP, PDF, DOCX, TXT, Markdown, CSV, JSON and
+LOG, up to 25 MB each and 20 files per request. Actual signatures and streamed sizes
+are checked. DOCX ZIP expansion/entry/depth limits reject macros, traversal and
+embedded executable content; other archives are refused. Random internal names
+isolate files outside public directories. Document readers run inside the bounded
+analysis namespace; documents are untrusted data, not permission grants.
 
 Each analysis has a separate supervisor: the full job stops after 295 seconds, orchestration is bounded to 285 seconds and agent calls use the remaining budget. Errors and interruptions appear in the request and job log. Worker failures are detected on restart.
 
@@ -128,9 +147,18 @@ docker compose logs --tail=100 backend worker agent-runtime
 docker compose down
 ```
 
-`down` preserves volumes. Back up the application database, `app-data` (including its encryption key), uploads, AI sessions, context documents and credentials together. Keep mirrors and worktrees for historical baselines. Do not use `down -v` on an instance you need to preserve.
+`down` preserves volumes. Coordinate backups of PostgreSQL, `app-data`, uploads,
+AI sessions, context documents, encrypted AI credentials and the matching
+`runtime-control-secrets` volume. Store encryption keys separately from database
+exports with restricted access. CLI encryption derives from the control key;
+restoring credentials without the matching key requires reconnecting the accounts.
+Keep mirrors/worktrees for historical baselines. Do not use `down -v` on an
+instance you need to preserve.
 
-Volume names use the `spechelper` prefix. Automatic source modification, PR creation, business writes and multi-tenant management are not implemented. Infrastructure controls access to the entire instance.
+Volume names use the `spechelper` prefix. Automatic source modification, PR creation,
+business writes and multi-tenant management are not implemented. Shared-password
+access protection applies to the whole team; remote TLS/proxy requirements are
+documented in [SECURITY.md](../SECURITY.md).
 
 ## Runtime checks
 
@@ -206,7 +234,7 @@ An administrator configures real GitHub/AI accounts. Deterministic tests use con
 - `python -m runtime.smoke` with Compose capabilities: reads of sources/Git history/attachments; rejected writes to source, cache and attachment; secrets and other sessions inaccessible; own session writable.
 - `python -m runtime.workflow_smoke codex` and `claude`: full API/worker/CLI workflow using a real local repository and Bubblewrap, clarification, same-session resumption and SHA export. Latest acknowledgments: 0.167/0.171 s; deterministic workflows: 0.481/0.497 s. These are not real-model benchmarks.
 - Docker network: runtime-to-backend connection on the application network rejected; worker reaches runtime through the control network.
-- Installed binaries: Codex CLI 0.163.0 and Claude Code 2.1.116. Without credentials, connection status is DISCONNECTED and quotas UNKNOWN.
+- Installed binaries: Codex CLI 0.163.0 and Claude Code 2.1.309. Without credentials, connection status is DISCONNECTED and quotas UNKNOWN.
 - All five Compose services started. Health endpoint: `http://localhost:3000/api/health`. Both desktop/mobile Admin scenarios also passed against the production build and PostgreSQL. Test name/theme restored afterward. Only frontend port 3000 is published on 127.0.0.1.
 - Token-free connections: guided GitHub/ChatGPT/Claude dialogs, temporary code or Claude confirmation, progress and cancellation. Six browser scenarios use controlled responses. A disposable Compose deployment started the three real CLIs through the public API, received official authorization links on github.com, auth.openai.com and claude.com, then canceled each attempt.
 - Worker control relay is authenticated and restricted to connection/health operations. Internal secrets are generated in protected volumes outside the sandbox. Tests cover the relay, concurrent secret generation and credential renewal without overwriting a newer login.

@@ -1,0 +1,13 @@
+# New warnings fail review unless specifically triaged in docs/security-testing.md.
+# Keep session leakage, executable content and injection failures blocking.
+10010	FAIL	Cookie No HttpOnly Flag
+10020	FAIL	Missing frame protection
+10021	FAIL	Missing nosniff header
+10023	FAIL	Debug error disclosure
+10024	FAIL	Sensitive information in URL
+10025	FAIL	Sensitive information in referrer
+10038	FAIL	Missing Content Security Policy
+40012	FAIL	Reflected cross-site scripting
+40014	FAIL	Persistent cross-site scripting
+40018	FAIL	SQL injection
+90022	FAIL	Application error disclosure

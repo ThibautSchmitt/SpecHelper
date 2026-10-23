@@ -272,6 +272,7 @@ for (const theme of ["light", "dark"])
     await expect(card.locator(".queue-assignment")).toHaveText("ChatGPT");
     await expect(card.locator(".queue-role")).toHaveText("Analyst");
     await expect(card.locator(".queue-assignment")).toHaveAttribute("title", /recorded-model/);
+    await expect(card.locator(".queue-assignment")).toHaveAttribute("title", /^Current AI/);
     await expect(queue.locator('[data-job="43"] [data-provider="claude"]')).toBeVisible();
     await expect(queue.locator('[data-job="43"] [data-assignment="previous"]')).toHaveAttribute("title", /Previous AI/);
     const bounds = await card.evaluate((node) => {
@@ -284,4 +285,5 @@ for (const theme of ["light", "dark"])
     expect(bounds.descriptionHeight).toBeLessThanOrEqual(bounds.descriptionLine * 2 + 1);
     expect(bounds.descriptionClipped).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await queue.screenshot({ path: test.info().outputPath("task-queue.png"), animations: "disabled" });
   });

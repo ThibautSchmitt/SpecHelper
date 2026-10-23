@@ -112,11 +112,13 @@ def main():
             (directory / filename).write_text(json.dumps(content))
         real_sandbox = server.sandbox
 
-        def fixture_sandbox(workspace, session, attachments, context_resources=()):
-            command = real_sandbox(workspace, session, attachments, context_resources)
+        def fixture_sandbox(workspace, session, attachments, context_resources=(), broker=None):
+            command = real_sandbox(workspace, session, attachments, context_resources, broker)
+            boundary = command.index("setpriv")
+            tail, command = command[boundary:], command[:boundary]
             for provider in ("codex", "claude"):
                 command += ["--ro-bind", str(fixture), "/usr/local/bin/" + provider]
-            return command
+            return command + tail
 
         observed_sessions = []
         with (

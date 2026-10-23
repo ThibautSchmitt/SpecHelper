@@ -117,7 +117,7 @@ import json, os, pathlib, re, sys, uuid, urllib.error, urllib.request
 prompt = sys.stdin.read()
 assert not pathlib.Path('/session/contexts').exists(), 'Other contexts visible inside primary session'
 assert 'secret-password' not in prompt
-capability = re.search('http://127[.]0[.]0[.]1:8090/query/[A-Za-z0-9_-]+', prompt)
+capability = re.search('http://127[.]0[.]0[.]1:8090/database', prompt)
 if capability:
 
     def query(sql):
@@ -219,12 +219,14 @@ else:
         real_sandbox = server.sandbox
         current_call = {}
 
-        def isolated_fixture(workspace, session, attachments, context_resources=()):
-            command = real_sandbox(workspace, session, attachments, context_resources)
+        def isolated_fixture(workspace, session, attachments, context_resources=(), broker=None):
+            command = real_sandbox(workspace, session, attachments, context_resources, broker)
+            boundary = command.index("setpriv")
+            tail, command = command[boundary:], command[:boundary]
             command += ["--setenv", "SPECHELPER_SMOKE_PROFILE", current_call["profile"]]
             for provider in ("codex", "claude") if dual_provider else (agent,):
                 command += ["--ro-bind", str(fixture), "/usr/local/bin/" + provider]
-            return command
+            return command + tail
 
         client = Client()
         started = time.monotonic()

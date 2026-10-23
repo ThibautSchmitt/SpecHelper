@@ -269,13 +269,11 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
               </>
             )}
           </div>
-          {form.platform === "github" && (
-            <p className="mt-4 text-sm muted">
-              {t(
-                "Uses the shared GitHub connection. No additional token is required.",
-              )}
-            </p>
-          )}
+          {form.platform === "github" && <div className="field">
+            <label htmlFor={`${prefix}-publication-secret`}>{t("Dedicated issue publication token")}</label>
+            <Input id={`${prefix}-publication-secret`} type="password" autoComplete="new-password" required={selected === null} value={form.secret} onChange={(event) => setForm({ ...form, secret: event.target.value })} />
+            <p className="mt-2 text-xs muted">{t("Use a separate fine-grained credential with issue permissions. Git source credentials cannot publish tickets.")}</p>
+          </div>}
           <div className="mt-5 flex flex-wrap gap-2">
             <Button disabled={busy}>{t("Save connector")}</Button>
             {selected !== null && (

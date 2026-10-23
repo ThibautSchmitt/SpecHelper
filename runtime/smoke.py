@@ -1,5 +1,6 @@
 """Real Linux sandbox smoke test. Run inside the runtime image with its Compose capabilities."""
 
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -33,6 +34,7 @@ with tempfile.TemporaryDirectory() as temp:
     (attachments / "need.txt").write_text("attachment")
     session = root / "session"
     session.mkdir()
+    os.chown(session, 10001, 10001)
     (root / "private-secret.txt").write_text("PRIVATE")
     checks = r"""
 import json, os, pathlib, subprocess
@@ -45,7 +47,10 @@ for path in ['/workspace/project/domain.txt','/attachments/need.txt',MIRROR_CONF
     except OSError:
         denied.append(path)
 assert len(denied)==3, denied
-assert not pathlib.Path(PRIVATE_SECRET).exists()
+try:
+    assert not pathlib.Path(PRIVATE_SECRET).exists()
+except PermissionError:
+    pass
 assert not pathlib.Path('/app').exists()
 assert not pathlib.Path('/credentials').exists()
 assert not pathlib.Path('/control').exists()

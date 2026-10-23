@@ -15,6 +15,14 @@ x-backend: &backend
     CONTROL_TOKEN_FILE: /control/runtime.token
     TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+    BIND_ADDRESS: ${BIND_ADDRESS:-127.0.0.1}
+    SPECHELPER_ACCESS_PASSWORD_HASH: ${SPECHELPER_ACCESS_PASSWORD_HASH:-}
+    SPECHELPER_ACCESS_PASSWORD_FILE: ${SPECHELPER_ACCESS_PASSWORD_FILE:-}
+    SPECHELPER_LOCAL_ONLY: ${SPECHELPER_LOCAL_ONLY:-1}
+    SPECHELPER_REQUIRE_HTTPS: ${SPECHELPER_REQUIRE_HTTPS:-0}
+    SPECHELPER_TRUST_PROXY: ${SPECHELPER_TRUST_PROXY:-0}
+    SPECHELPER_AUDIT_RETENTION_DAYS: ${SPECHELPER_AUDIT_RETENTION_DAYS:-30}
+    ENCRYPTION_KEY_FILE: ${ENCRYPTION_KEY_FILE:-/data/encryption.key}
   volumes:
     - runtime-control-secrets:/control
     - app-data:/data
@@ -24,8 +32,31 @@ x-backend: &backend
     - analysis-context:/data/analysis-context
     - uploads:/data/requests
   networks: [app, backend-egress, runtime-control]
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:rw,nosuid,nodev,size=256m,mode=1777"]
   restart: unless-stopped
 services:
+  prepare-storage:
+    <<: *backend
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    network_mode: none
+    networks: !reset []
+    restart: "no"
+    entrypoint: [python, -c]
+    command:
+      - |
+        import os
+        from pathlib import Path
+        for root in (Path("/data"), Path("/control")):
+            for directory, dirs, files in os.walk(root, followlinks=False):
+                os.chown(directory, 10000, 10000)
+                for name in dirs + files:
+                    path = Path(directory) / name
+                    if not path.is_symlink():
+                        os.chown(path, 10000, 10000)
   database:
     image: postgres:17
     environment:
@@ -45,6 +76,7 @@ services:
     networks: [app, backend-egress]
     command: [sh, -c, 'python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60']
     depends_on:
+      prepare-storage: {condition: service_completed_successfully}
       database: {condition: service_healthy}
     healthcheck:
       test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:8000/api/health")']
@@ -76,7 +108,13 @@ services:
       CODEX_MODEL: ${CODEX_MODEL:-gpt-6-luna}
     # Bubblewrap creates a mount/PID namespace and drops all caps for the agent.
     # The runtime has no Docker socket, application DB or GitHub credentials.
-    cap_add: [SYS_ADMIN]
+    cap_add: [SYS_ADMIN, NET_ADMIN]
+    read_only: true
+    cpus: 2
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=256m,mode=1777"]
+    ulimits:
+      nofile: 1024
+      core: 0
     security_opt: [seccomp:unconfined, apparmor:unconfined]
     volumes:
       - runtime-control-secrets:/control:ro
@@ -94,6 +132,12 @@ services:
       dockerfile: frontend/Dockerfile
     ports: ["${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"]
     networks: [app, web-ingress]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=32m
+      - /app/.next/cache:rw,nosuid,nodev,size=32m,uid=1000,gid=1000
     depends_on:
       backend: {condition: service_healthy}
     restart: unless-stopped

@@ -1,8 +1,9 @@
+import { secureFetch } from "@/lib/access";
 import type { AnalysisWarning } from "@/lib/orchestration";
 import type { ContextSnapshot, ContextUsage } from "@/lib/context";
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const response = await secureFetch(`/api${path}`, {
     cache: "no-store",
     ...options,
     headers: {

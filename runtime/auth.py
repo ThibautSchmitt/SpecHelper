@@ -3,7 +3,6 @@ import fcntl
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 import threading
@@ -14,6 +13,8 @@ from pathlib import Path
 from core.login import ACTIVE, PROVIDERS, TerminalLogin
 
 from .quota import app_server_windows, read_codex_quota
+from .vault import read as read_credential
+from .vault import write as write_credential
 
 
 def identity_root(root, identity_id=None):
@@ -64,12 +65,9 @@ def publish_refresh(root, provider, original, candidate):
     name = "auth.json" if provider == "codex" else ".credentials.json"
     with credential_lock(root, provider):
         destination = credential_directory(root, provider) / name
-        if not destination.exists() or destination.read_bytes() != original:
+        if not destination.exists() or read_credential(destination) != original:
             return False
-        temporary = destination.with_name(name + ".refresh")
-        temporary.write_bytes(candidate)
-        temporary.chmod(0o600)
-        os.replace(temporary, destination)
+        write_credential(destination, candidate)
     return True
 
 
@@ -104,10 +102,7 @@ class Logins:
                 with credential_lock(target_root, provider):
                     for name in files:
                         if (source / name).is_file():
-                            temporary = destination / (name + ".new")
-                            shutil.copyfile(source / name, temporary)
-                            temporary.chmod(0o600)
-                            os.replace(temporary, destination / name)
+                            write_credential(destination / name, (source / name).read_bytes())
                 return {
                     "account": PROVIDERS[provider],
                     "account_key": account_key(destination, provider),
@@ -182,7 +177,16 @@ def connection_status(root, provider, include_quota=False):
         if provider == "codex"
         else ["claude", "auth", "status", "--json"]
     )
-    result = subprocess.run(command, env=env, capture_output=True, timeout=10)
+    with tempfile.TemporaryDirectory(prefix="spechelper-status-") as temporary:
+        home = Path(temporary)
+        for name in (["auth.json"] if provider == "codex" else [".credentials.json", ".claude.json"]):
+            source = directory / name
+            if source.is_file():
+                destination = home / name
+                destination.write_bytes(read_credential(source))
+                destination.chmod(0o600)
+        env.update(HOME=temporary, CODEX_HOME=temporary, CLAUDE_CONFIG_DIR=temporary)
+        result = subprocess.run(command, env=env, capture_output=True, timeout=10)
     value = {
         "status": "CONNECTED" if result.returncode == 0 else "DISCONNECTED",
         "account": PROVIDERS[provider],
@@ -210,7 +214,7 @@ def quota_status(root, directory, provider, status):
         with tempfile.TemporaryDirectory(prefix="spechelper-usage-") as temporary:
             home = Path(temporary)
             with credential_lock(root, provider):
-                original = (directory / "auth.json").read_bytes()
+                original = read_credential(directory / "auth.json")
             (home / "auth.json").write_bytes(original)
             (home / "auth.json").chmod(0o600)
             env = {
@@ -243,7 +247,7 @@ def account_key(directory, provider):
     """Opaque quota grouping from provider account IDs, never a display-name guess."""
     try:
         filename = "auth.json" if provider == "codex" else ".claude.json"
-        value = json.loads((directory / filename).read_text())
+        value = json.loads(read_credential(directory / filename))
         identifier = (
             value.get("tokens", {}).get("account_id")
             if provider == "codex"
@@ -260,7 +264,7 @@ def subscription_credentials(directory, provider):
     """Subscription OAuth only: an administrator's billed API key is never inherited."""
     try:
         filename = "auth.json" if provider == "codex" else ".credentials.json"
-        value = json.loads((directory / filename).read_text())
+        value = json.loads(read_credential(directory / filename))
         if provider == "codex":
             return bool(
                 isinstance(value.get("tokens"), dict)

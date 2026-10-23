@@ -1,16 +1,21 @@
-# Publication review — 2026-10-22
+# Publication review — 2026-10-23
 
 Verdict: **PASS WITH WARNINGS** for the source snapshot, with third-party licensing
 scope retained below. The reviewed source is prepared in the local publication checkout; remote push status is reported separately.
 
-This report covers the refreshed publication snapshot, including consolidated settings, environment-owned ticket connectors, official non-inference Codex quota reads, v1.8 appearance, automatic role-based analysis, clearer task visibility, project questions and versioned environment context, independent analysis roles and verification and English/French
+This report covers the refreshed publication snapshot, including v1.9 access protection,
+encrypted CLI credentials, isolated provider execution, hostile-file validation and
+security CI, together with consolidated settings, environment-owned ticket connectors,
+official non-inference Codex quota reads, v1.8 appearance, automatic role-based analysis,
+clearer task visibility, project questions and versioned environment context,
+independent analysis roles and verification and English/French
 localization. Select **Settings → General → Application language**; French remains
 the default. Each request retains its creation language, and existing artifacts
 are not rewritten. See [localization verification](docs/localization.md).
 
 ## Files reviewed
 
-The publication contains 251 project-owned files, including this report. Sources,
+The publication contains 291 project-owned files, including this report. Sources,
 tests, migrations, configuration and documentation were read; both dependency locks
 were parsed. Installed dependency/cache/build files and private runtime data
 are excluded; dependency license metadata was inspected separately.
@@ -21,6 +26,8 @@ are excluded; dependency license metadata was inspected separately.
 - Twenty-eight findings in twenty files were reviewed: twenty-five are synthetic test
   fixtures or the disposable CI database password; three are translated "Password" labels.
   None is a live account credential.
+- The v1.9 candidate and full publication Git history also pass Gitleaks 8.30.1.
+  New fixtures use clearly synthetic values; no blanket test-source exclusion was added.
 - Configured connection credentials were compared against the publication files without
   printing them; no occurrence was found.
 - Instance-specific session/request IDs, validation repository references, branch
@@ -38,17 +45,18 @@ and psycopg is LGPL. The combined backend/container is not exclusively MIT.
 
 Locks refer to public package registries. Generated agent instructions are excluded. Docker images carry the project license/notices.
 CONTRIBUTING, SECURITY, GitHub issue/PR templates and a checks-only
-GitHub Actions workflow are supplied without account-specific links.
+GitHub Actions workflows are supplied without account-specific links. Security jobs
+include source, dependency, image, runtime and disposable authenticated DAST checks.
 
 ## Verification
 
 - The initial clean copy passed `npm ci --offline`, `uv sync --frozen --offline`
   and a frontend build without the original `.env.local`. The v1.3 locks also include PyYAML and Markdown preview dependencies, with
   their licenses recorded in THIRD_PARTY_NOTICES.md.
-- Current backend suite: **443 passed** on disposable PostgreSQL 17, including
+- v1.8 backend suite: **443 passed** on disposable PostgreSQL 17, including
   business database integration and language migration tests.
 - Current frontend: production build and TypeScript checks pass.
-- The most recent complete browser suite passed **118 desktop/mobile scenarios** against isolated local fixtures,
+- The v1.8 complete browser suite passed **118 desktop/mobile scenarios** against isolated local fixtures,
   including both languages, persistence, errors and workflow exports. This run
   used installed Chrome via the documented channel override. The subsequent queue-card
   refinement passes 18 focused browser scenarios, including clipped long text,
@@ -62,6 +70,11 @@ GitHub Actions workflow are supplied without account-specific links.
 GitHub Actions results for this source update have not been inspected; the workflow
 runs when a repository receives the update. Scanning and review reduce exposure risk
 but do not establish the absence of every possible vulnerability.
+
+The [v1.9 acceptance report](docs/acceptance-v1.9.md) records the current 510-test
+backend result, browser re-tests, encrypted-credential and database-copy rehearsals,
+real HTTPS checks and executed security scans. Image reports retain their OS findings
+under exact, expiring applicability reviews; no zero-vulnerability claim is made.
 
 A separate deployed desktop/mobile check and an actual GLPI 11.0.7 ticket
 creation/reconciliation check pass. See [v1.8 acceptance](docs/acceptance-v1.8.md), [v1.7 acceptance](docs/acceptance-v1.7.md), [v1.6 acceptance](docs/acceptance-v1.6.md) and

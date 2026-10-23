@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install uv==0.8.14
+      - run: python -m pip install uv==0.13.4
       - run: uv sync --project backend --frozen
       - run: uv run ruff check --config pyproject.toml . ../runtime
         working-directory: backend
@@ -59,3 +59,26 @@ jobs:
         working-directory: frontend
       - run: npm run typecheck
         working-directory: frontend
+      - name: Install browser for security regressions
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Verify access gate and hostile Markdown in desktop and mobile browsers
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: |
+          npm run start > "$RUNNER_TEMP/spechelper-frontend.log" 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$frontend_pid"' EXIT
+          python - <<'PY'
+          import time, urllib.request
+          for attempt in range(30):
+              try:
+                  urllib.request.urlopen("http://127.0.0.1:3000", timeout=1).close()
+                  break
+              except OSError:
+                  time.sleep(1)
+          else:
+              raise SystemExit("Security-test frontend did not start")
+          PY
+          npx playwright test tests/v19-security.spec.ts
