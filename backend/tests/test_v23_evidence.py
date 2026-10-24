@@ -72,6 +72,7 @@ def report(source, **claim_overrides):
                 "kind": "observed",
                 "status": "supported",
                 "scope": {
+                    "period": "Frozen source version",
                     "conditions": ["Active flag is true"],
                     "population": "Inspected function inputs",
                     "sample_limits": "Only the cited implementation was inspected",
@@ -104,6 +105,29 @@ def test_actual_git_support_and_absent_database_are_separate(context):
     assert checked.claims[0].status == "supported"
     assert checked.database.status == "not_configured"
     assert not checked.blocking
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("period", ""),
+        ("environment", "Another environment"),
+        ("conditions", [" "]),
+        ("population", " "),
+        ("sample_limits", "\t"),
+    ],
+)
+def test_incomplete_scope_or_mismatched_environment_blocks_unqualified_support(
+    context, field, value
+):
+    workspace, source, request, run = context
+    value_report = report(source)
+    value_report["claims"][0]["scope"][field] = value
+    checked = check_report(value_report, request, run, workspace)
+    assert checked.claims[0].status == "partial"
+    assert checked.blocking
+    assert checked.claims[0].scope.environment == "Staging"
 
 
 @pytest.mark.django_db

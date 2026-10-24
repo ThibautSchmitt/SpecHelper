@@ -1378,5 +1378,6 @@
   "Numerical certification is not supported by these observations.": "Numerical certification is not supported by these observations.",
   "This material claim was omitted from independent verification.": "This material claim was omitted from independent verification.",
   "Independent analysis, counter-analysis and verification have not all been completed.": "Independent analysis, counter-analysis and verification have not all been completed.",
-  "Independent counter-analysis and verification are required for new analyses.": "Independent counter-analysis and verification are required for new analyses."
+  "Independent counter-analysis and verification are required for new analyses.": "Independent counter-analysis and verification are required for new analyses.",
+  "The observation period is missing.": "The observation period is missing."
 }

@@ -353,6 +353,7 @@ def test_derived_request_uses_current_baseline_and_runs_independent_ticket_pipel
         "status": "supported",
         "scope": {
             "environment": "Staging",
+            "period": "Frozen source version",
             "conditions": ["export_active is called"],
             "population": "Input rows",
             "sample_limits": "Only this function was inspected",

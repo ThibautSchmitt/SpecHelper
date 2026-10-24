@@ -1378,5 +1378,6 @@
   "Numerical certification is not supported by these observations.": "Ces observations ne justifient aucune certification chiffrée.",
   "This material claim was omitted from independent verification.": "Ce constat important a été omis de la vérification indépendante.",
   "Independent analysis, counter-analysis and verification have not all been completed.": "L’analyse, la contre-analyse et la vérification indépendantes ne sont pas toutes terminées.",
-  "Independent counter-analysis and verification are required for new analyses.": "La contre-analyse et la vérification indépendantes sont obligatoires pour les nouvelles analyses."
+  "Independent counter-analysis and verification are required for new analyses.": "La contre-analyse et la vérification indépendantes sont obligatoires pour les nouvelles analyses.",
+  "The observation period is missing.": "La période d’observation n’est pas précisée."
 }

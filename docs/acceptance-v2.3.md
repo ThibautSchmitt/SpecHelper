@@ -38,6 +38,9 @@ build passed. Ruff passed; migration generation reported no model changes.
 Publication checks found no secrets and no findings or parse errors from six
 local Semgrep rules covering 167 production files. Browser/provider workflow data
 is controlled; these checks do not establish native model quality.
+A subsequent scope audit also checks that missing observation periods, blank
+conditions/population/limits and mismatched environments cannot remain supported
+material conclusions or enable business validation.
 
 ## Completed evaluation checks
 

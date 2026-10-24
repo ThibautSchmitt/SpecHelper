@@ -232,16 +232,23 @@ def check_report(report, request, run, workspace):
             and claim.scope.environment != expected_environment
         ):
             problems.append("The claimed environment does not match this analysis.")
+            if claim.status == "supported":
+                claim.status = "partial"
         claim.scope.environment = expected_environment
         if not verified_sources:
             claim.status = "unverified"
             problems.append("No inspected source supports this claim.")
         if (
             not claim.scope.conditions
-            or not claim.scope.population
-            or not claim.scope.sample_limits
+            or any(not item.strip() for item in claim.scope.conditions)
+            or not claim.scope.population.strip()
+            or not claim.scope.sample_limits.strip()
         ):
             problems.append("The conditions, population or observation limits are incomplete.")
+            if claim.status == "supported":
+                claim.status = "partial"
+        if not claim.scope.period.strip():
+            problems.append("The observation period is missing.")
             if claim.status == "supported":
                 claim.status = "partial"
         claim.universal = claim.universal or bool(
