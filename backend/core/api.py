@@ -1,5 +1,5 @@
 import re
-from typing import Annotated, Literal
+from typing import Literal
 from uuid import UUID
 
 from django.db import transaction
@@ -15,6 +15,7 @@ from . import connections as connection_flows
 from . import environments as environment_actions
 from . import github, providers
 from .agent import runtime_call
+from .clarification_schema import AnswersIn
 from .file_validation import attachment_path
 from .models import (
     AgentProfile,
@@ -38,7 +39,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="2.1", auth=None)
+api = NinjaAPI(title="SpecHelper", version="2.2", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -107,10 +108,6 @@ class RequestIn(Schema):
     need: str = Field(min_length=10, max_length=30000)
     confrontation: bool = False
     category: Literal["auto", "feature", "bug", "documentation"] = "auto"
-
-
-class AnswersIn(Schema):
-    answers: dict[Annotated[str, Field(max_length=100)], Annotated[str, Field(max_length=10000)]] = Field(max_length=100)
 
 
 class ContinuationIn(Schema):
@@ -215,8 +212,19 @@ def request_dict(value, full=False):
     }
     if full:
         analysis = AnalysisResult.objects.filter(request=value).first()
+        from .business_decisions import snapshot_for_request
+
+        decisions = snapshot_for_request(value)
+        latest_run = value.analysis_runs.order_by("-number").first()
+        latest_version = value.versions.order_by("-number").first()
+        summary = (latest_run.orchestration.get("business_summary") if latest_run else None) or (latest_version.business_summary if latest_version else {})
         result.update(
             {
+                "decisions": decisions["decisions"],
+                "decision_history": decisions["history"],
+                "decision_revision": value.decision_revision,
+                "validated_version": value.validated_version,
+                "business_summary": summary,
                 "context_snapshot": value.context_snapshot,
                 "baseline": value.baseline,
                 "database": value.database_snapshot,
@@ -288,6 +296,8 @@ def version_dict(version):
         "run_number": version.run.number if version.run_id else None,
         "context_snapshot": version.context_snapshot,
         "context_usage": version.context_usage,
+        "decisions_snapshot": version.decisions_snapshot,
+        "business_summary": version.business_summary,
         "language": version.language,
         "status": version.status,
         "created_at": version.created_at,
@@ -637,7 +647,7 @@ def start_analysis(request, request_id: UUID):
 @api.post("/requests/{request_id}/answers")
 def answer_questions(request, request_id: UUID, payload: AnswersIn):
     get_object_or_404(Request, pk=request_id, workflow="request")
-    return request_dict(enqueue_analysis(request_id, payload.answers), full=True)
+    return request_dict(enqueue_analysis(request_id, payload.answers, payload.choices, payload.expected_decision_revision, payload.confirm_changes), full=True)
 
 
 @api.get("/requests/{request_id}/markdown")
@@ -771,6 +781,8 @@ def queue(request):
 
 
 from .ai_api import router as ai_router  # noqa: E402
+from .business_decisions import DecisionConflict  # noqa: E402
+from .business_decisions import router as business_router  # noqa: E402
 from .context_api import router as context_router  # noqa: E402
 from .git_source_api import router as git_source_router  # noqa: E402
 from .library import router as library_router  # noqa: E402
@@ -790,3 +802,12 @@ api.add_router("", orchestration_router)
 api.add_router("", library_router)
 api.add_router("", library_assistant_router)
 api.add_router("", model_router)
+api.add_router("", business_router)
+
+
+@api.exception_handler(DecisionConflict)
+def decision_conflict(request, exc):
+    return api.create_response(request, {
+        "detail": str(exc.message), "code": "DECISION_CONFLICT",
+        "conflicts": exc.conflicts, "decision_revision": exc.revision,
+    }, status=409)

@@ -1,4 +1,5 @@
 "use client";
+import { BusinessClarification, BusinessDecisions, BusinessOverview } from "@/components/business-clarification";
 import { QuestionResult } from "@/components/question-result";
 import { PublishTicket } from "@/components/publish-ticket";
 import { AnalysisContext } from "@/components/analysis-context";
@@ -104,7 +105,6 @@ function RequestContent({
       setShowDiscussion(true);
   }, [isQuestion]);
   const [message, setMessage] = useState("");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [goalCopied, setGoalCopied] = useState(false);
@@ -177,19 +177,6 @@ function RequestContent({
       setShowDiscussion(false);
       setSelectedNumber(null);
       setSelectedVersion(null);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      setValue(await send<RequestDetail>(`${base}/${id}/answers`, { answers }));
-      setAnswers({});
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -466,39 +453,35 @@ function RequestContent({
         </details>
       )}
       {value.status === "NEEDS_CLARIFICATION" && (
-        <Card className="border-primary/40">
-          <h2 className="flex items-center gap-2">
-            <MessageCircle size={20} className="text-primary" />{" "}
-            {t("A few details before continuing")}
-          </h2>
-          <p className="mt-2 text-sm muted">
-            {t(
-              isQuestion
-                ? "Your answers will help explain the relevant behavior."
-                : "Your answers will help prepare a suitable proposal.",
-            )}
-          </p>
-          <form onSubmit={submit}>
-            {value.questions.map((q) => (
-              <div key={q.id} className="field">
-                <label htmlFor={q.id}>{q.question}</label>
-                <Textarea
-                  id={q.id}
-                  required
-                  maxLength={10000}
-                  value={answers[q.id] || ""}
-                  onChange={(e) =>
-                    setAnswers({ ...answers, [q.id]: e.target.value })
-                  }
-                />
-              </div>
-            ))}
-            <Button className="mt-5" disabled={busy}>
-              {busy ? t("Sending…") : t("Answer and continue")}
-            </Button>
-          </form>
-        </Card>
+        <BusinessClarification
+          key={JSON.stringify(value.questions)}
+          value={value}
+          base={base}
+          onUpdated={updated => {
+            setValue(updated);
+            setSelectedNumber(null);
+            setSelectedVersion(null);
+            router.replace(`${base}/${id}`, { scroll: false });
+          }}
+        />
       )}
+      {!loadingVersion && <BusinessOverview summary={selectedNumber !== null ? result?.business_summary : value.business_summary || result?.business_summary} />}
+      {!loadingVersion && <BusinessDecisions
+        key={`${id}-${selectedNumber ?? "current"}`}
+        value={value}
+        result={result}
+        historical={selectedNumber !== null}
+        base={base}
+        onUpdated={updated => {
+          setValue(updated);
+          if (active.includes(updated.status)) {
+            setSelectedNumber(null);
+            setSelectedVersion(null);
+            setShowDiscussion(false);
+            router.replace(`${base}/${id}`, { scroll: false });
+          }
+        }}
+      />}
       {loadingVersion && (
         <p role="status">{t("Loading the selected version…")}</p>
       )}
@@ -507,9 +490,7 @@ function RequestContent({
           key={`${id}-${result.number}`}
           questionId={id}
           onContinue={() => setShowDiscussion(true)}
-          discussionAvailable={["READY", "PARTIAL", "ERROR"].includes(
-            value.status,
-          )}
+          discussionAvailable={!value.validated_version && ["READY", "PARTIAL", "ERROR"].includes(value.status)}
           result={result}
           versions={value.versions}
           latestNumber={value.latest_version?.number}
@@ -616,7 +597,7 @@ function RequestContent({
               />
             )}
             {Object.entries(
-              result?.format_version === "1.2"
+              ticket.need !== undefined || result?.format_version === "1.2"
                 ? currentLabels
                 : result?.format_version === "1.1"
                   ? conciseLabels
@@ -644,6 +625,7 @@ function RequestContent({
       )}
       {value.latest_version &&
         ["READY", "PARTIAL", "ERROR"].includes(value.status) &&
+        !value.validated_version &&
         (!isQuestion || showDiscussion) && (
           <Card id="discussion">
             <h2>

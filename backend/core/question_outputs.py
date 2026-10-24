@@ -11,6 +11,7 @@ from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from .agent import Question
 from .artifacts import StrictModel, section
+from .business_outputs import BusinessSummary, summary_markdown
 from .i18n import translate
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
@@ -90,6 +91,8 @@ class QuestionAnswer(StrictModel):
     inferences: Items = Field(default_factory=list)
     uncertainties: Items = Field(default_factory=list)
     references: list[QuestionReference] = Field(default_factory=list, max_length=50)
+    confirmed_decisions: Items = Field(default_factory=list)
+    business_summary: BusinessSummary | None = None
 
     @field_validator("title")
     @classmethod
@@ -110,6 +113,8 @@ class QuestionAnswer(StrictModel):
 class QuestionOutput(StrictModel):
     status: Literal["READY", "PARTIAL"]
     answer: QuestionAnswer
+    business_summary: BusinessSummary | None = None
+    questions: list[Question] = Field(default_factory=list, max_length=5)
 
 
 class QuestionReport(StrictModel):
@@ -119,6 +124,7 @@ class QuestionReport(StrictModel):
     inferences: Items = Field(default_factory=list)
     uncertainties: Items = Field(default_factory=list)
     questions: list[Question] = Field(default_factory=list, max_length=8)
+    business_summary: BusinessSummary | None = None
 
     @model_validator(mode="after")
     def unique_questions(self):
@@ -154,6 +160,7 @@ def _references(answer, baseline):
 
 
 COMMON_SECTIONS = (
+    ("confirmed_decisions", "Confirmed decisions"),
     ("verified_facts", "Verified facts"),
     ("inferences", "Inferences"),
     ("uncertainties", "Uncertainties and verification limits"),
@@ -183,6 +190,8 @@ def _render(answer, baseline, kind, language):
         raise ValueError("Unsupported documentation format")
     values = answer.model_dump()
     lines = ["# " + answer.title, "", answer.summary, ""]
+    if answer.business_summary:
+        lines += [summary_markdown(answer.business_summary.model_dump(), language)]
     for key, label in sections[kind] + COMMON_SECTIONS:
         if values[key]:
             lines += section(label, values[key], language)

@@ -1,6 +1,14 @@
 import { secureFetch } from "@/lib/access";
 import type { AnalysisWarning } from "@/lib/orchestration";
 import type { ContextSnapshot, ContextUsage } from "@/lib/context";
+import type { BusinessDecision, BusinessSummary, ClarificationQuestion } from "@/lib/business-decisions";
+
+export class APIError extends Error {
+  constructor(message: string, public status: number, public details?: unknown) {
+    super(message);
+    this.name = "APIError";
+  }
+}
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await secureFetch(`/api${path}`, {
@@ -15,12 +23,14 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     let message = `Error ${response.status}`;
+    let details: unknown;
     try {
       const body = await response.json();
+      details = body;
       message =
         typeof body.detail === "string" ? body.detail : "Check the form fields";
     } catch {}
-    throw new Error(message);
+    throw new APIError(message, response.status, details);
   }
   return response.json();
 }
@@ -80,10 +90,17 @@ export type ResultVersion = {
   explanation?: { title: string; [key: string]: unknown };
   artifacts: Record<string, string>;
   run_number?: number;
+  decisions_snapshot?: BusinessDecision[];
+  business_summary?: BusinessSummary;
   context_snapshot?: ContextSnapshot;
   context_usage?: ContextUsage[];
 };
 export type RequestDetail = RequestItem & {
+  decisions?: BusinessDecision[];
+  decision_history?: BusinessDecision[];
+  decision_revision?: number;
+  validated_version?: number | null;
+  business_summary?: BusinessSummary;
   source_question?: { id: string; version: number; title?: string } | null;
   derived_requests?: {
     id: string;
@@ -126,7 +143,7 @@ export type RequestDetail = RequestItem & {
     parent?: { path: string } | null;
   }[];
   database: { name?: string };
-  questions: { id: string; question: string }[];
+  questions: ClarificationQuestion[];
   conversation: {
     questions: { id: string; question: string }[];
     answers: Record<string, string>;

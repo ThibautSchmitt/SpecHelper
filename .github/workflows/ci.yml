@@ -81,4 +81,4 @@ jobs:
           else:
               raise SystemExit("Security-test frontend did not start")
           PY
-          npx playwright test tests/v19-security.spec.ts tests/v20-library.spec.ts tests/v20-models.spec.ts tests/v21-assistant.spec.ts
+          npx playwright test tests/v19-security.spec.ts tests/v20-library.spec.ts tests/v20-models.spec.ts tests/v21-assistant.spec.ts tests/v22-clarification.spec.ts

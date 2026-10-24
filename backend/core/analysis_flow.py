@@ -13,6 +13,7 @@ from django.utils import timezone
 from pydantic import Field, model_validator
 
 from .agent import (
+    BUSINESS_CLARIFICATION_RULES,
     RULES,
     ProviderUnavailable,
     Question,
@@ -20,6 +21,7 @@ from .agent import (
     output_language_instruction,
 )
 from .artifacts import ArtifactOutput, StrictModel, render_goal
+from .business_outputs import BusinessFinding, BusinessSummary
 from .models import AgentProfile, AnalysisRun, DatabaseConnection, Request, RequestMessage
 from .postgres import parameters
 from .question_outputs import QuestionOutput, QuestionReport, render_answer
@@ -31,6 +33,8 @@ Text = Annotated[str, Field(min_length=1, max_length=4000)]
 
 class RequirementAssessment(UnderstandingOutput):
     complexity: Literal["simple", "standard", "complex"]
+    findings: list[BusinessFinding] = Field(default_factory=list, max_length=15)
+    business_summary: BusinessSummary | None = None
 
 
 class Observation(StrictModel):
@@ -53,6 +57,9 @@ class CodeReport(StrictModel):
     risks: list[Text] = Field(max_length=10)
     tests_expected: list[Text] = Field(min_length=1, max_length=15)
     uncertainties: list[Text] = Field(max_length=10)
+    questions: list[Question] = Field(default_factory=list, max_length=5)
+    findings: list[BusinessFinding] = Field(default_factory=list, max_length=15)
+    business_summary: BusinessSummary | None = None
 
 
 class VerificationRequest(StrictModel):
@@ -61,21 +68,30 @@ class VerificationRequest(StrictModel):
 
 
 class Review(StrictModel):
-    status: Literal["APPROVED", "NEEDS_VERIFICATION"]
+    status: Literal["APPROVED", "NEEDS_VERIFICATION", "NEEDS_CLARIFICATION"]
     summary: Text
     issues: list[Text] = Field(max_length=10)
     verification: VerificationRequest | None
+    questions: list[Question] = Field(default_factory=list, max_length=5)
 
     @model_validator(mode="after")
     def consistent(self):
         if (self.status == "NEEDS_VERIFICATION") != (self.verification is not None):
             raise ValueError("Missing or unexpected focused verification")
+        if (self.status == "NEEDS_CLARIFICATION") != bool(self.questions):
+            raise ValueError("A business conflict requires clarification before approval")
         return self
 
 
 class CodeAndResult(StrictModel):
     analysis: CodeReport
-    result: ArtifactOutput
+    result: ArtifactOutput | None
+
+    @model_validator(mode="after")
+    def clarified_before_writing(self):
+        if bool(self.analysis.questions) == (self.result is not None):
+            raise ValueError("A result must wait for blocking business clarification")
+        return self
 
 
 class ReviewAndResult(StrictModel):
@@ -138,10 +154,16 @@ class FlowError(ValueError):
     """Only application-authored, safe explanations may be shown to the user."""
 
 
-def context(request):
+class RepeatedBusinessQuestion(ValueError):
+    """A bounded response repair can reuse a confirmed answer instead of asking again."""
+
+
+def context(request, run=None):
     messages = list(request.messages.order_by("-id").values("role", "kind", "content")[:12])
     messages.reverse()
     previous = request.versions.order_by("-number").first()
+    frozen = run.context_snapshot if run else request.context_snapshot
+    decisions = frozen.get("business_decisions", {})
     return {
         "workflow": request.workflow,
         "category": request.category,
@@ -150,6 +172,10 @@ def context(request):
         "understanding": request.understanding,
         "recent_messages": messages,
         "clarification_answers": request.conversation,
+        "confirmed_decisions": decisions.get("decisions", []),
+        "decision_revision": decisions.get("revision", 0),
+        "changed_decision_keys": frozen.get("changed_decision_keys", []),
+        "targeted_reanalysis": bool(frozen.get("changed_decision_keys")),
         "baseline": request.baseline,
         "database": request.database_snapshot.get("name"),
         "attachments": [
@@ -225,7 +251,9 @@ class Orchestrator:
         if "library" not in self.config:
             from .library import snapshot as library_snapshot
 
-            self.config["library"] = self.run.context_snapshot.get("library") or library_snapshot(request.environment)
+            self.config["library"] = self.run.context_snapshot.get("library") or library_snapshot(
+                request.environment
+            )
             self.run.orchestration["config"] = self.config
             self.run.save(update_fields=["orchestration"])
         self.deadline = min(self.deadline, time.monotonic() + self.config["timeout_seconds"])
@@ -360,7 +388,7 @@ class Orchestrator:
         self.run.steps.append(step)
         self.run.save(update_fields=["pipeline", "steps"])
         data = {
-            **context(self.request),
+            **context(self.request, self.run),
             "environment_context": self.reference_context,
             "observations": self.facts,
         }
@@ -405,6 +433,8 @@ class Orchestrator:
             + "\n"
             + instruction
             + "\n"
+            + BUSINESS_CLARIFICATION_RULES
+            + "\n"
             + output_language_instruction(self.request.language)
             + "\n"
             + RULES
@@ -425,7 +455,9 @@ class Orchestrator:
         if len(prompt) > 195000:
             step.update(status="ERROR", finished_at=timezone.now().isoformat())
             self.run.save(update_fields=["steps"])
-            raise FlowError("The effective instructions are too large. Reduce the selected agents or skills.")
+            raise FlowError(
+                "The effective instructions are too large. Reduce the selected agents or skills."
+            )
         response_schema = schema.model_json_schema()
         reference_schema = response_schema.get("$defs", {}).get("QuestionReference")
         if reference_schema:
@@ -449,8 +481,8 @@ class Orchestrator:
                     raise ProviderUnavailable(
                         "QUOTA_EXHAUSTED", quota_windows=identity.quota_windows
                     )
-            # One repair is permitted for final artifact formatting; no open-ended agent loop.
-            for attempt in range(2 if "writer" in roles else 1):
+            # At most one repair for artifact format or an already answered business question.
+            for attempt in range(2):
                 remaining = int(self.deadline - time.monotonic()) - reserve
                 if remaining < 3 or self.calls >= self.config["max_calls"]:
                     raise FlowError(
@@ -507,6 +539,7 @@ class Orchestrator:
                     raise TimeoutError("Time limit reached")
                 try:
                     output = schema.model_validate(redact(response["output"], self.secret_values))
+                    self.validate_business_questions(output)
                     candidate = (
                         output
                         if isinstance(output, (ArtifactOutput, QuestionOutput))
@@ -524,11 +557,15 @@ class Orchestrator:
                         )
                     break
                 except (ValueError, KeyError) as exc:
-                    if attempt or "writer" not in roles:
+                    if attempt or (
+                        "writer" not in roles and not isinstance(exc, RepeatedBusinessQuestion)
+                    ):
                         raise FlowError(
                             "An analysis response does not match the expected format. Clarify the need and retry; previous results are preserved."
                         ) from exc
-                    if self.is_question:
+                    if isinstance(exc, RepeatedBusinessQuestion):
+                        prompt += "\nBUSINESS QUESTION CORRECTION: a returned question has already been answered in confirmed_decisions. Reuse that confirmed answer, do not ask the user again. Ask only a genuinely new dependent question, or report an explicit conflict using conflicts_with and its factual reason if new information contradicts the old rule."
+                    elif self.is_question:
                         prompt += "\nFORMAT CORRECTION: strictly follow the explanation schema. Use only known repository identifiers and existing repository-relative paths. Do not include private paths, ticket fields, goal fields or internal reasoning. Leave unsupported details empty."
                     else:
                         prompt += "\nFORMAT CORRECTION: strictly follow the schema, a ticket of at most 700 words and a separate detailed goal.md. useful_attachments must contain only the exact provided names, without Markdown or explanations, or an empty list. Do not include internal reasoning fields."
@@ -538,11 +575,16 @@ class Orchestrator:
             if self.session.connection:
                 from .model_catalog import record_execution
 
-                record_execution(self.session.connection, response.get("model") or self.session.model_snapshot, True)
+                record_execution(
+                    self.session.connection,
+                    response.get("model") or self.session.model_snapshot,
+                    True,
+                )
             self.run.orchestration.setdefault("structured_outputs", []).append(
                 {"roles": roles, "public_role": step["public_role"], "output": output.model_dump()}
             )
             self.run.save(update_fields=["steps", "orchestration"])
+            self.remember_business_context(output)
             return output
         except Exception as exc:
             self.observe_context(getattr(exc, "context_observation", {}), step)
@@ -554,7 +596,9 @@ class Orchestrator:
                     from .models import AIConnection
 
                     if self.session.connection:
-                        record_execution(self.session.connection, self.session.model_snapshot, False)
+                        record_execution(
+                            self.session.connection, self.session.model_snapshot, False
+                        )
                     AIConnection.objects.filter(pk=self.session.connection_id).update(
                         availability="MODEL_UNAVAILABLE"
                     )
@@ -602,9 +646,70 @@ class Orchestrator:
                     records.append(dict(item))
         self.run.save(update_fields=["steps", "context_usage"])
 
+    def validate_business_questions(self, output):
+        from .business_decisions import prepare_questions
+
+        question_owner = (
+            getattr(output, "analysis", None) or getattr(output, "review", None) or output
+        )
+        questions = [
+            *getattr(question_owner, "questions", []),
+            *getattr(getattr(output, "result", None), "questions", []),
+        ]
+        if questions:
+            confirmed = self.run.context_snapshot.get("business_decisions", {}).get("decisions", [])
+            for question in questions:
+                key = question.decision_key or question.id
+                if not question.conflicts_with and any(
+                    item["key"] == key
+                    and isinstance(item.get("question"), dict)
+                    and item["question"].get("question") == question.question
+                    for item in confirmed
+                ):
+                    raise RepeatedBusinessQuestion("Reuse the already confirmed business answer.")
+            prepare_questions(
+                self.request, [question.model_dump(exclude_defaults=True) for question in questions]
+            )
+
+    def remember_business_context(self, output):
+        """Keep established summaries and explicitly qualified findings for the user."""
+        owner = getattr(output, "analysis", None) or output
+        summary = getattr(owner, "business_summary", None)
+        if summary:
+            current = self.run.orchestration.get("business_summary", {})
+            uncertainties = list(
+                dict.fromkeys([*current.get("uncertainties", []), *summary.uncertainties])
+            )
+            current.update({key: value for key, value in summary.model_dump().items() if value})
+            current["uncertainties"] = uncertainties
+            self.run.orchestration["business_summary"] = current
+        findings = [item.model_dump() for item in getattr(owner, "findings", [])]
+        if findings:
+            existing = self.run.orchestration.setdefault("business_findings", [])
+            existing.extend(item for item in findings if item not in existing)
+            from .i18n import translate
+
+            uncertain = [
+                translate("Assumption", self.request.language) + ": " + item["description"]
+                if item["kind"] == "assumption"
+                else item["description"]
+                for item in findings
+                if item["kind"] in {"assumption", "unknown"}
+            ]
+            if uncertain:
+                summary = self.run.orchestration.setdefault("business_summary", {})
+                summary["uncertainties"] = list(
+                    dict.fromkeys([*summary.get("uncertainties", []), *uncertain])
+                )
+        self.run.save(update_fields=["orchestration"])
+
     def clarify(self, understanding, questions):
+        from .business_decisions import prepare_questions
+
         self.request.understanding = understanding
-        self.request.questions = [q.model_dump() for q in questions]
+        self.request.questions = prepare_questions(
+            self.request, [q.model_dump(exclude_defaults=True) for q in questions]
+        )
         self.request.save(update_fields=["understanding", "questions"])
         RequestMessage.objects.create(
             request=self.request,
@@ -641,7 +746,7 @@ class Orchestrator:
                 budget=220,
             )
             self.facts["code"] = combined.analysis.model_dump()
-            if self.is_question and combined.analysis.questions:
+            if combined.analysis.questions:
                 self.clarify(requirement.understanding, combined.analysis.questions)
                 return
             self.finish(combined.result)
@@ -671,7 +776,7 @@ class Orchestrator:
             budget=100,
         )
         self.facts["code"] = code.model_dump()
-        if self.is_question and code.questions:
+        if code.questions:
             self.clarify(requirement.understanding, code.questions)
             return
         if not AgentProfile.objects.filter(pk="reviewer", enabled=True).exists():
@@ -691,6 +796,9 @@ class Orchestrator:
             budget=65,
         )
         self.facts["review"] = review.review.model_dump()
+        if review.review.questions:
+            self.clarify(requirement.understanding, review.review.questions)
+            return
         if review.result:
             self.finish(review.result)
             return
@@ -717,6 +825,10 @@ class Orchestrator:
         self.finish(written)
 
     def finish(self, output):
+        if output.questions:
+            self.remember_business_context(output)
+            self.clarify(self.request.understanding, output.questions)
+            return
         unresolved = self.facts.get("verification", {}).get("remaining_uncertainties", [])
         if self.is_question and unresolved:
             output = output.model_copy(deep=True)
@@ -740,7 +852,12 @@ class Orchestrator:
             "GENERATING_RESULT",
             "Preparing the explanation" if self.is_question else "Preparing the ticket and goal.md",
         )
-        publish(self.request.id, self.run, output)
+        from .business_outputs import BusinessOutputError
+
+        try:
+            publish(self.request.id, self.run, output)
+        except BusinessOutputError as error:
+            raise FlowError(str(error)) from error
 
 
 class ConfrontationOrchestrator(Orchestrator):
@@ -771,7 +888,12 @@ class ConfrontationOrchestrator(Orchestrator):
                 .order_by("-number")
                 .first()
             )
-            if request.conversation and previous and previous.orchestration:
+            if (
+                request.conversation
+                and previous
+                and previous.orchestration
+                and not run.context_snapshot.get("revised_decision_keys")
+            ):
                 old_outputs = previous.orchestration.get("outputs", {})
                 requirement = old_outputs.get("requirement", {})
                 if requirement.get("status") == "READY_TO_ANALYZE":
@@ -799,7 +921,9 @@ class ConfrontationOrchestrator(Orchestrator):
         schema = self.schema_for_intent(schema)
         outputs = self.run.orchestration.setdefault("outputs", {})
         if name in outputs:
-            return schema.model_validate(outputs[name])
+            cached = schema.model_validate(outputs[name])
+            self.remember_business_context(cached)
+            return cached
         if self.calls >= self.config["max_calls"] or self.deadline - time.monotonic() < 3:
             raise FlowError(
                 "The analysis limit was reached. Validated observations and previous results are preserved."
@@ -884,7 +1008,7 @@ class ConfrontationOrchestrator(Orchestrator):
             "Analyze actual project sources, business need, attachments and read-only database when useful. Return sourced conclusions, impacts, uncertainties, minimal proposed solution and tests. No final ticket or internal reasoning.",
             budget=75,
         )
-        if self.is_question and first.questions:
+        if first.questions:
             self.clarify(requirement.understanding, first.questions)
             return
         # The autonomous counter-analysis receives the same business dossier and
@@ -898,7 +1022,7 @@ class ConfrontationOrchestrator(Orchestrator):
             "You do not have the other analysis. First produce your own autonomous sourced analysis of the business dossier and actual code, documents and optional read-only database. No first-analyst conclusions are provided. Identify overlooked impacts and uncertainties. Do not assume or request another agent's private notes. No final ticket or internal reasoning.",
             budget=75,
         )
-        if self.is_question and second.questions:
+        if second.questions:
             self.clarify(requirement.understanding, second.questions)
             return
         self.facts = {"independent_analyses": [first.model_dump(), second.model_dump()]}
@@ -911,6 +1035,9 @@ class ConfrontationOrchestrator(Orchestrator):
             budget=45,
         )
         self.facts["comparison"] = comparison.model_dump()
+        if comparison.questions:
+            self.clarify(requirement.understanding, comparison.questions)
+            return
         if comparison.verification:
             verification = comparison.verification
             if verification.target == "attachment" and not has_attachments:

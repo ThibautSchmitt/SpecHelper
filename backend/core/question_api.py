@@ -11,6 +11,7 @@ from ninja.responses import Status
 from pydantic import ConfigDict, Field
 
 from . import question_actions as actions
+from .clarification_schema import AnswersIn
 from .file_validation import attachment_path
 from .models import GeneratedArtifact, QuestionDocument, Request, RequestAttachment
 from .services import add_attachment, continue_conversation, enqueue_analysis
@@ -24,10 +25,6 @@ class QuestionIn(Schema):
     need: str = Field(min_length=1, max_length=30000)
     confrontation: bool = False
     category: Literal["general", "technical", "functional", "architecture"] = "general"
-
-
-class AnswersIn(Schema):
-    answers: dict[str, str]
 
 
 class ContinuationIn(Schema):
@@ -86,7 +83,7 @@ def analyze_question(request, question_id: UUID):
 @router.post("/questions/{question_id}/answers")
 def answer_question(request, question_id: UUID, payload: AnswersIn):
     actions.question(question_id)
-    return actions.question_dict(enqueue_analysis(question_id, payload.answers), full=True)
+    return actions.question_dict(enqueue_analysis(question_id, payload.answers, payload.choices, payload.expected_decision_revision, payload.confirm_changes), full=True)
 
 
 @router.post("/questions/{question_id}/continue")

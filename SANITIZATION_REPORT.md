@@ -3,7 +3,9 @@
 Verdict: **PASS WITH WARNINGS** for the source snapshot, with third-party licensing
 scope retained below. The reviewed source is prepared in the local publication checkout; remote push status is reported separately.
 
-This report covers the refreshed publication candidate, including the v2.1 conversational
+This report covers the refreshed publication candidate, including v2.2 guided business
+clarification, immutable human-confirmed decisions, explicit conflict review, targeted
+reanalysis and business-result validation, as well as the v2.1 conversational
 library assistant, inactive drafts, shared-queue demonstrations, declaration import/export
 and historical restoration, alongside the v2.0 versioned library, environment assignments
 and provider model catalog and v1.9 access protection,
@@ -18,7 +20,7 @@ are not rewritten. See [localization verification](docs/localization.md).
 
 ## Files reviewed
 
-The publication candidate contains 315 project-owned files, including this report. Sources,
+The publication candidate contains 328 project-owned files, including this report. Sources,
 tests, migrations, configuration and documentation were read; both dependency locks
 were parsed. Installed dependency/cache/build files and private runtime data
 are excluded; dependency license metadata was inspected separately.
@@ -94,6 +96,17 @@ a protected copy. Current candidate scans find no secrets; six Semgrep rules cov
 153 production files without findings or parse errors. The real Linux containment
 probe passes again. Provider generation/demo responses are controlled test fixtures;
 these checks do not claim a successful live paid-inference run.
+
+The [v2.2 acceptance report](docs/acceptance-v2.2.md) maps all business-clarification
+requirements to schema, API, worker, artifact and browser checks. The final backend
+run passes 635 tests with one host-only Linux skip, covered by the actual runtime
+probe. Migration 0026 preserves original data in 36 tables and 396 rows on a
+protected copy. Current scans report no candidate secrets and no findings or parse
+errors across 159 production files under six local Semgrep rules. The report
+distinguishes controlled provider responses from actual browser-to-API verification
+and records 176 passing full-suite browser cases and 52 passing production-build
+browser cases. No source-writing permission or
+automatic production deployment is added.
 
 A separate deployed desktop/mobile check and an actual GLPI 11.0.7 ticket
 creation/reconciliation check pass. See [v1.8 acceptance](docs/acceptance-v1.8.md), [v1.7 acceptance](docs/acceptance-v1.7.md), [v1.6 acceptance](docs/acceptance-v1.6.md) and

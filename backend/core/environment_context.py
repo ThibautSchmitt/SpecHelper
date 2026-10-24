@@ -257,6 +257,17 @@ def freeze_context(request, run=None, reuse=None):
     from .sensitive_data import configured_secrets, redact
 
     snapshot["snapshot_id"] = str(uuid.uuid4())
+    from .business_decisions import snapshot_for_request
+
+    snapshot["business_decisions"] = snapshot_for_request(request)
+    snapshot["changed_decision_keys"] = (
+        run.job.payload.get("changed_decision_keys", []) if run and run.job_id else []
+    )
+    snapshot["revised_decision_keys"] = [
+        item["key"]
+        for item in snapshot["business_decisions"]["decisions"]
+        if item.get("previous_id") is not None and item["key"] in snapshot["changed_decision_keys"]
+    ]
     snapshot["dossier"] = {
         "request_id": str(request.id),
         "workflow": request.workflow,

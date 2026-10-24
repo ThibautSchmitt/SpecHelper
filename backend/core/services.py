@@ -16,18 +16,29 @@ from .models import (
 )
 
 
-def queue_run(request, continuing=False):
+def queue_run(request, continuing=False, changed_decision_keys=None):
     if not request.messages.exists():
         RequestMessage.objects.create(
             request=request, role="user", kind="need", content=request.need
         )
-    job = Job.objects.create(kind="analysis", target=str(request.id))
+    job = Job.objects.create(
+        kind="analysis",
+        target=str(request.id),
+        payload={
+            "decision_revision": request.decision_revision,
+            "changed_decision_keys": changed_decision_keys or [],
+        },
+    )
     number = (request.analysis_runs.aggregate(last=Max("number"))["last"] or 0) + 1
     from .environment_context import freeze_context
 
     reuse = (
         request.context_snapshot
-        if (request.status == Request.Status.NEEDS_CLARIFICATION or not request.environment_id)
+        if (
+            request.status == Request.Status.NEEDS_CLARIFICATION
+            or not request.environment_id
+            or changed_decision_keys
+        )
         else None
     )
     run = AnalysisRun.objects.create(request=request, job=job, number=number)
@@ -61,13 +72,16 @@ ALLOWED_EXTENSIONS = {
 
 
 @transaction.atomic
-def enqueue_analysis(request_id, answers=None):
+def enqueue_analysis(
+    request_id, answers=None, choices=None, expected_decision_revision=None, confirm_changes=False
+):
     request = (
         Request.objects.select_for_update(of=("self",))
         .select_related("environment__database")
         .get(pk=request_id)
     )
-    if answers is None:
+    changed_decision_keys = []
+    if answers is None and choices is None:
         if request.status != Request.Status.DRAFT:
             raise HttpError(409, "This request has already been started")
         require_session_connection(request)
@@ -96,11 +110,11 @@ def enqueue_analysis(request_id, answers=None):
     else:
         if request.status != Request.Status.NEEDS_CLARIFICATION:
             raise HttpError(409, "This request is not awaiting an answer")
-        expected = {q["id"] for q in request.questions}
-        if set(answers) != expected or any(
-            not isinstance(v, str) or not v.strip() or len(v) > 10000 for v in answers.values()
-        ):
-            raise HttpError(422, "Answer every question")
+        from .business_decisions import accept_answers
+
+        answers, changed_decision_keys = accept_answers(
+            request, answers or {}, choices, expected_decision_revision, confirm_changes
+        )
         request.conversation += [{"questions": request.questions, "answers": answers}]
         require_session_connection(request)
         RequestMessage.objects.create(
@@ -111,12 +125,15 @@ def enqueue_analysis(request_id, answers=None):
             data={"questions": request.questions, "answers": answers},
         )
         request.questions = []
-    return queue_run(request)
+    return queue_run(request, changed_decision_keys=changed_decision_keys)
 
 
 @transaction.atomic
 def continue_conversation(request_id, message, expected_version):
     request = Request.objects.select_for_update().get(pk=request_id)
+    from .business_decisions import assert_editable
+
+    assert_editable(request)
     if request.status not in {"READY", "PARTIAL", "ERROR"}:
         raise HttpError(409, "Wait for the result or answer the pending questions.")
     latest = request.versions.order_by("-number").first()

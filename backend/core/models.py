@@ -232,6 +232,8 @@ class Request(models.Model):
     conversation = models.JSONField(default=list)
     questions = models.JSONField(default=list)
     understanding = models.TextField(blank=True)
+    decision_revision = models.PositiveIntegerField(default=0)
+    validated_version = models.PositiveIntegerField(null=True, blank=True)
     progress = models.JSONField(default=list)
     error = models.TextField(blank=True)
     confrontation = models.BooleanField(default=False)
@@ -388,6 +390,8 @@ class ResultVersion(models.Model):
     explanation = models.JSONField(default=dict)
     technical_summary = models.TextField(blank=True)
     context_usage = models.JSONField(default=list)
+    decisions_snapshot = models.JSONField(default=list)
+    business_summary = models.JSONField(default=dict)
     context_snapshot = models.JSONField(default=dict)
     baseline = models.JSONField(default=list)
     database_snapshot = models.JSONField(default=dict)
@@ -654,4 +658,46 @@ class LibraryDraftRevision(models.Model):
     def save(self, *args, **kwargs):
         if not self._state.adding:
             raise ValueError("A draft revision is immutable")
+        return super().save(*args, **kwargs)
+
+
+class BusinessDecision(models.Model):
+    """An immutable human choice; the latest sequence per key is the current rule."""
+
+    request = models.ForeignKey(Request, on_delete=models.PROTECT, related_name="business_decisions")
+    sequence = models.PositiveIntegerField()
+    revision = models.PositiveIntegerField()
+    key = models.CharField(max_length=100)
+    question = models.JSONField()
+    option_id = models.CharField(max_length=100, null=True)
+    option = models.JSONField(null=True)
+    value = models.TextField()
+    previous = models.ForeignKey("self", null=True, on_delete=models.PROTECT)
+    source_version = models.PositiveIntegerField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["request", "sequence"], name="unique_request_decision_sequence")
+        ]
+        ordering = ["sequence"]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("A business decision is immutable")
+        return super().save(*args, **kwargs)
+
+
+class BusinessValidation(models.Model):
+    """Human approval and explicit reopening of a published result."""
+
+    request = models.ForeignKey(Request, on_delete=models.PROTECT, related_name="business_validations")
+    version = models.PositiveIntegerField()
+    decision_revision = models.PositiveIntegerField()
+    action = models.CharField(max_length=10, choices=[("validated", "Validated"), ("reopened", "Reopened")])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("A business validation is immutable")
         return super().save(*args, **kwargs)

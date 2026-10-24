@@ -53,9 +53,13 @@ elif action == "cleanup":
         shutil.rmtree(settings.MEDIA_ROOT / str(request.id), ignore_errors=True)
     Job.objects.filter(kind="analysis", target__in=[str(r.id) for r in requests]).delete()
     # Delete only controlled fixture artifacts and derived requests before their protected sources.
-    from core.models import QuestionDocument
+    from core.models import BusinessDecision, BusinessValidation, QuestionDocument
 
     QuestionDocument.objects.filter(source_version__request__in=requests).delete()
+    BusinessValidation.objects.filter(request__in=requests).delete()
+    # Revisions protect their predecessors; remove only this fixture's newest rows first.
+    for decision in BusinessDecision.objects.filter(request__in=requests).order_by("-sequence"):
+        decision.delete()
     requests.filter(workflow="request").delete()
     requests.delete()
     environments.delete()
@@ -68,7 +72,49 @@ elif action == "cleanup":
         saved_ai.unlink()
 else:
     request = Request.objects.get(pk=target, environment__name__startswith="[E2E]")
-    if action == "clarify":
+    if action == "business-clarify":
+        from django.utils import timezone
+
+        from core.clarification_schema import ClarificationQuestion
+
+        question = ClarificationQuestion.model_validate({
+            "id": "export-scope",
+            "question": "Which contracts should the export include?",
+            "kind": "choice",
+            "decision_key": "export-scope",
+            "reason": "This decides which records the operations team will receive.",
+            "unknowns": ["Historical export exceptions have not been inspected."],
+            "options": [
+                {
+                    "id": "active",
+                    "label": "Active contracts only",
+                    "behavior": "Export active contracts only.",
+                    "relevance": "Use this for current operations.",
+                    "benefits": "Keeps the file focused on active work.",
+                    "limitations": "Inactive contracts are omitted.",
+                    "consequences": "The team needs another export for historical review.",
+                },
+                {
+                    "id": "all",
+                    "label": "All contracts with a warning",
+                    "behavior": "Export all contracts and warn when inactive records are included.",
+                    "relevance": "Use this when the team needs a complete review.",
+                    "benefits": "Includes all historical records.",
+                    "limitations": "The resulting file may contain more records.",
+                    "consequences": "The team checks the warning before sharing the file.",
+                },
+            ],
+        })
+        request.status = "NEEDS_CLARIFICATION"
+        request.questions = [question.model_dump()]
+        request.understanding = "Clarify the business scope of the contracts export."
+        request.save()
+        run = request.analysis_runs.order_by("-number").first()
+        if run:
+            run.status, run.finished_at = "NEEDS_CLARIFICATION", timezone.now()
+            run.save(update_fields=["status", "finished_at"])
+            Job.objects.filter(pk=run.job_id).update(status="DONE", finished_at=timezone.now())
+    elif action == "clarify":
         request.status = "NEEDS_CLARIFICATION"
         request.questions = [
             {"id": "Q1", "question": "Should the export include active contracts only?"}
@@ -103,7 +149,7 @@ else:
             },
         })
         publish(request.id, request.analysis_runs.order_by("-number").first(), output)
-    elif action in {"result", "derived-result"}:
+    elif action in {"result", "derived-result", "business-result"}:
         if action == "result":
             assert request.conversation[0]["answers"]["Q1"] == "Yes, active contracts only."
             assert request.session.runtime_id == "11111111-1111-4111-8111-111111111111"
@@ -138,5 +184,19 @@ else:
                 },
             }
         )
-        publish(request.id, request.analysis_runs.order_by("-number").first(), output)
+        run = request.analysis_runs.order_by("-number").first()
+        if action == "business-result":
+            # Controlled provider conclusions use the same frozen business rules as
+            # publication, while the real publisher validates and stores artifacts.
+            decisions = run.context_snapshot.get("business_decisions", {}).get("decisions", [])
+            if not decisions:
+                raise RuntimeError("Business-result fixtures require frozen confirmed decisions")
+            rules = [decision["value"] for decision in decisions]
+            output.ticket.title = "Contract export scope"
+            output.ticket.need = request.need
+            output.ticket.expected_behavior = rules
+            output.ticket.acceptance_criteria = rules
+            output.goal.required_behavior = rules
+            output.goal.acceptance_criteria = rules
+        publish(request.id, run, output)
         print(json.dumps({"baseline": request.baseline}))

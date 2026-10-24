@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .business_outputs import BusinessSummary, summary_markdown
+from .clarification_schema import ClarificationQuestion
 from .i18n import translate
 
 
@@ -53,6 +55,8 @@ class ArtifactOutput(StrictModel):
     ticket: HumanTicket
     goal: DevelopmentGoal
     technical_summary: str = Field(min_length=1, max_length=4000)
+    business_summary: BusinessSummary | None = None
+    questions: list[ClarificationQuestion] = Field(default_factory=list, max_length=5)
 
 
 HUMAN_SECTIONS = {
@@ -82,8 +86,12 @@ def section(label, content, language="en"):
     ]
 
 
-def render_human(ticket, language="en"):
+def render_human(ticket, language="en", business_summary=None, decisions=None):
     lines = ["# " + ticket["title"], ""]
+    if business_summary:
+        lines += [summary_markdown(business_summary, language)]
+    if decisions:
+        lines += section("Confirmed business decisions", decisions, language)
     for key, label in HUMAN_SECTIONS.items():
         lines += section(label, ticket[key], language)
     return "\n".join(lines).rstrip() + "\n"
@@ -99,6 +107,11 @@ def render_goal(goal, baseline, attachments, language="en", context_snapshot=Non
 
     lines = ["# " + translate("Goal", language), ""]
     lines += localized_section("Business intent", goal["business_intent"])
+    decisions = (context_snapshot or {}).get("business_decisions", {}).get("decisions", [])
+    if decisions:
+        from .business_outputs import decision_rules
+
+        lines += localized_section("Confirmed business decisions", decision_rules(decisions))
     lines += localized_section("Current behavior", goal["current_behavior"])
     lines += localized_section("Required behavior", goal["required_behavior"])
     lines += localized_section("Technical context", goal["technical_context"])

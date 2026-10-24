@@ -19,7 +19,7 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - Named assistant configurations, model selection and shared account availability
 - Versioned agent/skill library with environment selection and compatibility preview
 - Guided agent/skill creation with clarification, editable drafts and sandbox tests
-- Business clarification before technical analysis
+- Guided business clarification with explained choices and confirmed decisions
 - Optional environment instructions and versioned reference documents
 - Screenshots and document attachments
 - Automatic independent analyses based on configured AI roles, with one or two connected assistants
@@ -98,6 +98,10 @@ From **Requests**:
 4. Choose a request type: automatic, feature, bug or documentation.
 5. Start the analysis and answer any clarification questions.
 
+Clarifications use explained choices only when useful, with a free-text alternative.
+Confirmed decisions remain available for review and the resulting ticket and
+`goal.md`. See [business clarification](docs/business-clarification.md).
+
 Independent comparison is selected automatically from Settings and enabled assistant
 roles. Business forms contain no per-request comparison control.
 
@@ -168,6 +172,8 @@ Further documentation:
 
 - [Functional specification](docs/specification.md)
 - [AI connections, models and shared agent/skill library](docs/ai-library.md)
+- [Business clarification and confirmed decisions](docs/business-clarification.md)
+- [v2.2 acceptance report](docs/acceptance-v2.2.md)
 - [v2.1 acceptance report](docs/acceptance-v2.1.md)
 - [v2.0 acceptance report](docs/acceptance-v2.0.md)
 - [Environment context](docs/environment-context.md)
