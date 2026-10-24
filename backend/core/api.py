@@ -39,14 +39,16 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="2.2", auth=None)
+api = NinjaAPI(title="SpecHelper", version="2.3", auth=None)
 
 
 @api.exception_handler(ValueError)
 def invalid(request, exc):
     from .sensitive_data import configured_secrets, redact
 
-    return api.create_response(request, {"detail": redact(str(exc), configured_secrets())[:500]}, status=422)
+    return api.create_response(
+        request, {"detail": redact(str(exc), configured_secrets())[:500]}, status=422
+    )
 
 
 @api.exception_handler(Exception)
@@ -54,7 +56,9 @@ def unexpected(request, exc):
     import logging
 
     logging.getLogger(__name__).error("API operation failed (%s)", type(exc).__name__)
-    return api.create_response(request, {"detail": "The operation could not be completed. Try again."}, status=500)
+    return api.create_response(
+        request, {"detail": "The operation could not be completed. Try again."}, status=500
+    )
 
 
 class SettingsIn(Schema):
@@ -193,6 +197,7 @@ def request_dict(value, full=False):
         "title": value.need.splitlines()[0][:160],
         "workflow": value.workflow,
         "category": value.category,
+        "analysis_protocol": value.analysis_protocol,
         "source_question": {
             "id": str(value.source_question_version.request_id),
             "version": value.source_question_version.number,
@@ -217,7 +222,9 @@ def request_dict(value, full=False):
         decisions = snapshot_for_request(value)
         latest_run = value.analysis_runs.order_by("-number").first()
         latest_version = value.versions.order_by("-number").first()
-        summary = (latest_run.orchestration.get("business_summary") if latest_run else None) or (latest_version.business_summary if latest_version else {})
+        summary = (latest_run.orchestration.get("business_summary") if latest_run else None) or (
+            latest_version.business_summary if latest_version else {}
+        )
         result.update(
             {
                 "decisions": decisions["decisions"],
@@ -225,6 +232,8 @@ def request_dict(value, full=False):
                 "decision_revision": value.decision_revision,
                 "validated_version": value.validated_version,
                 "business_summary": summary,
+                "evidence": (latest_run.orchestration.get("evidence") if latest_run else None)
+                or (latest_version.evidence if latest_version else {}),
                 "context_snapshot": value.context_snapshot,
                 "baseline": value.baseline,
                 "database": value.database_snapshot,
@@ -298,6 +307,7 @@ def version_dict(version):
         "context_usage": version.context_usage,
         "decisions_snapshot": version.decisions_snapshot,
         "business_summary": version.business_summary,
+        "evidence": version.evidence,
         "language": version.language,
         "status": version.status,
         "created_at": version.created_at,
@@ -588,6 +598,7 @@ def create_request(request, payload: RequestIn):
     environment = get_object_or_404(Environment, pk=payload.environment_id)
     value = Request.objects.create(
         environment=environment,
+        analysis_protocol="2.3",
         environment_name_snapshot=environment.name,
         need=payload.need,
         confrontation=automatic_comparison(options),
@@ -641,13 +652,23 @@ def remove_draft_attachment(request, request_id: UUID, attachment_id: UUID):
 @api.post("/requests/{request_id}/analyze")
 def start_analysis(request, request_id: UUID):
     get_object_or_404(Request, pk=request_id, workflow="request")
-    return request_dict(enqueue_analysis(request_id), full=True)
+    return request_dict(enqueue_analysis(request_id, analysis_protocol="2.3"), full=True)
 
 
 @api.post("/requests/{request_id}/answers")
 def answer_questions(request, request_id: UUID, payload: AnswersIn):
     get_object_or_404(Request, pk=request_id, workflow="request")
-    return request_dict(enqueue_analysis(request_id, payload.answers, payload.choices, payload.expected_decision_revision, payload.confirm_changes), full=True)
+    return request_dict(
+        enqueue_analysis(
+            request_id,
+            payload.answers,
+            payload.choices,
+            payload.expected_decision_revision,
+            payload.confirm_changes,
+            analysis_protocol="2.3",
+        ),
+        full=True,
+    )
 
 
 @api.get("/requests/{request_id}/markdown")
@@ -662,7 +683,10 @@ def download_markdown(request, request_id: UUID):
 def continue_request(request, request_id: UUID, payload: ContinuationIn):
     get_object_or_404(Request, pk=request_id, workflow="request")
     return request_dict(
-        continue_conversation(request_id, payload.message, payload.expected_version), full=True
+        continue_conversation(
+            request_id, payload.message, payload.expected_version, analysis_protocol="2.3"
+        ),
+        full=True,
     )
 
 
@@ -709,7 +733,9 @@ def agents(request):
                 for skill in profile.skills.all()
             ],
         }
-        for profile in AgentProfile.objects.filter(deleted=False).prefetch_related("skills").order_by("slug")
+        for profile in AgentProfile.objects.filter(deleted=False)
+        .prefetch_related("skills")
+        .order_by("slug")
     ]
 
 
@@ -719,7 +745,9 @@ def skills(request):
 
     ensure_catalogue()
     return list(
-        SkillDefinition.objects.filter(deleted=False).order_by("slug").values("slug", "name", "instructions", "enabled")
+        SkillDefinition.objects.filter(deleted=False)
+        .order_by("slug")
+        .values("slug", "name", "instructions", "enabled")
     )
 
 
@@ -807,7 +835,13 @@ api.add_router("", business_router)
 
 @api.exception_handler(DecisionConflict)
 def decision_conflict(request, exc):
-    return api.create_response(request, {
-        "detail": str(exc.message), "code": "DECISION_CONFLICT",
-        "conflicts": exc.conflicts, "decision_revision": exc.revision,
-    }, status=409)
+    return api.create_response(
+        request,
+        {
+            "detail": str(exc.message),
+            "code": "DECISION_CONFLICT",
+            "conflicts": exc.conflicts,
+            "decision_revision": exc.revision,
+        },
+        status=409,
+    )

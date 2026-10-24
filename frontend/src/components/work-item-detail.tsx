@@ -3,6 +3,7 @@ import { BusinessClarification, BusinessDecisions, BusinessOverview } from "@/co
 import { QuestionResult } from "@/components/question-result";
 import { PublishTicket } from "@/components/publish-ticket";
 import { AnalysisContext } from "@/components/analysis-context";
+import { AnalysisEvidence } from "@/components/analysis-evidence";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels, warningMessage } from "@/lib/orchestration";
 import Link from "next/link";
@@ -466,6 +467,7 @@ function RequestContent({
         />
       )}
       {!loadingVersion && <BusinessOverview summary={selectedNumber !== null ? result?.business_summary : value.business_summary || result?.business_summary} />}
+      {!loadingVersion && <AnalysisEvidence report={selectedNumber !== null ? result?.evidence : value.evidence || result?.evidence} historical={selectedNumber !== null} />}
       {!loadingVersion && <BusinessDecisions
         key={`${id}-${selectedNumber ?? "current"}`}
         value={value}

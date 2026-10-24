@@ -35,12 +35,33 @@ def publish(request_id, run, output):
     if summary:
         summary = BusinessSummary.model_validate(summary).model_dump()
     output = output.model_copy(deep=True)
+    evidence = {}
+    if request.analysis_protocol == "2.3":
+        from .analysis_evidence import ReliabilityReport
+
+        evidence = ReliabilityReport.model_validate(
+            run.orchestration.get("evidence", {}) if run else {}
+        ).model_dump()
+        roles = {
+            step.get("public_role")
+            for step in (run.steps if run else [])
+            if step.get("status") == "DONE"
+        }
+        if not {"analyst", "counter_analyst", "verifier"} <= roles or not evidence["claims"]:
+            evidence["blocking"] = True
+            evidence["limitations"].append(
+                "Independent analysis, counter-analysis and verification have not all been completed."
+            )
+        if evidence["blocking"]:
+            output.status = "PARTIAL"
     is_question = request.workflow == "question"
     if is_question:
         output = QuestionOutput.model_validate(output.model_dump())
         output.answer.confirmed_decisions = rules
         if summary:
             output.answer.business_summary = BusinessSummary.model_validate(summary)
+        if evidence:
+            output.answer.evidence = ReliabilityReport.model_validate(evidence)
         output = QuestionOutput.model_validate(output.model_dump())
         explanation = output.answer.model_dump()
         ticket = {}
@@ -81,6 +102,14 @@ def publish(request_id, run, output):
             ),
         }
         technical_summary = output.technical_summary
+    if evidence and not is_question:
+        from .evidence_rendering import render_evidence
+
+        appendix = "\n" + render_evidence(evidence, request.language)
+        artifacts = {
+            name: content.rstrip() + "\n" + appendix for name, content in artifacts.items()
+        }
+        markdown = artifacts["ticket.md"]
     version = ResultVersion.objects.create(
         request=request,
         run=run,
@@ -98,6 +127,7 @@ def publish(request_id, run, output):
         context_usage=run.context_usage if run else [],
         decisions_snapshot=decisions,
         business_summary=summary,
+        evidence=evidence,
     )
     GeneratedArtifact.objects.bulk_create(
         [

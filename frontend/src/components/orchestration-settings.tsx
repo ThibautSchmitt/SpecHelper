@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { publicRoles, roleLabels, type PublicRole } from "@/lib/orchestration";
 
 export type OrchestrationSettings = {
+  reliability_protocol?: string;
   allow_confrontation?: boolean;
   verifier_enabled: boolean;
   allow_same_family_fallback: boolean;
@@ -42,7 +43,7 @@ export function OrchestrationSettingsForm() {
   }
   return <Card>
     <h2 className="flex items-center gap-2"><SlidersHorizontal size={18} />{t("Analysis configuration")}</h2>
-    <p className="mt-2 text-sm muted">{t("Compared requests use one analyst and one independent counter-analyst. An optional verifier consolidates the evidence.")}</p>
+    <p className="mt-2 text-sm muted">{t(value?.reliability_protocol === "2.3" ? "Questions and requests use an Analyst, an independent Counter-analyst and a Verifier. Each role works in a separate session; no role can approve its own analysis." : "Compared requests use one analyst and one independent counter-analyst. An optional verifier consolidates the evidence.")}</p>
     <p className="mt-2 text-sm muted">{t("AI verification does not replace human approval of the ticket and goal.md.")}</p>
     {error && <p role="alert" className="mt-4 text-sm text-red-700">{t(error)}</p>}
     {!value && !error && <p className="mt-4 text-sm muted">{t("Loading…")}</p>}
@@ -50,8 +51,8 @@ export function OrchestrationSettingsForm() {
       event.preventDefault();
       setBusy(true); setError(""); setNotice("");
       try {
-        const { available_agents, available_skills, ...body } = value;
-        void available_agents; void available_skills;
+        const { available_agents, available_skills, reliability_protocol, ...body } = value;
+        void available_agents; void available_skills; void reliability_protocol;
         setValue(await send<OrchestrationSettings>("/orchestration-settings", body, "PUT"));
         setNotice(t("Orchestration settings saved."));
         window.dispatchEvent(new Event("orchestration-updated"));
@@ -59,11 +60,11 @@ export function OrchestrationSettingsForm() {
       finally { setBusy(false); }
     }}>
       <fieldset disabled={busy} className="mt-5 space-y-5">
-        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={value.allow_confrontation !== false} onChange={(e) => setValue({ ...value, allow_confrontation: e.target.checked })} />{t("Independent counter-analysis")}</label>
+        {value.reliability_protocol === "2.3" ? <div className="rounded-lg border p-4 space-y-2" role="status"><p className="text-sm font-medium">{t("Independent review is required")}</p><p className="text-sm muted">{t("Counter-analysis and verification remain active for every new analysis. Saving time or tokens cannot bypass either role.")}</p><p className="text-sm muted">{t("The Verifier looks for limits, exceptions and counterexamples. Without a checked business database, conclusions about real records remain unverified.")}</p></div> : <><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={value.allow_confrontation !== false} onChange={(e) => setValue({ ...value, allow_confrontation: e.target.checked })} />{t("Independent counter-analysis")}</label>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={value.verifier_enabled} onChange={(e) => setValue({ ...value, verifier_enabled: e.target.checked })} />
           {t("Verify compared analyses")}
-        </label>
+        </label></>}
         <div>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" checked={value.allow_same_family_fallback} onChange={(e) => setValue({ ...value, allow_same_family_fallback: e.target.checked })} />
@@ -72,7 +73,7 @@ export function OrchestrationSettingsForm() {
           <p className="mt-2 text-xs muted">{t("Different eligible model families are always preferred. When fallback is disabled, the request waits explicitly for an eligible family.")}</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="field"><label htmlFor="orchestration-calls">{t("Maximum AI calls per analysis")}</label><Input id="orchestration-calls" type="number" min={2} max={20} required value={value.max_calls} onChange={(e) => setValue({ ...value, max_calls: Number(e.target.value) })} /></div>
+          <div className="field"><label htmlFor="orchestration-calls">{t("Maximum AI calls per analysis")}</label><Input id="orchestration-calls" type="number" min={value.reliability_protocol === "2.3" ? 6 : 2} max={20} required value={value.max_calls} onChange={(e) => setValue({ ...value, max_calls: Number(e.target.value) })} /></div>
           <div className="field"><label htmlFor="orchestration-timeout">{t("Analysis time limit (seconds)")}</label><Input id="orchestration-timeout" type="number" min={30} max={285} required value={value.timeout_seconds} onChange={(e) => setValue({ ...value, timeout_seconds: Number(e.target.value) })} /></div>
         </div>
         <details className="rounded-lg border p-4">

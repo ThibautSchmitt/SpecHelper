@@ -1,3 +1,5 @@
+import re
+
 import psycopg
 from pglast import ast, parse_sql
 
@@ -100,7 +102,57 @@ def validate_query(sql):
     ReadOnly()(statements)
 
 
-def query(config, sql):
+def minimize_result(result):
+    """Expose a small bounded preview; aggregates and anonymous state values are preferred."""
+    sensitive = re.compile(
+        r"(?i)(?:^|_)(?:name|email|phone|telephone|address|password|secret|token|ssn|iban|birth|dob|customer_id|person_id)(?:$|_)"
+    )
+    rows, size = [], 0
+    redacted = False
+    for row in result["rows"][:20]:
+        values = []
+        for column, value in zip(result["columns"], row, strict=True):
+            if value is not None and sensitive.search(column):
+                value, redacted = "[REDACTED]", True
+            elif isinstance(value, (str, bytes)):
+                text = value.decode(errors="replace") if isinstance(value, bytes) else value
+                scrubbed = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[REDACTED]", text)
+                scrubbed = re.sub(
+                    r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,})",
+                    "[REDACTED]",
+                    scrubbed,
+                )
+                redacted |= scrubbed != text or len(scrubbed) > 160
+                value = scrubbed[:160]
+            elif isinstance(value, (dict, list, tuple)):
+                value, redacted = "[STRUCTURED VALUE OMITTED]", True
+            values.append(value)
+        size += len(str(values))
+        if size > 16000:
+            break
+        rows.append(values)
+    return {
+        **result,
+        "rows": rows,
+        "truncated": result["truncated"] or len(rows) < len(result["rows"]),
+        "minimized": True,
+        "redacted": redacted,
+        "observed_row_count": len(result["rows"]),
+        "limitations": "At most 20 rows and bounded cells are exposed. Sensitive-looking fields are masked. Prefer counts, existence checks and grouped states; this preview is not a universal or exhaustive check.",
+    }
+
+
+def audit_sql(sql):
+    """Normalize a validated query without storing literal business values or comments."""
+    from pglast.stream import RawStream
+
+    normalized = RawStream()(parse_sql(sql))
+    normalized = re.sub(r"'(?:''|[^'])*'", "'?'", normalized)
+    normalized = re.sub(r"\b\d+(?:\.\d+)?\b", "?", normalized)
+    return normalized[:20000]
+
+
+def query(config, sql, *, minimize=False):
     validate_query(sql)
     try:
         with psycopg.connect(**config) as db:
@@ -109,10 +161,11 @@ def query(config, sql):
                 check_role(cursor)
                 cursor.execute(sql)
                 rows = cursor.fetchmany(201)
-                return {
+                result = {
                     "columns": [column.name for column in cursor.description],
                     "rows": rows[:200],
                     "truncated": len(rows) > 200,
                 }
+                return minimize_result(result) if minimize else result
     except psycopg.Error as exc:
         raise ValueError("Query rejected or unavailable") from exc

@@ -10,9 +10,7 @@ from core.secrets import decrypt
 pytestmark = pytest.mark.django_db
 
 
-def test_disabling_confrontation_applies_to_new_requests_without_changing_saved_choice(
-    client, environment
-):
+def test_legacy_policy_cannot_disable_mandatory_review_for_new_requests(client, environment):
     from core.models import InstanceSettings, Request
     from core.services import enqueue_analysis
 
@@ -30,7 +28,8 @@ def test_disabling_confrontation_applies_to_new_requests_without_changing_saved_
         "/api/requests", data=json.dumps(payload), content_type="application/json"
     )
     assert created.status_code == 201
-    assert created.json()["confrontation"] is False
+    assert created.json()["confrontation"] is True
+    assert created.json()["analysis_protocol"] == "2.3"
     assert Request.objects.count() == 2
     queued = enqueue_analysis(original.json()["id"])
     assert queued.confrontation is True and queued.status == "QUEUED"
@@ -123,7 +122,8 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
     from core.worker import claim_job, perform_job
 
     value = client.get("/api/analysis-options").json()
-    assert len(value["agents"]) == 5 and len(value["skills"]) == 7
+    assert len(value["agents"]) == 5
+    assert "effective-navigation" in {item["slug"] for item in value["skills"]}
     original = AgentProfile.objects.get(pk="code").instructions
     changed = client.patch(
         "/api/analysis-options",

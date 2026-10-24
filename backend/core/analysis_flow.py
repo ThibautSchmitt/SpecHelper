@@ -164,7 +164,7 @@ def context(request, run=None):
     previous = request.versions.order_by("-number").first()
     frozen = run.context_snapshot if run else request.context_snapshot
     decisions = frozen.get("business_decisions", {})
-    return {
+    data = {
         "workflow": request.workflow,
         "category": request.category,
         "output_language": request.language,
@@ -198,6 +198,19 @@ def context(request, run=None):
         if previous
         else None,
     }
+    if request.analysis_protocol == "2.3":
+        # Confirmed decisions and the current need are complete; bounded user updates
+        # replace duplicated full dialogue. Agents can still inspect real sources.
+        data["recent_messages"] = [item for item in messages if item["role"] == "user"][-3:]
+        data.pop("clarification_answers", None)
+        if previous:
+            data["previous_result"] = {
+                "version": previous.number,
+                "business_summary": previous.business_summary,
+                "technical_summary": previous.technical_summary,
+                "evidence": previous.evidence,
+            }
+    return data
 
 
 class Orchestrator:
@@ -247,7 +260,7 @@ class Orchestrator:
                 )
         from .orchestration_settings import get_config
 
-        self.config = self.run.orchestration.get("config") or get_config()
+        self.config = self.run.orchestration.get("config") or get_config(request.analysis_protocol)
         if "library" not in self.config:
             from .library import snapshot as library_snapshot
 
@@ -357,6 +370,11 @@ class Orchestrator:
                 "writer": "Preparing the explanation",
                 "synthesis": "Comparing findings and writing the explanation",
             }.get(role, label)
+        if (
+            self.request.analysis_protocol == "2.3"
+            and schema.__name__ == "CounterexampleAssessment"
+        ):
+            label = "Searching for limits and counterexamples"
         self.on_progress(self.request, status, label)
         for slug in roles:
             if slug not in self.run.pipeline:
@@ -616,6 +634,21 @@ class Orchestrator:
 
     def observe_context(self, response, step):
         public_role = step["public_role"]
+        if self.request.analysis_protocol == "2.3":
+            from .analysis_evidence import SQLReceipt
+
+            receipts = self.run.orchestration.setdefault("database_checks", [])
+            for raw in response.get("database_checks", [])[:100]:
+                try:
+                    receipt = SQLReceipt.model_validate(raw).model_dump()
+                except ValueError:
+                    continue
+                if receipt["query_id"] not in {item["query_id"] for item in receipts}:
+                    receipts.append(receipt)
+                self.run.orchestration.setdefault("query_roles", {})[receipt["query_id"]] = (
+                    public_role
+                )
+            receipts[:] = receipts[:100]
         observed = set(response.get("context_usage", []))
         status = response.get("context_audit", "unavailable")
         step.setdefault("context_usage", [])
@@ -644,7 +677,7 @@ class Orchestrator:
                         old.update(item)
                 else:
                     records.append(dict(item))
-        self.run.save(update_fields=["steps", "context_usage"])
+        self.run.save(update_fields=["steps", "context_usage", "orchestration"])
 
     def validate_business_questions(self, output):
         from .business_decisions import prepare_questions
@@ -869,7 +902,7 @@ class ConfrontationOrchestrator(Orchestrator):
         from .orchestration_settings import get_config
 
         if not run.orchestration:
-            config = get_config()
+            config = get_config(request.analysis_protocol)
             run.orchestration = {
                 "version": "1.5",
                 "config": config,
@@ -1115,5 +1148,10 @@ def analyze(request_id, run_id, caller, workspace_builder, on_progress, deadline
         from .environment_context import freeze_context
 
         freeze_context(request, run)
-    engine = ConfrontationOrchestrator if request.confrontation else Orchestrator
+    if request.analysis_protocol == "2.3":
+        from .reliable_flow import ReliableOrchestrator
+
+        engine = ReliableOrchestrator
+    else:
+        engine = ConfrontationOrchestrator if request.confrontation else Orchestrator
     engine(request, run, caller, workspace_builder, on_progress, deadline=deadline).execute()

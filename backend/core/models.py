@@ -218,6 +218,7 @@ class Request(models.Model):
     need = models.TextField()
     workflow = models.CharField(max_length=10, choices=Workflow, default=Workflow.REQUEST)
     category = models.CharField(max_length=20, default="auto")
+    analysis_protocol = models.CharField(max_length=10, default="legacy")
     source_question_version = models.ForeignKey(
         "ResultVersion",
         null=True,
@@ -392,6 +393,7 @@ class ResultVersion(models.Model):
     context_usage = models.JSONField(default=list)
     decisions_snapshot = models.JSONField(default=list)
     business_summary = models.JSONField(default=dict)
+    evidence = models.JSONField(default=dict)
     context_snapshot = models.JSONField(default=dict)
     baseline = models.JSONField(default=list)
     database_snapshot = models.JSONField(default=dict)
@@ -664,7 +666,9 @@ class LibraryDraftRevision(models.Model):
 class BusinessDecision(models.Model):
     """An immutable human choice; the latest sequence per key is the current rule."""
 
-    request = models.ForeignKey(Request, on_delete=models.PROTECT, related_name="business_decisions")
+    request = models.ForeignKey(
+        Request, on_delete=models.PROTECT, related_name="business_decisions"
+    )
     sequence = models.PositiveIntegerField()
     revision = models.PositiveIntegerField()
     key = models.CharField(max_length=100)
@@ -678,7 +682,9 @@ class BusinessDecision(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["request", "sequence"], name="unique_request_decision_sequence")
+            models.UniqueConstraint(
+                fields=["request", "sequence"], name="unique_request_decision_sequence"
+            )
         ]
         ordering = ["sequence"]
 
@@ -691,10 +697,14 @@ class BusinessDecision(models.Model):
 class BusinessValidation(models.Model):
     """Human approval and explicit reopening of a published result."""
 
-    request = models.ForeignKey(Request, on_delete=models.PROTECT, related_name="business_validations")
+    request = models.ForeignKey(
+        Request, on_delete=models.PROTECT, related_name="business_validations"
+    )
     version = models.PositiveIntegerField()
     decision_revision = models.PositiveIntegerField()
-    action = models.CharField(max_length=10, choices=[("validated", "Validated"), ("reopened", "Reopened")])
+    action = models.CharField(
+        max_length=10, choices=[("validated", "Validated"), ("reopened", "Reopened")]
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

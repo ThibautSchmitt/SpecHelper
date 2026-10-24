@@ -171,6 +171,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, tests and linting.
 Further documentation:
 
 - [Functional specification](docs/specification.md)
+- [Evidence and independent analysis](docs/analysis-reliability.md)
+- [Optional source index evaluation](docs/index-evaluation.md)
+- [v2.3 acceptance evidence](docs/acceptance-v2.3.md)
 - [AI connections, models and shared agent/skill library](docs/ai-library.md)
 - [Business clarification and confirmed decisions](docs/business-clarification.md)
 - [v2.2 acceptance report](docs/acceptance-v2.2.md)

@@ -140,7 +140,8 @@ export function BusinessDecisions({ value, result, historical, base, onUpdated }
   const snapshotMatches = JSON.stringify(currentIds) === JSON.stringify(resultIds);
   const staleResult = !historical && !!result && !snapshotMatches;
   const enabled = !historical && !value.validated_version && ["READY", "PARTIAL", "ERROR", "NEEDS_CLARIFICATION"].includes(value.status);
-  const canValidate = !historical && snapshotMatches && !!value.latest_version && value.status === "READY";
+  const evidenceBlocking = !!(value.evidence || result?.evidence)?.blocking;
+  const canValidate = !historical && !evidenceBlocking && snapshotMatches && !!value.latest_version && value.status === "READY";
   if (value.decision_revision === undefined && result?.decisions_snapshot === undefined) return null;
   async function revise(payload: Record<string, unknown>) {
     if (!editing) return;

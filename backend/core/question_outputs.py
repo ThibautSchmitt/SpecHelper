@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from .agent import Question
+from .analysis_evidence import ReliabilityReport
 from .artifacts import StrictModel, section
 from .business_outputs import BusinessSummary, summary_markdown
 from .i18n import translate
@@ -93,6 +94,7 @@ class QuestionAnswer(StrictModel):
     references: list[QuestionReference] = Field(default_factory=list, max_length=50)
     confirmed_decisions: Items = Field(default_factory=list)
     business_summary: BusinessSummary | None = None
+    evidence: ReliabilityReport | None = None
 
     @field_validator("title")
     @classmethod
@@ -196,6 +198,10 @@ def _render(answer, baseline, kind, language):
         if values[key]:
             lines += section(label, values[key], language)
     lines += section("Source references", references, language)
+    if answer.evidence:
+        from .evidence_rendering import render_evidence
+
+        lines += [render_evidence(answer.evidence.model_dump(), language)]
     if not references:
         lines += [
             translate("No source references were verified for this explanation.", language),

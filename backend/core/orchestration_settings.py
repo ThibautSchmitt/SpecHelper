@@ -40,7 +40,7 @@ class OrchestrationIn(Schema):
     allow_confrontation: bool | None = None
     verifier_enabled: bool = True
     allow_same_family_fallback: bool = True
-    max_calls: int = Field(default=10, ge=2, le=20)
+    max_calls: int = Field(default=10, ge=6, le=20)
     timeout_seconds: int = Field(default=285, ge=30, le=285)
     role_instructions: dict[Role, str] = Field(default_factory=dict)
     active_internal_agents: list[str]
@@ -54,14 +54,24 @@ class OrchestrationIn(Schema):
         return value
 
 
+class LegacyOrchestrationIn(OrchestrationIn):
+    """Validate persisted pre-v2.3 run budgets without changing their execution contract."""
+
+    max_calls: int = Field(default=10, ge=2, le=20)
+
+
 def validate_lists(value):
     ensure_catalogue()
     if len(set(value.active_internal_agents)) != len(value.active_internal_agents) or len(
         set(value.default_skills)
     ) != len(value.default_skills):
         raise HttpError(422, "Select each internal agent and skill only once.")
-    agents = set(AgentProfile.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True))
-    skills = set(SkillDefinition.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True))
+    agents = set(
+        AgentProfile.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True)
+    )
+    skills = set(
+        SkillDefinition.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True)
+    )
     if not set(value.active_internal_agents) <= agents or not set(value.default_skills) <= skills:
         raise HttpError(422, "The selected internal agent or skill is unavailable.")
     if not REQUIRED_AGENTS <= set(value.active_internal_agents):
@@ -70,7 +80,7 @@ def validate_lists(value):
         )
 
 
-def get_config():
+def get_config(protocol="2.3"):
     base = defaults()
     settings, _ = InstanceSettings.objects.get_or_create(pk=1)
     saved = settings.orchestration or {}
@@ -80,8 +90,15 @@ def get_config():
         **saved.get("role_instructions", {}),
     }
     # Stored settings are application-owned, but bound legacy/administrative input too.
-    merged["allow_confrontation"] = settings.allow_confrontation
-    config = OrchestrationIn.model_validate(merged).model_dump()
+    # Mandatory independent review is the current protocol; historical run snapshots
+    # retain the older optional behavior rather than being silently reinterpreted.
+    merged["allow_confrontation"] = True if protocol == "2.3" else settings.allow_confrontation
+    merged["verifier_enabled"] = True if protocol == "2.3" else saved.get("verifier_enabled", True)
+    if protocol == "2.3":
+        merged["max_calls"] = max(6, merged["max_calls"])
+    schema = OrchestrationIn if protocol == "2.3" else LegacyOrchestrationIn
+    config = schema.model_validate(merged).model_dump()
+    config["reliability_protocol"] = protocol
     return config
 
 
@@ -110,6 +127,10 @@ def read_settings(request):
 
 @router.put("/orchestration-settings")
 def update_settings(request, payload: OrchestrationIn):
+    if payload.allow_confrontation is False or not payload.verifier_enabled:
+        raise HttpError(
+            422, "Independent counter-analysis and verification are required for new analyses."
+        )
     validate_lists(payload)
     values = payload.model_dump()
     values["role_instructions"] = {
@@ -128,7 +149,11 @@ def validate_connection_overrides(roles=None, skills=None):
         raise HttpError(422, "Select each supported AI role only once.")
     if skills is not None:
         ensure_catalogue()
-        known = set(SkillDefinition.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True))
+        known = set(
+            SkillDefinition.objects.filter(enabled=True, deleted=False).values_list(
+                "slug", flat=True
+            )
+        )
         if not set(skills) <= known or any(
             type(enabled) is not bool for enabled in skills.values()
         ):

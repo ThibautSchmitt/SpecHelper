@@ -1,0 +1,4 @@
+[
+  {"id": 1, "channel": "physical", "reserved": 0, "quantity": 2, "state": "dispatched", "origin": "legacy_import"},
+  {"id": 2, "channel": "digital", "reserved": 0, "quantity": 1, "state": "pending", "origin": "application"}
+]

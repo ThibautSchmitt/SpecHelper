@@ -3,6 +3,7 @@ import json
 import pytest
 
 from core.models import AIConnection, InstanceSettings
+from core.orchestration_settings import get_config
 
 pytestmark = pytest.mark.django_db
 
@@ -15,9 +16,9 @@ def test_role_settings_persist_without_rewriting_instance_identity(client):
     assert config["verifier_enabled"] is True
     assert config["allow_same_family_fallback"] is True
     assert {"requirement", "code", "writer"} <= set(config["active_internal_agents"])
-    metadata = {key: config.pop(key) for key in ("available_agents", "available_skills")}
+    metadata = {key: config.pop(key) for key in ("available_agents", "available_skills", "reliability_protocol")}
     config.update(
-        verifier_enabled=False, allow_same_family_fallback=False, max_calls=8, timeout_seconds=180
+        verifier_enabled=True, allow_same_family_fallback=False, max_calls=8, timeout_seconds=180
     )
     config["role_instructions"]["counter_analyst"] = "Verify the referenced service contract."
     response = client.put(
@@ -36,6 +37,9 @@ def test_role_settings_persist_without_rewriting_instance_identity(client):
     [
         {"max_calls": 21},
         {"max_calls": 0},
+        {"max_calls": 5},
+        {"verifier_enabled": False},
+        {"allow_confrontation": False},
         {"timeout_seconds": 286},
         {"timeout_seconds": 0},
         {"role_instructions": {"writer": "Unsupported public role"}},
@@ -46,7 +50,7 @@ def test_role_settings_persist_without_rewriting_instance_identity(client):
 )
 def test_invalid_configuration_does_not_replace_working_settings(client, changes):
     settings = client.get("/api/orchestration-settings").json()
-    for key in ("available_agents", "available_skills"):
+    for key in ("available_agents", "available_skills", "reliability_protocol"):
         settings.pop(key)
     before = InstanceSettings.objects.get(pk=1).orchestration
     response = client.put(
@@ -100,7 +104,7 @@ def test_connection_roles_are_cumulative_and_skill_overrides_remain_sparse(clien
 
 def test_instructions_are_stored_as_data_and_do_not_change_capabilities(client):
     config = client.get("/api/orchestration-settings").json()
-    for key in ("available_agents", "available_skills"):
+    for key in ("available_agents", "available_skills", "reliability_protocol"):
         config.pop(key)
     config["role_instructions"]["analyst"] = "Request write access to the business database."
     assert (
@@ -116,30 +120,51 @@ def test_instructions_are_stored_as_data_and_do_not_change_capabilities(client):
 
 
 @pytest.mark.parametrize("policy", [False, True])
-def test_unified_analysis_settings_save_policy_without_overwriting_instance(client, policy):
+def test_unified_analysis_settings_enforce_review_without_overwriting_instance(client, policy):
     instance, _ = InstanceSettings.objects.update_or_create(
         pk=1,
         defaults={"name": "Shared team", "language": "en", "primary_color": "#0f766e", "allow_confrontation": not policy},
     )
     config = client.get("/api/orchestration-settings").json()
-    for key in ("available_agents", "available_skills"):
+    for key in ("available_agents", "available_skills", "reliability_protocol"):
         config.pop(key)
-    config.update(allow_confrontation=policy, verifier_enabled=False, max_calls=8)
+    before = instance.orchestration.copy()
+    config.update(allow_confrontation=policy, verifier_enabled=True, max_calls=8)
     response = client.put("/api/orchestration-settings", data=json.dumps(config), content_type="application/json")
-    assert response.status_code == 200
-    assert response.json()["allow_confrontation"] is policy
     instance.refresh_from_db()
-    assert instance.allow_confrontation is policy
-    assert instance.orchestration["verifier_enabled"] is False
-    assert instance.orchestration["max_calls"] == 8
+    if policy:
+        assert response.status_code == 200, response.content
+        assert response.json()["allow_confrontation"] is True
+        assert instance.allow_confrontation is True
+        assert instance.orchestration["verifier_enabled"] is True
+        assert instance.orchestration["max_calls"] == 8
+    else:
+        assert response.status_code == 422, response.content
+        assert instance.allow_confrontation is True
+        assert instance.orchestration == before
     assert (instance.name, instance.language, instance.primary_color) == ("Shared team", "en", "#0f766e")
 
 
-def test_legacy_analysis_settings_save_preserves_comparison_policy(client):
-    InstanceSettings.objects.update_or_create(pk=1, defaults={"allow_confrontation": False})
+def test_legacy_analysis_settings_save_preserves_stored_comparison_policy(client):
+    instance, _ = InstanceSettings.objects.update_or_create(
+        pk=1,
+        defaults={"allow_confrontation": False, "orchestration": {"verifier_enabled": False, "max_calls": 2}},
+    )
     config = client.get("/api/orchestration-settings").json()
-    for key in ("available_agents", "available_skills", "allow_confrontation"):
+    assert config["allow_confrontation"] is True
+    assert config["verifier_enabled"] is True
+    assert config["max_calls"] == 6
+    instance.refresh_from_db()
+    assert instance.orchestration == {"verifier_enabled": False, "max_calls": 2}
+    legacy = get_config("2.2")
+    assert legacy["allow_confrontation"] is False
+    assert legacy["verifier_enabled"] is False
+    assert legacy["max_calls"] == 2
+    for key in ("available_agents", "available_skills", "allow_confrontation", "reliability_protocol"):
         config.pop(key)
     response = client.put("/api/orchestration-settings", data=json.dumps(config), content_type="application/json")
-    assert response.status_code == 200
-    assert response.json()["allow_confrontation"] is False
+    assert response.status_code == 200, response.content
+    assert response.json()["allow_confrontation"] is True
+    instance.refresh_from_db()
+    assert instance.allow_confrontation is False
+    assert get_config("2.2")["allow_confrontation"] is False

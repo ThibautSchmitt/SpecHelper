@@ -105,9 +105,12 @@ def sandbox(workspace: Path, session: Path, attachments: Path, context_resources
         "--unshare-net",
         "--cap-drop",
         "ALL",
-        "--cap-add", "CAP_SETUID",
-        "--cap-add", "CAP_SETGID",
-        "--cap-add", "CAP_SETPCAP",
+        "--cap-add",
+        "CAP_SETUID",
+        "--cap-add",
+        "CAP_SETGID",
+        "--cap-add",
+        "CAP_SETPCAP",
         "--clearenv",
         "--setenv",
         "PATH",
@@ -167,8 +170,10 @@ def sandbox(workspace: Path, session: Path, attachments: Path, context_resources
         "/proc",
         "--dev",
         "/dev",
-        "--perms", "1777",
-        "--size", "67108864",
+        "--perms",
+        "1777",
+        "--size",
+        "67108864",
         "--tmpfs",
         "/tmp",
         "--bind",
@@ -194,13 +199,48 @@ def sandbox(workspace: Path, session: Path, attachments: Path, context_resources
     # those empty mount ancestors traversable for the non-root analysis identity.
     parents = set(workspace.parents) | set((DATA / "git-cache").parents)
     for parent in sorted(parents, key=lambda value: len(value.parts)):
-        if parent not in {Path("/"), Path("/tmp"), Path("/usr"), Path("/bin"), Path("/lib"), Path("/lib64")}:
+        if parent not in {
+            Path("/"),
+            Path("/tmp"),
+            Path("/usr"),
+            Path("/bin"),
+            Path("/lib"),
+            Path("/lib64"),
+        }:
             command += ["--chmod", "0755", str(parent)]
     if broker:
-        command += ["--ro-bind", str(broker.path), "/broker.sock", "--ro-bind", str(Path(__file__).with_name("relay.py")), "/bootstrap.py"]
-        command += ["--setenv", "ANTHROPIC_BASE_URL", "http://127.0.0.1:8090/claude", "--setenv", "CLAUDE_CODE_OAUTH_TOKEN", broker.token, "--setenv", "SPECHELPER_PROVIDER_TOKEN", broker.token]
+        command += [
+            "--ro-bind",
+            str(broker.path),
+            "/broker.sock",
+            "--ro-bind",
+            str(Path(__file__).with_name("relay.py")),
+            "/bootstrap.py",
+        ]
+        command += [
+            "--setenv",
+            "ANTHROPIC_BASE_URL",
+            "http://127.0.0.1:8090/claude",
+            "--setenv",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            broker.token,
+            "--setenv",
+            "SPECHELPER_PROVIDER_TOKEN",
+            broker.token,
+        ]
     command += ["--ro-bind", str(Path(__file__).with_name("restrict.py")), "/restrict.py"]
-    command += ["setpriv", "--reuid=10001", "--regid=10001", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs", "python3", "/restrict.py"]
+    command += [
+        "setpriv",
+        "--reuid=10001",
+        "--regid=10001",
+        "--clear-groups",
+        "--bounding-set=-all",
+        "--inh-caps=-all",
+        "--ambient-caps=-all",
+        "--no-new-privs",
+        "python3",
+        "/restrict.py",
+    ]
     if broker:
         command += ["python3", "/bootstrap.py"]
     return command
@@ -224,11 +264,24 @@ def scrub_session(session, root):
     if session_size(session) > SESSION_BYTES:
         raise HTTPException(422, "Session storage limit exceeded")
     private = []
-    for provider, filename, section in (("codex", "auth.json", "tokens"), ("claude", ".credentials.json", "claudeAiOauth")):
-        for path in (credential_directory(root, provider) / filename, session / provider / filename):
+    for provider, filename, section in (
+        ("codex", "auth.json", "tokens"),
+        ("claude", ".credentials.json", "claudeAiOauth"),
+    ):
+        for path in (
+            credential_directory(root, provider) / filename,
+            session / provider / filename,
+        ):
             try:
                 values = json.loads(read_credential(path)).get(section, {})
-                private += [value.encode() for key, value in values.items() if key in {"access_token", "refresh_token", "id_token", "accessToken", "refreshToken"} and isinstance(value, str) and len(value) >= 8]
+                private += [
+                    value.encode()
+                    for key, value in values.items()
+                    if key
+                    in {"access_token", "refresh_token", "id_token", "accessToken", "refreshToken"}
+                    and isinstance(value, str)
+                    and len(value) >= 8
+                ]
             except (OSError, ValueError, AttributeError):
                 continue
     for item in session.rglob("*"):
@@ -243,7 +296,7 @@ def scrub_session(session, root):
 
 
 def watch_session(session, process, stop):
-    while not stop.wait(.5):
+    while not stop.wait(0.5):
         try:
             if session_size(session) > SESSION_BYTES:
                 os.killpg(process.pid, signal.SIGKILL)
@@ -255,11 +308,41 @@ def watch_session(session, process, stop):
 def verify_sandbox():
     """Reject execution unless real non-root identity, network and capability isolation work."""
     try:
-        result = subprocess.run([
-            "bwrap", "--ro-bind", "/", "/", "--tmpfs", "/tmp", "--unshare-pid", "--unshare-net", "--proc", "/proc", "--cap-drop", "ALL", "--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID", "--cap-add", "CAP_SETPCAP",
-            "setpriv", "--reuid=10001", "--regid=10001", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs",
-            "python3", "-c", "import os,pathlib,socket; assert os.getuid()==10001 and os.getgid()==10001; assert 'CapEff:\\t0000000000000000' in pathlib.Path('/proc/self/status').read_text(); s=socket.socket(); s.settimeout(.2); assert s.connect_ex(('1.1.1.1',443)) != 0",
-        ], capture_output=True, timeout=10)
+        result = subprocess.run(
+            [
+                "bwrap",
+                "--ro-bind",
+                "/",
+                "/",
+                "--tmpfs",
+                "/tmp",
+                "--unshare-pid",
+                "--unshare-net",
+                "--proc",
+                "/proc",
+                "--cap-drop",
+                "ALL",
+                "--cap-add",
+                "CAP_SETUID",
+                "--cap-add",
+                "CAP_SETGID",
+                "--cap-add",
+                "CAP_SETPCAP",
+                "setpriv",
+                "--reuid=10001",
+                "--regid=10001",
+                "--clear-groups",
+                "--bounding-set=-all",
+                "--inh-caps=-all",
+                "--ambient-caps=-all",
+                "--no-new-privs",
+                "python3",
+                "-c",
+                "import os,pathlib,socket; assert os.getuid()==10001 and os.getgid()==10001; assert 'CapEff:\\t0000000000000000' in pathlib.Path('/proc/self/status').read_text(); s=socket.socket(); s.settimeout(.2); assert s.connect_ex(('1.1.1.1',443)) != 0",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
         return result.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
@@ -361,7 +444,9 @@ def run(payload: RunIn):
             session = (
                 SESSIONS / "contexts" / request_id / str(payload.context_id or payload.request_id)
             )
-        if session.is_symlink() or any(parent.is_symlink() for parent in session.parents if parent != Path("/")):
+        if session.is_symlink() or any(
+            parent.is_symlink() for parent in session.parents if parent != Path("/")
+        ):
             raise HTTPException(422, "Invalid session directory")
         agent_home = session / payload.agent
         if any((session / provider).is_symlink() for provider in ("codex", "claude")):
@@ -374,20 +459,38 @@ def run(payload: RunIn):
             return {"failure": {"kind": "AUTH_ERROR"}, **context_observation}
         credential_name = "auth.json" if payload.agent == "codex" else ".credentials.json"
         credential_data = json.loads(read_credential(credential_root / credential_name))
-        broker = Broker(payload.agent, credential_data, payload.timeout,
-                        database=(lambda sql: query(payload.database, sql)) if payload.database else None)
+        broker = Broker(
+            payload.agent,
+            credential_data,
+            payload.timeout,
+            database=(lambda sql: query(payload.database, sql, minimize=True))
+            if payload.database
+            else None,
+        )
         broker.__enter__()
+        context_observation["database_checks"] = broker.database_checks
         scrub_session(session, root)
         # Remove all legacy credential copies, including an alternate provider used in this context.
         for provider in ("codex", "claude"):
             for name in ("auth.json", ".credentials.json", ".claude.json"):
                 (session / provider / name).unlink(missing_ok=True)
         if payload.agent == "codex":
-            auth = {"auth_mode": "chatgpt", "tokens": {"access_token": broker.token, "refresh_token": "broker-only", "account_id": "spechelper-scoped", "id_token": ""}, "last_refresh": datetime.now(UTC).isoformat()}
+            auth = {
+                "auth_mode": "chatgpt",
+                "tokens": {
+                    "access_token": broker.token,
+                    "refresh_token": "broker-only",
+                    "account_id": "spechelper-scoped",
+                    "id_token": "",
+                },
+                "last_refresh": datetime.now(UTC).isoformat(),
+            }
             (agent_home / "auth.json").write_text(json.dumps(auth))
             (agent_home / "auth.json").chmod(0o600)
         elif (credential_root / ".claude.json").is_file():
-            (agent_home / ".claude.json").write_text(json.dumps(claude_metadata(read_credential(credential_root / ".claude.json"))))
+            (agent_home / ".claude.json").write_text(
+                json.dumps(claude_metadata(read_credential(credential_root / ".claude.json")))
+            )
         schema = session / "schema.json"
         schema.unlink(missing_ok=True)
         schema.write_text(json.dumps(payload.output_schema))
@@ -399,7 +502,7 @@ def run(payload: RunIn):
             raise HTTPException(422, "Attachments directory missing")
         user_prompt = payload.prompt
         if payload.database:
-            user_prompt += '\nA read-only database is available through POST http://127.0.0.1:8090/database with JSON {"sql":"SELECT ..."}. Results are limited to 200 rows. No database credentials are provided.'
+            user_prompt += '\nA read-only database is available through POST http://127.0.0.1:8090/database with JSON {"sql":"SELECT ..."}. Prefer existence checks, counts and grouped states. Previews expose at most 20 minimized rows; sensitive-looking fields are masked. Each query returns a service-generated query_id and checked_at timestamp: cite that query_id as SQL evidence. No database credentials are provided.'
         cli = [
             "codex",
             "exec",
@@ -413,14 +516,22 @@ def run(payload: RunIn):
             "/session/schema.json",
             "--output-last-message",
             "/session/result.json",
-            "-c", 'chatgpt_base_url="http://127.0.0.1:8090"',
-            "-c", 'model_provider="spechelper"',
-            "-c", 'model_providers.spechelper.name="SpecHelper provider relay"',
-            "-c", 'model_providers.spechelper.base_url="http://127.0.0.1:8090/codex"',
-            "-c", 'model_providers.spechelper.wire_api="responses"',
-            "-c", 'model_providers.spechelper.requires_openai_auth=false',
-            "-c", 'model_providers.spechelper.env_key="SPECHELPER_PROVIDER_TOKEN"',
-            "-c", 'model_providers.spechelper.supports_websockets=false',
+            "-c",
+            'chatgpt_base_url="http://127.0.0.1:8090"',
+            "-c",
+            'model_provider="spechelper"',
+            "-c",
+            'model_providers.spechelper.name="SpecHelper provider relay"',
+            "-c",
+            'model_providers.spechelper.base_url="http://127.0.0.1:8090/codex"',
+            "-c",
+            'model_providers.spechelper.wire_api="responses"',
+            "-c",
+            "model_providers.spechelper.requires_openai_auth=false",
+            "-c",
+            'model_providers.spechelper.env_key="SPECHELPER_PROVIDER_TOKEN"',
+            "-c",
+            "model_providers.spechelper.supports_websockets=false",
             "-c",
             'approval_policy="never"',
             "-c",
@@ -487,7 +598,9 @@ def run(payload: RunIn):
             env={"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"},
         )
         monitor_stop = threading.Event()
-        monitor = threading.Thread(target=watch_session, args=(session, process, monitor_stop), daemon=True)
+        monitor = threading.Thread(
+            target=watch_session, args=(session, process, monitor_stop), daemon=True
+        )
         monitor.start()
         try:
             stdout, _ = process.communicate(user_prompt.encode(), timeout=payload.timeout)
@@ -506,6 +619,7 @@ def run(payload: RunIn):
         if len(stdout) > 64 * 1024 * 1024:
             return {"failure": {"kind": "ERROR"}, **context_observation}
         context_observation = reads.finish()
+        context_observation["database_checks"] = broker.database_checks
         broker.observe_commands(stdout)
         broker.observe_session(session)
         session_id = str(payload.session_id) if payload.session_id else None
@@ -665,6 +779,6 @@ def database_query(capability: str, payload: QueryIn):
     if not connection or connection["expires"] < time.monotonic():
         raise HTTPException(403, "Access expired or missing")
     try:
-        return query(connection["config"], payload.sql)
+        return query(connection["config"], payload.sql, minimize=True)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc

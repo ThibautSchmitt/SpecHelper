@@ -1,0 +1,4 @@
+[
+  {"id": 1, "issuedYear": 2022, "approved": false, "state": "finalized_by_legacy_import"},
+  {"id": 2, "issuedYear": 2025, "approved": true, "state": "open"}
+]

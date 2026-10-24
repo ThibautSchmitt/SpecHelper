@@ -17,6 +17,8 @@ from .models import (
 
 
 def queue_run(request, continuing=False, changed_decision_keys=None):
+    if request.analysis_protocol == "2.3":
+        request.confrontation = True
     if not request.messages.exists():
         RequestMessage.objects.create(
             request=request, role="user", kind="need", content=request.need
@@ -25,6 +27,7 @@ def queue_run(request, continuing=False, changed_decision_keys=None):
         kind="analysis",
         target=str(request.id),
         payload={
+            "analysis_protocol": request.analysis_protocol,
             "decision_revision": request.decision_revision,
             "changed_decision_keys": changed_decision_keys or [],
         },
@@ -73,7 +76,12 @@ ALLOWED_EXTENSIONS = {
 
 @transaction.atomic
 def enqueue_analysis(
-    request_id, answers=None, choices=None, expected_decision_revision=None, confirm_changes=False
+    request_id,
+    answers=None,
+    choices=None,
+    expected_decision_revision=None,
+    confirm_changes=False,
+    analysis_protocol=None,
 ):
     request = (
         Request.objects.select_for_update(of=("self",))
@@ -125,11 +133,13 @@ def enqueue_analysis(
             data={"questions": request.questions, "answers": answers},
         )
         request.questions = []
+    if analysis_protocol == "2.3":
+        request.analysis_protocol = "2.3"
     return queue_run(request, changed_decision_keys=changed_decision_keys)
 
 
 @transaction.atomic
-def continue_conversation(request_id, message, expected_version):
+def continue_conversation(request_id, message, expected_version, analysis_protocol=None):
     request = Request.objects.select_for_update().get(pk=request_id)
     from .business_decisions import assert_editable
 
@@ -146,6 +156,8 @@ def continue_conversation(request_id, message, expected_version):
         request=request, role="user", kind="followup", content=message.strip(), version=latest
     )
     request.questions = []
+    if analysis_protocol == "2.3":
+        request.analysis_protocol = "2.3"
     return queue_run(request, continuing=True)
 
 

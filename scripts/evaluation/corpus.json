@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "description": "Synthetic multi-project reliability study; no business source or personal data.",
+  "cases": [
+    {
+      "id": "python-orders",
+      "language": "Python",
+      "question": "Is cancellation always blocked when an order still has active services? Explain the conditions, configuration limits and what historical cancelled records prove. No live business database is provided.",
+      "symbol_query": "cancellation_allowed",
+      "search_pattern": "cancellation_allowed|block_active_services|import_legacy_order|legacy_import",
+      "expected_files": ["policy.py", "settings.py", "history.py", "records.json"],
+      "critical_facts": [
+        {"id": "conditional_rule", "patterns": ["subscription", "block_active_services"], "source": "policy.py"},
+        {"id": "configuration", "patterns": ["block_active_services"], "source": "settings.py"},
+        {"id": "historical_anomaly", "patterns": ["legacy", "import"], "source": "history.py"},
+        {"id": "counterexample", "patterns": ["single", "active"], "source": "records.json"}
+      ],
+      "forbidden_unqualified_conclusions": ["cancellation is always blocked", "all orders with active services are blocked"],
+      "expected_counterexamples": ["single", "legacy"],
+      "unresolved_business_decisions": 0
+    },
+    {
+      "id": "typescript-stock",
+      "language": "TypeScript",
+      "question": "Must every dispatched order have a full stock reservation? Explain exceptions, configuration and the difference between legacy imported shipment states and current application behavior. No live business database is provided.",
+      "symbol_query": "canDispatch",
+      "search_pattern": "canDispatch|requireReservation|importShipment|legacy_import",
+      "expected_files": ["reservation.ts", "config.ts", "import.ts", "records.json"],
+      "critical_facts": [
+        {"id": "digital_exception", "patterns": ["digital"], "source": "reservation.ts"},
+        {"id": "configuration", "patterns": ["requireReservation"], "source": "config.ts"},
+        {"id": "historical_anomaly", "patterns": ["legacy", "import"], "source": "import.ts"},
+        {"id": "counterexample", "patterns": ["physical", "legacy"], "source": "records.json"}
+      ],
+      "forbidden_unqualified_conclusions": ["every dispatched order has a full reservation", "all orders require full stock reservation"],
+      "expected_counterexamples": ["digital", "legacy"],
+      "unresolved_business_decisions": 0
+    },
+    {
+      "id": "java-billing",
+      "language": "Java",
+      "question": "Is finalizing an invoice without approval always forbidden? Explain the temporal and configuration scope, and whether historical import records establish the current application's rule. No live business database is provided.",
+      "symbol_query": "canFinalize",
+      "search_pattern": "canFinalize|requireApproval|enforcementYear|LegacyImport|legacy_import",
+      "expected_files": ["InvoicePolicy.java", "LegacyImport.java", "config.json", "records.json"],
+      "critical_facts": [
+        {"id": "temporal_exception", "patterns": ["issuedYear", "enforcementYear"], "source": "InvoicePolicy.java"},
+        {"id": "configuration", "patterns": ["requireApproval", "2024"], "source": "config.json"},
+        {"id": "historical_anomaly", "patterns": ["legacy", "import"], "source": "LegacyImport.java"},
+        {"id": "counterexample", "patterns": ["2022", "false"], "source": "records.json"}
+      ],
+      "forbidden_unqualified_conclusions": ["finalizing without approval is always forbidden", "all invoices require approval"],
+      "expected_counterexamples": ["2022", "legacy"],
+      "unresolved_business_decisions": 0
+    }
+  ]
+}

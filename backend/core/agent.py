@@ -182,7 +182,11 @@ def runtime_call(path, payload=None, timeout=15):
                 kind,
                 failure.get("retry_seconds"),
                 failure.get("quota_windows"),
-                {key: result[key] for key in ("context_usage", "context_audit") if key in result},
+                {
+                    key: result[key]
+                    for key in ("context_usage", "context_audit", "database_checks")
+                    if key in result
+                },
             )
         return result
     except httpx.HTTPError as exc:

@@ -77,19 +77,31 @@ def get_question(request, question_id: UUID):
 @router.post("/questions/{question_id}/analyze")
 def analyze_question(request, question_id: UUID):
     actions.question(question_id)
-    return actions.question_dict(enqueue_analysis(question_id), full=True)
+    return actions.question_dict(enqueue_analysis(question_id, analysis_protocol="2.3"), full=True)
 
 
 @router.post("/questions/{question_id}/answers")
 def answer_question(request, question_id: UUID, payload: AnswersIn):
     actions.question(question_id)
-    return actions.question_dict(enqueue_analysis(question_id, payload.answers, payload.choices, payload.expected_decision_revision, payload.confirm_changes), full=True)
+    return actions.question_dict(
+        enqueue_analysis(
+            question_id,
+            payload.answers,
+            payload.choices,
+            payload.expected_decision_revision,
+            payload.confirm_changes,
+            analysis_protocol="2.3",
+        ),
+        full=True,
+    )
 
 
 @router.post("/questions/{question_id}/continue")
 def continue_question(request, question_id: UUID, payload: ContinuationIn):
     actions.question(question_id)
-    value = continue_conversation(question_id, payload.message, payload.expected_version)
+    value = continue_conversation(
+        question_id, payload.message, payload.expected_version, analysis_protocol="2.3"
+    )
     return actions.question_dict(value, full=True)
 
 

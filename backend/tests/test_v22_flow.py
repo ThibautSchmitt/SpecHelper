@@ -1,12 +1,13 @@
 """Guided business choices survive real queue resumes, roles and artifact publication."""
 
 import copy
-import json
 import uuid
 from unittest.mock import patch
 
 import pytest
+from ninja.errors import HttpError
 
+from core.business_decisions import DecisionConflict
 from core.models import Request
 from core.services import continue_conversation, enqueue_analysis
 from core.worker import claim_job, perform_job
@@ -77,11 +78,17 @@ def execute(request, storage, outputs):
     return calls, job
 
 
-def submit(client, request, **payload):
-    base = "questions" if request.workflow == "question" else "requests"
-    return client.post(
-        f"/api/{base}/{request.pk}/answers", json.dumps(payload), content_type="application/json"
-    )
+def resume_legacy(request, **payload):
+    """Resume historical engine fixtures through the service, preserving legacy protocol.
+
+    Public answer endpoints deliberately adopt v2.3 and are covered by v2.3 tests.
+    These controlled provider outputs exercise persisted legacy orchestration only.
+    """
+    request.refresh_from_db()
+    assert request.analysis_protocol == "legacy"
+    value = enqueue_analysis(request.pk, **payload)
+    assert value.analysis_protocol == "legacy"
+    return value
 
 
 def started(environment, **values):
@@ -97,30 +104,26 @@ def started(environment, **values):
 
 @pytest.mark.parametrize("workflow", ["request", "question"])
 def test_choice_b_other_and_dependent_question_resume_without_ai_business_approval(
-    environment, storage, bundle, code_report, client, workflow
+    environment, storage, bundle, code_report, workflow
 ):
     request = started(environment, workflow=workflow)
     _, job = execute(request, storage, [assessment([choice()])])
     assert request.status == "NEEDS_CLARIFICATION" and job.status == "DONE"
     assert not request.versions.exists() and claim_job() is None
     first_snapshot = copy.deepcopy(request.context_snapshot)
-    assert (
-        submit(
-            client,
+    with pytest.raises(HttpError) as invalid:
+        resume_legacy(
             request,
             choices={"ongoing-benefits": {"option_id": "other"}},
             expected_decision_revision=0,
-        ).status_code
-        == 422
-    )
+        )
+    assert invalid.value.status_code == 422
     assert request.business_decisions.count() == 0
-    answer = submit(
-        client,
+    resume_legacy(
         request,
         choices={"ongoing-benefits": {"option_id": "b"}},
         expected_decision_revision=0,
     )
-    assert answer.status_code == 200, answer.content
     request.refresh_from_db()
     assert request.decision_revision == 1
     selected = choice()["options"][1]["behavior"]
@@ -134,14 +137,10 @@ def test_choice_b_other_and_dependent_question_resume_without_ai_business_approv
     assert "Do not repeat a question already answered" in calls[0]["prompt"]
     assert request.status == "NEEDS_CLARIFICATION" and request.questions == [dependent]
     assert request.context_snapshot["library"] == first_snapshot["library"]
-    assert (
-        submit(
-            client,
-            request,
-            answers={"warning": "The case owner must review all ongoing benefits."},
-            expected_decision_revision=1,
-        ).status_code
-        == 200
+    resume_legacy(
+        request,
+        answers={"warning": "The case owner must review all ongoing benefits."},
+        expected_decision_revision=1,
     )
     if workflow == "request":
         result = bundle.model_dump()
@@ -228,18 +227,14 @@ def test_a_late_writer_question_cannot_publish_an_unapproved_result(
 
 
 def test_a_changed_rule_requires_confirmation_and_reanalysis_keeps_old_artifacts(
-    environment, storage, code_report, bundle, client
+    environment, storage, code_report, bundle
 ):
     request = started(environment)
     execute(request, storage, [assessment([choice()])])
-    assert (
-        submit(
-            client,
-            request,
-            choices={"ongoing-benefits": {"option_id": "b"}},
-            expected_decision_revision=0,
-        ).status_code
-        == 200
+    resume_legacy(
+        request,
+        choices={"ongoing-benefits": {"option_id": "b"}},
+        expected_decision_revision=0,
     )
     execute(
         request, storage, [assessment(), {"analysis": code_report, "result": bundle.model_dump()}]
@@ -254,11 +249,11 @@ def test_a_changed_rule_requires_confirmation_and_reanalysis_keeps_old_artifacts
     )
     execute(request, storage, [assessment([conflict])])
     changed = {"choices": {"ongoing-benefits": {"option_id": "a"}}, "expected_decision_revision": 1}
-    response = submit(client, request, **changed)
-    assert response.status_code == 409, response.content
-    assert response.json()["code"] == "DECISION_CONFLICT"
+    with pytest.raises(DecisionConflict) as conflict_error:
+        resume_legacy(request, **changed)
+    assert conflict_error.value.status_code == 409
     assert request.business_decisions.count() == 1
-    assert submit(client, request, **changed, confirm_changes=True).status_code == 200
+    resume_legacy(request, **changed, confirm_changes=True)
     calls, _ = execute(
         request, storage, [assessment(), {"analysis": code_report, "result": bundle.model_dump()}]
     )
@@ -316,18 +311,14 @@ def test_a_clear_request_uses_no_artificial_multiple_choice_card(
 
 
 def test_repeated_answered_question_is_repaired_once_without_asking_the_user_again(
-    environment, storage, client, bundle, code_report
+    environment, storage, bundle, code_report
 ):
     request = started(environment)
     execute(request, storage, [assessment([choice()])])
-    assert (
-        submit(
-            client,
-            request,
-            choices={"ongoing-benefits": {"option_id": "b"}},
-            expected_decision_revision=0,
-        ).status_code
-        == 200
+    resume_legacy(
+        request,
+        choices={"ongoing-benefits": {"option_id": "b"}},
+        expected_decision_revision=0,
     )
     calls, _ = execute(
         request,
@@ -345,7 +336,7 @@ def test_repeated_answered_question_is_repaired_once_without_asking_the_user_aga
 
 
 def test_reused_verified_facts_keep_their_unresolved_business_limits(
-    environment, storage, client, bundle, code_report
+    environment, storage, bundle, code_report
 ):
     from django.core.files.uploadedfile import SimpleUploadedFile
 
@@ -366,14 +357,10 @@ def test_reused_verified_facts_keep_their_unresolved_business_limits(
             {"observations": [], "questions": [question]},
         ],
     )
-    assert (
-        submit(
-            client,
-            request,
-            answers={"scope": "Include active contracts only."},
-            expected_decision_revision=0,
-        ).status_code
-        == 200
+    resume_legacy(
+        request,
+        answers={"scope": "Include active contracts only."},
+        expected_decision_revision=0,
     )
     calls, _ = execute(
         request,

@@ -124,7 +124,7 @@ if capability:
         request = urllib.request.Request(capability[0], data=json.dumps({'sql': sql}).encode(), headers={'Content-Type': 'application/json'})
         return json.load(urllib.request.urlopen(request, timeout=8))
     rows = query('SELECT id, name FROM spechelper_fixture.contracts')['rows']
-    assert rows == [[1, 'Active']]
+    assert rows == [[1, '[REDACTED]']]
     try:
         query('DELETE FROM spechelper_fixture.contracts')
     except urllib.error.HTTPError as error:

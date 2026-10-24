@@ -128,7 +128,8 @@ def test_question_comparison_and_blank_guards(environment, storage):
         },
     )
     assert created.status_code == 201
-    assert created.json()["confrontation"] is False
+    assert created.json()["confrontation"] is True
+    assert created.json()["analysis_protocol"] == "2.3"
     assert (
         post(
             client,

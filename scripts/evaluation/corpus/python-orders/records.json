@@ -1,0 +1,4 @@
+[
+  {"id": 1, "kind": "subscription", "status": "cancelled", "active_services": 2, "origin": "legacy_import"},
+  {"id": 2, "kind": "single", "status": "open", "active_services": 1, "origin": "application"}
+]

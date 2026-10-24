@@ -2,6 +2,7 @@ import { secureFetch } from "@/lib/access";
 import type { AnalysisWarning } from "@/lib/orchestration";
 import type { ContextSnapshot, ContextUsage } from "@/lib/context";
 import type { BusinessDecision, BusinessSummary, ClarificationQuestion } from "@/lib/business-decisions";
+import type { ReliabilityReport } from "@/lib/analysis-evidence";
 
 export class APIError extends Error {
   constructor(message: string, public status: number, public details?: unknown) {
@@ -92,10 +93,13 @@ export type ResultVersion = {
   run_number?: number;
   decisions_snapshot?: BusinessDecision[];
   business_summary?: BusinessSummary;
+  evidence?: ReliabilityReport;
   context_snapshot?: ContextSnapshot;
   context_usage?: ContextUsage[];
 };
 export type RequestDetail = RequestItem & {
+  analysis_protocol?: string;
+  evidence?: ReliabilityReport;
   decisions?: BusinessDecision[];
   decision_history?: BusinessDecision[];
   decision_revision?: number;

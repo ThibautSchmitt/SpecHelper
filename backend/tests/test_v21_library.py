@@ -327,13 +327,43 @@ def test_assistant_migration_preserves_existing_library_and_frozen_analysis_valu
         executor.migrate(latest)
         current = executor.loader.project_state(latest).apps
         for name, rows in originals.items():
+            model = current.get_model("core", name)
+            primary_key = model._meta.pk.attname
             assert list(
-                current.get_model("core", name).objects.order_by("pk").values(*rows[0])
+                model.objects.filter(pk__in=[row[primary_key] for row in rows])
+                .order_by("pk")
+                .values(*rows[0])
             ) == rows
         restored_agent = current.get_model("core", "AgentProfile").objects.get(pk=agent.pk)
         assert restored_agent.expected_checks == []
         assert list(restored_agent.skills.values_list("pk", flat=True)) == [skill.pk]
         assert current.get_model("core", "SkillDefinition").objects.get(pk=skill.pk).expected_checks == []
+        navigation = current.get_model("core", "SkillDefinition").objects.get(
+            pk="effective-navigation"
+        )
+        assert navigation.name == "Effective source navigation"
+        assert navigation.enabled is True
+        assert navigation.required_capabilities == ["read_sources"]
+        assert navigation.version == 1
+        assert navigation.deleted is False
+        assert "reopen actual code" in navigation.instructions
+        revision = current.get_model("core", "LibraryRevision").objects.get(
+            kind="skill", slug=navigation.pk, version=navigation.version
+        )
+        assert revision.action == "created"
+        assert revision.editor == "system"
+        assert revision.definition == {
+            "slug": navigation.slug,
+            "name": navigation.name,
+            "objective": navigation.objective,
+            "instructions": navigation.instructions,
+            "enabled": navigation.enabled,
+            "compatibility": navigation.compatibility,
+            "required_capabilities": navigation.required_capabilities,
+            "expected_checks": navigation.expected_checks,
+            "version": navigation.version,
+            "deleted": navigation.deleted,
+        }
         assert current.get_model("core", "LibraryDraft").objects.count() == 0
     finally:
         MigrationExecutor(connection).migrate(latest)

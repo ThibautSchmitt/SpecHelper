@@ -315,33 +315,78 @@ def test_unavailable_reference_path_is_repaired_once_before_publication(
     assert enum == ["company/backend"]
 
 
-def test_derived_request_uses_current_baseline_and_runs_ordinary_ticket_pipeline(
+def test_derived_request_uses_current_baseline_and_runs_independent_ticket_pipeline(
     question, storage, explanation, bundle, code_report
 ):
     enqueue_analysis(question.pk)
     execute(question, storage, [assessment(), {"analysis": report(), "result": explanation}])
     original = question.versions.get()
-    # The normal single-analysis path is selected by the instance, not the form.
+    # A new derived request adopts mandatory review even with a legacy disabled policy.
     InstanceSettings.objects.update_or_create(pk=1, defaults={"allow_confrontation": False})
     request = create_request(
         question.pk, 1, question.environment_id, "Add an option for archived exports."
     )
     transferred = Path(request.attachments.get().path).read_bytes()
-    question.environment.repositories.update(sha="b" * 40)
+    from core.git import run as git
+
+    repository = storage / "company/backend"
+    git("init", repository)
+    git("-C", repository, "add", "contracts/export.py")
+    git(
+        "-C",
+        repository,
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "-m",
+        "fixture",
+    )
+    sha = git("-C", repository, "rev-parse", "HEAD")
+    question.environment.repositories.update(sha=sha)
     enqueue_analysis(request.pk)
-    # The new request includes a context attachment, so the ordinary attachment/review path applies.
+    claim = {
+        "id": "active",
+        "statement": "The inspected export selects active rows.",
+        "kind": "observed",
+        "status": "supported",
+        "scope": {
+            "environment": "Staging",
+            "conditions": ["export_active is called"],
+            "population": "Input rows",
+            "sample_limits": "Only this function was inspected",
+        },
+        "sources": [
+            {
+                "kind": "git",
+                "repository": "company/backend",
+                "commit": sha,
+                "path": "contracts/export.py",
+                "line_start": 1,
+                "line_end": 2,
+                "excerpt": (repository / "contracts/export.py").read_text().strip(),
+            }
+        ],
+    }
+    verified = [{**claim, "id": role + ":active"} for role in ("analyst", "counter")]
+    # The transferred attachment is inspected before the three independent roles finish.
     calls = execute(
         request,
         storage,
         [
             assessment("standard"),
             {"observations": [], "questions": []},
-            code_report,
-            {"review": approved(), "result": bundle.model_dump()},
+            {**code_report, "claims": [claim]},
+            {**code_report, "claims": [claim]},
+            approved(),
+            {"report": {"claims": verified}, "questions": []},
+            bundle.model_dump(),
         ],
     )
     assert request.status == "READY", request.error
-    assert request.baseline[0]["sha"] == "b" * 40
+    assert request.analysis_protocol == "2.3" and len(calls) == 7
+    assert request.baseline[0]["sha"] == sha
     assert original.baseline[0]["sha"] == "a" * 40
     assert all("TRANSFERRED QUESTION CONTEXT" in call["prompt"] for call in calls)
     assert all(transferred.decode() not in call["prompt"] for call in calls)

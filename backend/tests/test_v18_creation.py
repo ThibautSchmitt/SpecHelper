@@ -1,4 +1,4 @@
-"""Creation freezes instance orchestration policy and validated business categories."""
+"""Creation enforces current review while preserving historical policy and categories."""
 
 import pytest
 from django.test import Client
@@ -24,18 +24,19 @@ def create(client, environment, path, **payload):
 
 @pytest.mark.parametrize("path", ["/api/requests", "/api/questions"])
 @pytest.mark.parametrize("legacy", [True, False])
-def test_form_payload_cannot_override_instance_comparison(environment, path, legacy):
+def test_form_payload_and_legacy_instance_policy_cannot_disable_current_comparison(environment, path, legacy):
     client = Client()
     for allowed in (True, False):
         InstanceSettings.objects.update_or_create(pk=1, defaults={"allow_confrontation": allowed})
         response = create(client, environment, path, confrontation=legacy)
         assert response.status_code == 201, response.content
-        assert response.json()["confrontation"] is allowed
-        assert Request.objects.get(pk=response.json()["id"]).confrontation is allowed
+        assert response.json()["confrontation"] is True
+        assert Request.objects.get(pk=response.json()["id"]).confrontation is True
+        assert InstanceSettings.objects.get(pk=1).allow_confrontation is allowed
 
 
 @pytest.mark.parametrize("reason", ["disabled", "no_role", "disconnected", "identity"])
-def test_comparison_requires_authenticated_enabled_counter_role(environment, reason):
+def test_missing_authenticated_enabled_counter_role_does_not_disable_comparison(environment, reason):
     from core.providers import identity_for
 
     connection = AIConnection.objects.get(pk=1)
@@ -53,7 +54,8 @@ def test_comparison_requires_authenticated_enabled_counter_role(environment, rea
     connection.save()
     result = create(Client(), environment, "/api/requests", confrontation=True)
     assert result.status_code == 201
-    assert result.json()["confrontation"] is False
+    assert result.json()["confrontation"] is True
+    assert Request.objects.get(pk=result.json()["id"]).confrontation is True
 
 
 @pytest.mark.parametrize("availability", ["BUSY", "QUOTA_EXHAUSTED", "MODEL_UNAVAILABLE"])
@@ -116,7 +118,7 @@ def test_derived_request_uses_current_policy_and_own_category(environment, stora
             category="documentation",
         )
         assert response.status_code == 201, response.content
-        assert response.json()["confrontation"] is allowed
+        assert response.json()["confrontation"] is True
         assert response.json()["category"] == "documentation"
     question.refresh_from_db()
     assert question.confrontation is False
