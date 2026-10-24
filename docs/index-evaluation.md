@@ -22,8 +22,8 @@ of every source file. The runner rejects dirty sources, wrong commits, mismatche
 index manifests and paths outside the authorized project.
 
 ```sh
-rtk proxy python3 scripts/evaluation/reliability_benchmark.py prepare .local/my-index-study
-rtk proxy python3 scripts/evaluation/reliability_benchmark.py source .local/my-index-study --case python-orders
+python3 scripts/evaluation/reliability_benchmark.py prepare .local/my-index-study
+python3 scripts/evaluation/reliability_benchmark.py source .local/my-index-study --case python-orders
 ```
 
 Repeat source navigation for `typescript-stock` and `java-billing`. For index mode,
@@ -67,7 +67,7 @@ must be idle, shared identity availability is reserved, and ordinary provider
 usage must be available. There is no automatic provider fallback.
 
 ```sh
-rtk proxy uv run --project backend python scripts/evaluation/native_comparison.py \
+uv run --project backend python scripts/evaluation/native_comparison.py \
   .local/my-index-study --agent codex --enable-inference \
   --output .local/native-comparison.json
 ```
@@ -94,7 +94,7 @@ not independent human certification. Across eighteen reports, strict source chec
 found 26 invalid citations out of 87; six invalid citations remained in the two
 final Java reports. The defects involve exact excerpts and ranges, not wrong project
 SHAs. No generated proof was repaired. The native quality gate therefore failed,
-although the measurement run completed. See [acceptance evidence](acceptance-v2.3.md).
+although the measurement run completed. See [acceptance evidence](archive/reports/acceptance-v2.3.md).
 
 One ordered trial with identical retrieved source bytes and differing cache usage
 does not establish that indexing saves time/tokens or preserves quality on a

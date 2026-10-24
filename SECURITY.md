@@ -44,8 +44,8 @@ verify the recorded operation rather than creating another ticket manually.
 
 The Linux sandbox requires specific namespace capabilities and network boundaries.
 Preserve those boundaries when adapting deployment; see
-[implementation notes](docs/implementation.md#services-and-runtime).
-See [operations](docs/implementation.md#operations) for coordinated backups and
+[architecture](docs/architecture.md#services-and-runtime).
+See [operations](docs/operations.md#daily-operations) for coordinated backups and
 persistent volumes.
 
 ## Reporting a vulnerability

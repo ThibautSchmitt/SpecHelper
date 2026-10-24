@@ -27,7 +27,7 @@ as supported by these adapters. A successful connection read does not guarantee
 that the account can create tickets in every destination; write refusals remain errors.
 
 The legacy API was exercised against a disposable GLPI 11.0.7 instance, including
-template-driven creation and reconciliation. See the [v1.3 acceptance report](acceptance-v1.3.md)
+template-driven creation and reconciliation. See the [v1.3 acceptance report](archive/reports/acceptance-v1.3.md)
 for verification boundaries and the other platforms' contract-test coverage.
 
 ## Review and create

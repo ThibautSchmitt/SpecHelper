@@ -44,7 +44,7 @@ also verify absent homed/TPM/tiffcrop/X11 components. Runtime findings additiona
 require the exact image's UID, capabilities, seccomp, source/session, credential,
 network and four-carrier injection probes. Read the complete
 [applicability register](../security/image-applicability.json) and
-[targeted review](security-review-v1.9.md) before adapting the reference deployment.
+[targeted review](archive/reports/security-review-v1.9.md) before adapting the reference deployment.
 `security/trivy-exceptions.json` contains one exact infrastructure exception for
 DS002 in `runtime/Dockerfile`: the trusted namespace supervisor requires root,
 whereas analysis children must run as a distinct non-root identity. Runtime

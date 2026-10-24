@@ -29,7 +29,7 @@ npm run dev
 
 A local worker needs `RUNTIME_URL`, `RUNTIME_TOKEN` and a `SPECHELPER_DATA_DIR`
 consistent with the runtime. Compose is recommended for exercising actual
-isolation. See [implementation and runtime checks](docs/implementation.md).
+isolation. See [operations and runtime checks](docs/operations.md).
 
 ## Checks
 
@@ -61,7 +61,7 @@ Tests create and remove `[E2E]` fixtures in the default local development databa
 and use controlled AI results. Never run them against the Docker deployment
 connected to team accounts. For Linux isolation, provider adapters, database
 capabilities and process-reaping checks, use the commands under
-[runtime checks](docs/implementation.md#runtime-checks).
+[runtime checks](docs/operations.md#runtime-checks).
 
 ## Proposed changes
 
@@ -73,3 +73,34 @@ capabilities and process-reaping checks, use the commands under
 - Never attach credentials, real results, private files, backups, AI sessions or screenshots containing team data.
 
 For security issues, follow [SECURITY.md](SECURITY.md).
+
+## Documentation
+
+Update the current thematic guide whenever behavior changes, and update
+[CHANGELOG.md](CHANGELOG.md) for each major delivery. Follow the ownership and
+archiving rules in [documentation maintenance](docs/documentation.md).
+Do not create a permanent acceptance report per version without a reason.
+
+From the repository root, check relative links, Markdown anchors and shell syntax:
+
+```sh
+python3 scripts/check_documentation.py
+```
+
+The checker is offline: it does not certify external URLs, command behavior or
+application correctness. Execute relevant commands on disposable data and record
+their scope. Never describe controlled provider responses as live AI quality.
+
+## Translations
+
+Code, comments, docstrings, internal instructions and documentation use English.
+Frontend catalogs `frontend/src/locales/en.json` and `fr.json` must have matching
+keys and interpolation placeholders. Use `useI18n().t()` for fixed text and
+`dateLocale` for dates. Do not translate user text or generated business content
+in the browser.
+
+Backend fixed artifact labels use `core.i18n.translate` with the frozen request
+language. Pass that language to each role and write generated narrative in it;
+preserve exact quotations, filenames, paths, commands and code identifiers.
+Keep historical French seed/migration catalogs unchanged: they are historical
+data, not current instructions. Test both languages and immutable old artifacts.
