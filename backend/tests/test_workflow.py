@@ -1,5 +1,4 @@
 import json
-import subprocess
 import uuid
 from pathlib import Path
 from unittest.mock import patch
@@ -247,17 +246,28 @@ def test_api_theme_upload_export_and_cross_origin(client, environment, storage, 
     assert exported["Content-Type"].startswith("text/markdown")
 
 
-def test_whole_job_supervision_kills_after_295_seconds(environment):
+def test_legacy_supervision_retains_its_technical_guard_without_blocking_scheduler(environment):
+    from core.step_supervisor import PROCESSES, poll_processes
+
+    PROCESSES.clear()
     request = Request.objects.create(environment=environment, need="Export contracts")
     enqueue_analysis(request.id)
-    with patch("core.worker.subprocess.Popen") as popen, patch("core.worker.os.killpg") as kill:
+    with (
+        patch("core.step_supervisor.subprocess.Popen") as popen,
+        patch("core.step_supervisor.os.killpg") as kill,
+        patch("core.step_supervisor.time.monotonic", return_value=0) as clock,
+    ):
         popen.return_value.pid = 12345
-        popen.return_value.wait.side_effect = [subprocess.TimeoutExpired("job", 295), -9]
+        popen.return_value.poll.return_value = None
+        popen.return_value.wait.return_value = -9
         popen.return_value.returncode = -9
         assert work_once() is True
-        assert popen.return_value.wait.call_args_list[0].kwargs == {"timeout": 295}
+        assert Job.objects.get().status == "RUNNING"
+        popen.return_value.wait.assert_not_called()
+        clock.return_value = 296
+        poll_processes()
         kill.assert_called_once()
     request.refresh_from_db()
     assert request.status == "ERROR"
-    assert "five-minute" in request.error
     assert Job.objects.get().status == "ERROR"
+    assert not PROCESSES

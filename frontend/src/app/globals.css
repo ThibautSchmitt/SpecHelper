@@ -1116,3 +1116,7 @@ summary:focus-visible {
 .sidebar-admin[aria-current="page"] { background: var(--muted); color: var(--primary-ink, var(--primary)); }
 @media (pointer: coarse) { .icon-action[data-slot="button"] { width: 44px; height: 44px; } }
 @media (min-width: 1280px) and (max-width: 1350px) { .dashboard { grid-template-columns: 180px minmax(0, 1fr) 344px; } .dashboard-center { padding: 22px; } }
+
+.queue-card[data-state="WAITING_AI"] { border-left-color: var(--waiting); }
+.queue-card[data-state="CANCELLED"] { border-left-color: var(--muted-foreground); }
+.queue-group-heading h3[data-state="WAITING_AI"] > svg, .queue-card[data-state="WAITING_AI"] .queue-card-status > svg { color: var(--waiting); }

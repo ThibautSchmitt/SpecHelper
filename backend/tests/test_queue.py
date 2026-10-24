@@ -38,6 +38,11 @@ def test_queue_caps_terminal_history_keeps_failed_tasks_and_real_provider(client
         Job.objects.create(
             kind="sync", target=str(environment.pk), status="DONE", finished_at=timezone.now()
         )
+        # The panel now hides successful synchronization and groups by business item.
+        previous = Request.objects.create(environment=environment, need="Earlier request")
+        Job.objects.create(
+            kind="analysis", target=str(previous.pk), status="DONE", finished_at=timezone.now()
+        )
     job = Job.objects.create(
         kind="analysis",
         target=str(request.pk),
@@ -48,6 +53,7 @@ def test_queue_caps_terminal_history_keeps_failed_tasks_and_real_provider(client
     AnalysisRun.objects.create(request=request, job=job, number=1, steps=[{"provider": "codex"}])
     values = client.get("/api/queue").json()
     assert len(values) == 15
+    assert all(value["kind"] == "analysis" for value in values)
     assert values[0]["agent"] == "codex"
     assert values[0]["error"] == "Analysis interrupted."
     assert values[0]["href"] == f"/requests/{request.pk}"
@@ -60,6 +66,29 @@ def test_deleted_queue_targets_and_tied_timestamps_are_safe(client):
     values = client.get("/api/queue").json()
     assert [v["id"] for v in values] == [first.pk, second.pk]
     assert all(v["request_id"] is None for v in values)
+
+
+def test_waiting_ai_cards_are_active_and_never_truncated_by_completed_history(client, environment):
+    waiting = []
+    for index in range(20):
+        request = Request.objects.create(
+            environment=environment,
+            need=f"Waiting {index}",
+            analysis_protocol="2.4",
+            status="QUEUED",
+        )
+        waiting.append(Job.objects.create(kind="analysis", target=str(request.pk)))
+        finished = Request.objects.create(
+            environment=environment, need=f"Finished {index}", status="READY"
+        )
+        Job.objects.create(
+            kind="analysis", target=str(finished.pk), status="DONE", finished_at=timezone.now()
+        )
+    values = client.get("/api/queue").json()
+    assert [row["id"] for row in values[:20]] == [job.pk for job in waiting]
+    assert all(row["queue_state"] == "WAITING_AI" for row in values[:20])
+    assert len(values) == 35
+    assert [row["queue_position"] for row in values[:20]] == list(range(1, 21))
 
 
 def test_publication_activity_is_visible_without_entering_the_analysis_scheduler(

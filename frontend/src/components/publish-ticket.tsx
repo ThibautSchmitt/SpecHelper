@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { ProviderLogo } from "@/components/provider-logo";
 import { SafeMarkdown } from "@/components/safe-markdown";
 import { secureFetch } from "@/lib/access";
 import { api, send } from "@/lib/api";
@@ -23,7 +24,33 @@ type Field = {
   description?: string;
   read_only?: boolean;
 };
-type Preview = {
+type Presentation = {
+  ticket_format: "" | "project" | "standard";
+  include_business_analysis: boolean;
+  include_technical_analysis: boolean;
+  include_attachments: boolean;
+  attachment_ids: string[];
+  include_goal: boolean;
+};
+type TransferFile = { id: string; name: string; size: number; mime: string; kind: "original" | "goal"; transferable: boolean; reason?: string; };
+const defaultPresentation: Presentation = { ticket_format: "", include_business_analysis: false, include_technical_analysis: false, include_attachments: false, attachment_ids: [], include_goal: false };
+type Preview = Partial<Presentation> & {
+  draft_id?: string;
+  draft_revision?: number;
+  template_id?: string;
+  issue_type?: string;
+  fallback_reason?: string;
+  publication_allowed?: boolean;
+  publication_blockers?: string[];
+  validation_errors?: Record<string, string>;
+  available_attachments?: TransferFile[];
+  selected_attachments?: TransferFile[];
+  result_status?: string;
+  version_id?: string;
+  environment_name?: string;
+  baseline?: { repository: string; sha: string; branch?: string }[];
+  publication_reference?: string;
+  rendered_body?: string;
   title: string;
   body: string;
   fields: Field[];
@@ -45,8 +72,11 @@ type Publication = {
   external_id?: string;
   external_key?: string;
   error?: string;
+  attachment_delivery?: { id: string; name: string; status: "TRANSFERRING" | "TRANSFERRED" | "UNCERTAIN"; error?: string; external_id?: string }[];
 };
-type Payload = {
+type Payload = Partial<Presentation> & {
+  draft_id?: string;
+  draft_revision?: number;
   connector_id: number;
   project: string;
   title: string;
@@ -93,6 +123,10 @@ export function PublishTicket({
   const [project, setProject] = useState("");
   const [template, setTemplate] = useState("");
   const [issueType, setIssueType] = useState("");
+  const [presentation, setPresentation] = useState<Presentation>(defaultPresentation);
+  const previewGeneration = useRef(0);
+  const [saved, setSaved] = useState(false);
+  const [draftSaveFailed, setDraftSaveFailed] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -211,48 +245,81 @@ export function PublishTicket({
       alive = false;
     };
   }, [open, connector, connectors]);
+  function applyPreview(value: Preview) {
+    setPreview(value);
+    setTitle(value.title);
+    setBody(value.body);
+    setTemplate(value.template_id || "");
+    setIssueType(value.issue_type || "");
+    setPresentation({ ...defaultPresentation, ...Object.fromEntries(Object.keys(defaultPresentation).filter(key => key in value).map(key => [key, value[key as keyof Preview]])) });
+    setFields({ ...Object.fromEntries(value.fields.map(field => [field.id, field.default ?? (field.type === "checkboxes" ? [] : "")])), ...value.values });
+    setLabels(value.defaults?.labels || []);
+    setAssignees(value.defaults?.assignees || []);
+    setDirty(false);
+    setSaved(false);
+    setDraftSaveFailed(false);
+  }
   useEffect(() => {
     if (!open || !connector || !project) return;
-    let alive = true;
+    const generation = ++previewGeneration.current;
     setBusy(true);
     setError("");
     setPreview(null);
-    send<Preview>(`${endpoint}/publication-preview`, {
-      connector_id: Number(connector),
-      project,
-      template_id: template,
-      issue_type: issueType,
-    })
-      .then((v) => {
-        if (alive) {
-          setPreview(v);
-          setTitle(v.title);
-          setBody(v.body);
-          setFields({
-            ...Object.fromEntries(
-              v.fields.map((f) => [
-                f.id,
-                f.default ?? (f.type === "checkboxes" ? [] : ""),
-              ]),
-            ),
-            ...v.values,
-          });
-          setLabels(v.defaults?.labels || []);
-          setAssignees(v.defaults?.assignees || []);
-          setDirty(false);
-        }
-      })
-      .catch((e) => {
-        if (alive) setError(e.message);
-      })
-      .finally(() => {
-        if (alive) setBusy(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [open, connector, project, template, issueType, endpoint]);
-  const renderedBody = preview?.render_fields
+    api<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}`)
+      .then(value => { if (generation === previewGeneration.current) applyPreview(value); })
+      .catch(error => { if (generation === previewGeneration.current) setError(error.message); })
+      .finally(() => { if (generation === previewGeneration.current) setBusy(false); });
+    return () => { previewGeneration.current++; };
+  }, [open, connector, project, endpoint]);
+  async function recompose(changes: Partial<Presentation> & { template_id?: string; issue_type?: string }) {
+    const generation = ++previewGeneration.current;
+    const before = presentation;
+    const previousTemplate = template;
+    const previousType = issueType;
+    setPresentation(current => ({ ...current, ...Object.fromEntries(Object.keys(defaultPresentation).filter(key => key in changes).map(key => [key, changes[key as keyof typeof changes]])) }));
+    if (changes.template_id !== undefined) setTemplate(changes.template_id);
+    if (changes.issue_type !== undefined) setIssueType(changes.issue_type);
+    setBusy(true);
+    setError("");
+    try {
+      const value = await send<Preview>(`${endpoint}/publication-preview`, { connector_id: Number(connector), project, template_id: template, issue_type: issueType, ...presentation, ...changes });
+      if (generation === previewGeneration.current) applyPreview(value);
+    } catch (error) {
+      if (generation === previewGeneration.current) { setPresentation(before); setTemplate(previousTemplate); setIssueType(previousType); setError((error as Error).message); }
+    } finally {
+      if (generation === previewGeneration.current) setBusy(false);
+    }
+  }
+  function draftPayload() {
+    return { connector_id: Number(connector), project, title, body, fields, labels, assignees, template_id: template, issue_type: issueType, options_revision: preview?.revision, draft_id: preview?.draft_id, draft_revision: preview?.draft_revision, ...presentation };
+  }
+  async function saveDraft() {
+    try {
+      const value = await send<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}`, draftPayload(), "PUT");
+      setPreview(value);
+      setDirty(false);
+      setSaved(true);
+      setDraftSaveFailed(false);
+      return value;
+    } catch (error) {
+      setDraftSaveFailed(true);
+      throw error;
+    }
+  }
+  async function reloadDraft() {
+    const generation = ++previewGeneration.current;
+    setBusy(true);
+    setError("");
+    try {
+      const value = await api<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}`);
+      if (generation === previewGeneration.current) applyPreview(value);
+    } catch (error) {
+      if (generation === previewGeneration.current) setError((error as Error).message);
+    } finally {
+      if (generation === previewGeneration.current) setBusy(false);
+    }
+  }
+  const fieldBody = preview?.render_fields
     ? (
         body +
         preview.fields
@@ -270,6 +337,13 @@ export function PublishTicket({
           .join("")
       ).trim()
     : body;
+  const reference = preview?.publication_reference || "";
+  const referencePattern = reference
+    ? new RegExp(`(?<![\\w:.-])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w:.-])`)
+    : null;
+  const renderedBody = reference && !referencePattern?.test(fieldBody)
+    ? `${fieldBody}\n\n${reference}`.trim()
+    : fieldBody.trim();
   function change(action: () => void) {
     if (
       !dirty ||
@@ -371,7 +445,18 @@ export function PublishTicket({
       setBusy(false);
     }
   }
-  function close() {
+  async function close() {
+    if (busy) return;
+    if (dirty && preview) {
+      setBusy(true);
+      try { await saveDraft(); }
+      catch (error) { setError((error as Error).message); return; }
+      finally { setBusy(false); }
+    }
+    finishClose();
+  }
+  function finishClose() {
+    previewGeneration.current++;
     dialog.current?.close();
     setOpen(false);
     setPreview(null);
@@ -379,6 +464,7 @@ export function PublishTicket({
     setDirty(false);
     setConnector("");
     setPending(null);
+    setDraftSaveFailed(false);
   }
   return (
     <>
@@ -443,6 +529,10 @@ export function PublishTicket({
               {t("Ticket published successfully.")}{" "}
               {result.external_key || result.external_id}
             </p>
+            {!!result.attachment_delivery?.length && <section className="mt-4 space-y-3 text-sm" aria-label={t("Attachment transfer results")}>
+              <h3>{t("Attachment transfer results")}</h3>
+              {result.attachment_delivery.map(file => <div key={file.id} className="rounded border p-3"><p className="break-words font-medium">{file.name} · {t(file.status === "TRANSFERRED" ? "File transferred" : file.status === "TRANSFERRING" ? "File transfer in progress" : "File transfer outcome unknown")}</p>{file.error && <p role="alert" className="mt-1 break-words">{t(file.error)}</p>}{file.status === "UNCERTAIN" && <p className="mt-1 muted">{t("Check the destination before transferring this file again.")}</p>}</div>)}
+            </section>}
             {result.url && (
               <a
                 className="mt-4 inline-block text-primary underline"
@@ -472,10 +562,17 @@ export function PublishTicket({
           </div>
         ) : (
           <form
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
-              if (!preview) return;
+              if (!preview || preview.publication_allowed === false) return;
+              setBusy(true);
+              let current = preview;
+              try { current = await saveDraft(); }
+              catch (error) { setError((error as Error).message); setBusy(false); return; }
               publish({
+                ...presentation,
+                draft_id: current.draft_id,
+                draft_revision: current.draft_revision,
                 connector_id: Number(connector),
                 project,
                 title,
@@ -539,6 +636,14 @@ export function PublishTicket({
                   ))}
                 </select>
               </div>
+              {preview && <div className="field sm:col-span-2">
+                <label htmlFor="publish-format">{t("Ticket format")}</label>
+                <select id="publish-format" value={presentation.ticket_format || "standard"} onChange={event => change(() => { void recompose({ ticket_format: event.target.value as "project" | "standard" }); })}>
+                  <option value="project" disabled={!preview.templates.length}>{t("Project template")}</option>
+                  <option value="standard">{t("Standard SpecHelper format")}</option>
+                </select>
+                {preview.fallback_reason && <p role="status" className="mt-2 text-xs muted">{t(preview.fallback_reason)}</p>}
+              </div>}
               {!!preview?.templates.length && (
                 <div className="field">
                   <label htmlFor="publish-template">
@@ -547,9 +652,11 @@ export function PublishTicket({
                   <select
                     id="publish-template"
                     value={template}
-                    onChange={(e) => change(() => setTemplate(e.target.value))}
+                    required={presentation.ticket_format === "project"}
+                    disabled={presentation.ticket_format === "standard"}
+                    onChange={(e) => change(() => { void recompose({ template_id: e.target.value }); })}
                   >
-                    <option value="">{t("Default format")}</option>
+                    <option value="">{t("Select a template")}</option>
                     {preview.templates.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name}
@@ -565,7 +672,7 @@ export function PublishTicket({
                     id="publish-issue-type"
                     required
                     value={issueType}
-                    onChange={(e) => change(() => setIssueType(e.target.value))}
+                    onChange={(e) => change(() => { void recompose({ issue_type: e.target.value }); })}
                   >
                     <option value="">{t("Select an issue type")}</option>
                     {preview.issue_types.map((o) => (
@@ -588,9 +695,7 @@ export function PublishTicket({
                 className="mt-4"
                 variant="outline"
                 onClick={() => {
-                  const current = project;
-                  setProject("");
-                  setTimeout(() => setProject(current), 0);
+                  void recompose({});
                 }}
               >
                 {t("Reload and review options")}
@@ -603,6 +708,16 @@ export function PublishTicket({
                     {t(preview.notice)}
                   </p>
                 )}
+                {preview.publication_allowed === false && <div role="status" className="mt-4 rounded-lg border border-amber-500/50 p-4 text-sm">
+                  <p className="font-semibold">{t("Publication is blocked")}</p>
+                  <ul className="mt-2 list-disc pl-5">{(preview.publication_blockers?.length ? preview.publication_blockers : ["Required independent checks are incomplete. Publication is blocked."]).map((reason, index) => <li key={index}>{t(reason)}</li>)}</ul>
+                  <p className="mt-2 muted">{t("You can review and save this draft. Exporting it does not complete the missing checks.")}</p>
+                </div>}
+                <fieldset className="mt-5 space-y-3 rounded-lg border p-4">
+                  <legend className="px-1 text-sm font-semibold">{t("Optional ticket content")}</legend>
+                  {([["include_business_analysis", "Include detailed business analysis"], ["include_technical_analysis", "Include detailed technical analysis"]] as const).map(([key, label]) => <label key={key} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation[key]} onChange={event => change(() => { void recompose({ [key]: event.target.checked }); })} />{t(label)}</label>)}
+                  <p className="text-xs muted">{t("These options change only the ticket presentation. The verified analysis and detailed goal.md remain unchanged.")}</p>
+                </fieldset>
                 <div className="field">
                   <label htmlFor="publish-title">{t("Ticket title")}</label>
                   <Input
@@ -765,7 +880,22 @@ export function PublishTicket({
                     </select>
                   </div>
                 )}
+                <fieldset className="mt-5 space-y-3 rounded-lg border p-4">
+                  <legend className="px-1 text-sm font-semibold">{t("Files to transfer")}</legend>
+                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false }) }); })} />{t("Include attachments")}</label>
+                  <p className="text-xs muted">{presentation.include_attachments ? t("Selected files will be sent to {destination}.", { destination: projects.find(item => item.id === project)?.name || project }) : t("No file will be sent to the external platform.")}</p>
+                  {presentation.include_attachments && <div className="space-y-3">
+                    <p className="text-xs muted">{t("Select each file to transfer. Original files and generated goal.md are separate choices.")}</p>
+                    {(preview.available_attachments || []).map(file => <div key={file.id}>
+                      <label className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={!file.transferable} checked={file.kind === "goal" ? presentation.include_goal : presentation.attachment_ids.includes(file.id)} onChange={event => change(() => { void recompose(file.kind === "goal" ? { include_goal: event.target.checked } : { attachment_ids: event.target.checked ? [...presentation.attachment_ids, file.id] : presentation.attachment_ids.filter(id => id !== file.id) }); })} /><span className="min-w-0 break-words">{file.name}<span className="ml-2 text-xs muted">{t(file.kind === "goal" ? "Generated goal.md" : "Original attachment")} · {Math.ceil(file.size / 1024)} KB</span></span></label>
+                      {!file.transferable && <p className="ml-6 mt-1 text-xs muted">{t(file.reason || "This connector cannot transfer this file.")}</p>}
+                    </div>)}
+                    {!preview.available_attachments?.length && <p className="text-xs muted">{t("No transferable files are available.")}</p>}
+                  </div>}
+                </fieldset>
                 <h3 className="mt-6">{t("Publication preview")}</h3>
+                <p className="mt-2 break-words text-sm font-semibold">{title}</p>
+                <p className="mt-1 flex items-center gap-2 text-xs muted"><ProviderLogo provider={connectors.find(item => String(item.id) === connector)?.platform} />{t("Analysis version {number}", { number: version })} · {projects.find(item => item.id === project)?.name || project}</p>
                 <div className="markdown-preview mt-3 rounded border bg-muted p-4">
                   {preview.format === "markdown" ? (
                     <SafeMarkdown>
@@ -780,11 +910,20 @@ export function PublishTicket({
                     "Creating this ticket sends the reviewed content to the selected service. No source code will be modified.",
                   )}
                 </p>
+                <div className="mb-4 text-xs muted" aria-label={t("Attachment transfer preview")}>
+                  <p>{t("Files to transfer")}: {presentation.include_attachments ? (preview.selected_attachments || []).map(file => file.name).join(", ") || t("None") : t("None")}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button type="button" variant="outline" disabled={busy} onClick={async () => { setBusy(true); setError(""); try { await saveDraft(); } catch (error) { setError((error as Error).message); } finally { setBusy(false); } }}>{t("Save publication draft")}</Button>
+                  <Button type="button" variant="ghost" disabled={busy} onClick={() => change(() => { void reloadDraft(); })}>{t("Reload saved draft")}</Button>
+                  {draftSaveFailed && <Button type="button" variant="ghost" disabled={busy} onClick={finishClose}>{t("Close without saving")}</Button>}
+                  {saved && !dirty && <p role="status" className="text-xs muted">{t("Publication draft saved.")}</p>}
                 <Button
-                  disabled={busy || !title.trim() || !renderedBody.trim()}
+                  disabled={busy || preview.publication_allowed === false || !title.trim() || !fieldBody.trim() || preview.fields.some(field => field.required && !field.read_only && (fields[field.id] === "" || fields[field.id] === undefined || fields[field.id] === null || fields[field.id] === false || (Array.isArray(fields[field.id]) && !(fields[field.id] as unknown[]).length))) || (!!preview.issue_types.length && !issueType) || (presentation.ticket_format === "project" && !!preview.templates.length && !template)}
                 >
                   {t("Create ticket")}
                 </Button>
+                </div>
               </fieldset>
             )}
           </form>

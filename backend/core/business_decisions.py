@@ -238,7 +238,7 @@ def revise_decision(request_id, decision_id, payload):
     request = get_object_or_404(Request.objects.select_for_update(), pk=request_id)
     # A newly requested revision follows the current review protocol; prior
     # published versions and already executing snapshots remain immutable.
-    request.analysis_protocol = "2.3"
+    request.analysis_protocol = "2.4"
     assert_editable(request)
     check_revision(request, payload.expected_decision_revision, required=True)
     if request.status not in {"READY", "PARTIAL", "NEEDS_CLARIFICATION", "ERROR"}:

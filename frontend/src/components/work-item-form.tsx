@@ -10,15 +10,9 @@ import {
   Sparkles,
   FileText,
   CircleHelp,
-  Upload,
   X,
   Search,
   SlidersHorizontal,
-  Bug,
-  Layers,
-  Wrench,
-  Briefcase,
-  BookOpen,
   ChevronDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -54,7 +48,6 @@ export function WorkItemForm({
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [environment, setEnvironment] = useState("");
   const [need, setNeed] = useState("");
-  const [category, setCategory] = useState(isQuestion ? "general" : "auto");
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -136,7 +129,6 @@ export function WorkItemForm({
           {
             environment_id: Number(environment),
             need,
-            category,
             ...(sourceQuestion
               ? {
                   source_version: sourceVersion,
@@ -162,19 +154,6 @@ export function WorkItemForm({
       setBusy(false);
     }
   }
-  const types = isQuestion
-    ? [
-        { value: "general", label: "General", icon: CircleHelp },
-        { value: "technical", label: "Technical", icon: Wrench },
-        { value: "functional", label: "Functional", icon: Briefcase },
-        { value: "architecture", label: "Architecture", icon: Layers },
-      ]
-    : [
-        { value: "auto", label: "Automatic", icon: Sparkles },
-        { value: "feature", label: "Feature", icon: Plus },
-        { value: "bug", label: "Bug", icon: Bug },
-        { value: "documentation", label: "Documentation", icon: BookOpen },
-      ];
   const filtered = requests.filter(
     (item) =>
       (!statusFilter || item.status === statusFilter) &&
@@ -215,7 +194,6 @@ export function WorkItemForm({
   function reset() {
     if (busy || draftId) return;
     setNeed("");
-    setCategory(isQuestion ? "general" : "auto");
     setFiles([]);
     setError("");
     if (!sourceQuestion) setEnvironment("");
@@ -282,7 +260,22 @@ export function WorkItemForm({
             {t("Clear form")}
           </Button>
         </div>
-        <form onSubmit={analyze}>
+        <form onSubmit={analyze}
+          onDragOver={(event) => {
+            if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+            event.preventDefault();
+            if (!busy && !draftId) setDragging(true);
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+          }}
+          onDrop={(event) => {
+            if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+            event.preventDefault();
+            setDragging(false);
+            if (!busy && !draftId) addFiles(Array.from(event.dataTransfer.files));
+          }}
+        >
           <div className="form-top-row">
             <div>
               <label htmlFor="environment">{t("Environment")}</label>
@@ -311,24 +304,7 @@ export function WorkItemForm({
                 </p>
               )}
             </div>
-            <fieldset disabled={busy || !!draftId}>
-              <legend className="mb-2 text-sm font-semibold">
-                {t(isQuestion ? "Question type" : "Request type")}
-              </legend>
-              <div className="type-options">
-                {types.map(({ value, label, icon: Icon }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={category === value}
-                    onClick={() => setCategory(value)}
-                  >
-                    <Icon size={14} />
-                    {t(label)}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+
           </div>
           <div className="field">
             <label htmlFor="need">
@@ -419,45 +395,39 @@ export function WorkItemForm({
               <span className="font-normal muted">{t("(optional)")}</span>
             </label>
             <div
-              className="file-dropzone"
+              className={`flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 ${dragging ? "border-primary bg-primary/10" : "border-dashed"}`}
               data-dragging={dragging}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!busy && !draftId) setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(false);
-                if (!busy && !draftId)
-                  addFiles(Array.from(e.dataTransfer.files));
-              }}
             >
               <input
                 id="attachments"
+                className="sr-only peer"
                 type="file"
                 multiple
                 disabled={busy || !!draftId}
                 accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.docx,.txt,.md,.csv,.json,.log"
-                aria-describedby="attachment-limits"
-                onChange={(e) => addFiles(Array.from(e.target.files || []))}
+                aria-describedby="attachment-limits attachment-feedback"
+                onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = ""; }}
               />
-              <Upload size={19} className="muted" />
-              <span className="text-xs font-medium">
-                {t("Drop files here, or click to browse")}
-              </span>
-              <p id="attachment-limits" className="text-xs muted">
-                {t(
-                  "Images, PDF, Word or text · 25 MB per file · up to 20 files.",
-                )}
-              </p>
+              <label htmlFor="attachments" style={{ display: "inline-flex", whiteSpace: "nowrap" }} className={`!mb-0 inline-flex cursor-pointer items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary ${busy || draftId ? "pointer-events-none opacity-50" : ""}`}>
+                <Paperclip size={15} aria-hidden="true" />{t("Add files")}
+              </label>
+              <span className="text-xs muted">{t("25 MB · 20 files")}</span>
             </div>
+            <p id="attachment-limits" className="mt-2 text-xs muted">
+              {t("Images, PDF, Word or text · 25 MB per file · up to 20 files.")}
+              <span className="block">{t("You can also drop files anywhere on this form.")}</span>
+            </p>
+            <p id="attachment-feedback" role="status" className="sr-only">{t("{count} files selected", { count: files.length })}</p>
+            {files.length + (sourceQuestion && includeContext ? 1 : 0) > 20 && <p role="alert" className="mt-2 text-sm text-red-700">{t("A maximum of 20 attachments is allowed.")}</p>}
             {!!files.length && (
               <ul className="file-selection">
                 {files.map((file, index) => (
                   <li key={`${file.name}-${index}`}>
                     <Paperclip size={13} />
-                    <span>{file.name}</span>
+                    <span className="min-w-0 flex-1 break-words">{file.name}<span className="ml-2 text-xs muted">{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}</span>
+                      {file.size > 25 * 1024 * 1024 && <span role="alert" className="block text-xs text-red-700">{t("Each file must be smaller than 25 MB.")}</span>}
+                      {!/\.(png|jpe?g|gif|webp|pdf|docx|txt|md|csv|json|log)$/i.test(file.name) && <span role="alert" className="block text-xs text-red-700">{t("One of the file formats is not allowed.")}</span>}
+                    </span>
                     <button
                       type="button"
                       aria-label={t("Remove file {name}", { name: file.name })}
@@ -580,8 +550,6 @@ export function WorkItemForm({
                 <p className="row-subtitle">
                   {item.environment_name} ·{" "}
                   {new Date(item.created_at).toLocaleDateString(dateLocale)}
-                  {item.category &&
-                    ` · ${t(types.find((type) => type.value === item.category)?.label || item.category)}`}
                 </p>
                 {item.updated_at && (
                   <p className="row-subtitle">

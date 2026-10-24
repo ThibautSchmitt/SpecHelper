@@ -13,8 +13,8 @@ One installation serves a trusted team. Requests and connections are shared; the
 - Multiple AI configurations with model, shared identity, default and availability preference.
 - Named environments with multiple Git repositories/branches and optional PostgreSQL.
 - Environment creation, editing, synchronization and confirmed deletion.
-- Instance name, short label, color, application language and permission to compare new requests.
-- Administrative role instructions, inherited skills and bounded verification policy.
+- Instance name, short label, color, application language and global instructions.
+- Connection-specific instructions, allowed system roles and global skills loaded on demand.
 
 **Application language** under **Settings → General** selects English or French for the interface and newly created analyses. French is the default, preserving existing installations. A request's language is frozen at creation and used for clarification, later discussion and generated artifacts. Switching the instance language does not translate or overwrite historical artifacts.
 
@@ -23,15 +23,18 @@ The PostgreSQL test checks connectivity, a read and read-only permissions. It re
 ## Business workflow
 
 Users select an environment, describe their need and attach files. Understanding may ask questions before full exploration. Answers resume the same request. Source SHAs and the database connection are frozen in a baseline; the database baseline is not a data snapshot.
+No request or question category is required at entry. Files use a compact keyboard-accessible
+control with drag-and-drop, size/removal feedback and validation errors.
 
-Without comparison, an available analyst is selected automatically. Comparison runs
-one analyst and one independent counter-analyst, followed by comparison and an
-optional verifier. Consecutive roles prefer distinct actual model families; an
-eligible third family is preferred for verification. Same-family fallback requires
-administrative permission and a warning. Otherwise the request waits explicitly.
-Public roles use separate terminal contexts and writable directories. Only structured
-conclusions and evidence cross role boundaries; one targeted check is allowed.
-See [role configuration and verification](orchestration.md).
+Every current analysis uses Analyst, independent Counter-analyst and Verifier.
+Independent omission discovery, coverage review and scoped evidence remain mandatory.
+Consecutive roles prefer distinct actual model families, with an eligible third
+family preferred for verification. One family may perform separate roles in fresh
+contexts with an explicit diversity limitation. A forbidden role is never substituted.
+Global and connection instructions remain below the fixed role/security mission;
+environment resources provide factual context. Active compatible global skills are
+discoverable by all assistants and loaded only when useful.
+See [step scheduling and independent coverage](orchestration-v2.4.md).
 
 ## Results and discussion
 
@@ -53,6 +56,10 @@ A completed result opens a publication dialog with target templates, required
 fields, editable content and preview. Only explicit human confirmation creates an
 external ticket. Metadata revisions, persistent operation identifiers and
 uncertain-write reconciliation guard against stale forms and duplicate creation.
+Persistent presentation drafts retain the selected real template/type or short standard
+format and optional business/technical detail. Changing these does not re-run analysis
+or alter `goal.md`. Files require explicit opt-in and individual selection; partial
+results cannot bypass missing independent checks through export or publication.
 
 Tickets lists confirmed publications, with search and platform/environment filters,
 external links and the exact immutable source version. See
@@ -63,18 +70,18 @@ account quota grouping and execution attribution are described in
 
 ## Execution and security
 
-The queue is persistent and the default worker runs requests sequentially. Different browsers can submit different requests. Concurrent operations on the same request are guarded.
+The persistent shared queue schedules ready steps across available compatible connections. Distinct requests may advance concurrently; only one checkpoint of a request may execute at a time. Atomic attempts and account/quota leases guard against duplicate work, including with multiple workers.
 
 Git mirrors are shared; analysis worktrees are isolated and immutable. The Linux runtime mounts sources, cache and files read-only and does not expose credentials to agents. Temporary PostgreSQL access is filtered and read-only. Instructions in sources or attachments are untrusted data.
 
-Orchestration is bounded to 285 seconds, with a 295-second supervisor limit per job, excluding queue/capacity waits. Latency targets depend on the provider. Quotas and reset times not officially exposed remain unknown.
+There is no fixed total business-analysis deadline. Technical SQL/tool timeouts, resource caps, heartbeat recovery and loop guards remain explicit. Clarification releases capacity and resumes the same job with unaffected checkpoints. Cancellation stops the exact runtime attempt and its process tree before releasing capacity. Quotas not officially observed remain unknown.
 
 Out of scope: multi-tenant management, request-history search, automatic PRs, business writes, proprietary graphs and advanced scheduling.
 
 ## Project questions
 
 Questions explain existing behavior through the same analysis and shared queue as
-requests. They support attachments, configured independent comparison, clarification during
+requests. They support attachments, mandatory independent review, clarification during
 exploration and versioned follow-ups. Answers identify verified facts, inferences,
 uncertainties and Git references. No ticket, goal or external publication is created.
 
@@ -89,9 +96,9 @@ See [questions](questions.md) for the complete workflow.
 ## Appearance and analysis preferences
 
 Requests and questions choose their analysis policy automatically from instance
-settings and authenticated assistant roles. Their forms collect an environment,
-a business category, text and optional attachments; no comparison checkbox is
-shown. Configuration, role instructions and skills remain in Settings. Existing
+mandatory system roles and available compatible assistants. Their forms collect an environment,
+free text and optional attachments; no category or comparison checkbox is
+shown. Global instructions, connection instructions and the global skill library remain in Settings. Existing
 requests retain their recorded comparison policy and immutable artifacts.
 
 The shared shell uses fixed navigation, central content and a desktop task panel.
@@ -108,6 +115,16 @@ page hierarchy. Settings retains shared instance color and language controls.
 Main navigation contains Requests, Questions and Tickets; the bottom-left Settings
 button opens General, AI & Agents and Environments. Each setting has one editing
 location. General saves browser appearance separately from shared identity,
-language and color. AI & Agents saves comparison policy and orchestration together.
+language and color. General contains global instructions. AI & Agents contains connection instructions, role eligibility, model selection and the global skill library.
 Environment-specific ticket connectors are checked server-side during publication.
 See [settings](settings.md) for provider quota visibility and migration guarantees.
+
+## External official references
+
+Global instructions request official external documentation only for relevant rules,
+contracts, standards or external versions. Environment URLs/notes are non-exclusive
+factual hints, frozen with the context. Public HTTPS reading is scoped and bounded;
+actual fetched-page receipts preserve URL, title, consultation date and hashes.
+Claims record applicability, effect/version, jurisdiction and scope; unverified or
+undated regulatory applicability remains a limit. Web evidence cannot establish
+deployment behavior without Git/SQL observations. See [official references](official-references.md).

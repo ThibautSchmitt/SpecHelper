@@ -134,6 +134,14 @@ export type RequestDetail = RequestItem & {
       error?: string;
       failure?: string;
       diagnostic?: string;
+      instruction_snapshot?: {
+        global_instructions?: string;
+        global_instruction_version?: number;
+        connection_instructions?: { additional_instructions?: string; version?: string };
+        public_role?: string;
+      };
+      loaded_skills?: { slug: string; name?: string; version: number; sha256?: string }[];
+      skills_audit?: "observed" | "unavailable";
     }[];
     error?: string;
   }[];
@@ -200,6 +208,8 @@ export const statuses: Record<string, string> = {
   MODEL_UNAVAILABLE: "Model unavailable",
   AUTH_ERROR: "Authentication error",
   DISABLED: "Disabled",
+  CANCELLED: "Cancelled",
+  WAITING_AI: "Waiting for AI",
 };
 
 export type QuestionDocument = {

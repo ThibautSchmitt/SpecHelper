@@ -68,6 +68,7 @@ const detail = {
   ],
   messages: [],
 };
+const publicationOptions = new RegExp(`/api/requests/${id}/versions/1/publication-(?:preview|draft)(?:\\?.*)?$`);
 const options = {
   title: "Approved export",
   body: "## Context\n\nActive records.\n\n- Reviewed requirement\n\n[Unsafe](javascript:alert(1))",
@@ -159,7 +160,7 @@ async function base(page: Page) {
     r.fulfill({ json: [] }),
   );
   await page.route(
-    `**/api/requests/${id}/versions/1/publication-preview`,
+    publicationOptions,
     (r) => r.fulfill({ json: options }),
   );
   await page.route("**/api/tickets?**", (r) =>
@@ -322,9 +323,7 @@ test("publication edits exact version, validates target fields and reconciles un
   await modal
     .getByLabel("Ticket title", { exact: true })
     .fill("Reviewed export title");
-  await modal
-    .getByRole("button", { name: "Create ticket", exact: true })
-    .click();
+  await expect(modal.getByRole("button", { name: "Create ticket", exact: true })).toBeDisabled();
   expect(sent).toHaveLength(0);
   await modal
     .getByLabel("Business owner", { exact: false })
@@ -370,9 +369,9 @@ test("changed templates require a review and tickets link to their immutable res
   let previews = 0;
   let posts = 0;
   await page.route(
-    `**/api/requests/${id}/versions/1/publication-preview`,
+    publicationOptions,
     (r) => {
-      previews++;
+      if (r.request().method() !== "PUT") previews++;
       return r.fulfill({
         json: {
           ...options,
@@ -550,7 +549,7 @@ test("issue form preview renders live target fields once and permits a field-onl
 }) => {
   await base(page);
   await page.route(
-    `**/api/requests/${id}/versions/1/publication-preview`,
+    publicationOptions,
     (route) =>
       route.fulfill({ json: { ...options, body: "", render_fields: true } }),
   );
@@ -650,7 +649,7 @@ test("another browser's successful publication resolves a conflicting edited sub
   let published = false;
   let posts = 0;
   await page.route(
-    `**/api/requests/${id}/versions/1/publication-preview`,
+    publicationOptions,
     (r) => r.fulfill({ json: { ...options, fields: [] } }),
   );
   await page.route(`**/api/requests/${id}/versions/1/publications`, (r) => {

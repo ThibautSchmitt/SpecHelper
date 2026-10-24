@@ -2,6 +2,7 @@
 
 import contextlib
 import hashlib
+import http.client
 import json
 import logging
 import os
@@ -25,13 +26,16 @@ MAX_RESPONSE = 16 * 1024 * 1024
 
 
 class Broker:
-    def __init__(self, provider, credentials, timeout, database=None):
+    def __init__(self, provider, credentials, timeout, database=None, web=False):
         self.provider = provider
         self.credentials = credentials
         self.deadline = time.monotonic() + timeout
         self.database = database
         self.database_checks = []
         self.database_lock = threading.Lock()
+        from .web_sources import WebReader
+
+        self.web = WebReader(timeout, self.redact) if web else None
         self.token = secrets.token_urlsafe(32)
         self.events = {"network_denied": 0, "credential_read_attempt": 0}
         self.temporary = None
@@ -182,6 +186,35 @@ class Broker:
                     broker.audit("network_denied")
                     return self.reply(413, {"error": "Provider request exceeds limits"})
                 body = self.rfile.read(length)
+                if self.command == "POST" and self.path in {"/web", "/web/search"}:
+                    if not broker.web:
+                        broker.audit("network_denied")
+                        return self.reply(
+                            403, {"error": "Web references are unavailable in this step"}
+                        )
+                    try:
+                        payload = json.loads(body)
+                        key = "query" if self.path == "/web/search" else "url"
+                        if set(payload) != {key} or not isinstance(payload[key], str):
+                            raise ValueError("Invalid reference request")
+                        result = (
+                            broker.web.search(payload[key])
+                            if key == "query"
+                            else broker.web.read(payload[key])
+                        )
+                        return self.reply(200, result)
+                    except (
+                        ValueError,
+                        TypeError,
+                        OSError,
+                        TimeoutError,
+                        http.client.HTTPException,
+                    ):
+                        broker.audit("web_reference_denied_or_unavailable")
+                        return self.reply(
+                            422,
+                            {"error": "Public HTTPS reference denied, unavailable or over budget"},
+                        )
                 if self.command == "POST" and self.path == "/database" and broker.database:
                     try:
                         payload = json.loads(body)

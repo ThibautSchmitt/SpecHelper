@@ -33,6 +33,9 @@ Text = Annotated[str, Field(min_length=1, max_length=4000)]
 
 class RequirementAssessment(UnderstandingOutput):
     complexity: Literal["simple", "standard", "complex"]
+    intent: Literal["bug", "feature", "improvement", "documentation", "question", "unknown"] = (
+        "unknown"
+    )
     findings: list[BusinessFinding] = Field(default_factory=list, max_length=15)
     business_summary: BusinessSummary | None = None
 
@@ -198,7 +201,7 @@ def context(request, run=None):
         if previous
         else None,
     }
-    if request.analysis_protocol == "2.3":
+    if request.analysis_protocol in {"2.3", "2.4"}:
         # Confirmed decisions and the current need are complete; bounded user updates
         # replace duplicated full dialogue. Agents can still inspect real sources.
         data["recent_messages"] = [item for item in messages if item["role"] == "user"][-3:]
@@ -216,9 +219,17 @@ def context(request, run=None):
 class Orchestrator:
     def __init__(self, request, run, caller, workspace_builder, on_progress, deadline=None):
         self.request, self.run = request, run
+        self.incremental = request.analysis_protocol == "2.4"
+        request.execution_run = run if self.incremental else None
         self.is_question = request.workflow == "question"
         self.caller, self.on_progress = caller, on_progress
-        self.deadline = deadline if deadline is not None else time.monotonic() + 285
+        self.deadline = (
+            float("inf")
+            if self.incremental
+            else deadline
+            if deadline is not None
+            else time.monotonic() + 285
+        )
         self.workspace = workspace_builder(request)
         (settings.MEDIA_ROOT / str(request.id) / "attachments").mkdir(parents=True, exist_ok=True)
         self.session = request.session
@@ -246,7 +257,13 @@ class Orchestrator:
                 "environment": frozen.get("environment", {}),
                 "snapshot_id": frozen.get("snapshot_id"),
                 "resources": [],
+                "official_references": frozen.get("official_references", []),
             }
+            if self.incremental:
+                self.reference_context["factual_context"] = self.reference_context[
+                    "instructions"
+                ].get("text", "")
+                self.reference_context.pop("instructions", None)
             for item in frozen.get("resources", []):
                 path = item["relative_path"]
                 self.context_resources.append(
@@ -268,8 +285,9 @@ class Orchestrator:
                 request.environment
             )
             self.run.orchestration["config"] = self.config
-            self.run.save(update_fields=["orchestration"])
-        self.deadline = min(self.deadline, time.monotonic() + self.config["timeout_seconds"])
+            self.persist_run(update_fields=["orchestration"])
+        if not self.incremental:
+            self.deadline = min(self.deadline, time.monotonic() + self.config["timeout_seconds"])
         self.database = (
             parameters(DatabaseConnection.objects.get(pk=request.database_snapshot["id"]))
             if request.database_snapshot
@@ -277,7 +295,24 @@ class Orchestrator:
         )
         self.run.status = "RUNNING"
         self.run.started_at = self.run.started_at or timezone.now()
-        self.run.save(update_fields=["status", "started_at"])
+        self.persist_run(update_fields=["status", "started_at"])
+
+    def persist_run(self, update_fields):
+        if getattr(self, "incremental", False):
+            from .step_execution import save_run
+
+            save_run(self.run, update_fields)
+        else:
+            self.run.save(update_fields=update_fields)
+
+    def persist_request(self, update_fields):
+        if self.incremental:
+            from .step_execution import fenced_transition
+
+            with fenced_transition(self.run):
+                self.request.save(update_fields=update_fields)
+        else:
+            self.request.save(update_fields=update_fields)
 
     def schema_for_intent(self, schema):
         if not self.is_question:
@@ -370,11 +405,15 @@ class Orchestrator:
                 "writer": "Preparing the explanation",
                 "synthesis": "Comparing findings and writing the explanation",
             }.get(role, label)
-        if (
-            self.request.analysis_protocol == "2.3"
-            and schema.__name__ == "CounterexampleAssessment"
-        ):
-            label = "Searching for limits and counterexamples"
+        if self.request.analysis_protocol in {"2.3", "2.4"} and schema.__name__ in {
+            "CounterexampleAssessment",
+            "CoverageAssessment",
+        }:
+            label = (
+                "Searching for omissions, limits and counterexamples"
+                if self.incremental
+                else "Searching for limits and counterexamples"
+            )
         self.on_progress(self.request, status, label)
         for slug in roles:
             if slug not in self.run.pipeline:
@@ -403,8 +442,14 @@ class Orchestrator:
                 if warning.get("role") == getattr(self, "public_role", "analyst")
             ],
         }
+        if self.incremental:
+            from .step_execution import check_execution
+
+            execution = check_execution(self.run)
+            step["attempt_id"] = str(execution.attempt_id)
+            step["instruction_snapshot"] = execution.instruction_snapshot
         self.run.steps.append(step)
-        self.run.save(update_fields=["pipeline", "steps"])
+        self.persist_run(update_fields=["pipeline", "steps"])
         data = {
             **context(self.request, self.run),
             "environment_context": self.reference_context,
@@ -428,28 +473,42 @@ class Orchestrator:
                     "agent": self.session.agent,
                     "model": self.session.model_snapshot,
                 }
-                self.run.save(update_fields=["orchestration"])
+                self.persist_run(update_fields=["orchestration"])
             connection = copy.copy(connection)
             for field_name, value in snapshots[key].items():
                 setattr(connection, field_name, copy.deepcopy(value))
+        if self.incremental:
+            from .global_skills import effective_instructions as global_instructions
+            from .step_execution import check_execution
+
+            execution = check_execution(self.run)
+            connection.additional_instructions = execution.instruction_snapshot[
+                "connection_instructions"
+            ]["additional_instructions"]
         try:
-            effective_instructions = role_instructions(
-                self.config,
-                connection,
-                getattr(self, "public_role", "analyst"),
-                roles,
-                bool(self.database),
+            effective_instructions = (
+                global_instructions(
+                    self.config, connection, self.public_role, execution.skill_snapshot
+                )
+                if self.incremental
+                else role_instructions(
+                    self.config,
+                    connection,
+                    getattr(self, "public_role", "analyst"),
+                    roles,
+                    bool(self.database),
+                )
             )
         except ValueError as exc:
             step.update(status="ERROR", finished_at=timezone.now().isoformat(), diagnostic=str(exc))
-            self.run.save(update_fields=["steps"])
+            self.persist_run(update_fields=["steps"])
             raise FlowError(str(exc)) from exc
         prompt = (
             RULES
             + "\n"
-            + effective_instructions
+            + (instruction if self.incremental else effective_instructions)
             + "\n"
-            + instruction
+            + (effective_instructions if self.incremental else instruction)
             + "\n"
             + BUSINESS_CLARIFICATION_RULES
             + "\n"
@@ -472,7 +531,7 @@ class Orchestrator:
         prompt = redact(prompt, self.secret_values)
         if len(prompt) > 195000:
             step.update(status="ERROR", finished_at=timezone.now().isoformat())
-            self.run.save(update_fields=["steps"])
+            self.persist_run(update_fields=["steps"])
             raise FlowError(
                 "The effective instructions are too large. Reduce the selected agents or skills."
             )
@@ -501,7 +560,11 @@ class Orchestrator:
                     )
             # At most one repair for artifact format or an already answered business question.
             for attempt in range(2):
-                remaining = int(self.deadline - time.monotonic()) - reserve
+                remaining = (
+                    self.config.get("tool_timeout_seconds", 300)
+                    if self.incremental
+                    else int(self.deadline - time.monotonic()) - reserve
+                )
                 if remaining < 3 or self.calls >= self.config["max_calls"]:
                     raise FlowError(
                         "The analysis limit was reached. The previous result remains available; narrow the scope before continuing."
@@ -509,14 +572,27 @@ class Orchestrator:
                 self.calls += 1
                 if self.request.confrontation:
                     self.run.orchestration["calls"] = self.calls
-                    self.run.save(update_fields=["orchestration"])
+                    self.persist_run(update_fields=["orchestration"])
                 step["attempts"] += 1
-                self.run.save(update_fields=["steps"])
-                timeout = min(budget, remaining)
+                self.persist_run(update_fields=["steps"])
+                timeout = remaining if self.incremental else min(budget, remaining)
+                if self.incremental:
+                    execution = check_execution(self.run)
                 response = self.caller(
                     "/run",
                     {
                         "request_id": str(self.request.id),
+                        **(
+                            {
+                                "attempt_id": str(execution.attempt_id),
+                                "skill_definitions": redact(
+                                    execution.skill_snapshot.get("definitions", []),
+                                    self.secret_values,
+                                ),
+                            }
+                            if self.incremental
+                            else {}
+                        ),
                         "independent_context": bool(self.request.confrontation),
                         "public_role": getattr(self, "public_role", "analyst"),
                         "session_id": self.session.runtime_id or None,
@@ -531,6 +607,10 @@ class Orchestrator:
                         "phase": phase,
                         "profile": role,
                         "workspace": str(self.workspace),
+                        "repositories": [item["repository"] for item in self.request.baseline],
+                        "web_references": bool(
+                            self.incremental and ("code" in roles or "reviewer" in roles)
+                        ),
                         "context_dir": self.context_dir,
                         "context_resources": self.context_resources,
                         "prompt": prompt,
@@ -542,6 +622,12 @@ class Orchestrator:
                     },
                     timeout=timeout + 3,
                 )
+                if self.incremental:
+                    execution = check_execution(self.run)
+                    execution.loaded_skills = response.get("loaded_skills", [])
+                    execution.save(update_fields=["loaded_skills"])
+                    step["loaded_skills"] = execution.loaded_skills
+                    step["skills_audit"] = response.get("skills_audit", "unavailable")
                 self.observe_context(response, step)
                 if response.get("model"):
                     step["model"] = response["model"]
@@ -601,10 +687,14 @@ class Orchestrator:
             self.run.orchestration.setdefault("structured_outputs", []).append(
                 {"roles": roles, "public_role": step["public_role"], "output": output.model_dump()}
             )
-            self.run.save(update_fields=["steps", "orchestration"])
+            self.persist_run(update_fields=["steps", "orchestration"])
             self.remember_business_context(output)
             return output
         except Exception as exc:
+            from .step_execution import ExecutionStopped
+
+            if isinstance(exc, ExecutionStopped):
+                raise
             self.observe_context(getattr(exc, "context_observation", {}), step)
             if isinstance(exc, ProviderUnavailable):
                 from .providers import mark_failure
@@ -629,12 +719,39 @@ class Orchestrator:
                     )
                 step["failure"] = exc.kind
             step.update(status="ERROR", finished_at=timezone.now().isoformat())
-            self.run.save(update_fields=["steps"])
+            self.persist_run(update_fields=["steps"])
             raise
 
     def observe_context(self, response, step):
         public_role = step["public_role"]
-        if self.request.analysis_protocol == "2.3":
+        if self.incremental:
+            from .web_evidence import WebReceipt
+
+            web_checks = self.run.orchestration.setdefault("web_checks", [])
+            for raw in response.get("web_checks", [])[:16]:
+                try:
+                    receipt = WebReceipt.model_validate(
+                        redact(raw, self.secret_values)
+                    ).model_dump()
+                except ValueError:
+                    continue
+                if (
+                    receipt["reference_id"] not in {item["reference_id"] for item in web_checks}
+                    and len(web_checks) < 64
+                ):
+                    web_checks.append(receipt)
+                self.run.orchestration.setdefault("web_roles", {})[receipt["reference_id"]] = (
+                    public_role
+                )
+        if self.incremental:
+            from .step_execution import check_execution
+
+            execution = check_execution(self.run)
+            step["loaded_skills"] = response.get("loaded_skills", [])[:100]
+            step["skills_audit"] = response.get("skills_audit", "unavailable")
+            execution.loaded_skills = step["loaded_skills"]
+            execution.save(update_fields=["loaded_skills"])
+        if self.request.analysis_protocol in {"2.3", "2.4"}:
             from .analysis_evidence import SQLReceipt
 
             receipts = self.run.orchestration.setdefault("database_checks", [])
@@ -677,7 +794,7 @@ class Orchestrator:
                         old.update(item)
                 else:
                     records.append(dict(item))
-        self.run.save(update_fields=["steps", "context_usage", "orchestration"])
+        self.persist_run(update_fields=["steps", "context_usage", "orchestration"])
 
     def validate_business_questions(self, output):
         from .business_decisions import prepare_questions
@@ -734,7 +851,7 @@ class Orchestrator:
                 summary["uncertainties"] = list(
                     dict.fromkeys([*summary.get("uncertainties", []), *uncertain])
                 )
-        self.run.save(update_fields=["orchestration"])
+        self.persist_run(update_fields=["orchestration"])
 
     def clarify(self, understanding, questions):
         from .business_decisions import prepare_questions
@@ -743,7 +860,7 @@ class Orchestrator:
         self.request.questions = prepare_questions(
             self.request, [q.model_dump(exclude_defaults=True) for q in questions]
         )
-        self.request.save(update_fields=["understanding", "questions"])
+        self.persist_request(update_fields=["understanding", "questions"])
         RequestMessage.objects.create(
             request=self.request,
             role="assistant",
@@ -753,7 +870,7 @@ class Orchestrator:
         )
         self.on_progress(self.request, "NEEDS_CLARIFICATION", "Your answer is needed")
         self.run.status, self.run.finished_at = "NEEDS_CLARIFICATION", timezone.now()
-        self.run.save(update_fields=["status", "finished_at"])
+        self.persist_run(update_fields=["status", "finished_at"])
 
     def execute(self):
         requirement = self.call(
@@ -764,7 +881,7 @@ class Orchestrator:
             budget=45,
         )
         self.request.understanding = requirement.understanding
-        self.request.save(update_fields=["understanding"])
+        self.persist_request(update_fields=["understanding"])
         if requirement.status == "NEEDS_CLARIFICATION":
             self.clarify(requirement.understanding, requirement.questions)
             return
@@ -935,9 +1052,15 @@ class ConfrontationOrchestrator(Orchestrator):
                 if attachments is not None:
                     run.orchestration["outputs"]["attachments"] = {**attachments, "questions": []}
                     run.orchestration["reused_facts_from_run"] = previous.pk
-            run.save(update_fields=["orchestration"])
+            from .step_execution import save_run
+
+            save_run(run, ["orchestration"])
         state = run.orchestration
-        remaining = (datetime.fromisoformat(state["deadline_at"]) - timezone.now()).total_seconds()
+        remaining = (
+            float("inf")
+            if request.analysis_protocol == "2.4"
+            else (datetime.fromisoformat(state["deadline_at"]) - timezone.now()).total_seconds()
+        )
         configured_deadline = time.monotonic() + remaining
         if deadline is not None:
             configured_deadline = min(configured_deadline, deadline)
@@ -957,16 +1080,23 @@ class ConfrontationOrchestrator(Orchestrator):
             cached = schema.model_validate(outputs[name])
             self.remember_business_context(cached)
             return cached
+        if self.incremental:
+            from .step_execution import StepYield, check_execution
+
+            execution = check_execution(self.run)
+            if execution.checkpoint != name:
+                raise StepYield(name, public_role)
+            self.session, self.public_role = execution.session, public_role
         if self.calls >= self.config["max_calls"] or self.deadline - time.monotonic() < 3:
             raise FlowError(
                 "The analysis limit was reached. Validated observations and previous results are preserved."
             )
         self.run.orchestration["checkpoint"] = name
         self.run.orchestration["waiting_role"] = public_role
-        self.run.save(update_fields=["orchestration"])
+        self.persist_run(update_fields=["orchestration"])
         while True:
             try:
-                if self.public_role != public_role:
+                if not self.incremental and self.public_role != public_role:
                     self.session = assign_role(
                         self.request,
                         self.run,
@@ -978,9 +1108,11 @@ class ConfrontationOrchestrator(Orchestrator):
                 outputs[name] = output.model_dump()
                 self.run.orchestration["waiting_role"] = None
                 self.run.orchestration["calls"] = self.calls
-                self.run.save(update_fields=["orchestration"])
+                self.persist_run(update_fields=["orchestration"])
                 return output
             except ProviderUnavailable as unavailable:
+                if self.incremental:
+                    raise
                 self.excluded.setdefault(public_role, set()).add(self.session.connection_id)
                 warning = {
                     "code": "PROVIDER_FALLBACK",
@@ -989,7 +1121,7 @@ class ConfrontationOrchestrator(Orchestrator):
                 }
                 if warning not in self.run.warnings:
                     self.run.warnings.append(warning)
-                self.run.save(update_fields=["warnings"])
+                self.persist_run(update_fields=["warnings"])
                 self.public_role = None
                 if self.calls >= self.config["max_calls"] or self.deadline - time.monotonic() < 3:
                     raise FlowError(
@@ -998,7 +1130,7 @@ class ConfrontationOrchestrator(Orchestrator):
             except RoleUnavailable as wait:
                 self.run.orchestration["waiting_role"] = public_role
                 self.run.orchestration["waiting_reason"] = wait.reason
-                self.run.save(update_fields=["orchestration"])
+                self.persist_run(update_fields=["orchestration"])
                 raise
 
     def execute(self):
@@ -1011,7 +1143,7 @@ class ConfrontationOrchestrator(Orchestrator):
             budget=45,
         )
         self.request.understanding = requirement.understanding
-        self.request.save(update_fields=["understanding"])
+        self.persist_request(update_fields=["understanding"])
         if requirement.status == "NEEDS_CLARIFICATION":
             self.clarify(requirement.understanding, requirement.questions)
             return
@@ -1133,7 +1265,9 @@ class ConfrontationOrchestrator(Orchestrator):
         self.finish(result)
 
 
-def analyze(request_id, run_id, caller, workspace_builder, on_progress, deadline=None):
+def analyze(
+    request_id, run_id, caller, workspace_builder, on_progress, deadline=None, attempt_id=None
+):
     request = Request.objects.get(pk=request_id)
     if run_id:
         run = AnalysisRun.objects.get(pk=run_id, request=request)
@@ -1148,7 +1282,13 @@ def analyze(request_id, run_id, caller, workspace_builder, on_progress, deadline
         from .environment_context import freeze_context
 
         freeze_context(request, run)
-    if request.analysis_protocol == "2.3":
+    if attempt_id:
+        run.execution_attempt = attempt_id
+    if request.analysis_protocol == "2.4":
+        from .reliable_flow import OmissionsOrchestrator
+
+        engine = OmissionsOrchestrator
+    elif request.analysis_protocol == "2.3":
         from .reliable_flow import ReliableOrchestrator
 
         engine = ReliableOrchestrator

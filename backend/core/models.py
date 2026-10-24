@@ -133,6 +133,7 @@ class Environment(models.Model):
     context_instructions = models.TextField(blank=True)
     instructions_enabled = models.BooleanField(default=True)
     context_revision = models.PositiveIntegerField(default=1)
+    official_references = models.JSONField(default=list)
     library_selection = models.JSONField(default=dict)
     library_revision = models.PositiveIntegerField(default=1)
 
@@ -211,6 +212,7 @@ class Request(models.Model):
         READY = "READY"
         PARTIAL = "PARTIAL"
         ERROR = "ERROR"
+        CANCELLED = "CANCELLED"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     environment = models.ForeignKey(Environment, null=True, on_delete=models.SET_NULL)
@@ -301,6 +303,37 @@ class Job(models.Model):
     finished_at = models.DateTimeField(null=True)
     error = models.TextField(blank=True)
     payload = models.JSONField(default=dict)
+
+
+class StepExecution(models.Model):
+    """Durable, fenced invocation of one sequential checkpoint in a shared job."""
+
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="executions")
+    checkpoint = models.CharField(max_length=80)
+    public_role = models.CharField(max_length=30)
+    status = models.CharField(max_length=20, default="QUEUED", db_index=True)
+    attempt_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    attempts = models.PositiveIntegerField(default=0)
+    connection = models.ForeignKey(AIConnection, null=True, on_delete=models.SET_NULL)
+    session = models.ForeignKey("AISession", null=True, on_delete=models.SET_NULL)
+    instruction_snapshot = models.JSONField(default=dict)
+    skill_snapshot = models.JSONField(default=dict)
+    loaded_skills = models.JSONField(default=list)
+    output = models.JSONField(default=dict)
+    owner = models.CharField(max_length=100, blank=True)
+    process_id = models.PositiveIntegerField(null=True)
+    heartbeat_at = models.DateTimeField(null=True)
+    started_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["job", "checkpoint"], name="unique_job_checkpoint"),
+            models.UniqueConstraint(
+                fields=["job"], condition=models.Q(status="RUNNING"), name="one_active_step_per_job"
+            ),
+        ]
 
 
 class SkillDefinition(models.Model):
@@ -534,6 +567,7 @@ class PublishedTicket(models.Model):
     body = models.TextField()
     fields = models.JSONField(default=dict)
     snapshot = models.JSONField(default=dict)
+    attachment_delivery = models.JSONField(default=list)
     payload_hash = models.CharField(max_length=64)
     external_id = models.CharField(max_length=255, blank=True)
     external_key = models.CharField(max_length=255, blank=True)
@@ -579,6 +613,31 @@ class PublishedTicket(models.Model):
         if self.request_id != self.version.request_id:
             raise ValueError("The published version does not belong to this request")
         return super().save(*args, **kwargs)
+
+
+class TicketPublicationDraft(models.Model):
+    """Mutable presentation of one immutable analysis version for one destination."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    version = models.ForeignKey(
+        ResultVersion, related_name="ticket_drafts", on_delete=models.CASCADE
+    )
+    connector = models.ForeignKey(
+        TicketConnector, related_name="ticket_drafts", on_delete=models.CASCADE
+    )
+    project = models.CharField(max_length=255)
+    presentation = models.JSONField(default=dict)
+    content = models.JSONField(default=dict)
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["version", "connector", "project"], name="unique_ticket_draft_destination"
+            )
+        ]
 
 
 # Register security tables while keeping shared workspace models independent.

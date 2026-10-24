@@ -45,7 +45,13 @@ def test_continuation_retains_session_and_creates_immutable_artifacts(client, en
         == 409
     )
     environment.repositories.update(sha="b" * 40)
+    # Direct rendering fixtures still require a valid current execution fence;
+    # they do not pretend that independent AI review has completed.
+    from core.worker import claim_job
+
+    assert claim_job() is not None
     second = publish(request.id, Job.objects.get().analysis_run, bundle)
+    assert second.status == "PARTIAL"
     assert second.number == 2
     assert second.baseline == first.baseline
     assert first.artifacts.get(name="goal.md").content == original_goal

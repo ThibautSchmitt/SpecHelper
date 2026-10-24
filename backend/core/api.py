@@ -39,7 +39,7 @@ from .postgres import check_connection
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
-api = NinjaAPI(title="SpecHelper", version="2.3", auth=None)
+api = NinjaAPI(title="SpecHelper", version="2.4", auth=None)
 
 
 @api.exception_handler(ValueError)
@@ -554,6 +554,19 @@ def create_environment(request, payload: EnvironmentIn):
     return Status(201, environment_dict(environment))
 
 
+@api.get("/environments/{environment_id}/synchronization-history")
+def synchronization_history(request, environment_id: int):
+    from .sensitive_data import configured_secrets, redact
+
+    get_object_or_404(Environment, pk=environment_id)
+    rows = list(
+        Job.objects.filter(kind="sync", target=str(environment_id))
+        .order_by("-created_at", "-id")
+        .values("id", "status", "created_at", "started_at", "finished_at", "error")[:20]
+    )
+    return [{**row, "error": redact(row["error"], configured_secrets())[:1000]} for row in rows]
+
+
 @api.post("/environments/{environment_id}/sync")
 @transaction.atomic
 def sync(request, environment_id: int):
@@ -598,7 +611,7 @@ def create_request(request, payload: RequestIn):
     environment = get_object_or_404(Environment, pk=payload.environment_id)
     value = Request.objects.create(
         environment=environment,
-        analysis_protocol="2.3",
+        analysis_protocol="2.4",
         environment_name_snapshot=environment.name,
         need=payload.need,
         confrontation=automatic_comparison(options),
@@ -652,7 +665,23 @@ def remove_draft_attachment(request, request_id: UUID, attachment_id: UUID):
 @api.post("/requests/{request_id}/analyze")
 def start_analysis(request, request_id: UUID):
     get_object_or_404(Request, pk=request_id, workflow="request")
-    return request_dict(enqueue_analysis(request_id, analysis_protocol="2.3"), full=True)
+    return request_dict(enqueue_analysis(request_id, analysis_protocol="2.4"), full=True)
+
+
+@api.post("/requests/{request_id}/cancel")
+def cancel_request_analysis(request, request_id: UUID):
+    from .step_execution import cancel_analysis
+
+    get_object_or_404(Request, pk=request_id, workflow="request")
+    return request_dict(cancel_analysis(request_id), full=True)
+
+
+@api.post("/requests/{request_id}/retry")
+def retry_request_analysis(request, request_id: UUID):
+    from .step_execution import retry_analysis
+
+    get_object_or_404(Request, pk=request_id, workflow="request")
+    return request_dict(retry_analysis(request_id), full=True)
 
 
 @api.post("/requests/{request_id}/answers")
@@ -665,7 +694,7 @@ def answer_questions(request, request_id: UUID, payload: AnswersIn):
             payload.choices,
             payload.expected_decision_revision,
             payload.confirm_changes,
-            analysis_protocol="2.3",
+            analysis_protocol="2.4",
         ),
         full=True,
     )
@@ -684,7 +713,7 @@ def continue_request(request, request_id: UUID, payload: ContinuationIn):
     get_object_or_404(Request, pk=request_id, workflow="request")
     return request_dict(
         continue_conversation(
-            request_id, payload.message, payload.expected_version, analysis_protocol="2.3"
+            request_id, payload.message, payload.expected_version, analysis_protocol="2.4"
         ),
         full=True,
     )

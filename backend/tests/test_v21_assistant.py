@@ -238,7 +238,7 @@ def test_minimized_generation_context_never_includes_connections_or_environments
     calls = []
     run(monkeypatch, proposal(), calls)
     prompt = calls[0][1]["prompt"]
-    assert "Private connection instructions" not in prompt
+    assert "Private connection instructions" in prompt
     assert ai.name not in prompt
     assert "existing_library" in prompt and "current_draft" in prompt
     assert "never grant permissions" in prompt

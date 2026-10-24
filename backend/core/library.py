@@ -13,10 +13,10 @@ from pydantic import ConfigDict, Field, ValidationError, field_validator
 from .catalogue import ensure_catalogue
 from .environment_context import reject_credentials
 from .models import AgentProfile, AIConnection, Environment, LibraryRevision, SkillDefinition
+from .skill_metadata import CAPABILITIES, normalize_skill
 
 router = Router(tags=["Agent and skill library"])
 MODELS = {"agent": AgentProfile, "skill": SkillDefinition}
-CAPABILITIES = {"read_sources", "read_attachments", "read_database", "structured_output"}
 PROVIDERS = {"codex", "claude"}
 
 
@@ -35,7 +35,7 @@ class DefinitionIn(Schema):
     instructions: str = Field(min_length=1, max_length=12000)
     enabled: bool = True
     compatibility: list[str] = Field(default_factory=list, max_length=2)
-    required_capabilities: list[str] = Field(default_factory=list, max_length=4)
+    required_capabilities: list[str] = Field(default_factory=list, max_length=5)
     skills: list[str] = Field(default_factory=list, max_length=100)
     expected_checks: list[str] = Field(default_factory=list, max_length=20)
     expected_version: int | None = Field(default=None, ge=1)
@@ -201,6 +201,8 @@ def check_definition(kind, raw):
     try:
         payload = DefinitionIn.model_validate(raw)
         validate_definition(payload, kind)
+        if kind == "skill":
+            payload = normalize_skill(payload)
     except ValidationError as error:
         # Do not return Pydantic's input values, which can contain untrusted credentials.
         return {
@@ -234,6 +236,8 @@ def save_definition(kind, payload, slug=None, editor="administrator", action_nam
     ensure_catalogue()
     model = model_for(kind)
     validate_definition(payload, kind)
+    if kind == "skill":
+        payload = normalize_skill(payload)
     if slug is None:
         if (
             model.objects.filter(pk=payload.slug).exists()
@@ -384,10 +388,10 @@ def delete_definition(request, kind: str, slug: str, expected_version: int):
 
     if kind == "agent" and slug in REQUIRED_AGENTS:
         raise HttpError(409, "This built-in agent is required by the analysis workflow.")
-    if kind == "skill" and item.agents.filter(deleted=False).exists():
-        raise HttpError(409, "Remove this skill from its agents before deleting it.")
-    key = "agents" if kind == "agent" else "skills"
-    if any(slug in (env.library_selection.get(key) or []) for env in Environment.objects.all()):
+    # Legacy associations remain audit data and cannot prevent deleting a global skill.
+    if kind == "agent" and any(
+        slug in (env.library_selection.get("agents") or []) for env in Environment.objects.all()
+    ):
         raise HttpError(
             409, "Remove this definition from environment selections before deleting it."
         )
@@ -415,6 +419,15 @@ def read_selection(request, environment_id: int):
 @router.put("/environments/{environment_id}/library")
 @transaction.atomic
 def update_selection(request, environment_id: int, payload: SelectionIn):
+    raise HttpError(
+        422,
+        "Skills are global. Environment skill and agent assignments are no longer configurable.",
+    )
+
+
+@transaction.atomic
+def legacy_update_selection(environment_id: int, payload: SelectionIn):
+    """Retain historical validation for migration tooling, outside editable API routes."""
     ensure_catalogue()
     env = get_object_or_404(Environment.objects.select_for_update(), pk=environment_id)
     if env.library_revision != payload.expected_revision:
@@ -442,10 +455,10 @@ def update_selection(request, environment_id: int, payload: SelectionIn):
 
 
 @transaction.atomic
-def snapshot(environment=None):
+def snapshot(environment=None, protocol="legacy"):
     """Freeze complete definitions, not live references that drift during a run."""
     ensure_catalogue()
-    chosen = environment.library_selection if environment else {}
+    chosen = environment.library_selection if environment and protocol != "2.4" else {}
     result = {
         "agents": [],
         "skills": [],
@@ -483,6 +496,18 @@ def preview_draft(request, environment_id: int, connection_id: int, payload: Sel
 
 def effective(library, connection, internal_roles, config, has_database=False):
     """Adapt declarative text only; unsupported capabilities never widen a sandbox."""
+    if config.get("reliability_protocol") == "2.4":
+        from .global_skills import catalog, effective_instructions
+
+        skills = catalog(connection, has_database)
+        return {
+            "compatible": True,
+            "incompatibilities": [item for item in skills["registry"] if not item["applicable"]],
+            "instructions": effective_instructions(config, connection, "preview", skills),
+            "library": {"skills": skills["registry"], "agents": []},
+            "skill_snapshot": skills,
+            "provider": skills["provider"],
+        }
     problems, lines = [], []
     provider = connection.agent if connection else "codex"
     selected = {item["slug"]: item for item in library["agents"]}
@@ -592,6 +617,13 @@ def preview_configuration(environment, connection, config):
         connection_instructions=connection.additional_instructions,
         adapter="codex_cli" if connection.agent == "codex" else "claude_code_cli",
     )
+    if config.get("reliability_protocol") == "2.4":
+        value.update(
+            global_instructions=config["global_instructions"],
+            global_instruction_version=config["global_instruction_version"],
+            role_instructions={},
+        )
+        return value
     value["instructions"] += (
         "\n"
         + "\n".join(

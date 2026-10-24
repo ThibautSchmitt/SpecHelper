@@ -6,6 +6,8 @@ from typing import Literal
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from ninja import Router, Schema
 from ninja.errors import HttpError
 from pydantic import ConfigDict, Field
@@ -164,6 +166,59 @@ def test_configuration(value):
 @router.post("/ai-connections/{connection_id}/test")
 def test_connection(request, connection_id: int):
     return test_configuration(get_object_or_404(AIConnection, pk=connection_id))
+
+
+@router.post("/ai-connections/{connection_id}/quota/refresh")
+@transaction.atomic
+def refresh_quota(request, connection_id: int):
+    """Read provider metadata at most every two minutes per shared identity.
+
+    Row locks coordinate browsers and application processes. Competing refreshes
+    return the last observation immediately, without launching an inference or
+    blocking an active analysis. Failed reads never replace valid observations.
+    """
+    value = get_object_or_404(AIConnection, pk=connection_id)
+    identity = identity_for(value)
+    ids = list(quota_group(identity).order_by("pk").values_list("pk", flat=True))
+    locked = list(
+        AIIdentity.objects.select_for_update(skip_locked=True).filter(pk__in=ids).order_by("pk")
+    )
+    if len(locked) != len(ids) or not value.enabled:
+        return {**public(value), "quota_refresh_state": "pending"}
+    if any(item.availability == "BUSY" for item in locked):
+        return {**public(value), "quota_refresh_state": "busy"}
+    observations = []
+    for item in locked:
+        status = (
+            item.quota_windows.get("_status", {}) if isinstance(item.quota_windows, dict) else {}
+        )
+        try:
+            checked = parse_datetime(status.get("checked_at", ""))
+        except (TypeError, ValueError):
+            checked = None
+        if checked and timezone.is_aware(checked):
+            observations.append(checked)
+    if observations and (timezone.now() - max(observations)).total_seconds() < 120:
+        return {**public(value), "quota_refresh_state": "cached"}
+    try:
+        return {**test_configuration(value), "quota_refresh_state": "refreshed"}
+    except HttpError as error:
+        if error.status_code != 503:
+            raise
+        for item in locked:
+            windows = item.quota_windows if isinstance(item.quota_windows, dict) else {}
+            AIIdentity.objects.filter(pk=item.pk).update(
+                quota_windows={
+                    **windows,
+                    "_status": {
+                        "state": "error",
+                        "reason": "refresh_failed",
+                        "checked_at": timezone.now().isoformat(),
+                    },
+                }
+            )
+        value.refresh_from_db()
+        return {**public(value), "quota_refresh_state": "error"}
 
 
 @router.post("/ai-connections/{connection_id}/auth/start")

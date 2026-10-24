@@ -23,7 +23,10 @@ worktrees are separate. Launching a request freezes its SHAs and database select
 retained commit refs preserve its baseline across later fetches and force-pushes.
 
 An agent receives its read-only request workspace, attachments, explicitly allowed
-frozen context files and Git cache, plus its own writable session directory. It
+frozen context files and authorized repository history, plus its own writable session directory. Shared
+Git caches expose only those repositories' objects and the current worktrees' metadata;
+other repositories and other jobs' linked-worktree metadata remain hidden. Repository
+history is available for analysis; result citations are checked against frozen SHAs. It
 cannot access application data, real Git/AI/database credentials or other request
 sessions. The trusted runtime supervisor needs `SYS_ADMIN`/`NET_ADMIN` for namespace
 setup. The child runs as UID/GID 10001 with zero capabilities, no-new-privileges and
@@ -38,11 +41,16 @@ database. The worker reaches it through an internal control network; the backend
 uses a restricted authenticated control relay. A separate per-run Unix broker
 injects real provider OAuth into a fixed upstream endpoint allowlist. The child
 receives only a synthetic expiring capability and a loopback relay in an isolated
-network namespace. It cannot select arbitrary remote destinations or follow
-redirects. A request-scoped database capability uses the same broker. Internal
+network namespace. Provider calls cannot select arbitrary destinations or follow
+redirects. Source/reviewer steps may separately request bounded public HTTPS references
+through the Web reader, with validated/pinned DNS and redirect revalidation. No
+provider credentials or caller-controlled headers are forwarded to public pages.
+A request-scoped database capability uses the same broker. Internal
 keys and encrypted CLI credentials are outside the child's mounts.
+See [official references](official-references.md) for conditional research, transfer
+limits, actual page receipts and applicability boundaries.
 
-The optional business database is accessed through a request-scoped temporary capability, PostgreSQL parser, function allowlist and read-only transaction. Owner, superuser, write-enabled and object-creation roles are rejected. Responses are limited to 200 rows and queries to five seconds. Credentials never enter prompts. A database baseline identifies the connection; it is not a data snapshot.
+The optional business database is accessed through a request-scoped temporary capability, PostgreSQL parser, function allowlist and read-only transaction. Owner, superuser, write-enabled and object-creation roles are rejected. Queries are limited to five seconds and 200 observed rows; AI previews are further minimized to 20 rows with bounded, masked cells. Credentials never enter prompts. A database baseline identifies the connection; it is not a data snapshot.
 
 Allowed attachments are PNG/JPEG/GIF/WebP, PDF, DOCX, TXT, Markdown, CSV, JSON and
 LOG, up to 25 MB each and 20 files per request. Actual signatures and streamed sizes
@@ -51,17 +59,34 @@ embedded executable content; other archives are refused. Random internal names
 isolate files outside public directories. Document readers run inside the bounded
 analysis namespace; documents are untrusted data, not permission grants.
 
-Each analysis has a separate supervisor: the full job stops after 295 seconds, orchestration is bounded to 285 seconds and agent calls use the remaining budget. Errors and interruptions appear in the request and job log. Worker failures are detected on restart.
+Current analyses use persistent checkpoint attempts. The shared worker starts independent
+subprocesses for ready compatible steps, allowing different requests to use free AI
+connections concurrently. Each request remains sequential. Atomic reservations
+respect role restrictions and known shared account/quota capacity. Completed
+observations are cached before the next step; cancellation and stale attempts are
+fenced before publication. Heartbeats identify interrupted execution. There is no
+fixed business-job deadline; SQL, invocation and stuck-process guards remain.
 
-The pipeline selects useful roles: Requirement Analyst, Code Analyst and Ticket / Goal Writer for simple requests; Attachment Analyst for files and Reviewer for standard, complex or database-backed requests. Code/Writer or Reviewer/Writer may share a structured terminal invocation. Only one additional targeted verification is allowed, with at most ten invocations and two provider attempts per job execution, including format repair. Exchanges are typed and persisted; agents cannot change application workflow. Internal skills cover code navigation, Git history, impacts, minimal changes, attachments, read-only PostgreSQL and project conventions. Artifacts contain conclusions, never a chain of thought.
+Analyst, independent Counter-analyst and Verifier are mandatory. Source inspection,
+clarification, focused checks and writing are checkpoints within that workflow.
+The Counter-analyst discovers omitted decisive areas before receiving the Analyst
+report. The Verifier resolves coverage concerns and checks limits/counterexamples.
+Typed conclusions and evidence cross role boundaries; private reasoning does not.
+Skills are global declarative procedures with metadata-only discovery and exact
+read-only files loaded on demand. Actual loaded versions and both configurable
+instruction levels are recorded. See [current orchestration](orchestration-v2.4.md).
 
-The default single worker runs jobs sequentially. Different browsers can submit different requests to the persistent queue; concurrent operations on the same request are guarded. Shared visibility does not provide per-user authentication or privacy.
+Different browsers submit to one shared queue; this does not provide private user
+spaces. Legacy running jobs retain their prior execution contract. Migration marks
+already queued older analyses for an incremental transition at claim time, retaining
+the same job/run, frozen sources and old state for audit. Reusable qualified
+observations stay cached; insufficiently qualified reports are rechecked.
 
 Git network operations have a ten-minute timeout each. Full synchronization has a separate twenty-minute limit; an initial large download can take longer than an analysis.
 
 ## Environment context
 
-Optional instructions and immutable document versions belong to an environment.
+Business terminology, factual context and immutable document versions belong to an environment. They are untrusted documentary data; configurable instructions belong only to the global settings and the selected AI connection.
 Each launch records a logical manifest with content hashes, Git baseline, business
 answers and request-specific attachment references. Clarification keeps the same
 reference versions while recording the new answers. A later discussion uses the
@@ -89,9 +114,10 @@ the theme before paint; the client provider tracks system and cross-tab preferen
 changes. Shared CSS tokens preserve the same hierarchy and adjust neutral surfaces,
 readable primary foregrounds and state colors. See [appearance](appearance.md).
 
-Business forms submit a category and no comparison choice. The backend freezes the
-creation policy from the instance setting and authenticated enabled counter-analyst
-roles; legacy payload flags cannot override it. Temporary capacity remains the
+Business forms submit free text without a category or comparison choice. The
+requirement checkpoint infers a presentation intent, which can suggest a real
+publication template later. The backend freezes the mandatory independent-role
+policy; legacy payload flags cannot override it. Temporary capacity remains the
 scheduler's responsibility. Historical items and result snapshots are preserved.
 
 ## Questions and request handoff
@@ -228,7 +254,7 @@ An administrator configures real GitHub/AI accounts. Deterministic tests use con
 ### Checks performed on October 20, 2026
 
 - 62 backend tests passed with Django using actual PostgreSQL 17 in a disposable container. `backend/tests/test_admin.py` covers encrypted GitHub credentials, discovery and pagination. `test_git.py` uses real Git, two branches and one mirror; resynchronization preserves request workspace and SHAs. `test_postgres_integration.py` verifies read-only roles/transactions and rejection of superusers, table writes and column writes.
-- `test_workflow.py` covers isolated uploads, executable rejection, baselines, answers, session identity, export and 295-second supervision. `test_runtime.py` covers internal authentication, workspace path confinement, explicit session resumption, agent termination and database capability expiration.
+- `test_workflow.py` covers isolated uploads, executable rejection, baselines, answers, session identity, export and retained legacy supervision. `test_runtime.py` covers internal authentication, workspace path confinement, explicit session resumption, agent termination and database capability expiration.
 - Ten Playwright desktop/mobile scenarios passed: administration, business workflow and connections. They include an 11 MB attachment, clarification, answer, ticket, Jira copy and Markdown download, with no horizontal overflow. AI results are explicit fixtures; no model is called.
 - Production Next.js build, TypeScript, Ruff, migrations and Compose validation passed. Frontend, backend, worker and runtime images built.
 - `python -m runtime.smoke` with Compose capabilities: reads of sources/Git history/attachments; rejected writes to source, cache and attachment; secrets and other sessions inaccessible; own session writable.
@@ -243,6 +269,6 @@ An administrator configures real GitHub/AI accounts. Deterministic tests use con
 
 The user connected GitHub and ChatGPT. Discovery, a public project and both private projects in the existing environment were synchronized with those accounts. Real analyses with/without attachments produced tickets after clarification and session resumption; sources, sections, exports and timings are checked in the [detailed audit](acceptance.md).
 
-Final post-answer jobs took 45.786 and 73.546 s. First clarification took 23–26 s, exceeding the indicative 15-second ideal. Simple/standard targets and the mandatory five-minute limit are distinct. These results do not guarantee external-provider latency. A reduced-budget real Linux timeout supplemented the 295-second supervisor tests.
+Final post-answer jobs took 45.786 and 73.546 s. First clarification took 23–26 s, exceeding the indicative 15-second ideal. These historical measurements used the earlier five-minute limit; current step-based analyses have no fixed business deadline. These results do not guarantee external-provider latency. A reduced-budget real Linux timeout supplemented the 295-second supervisor tests.
 
 Claude remains an alternative. Its official authorization startup and adapter were tested; no analysis using a real Claude account is claimed. Connected analyses above used Codex; either supported terminal agent can be configured.

@@ -19,7 +19,9 @@ def native_payload(study):
     manifest = json.loads((study / "manifest.json").read_text())
     corpus = json.loads((HERE / "corpus.json").read_text())["cases"]
     sys.path.insert(0, str(HERE.parents[1] / "backend"))
+    sys.path.insert(0, str(HERE.parents[1]))
     from core.analysis_evidence import ReliabilityReport
+    from runtime.output_schema import strict_output_schema
 
     contexts = []
     for case in corpus:
@@ -42,7 +44,10 @@ def native_payload(study):
                     "files": {path: (repository / path).read_text() for path in expected["files"]},
                 }
             )
-    return {"contexts": contexts, "schema": ReliabilityReport.model_json_schema()}
+    return {
+        "contexts": contexts,
+        "schema": strict_output_schema(ReliabilityReport.model_json_schema()),
+    }
 
 
 BACKEND_PROGRAM = r"""
@@ -57,9 +62,15 @@ import uuid
 from pathlib import Path
 from django.conf import settings
 from django.db import transaction
-from core.agent import RULES, runtime_call
+from core.agent import RULES, ProviderUnavailable, runtime_call as trusted_runtime_call
 from core.models import AIConnection, AIIdentity, Job
 from core.providers import identity_for, quota_group, release_connections
+
+def runtime_call(*args, **kwargs):
+    try:
+        return trusted_runtime_call(*args, **kwargs)
+    except ProviderUnavailable as error:
+        return {"failure":{"kind":error.kind},"quota_windows":error.quota_windows or {}, **error.context_observation}
 
 def execute(data):
     with contextlib.redirect_stdout(io.StringIO()):
@@ -115,6 +126,8 @@ def execute(data):
                     before=time.monotonic()
                     response=runtime_call("/run",{"request_id":request_id,"context_id":str(uuid.uuid4()),"independent_context":True,"session_id":None,"agent":connection.agent,"model":connection.model,"identity_id":credential,"phase":"analysis","profile":profile,"public_role":role,"workspace":str(workspace),"database":None,"context_resources":[],"context_dir":None,"prompt":prompt,"schema":data["schema"],"timeout":min(45,remaining)},timeout=min(45,remaining)+3)
                     attempts.append({"case_id":item["case_id"],"mode":item["mode"],"role":role,"usage":response.get("usage",{}),"seconds":time.monotonic()-before,"model":response.get("model",connection.model),"failure":response.get("failure"),"timed_out":response.get("timed_out",False)})
+                    if response.get("failure"):
+                        return {"status":"interrupted","reason":response["failure"]["kind"],"responses":results,"attempts":attempts,"quota":response.get("quota_windows",{})}
                     if response.get("timed_out"):
                         raise TimeoutError("A native comparison role timed out")
                     outputs.append(response["output"])
@@ -153,7 +166,7 @@ def main():
             "compose",
             "exec",
             "-T",
-            "backend",
+            "worker",
             "python",
             "manage.py",
             "shell",

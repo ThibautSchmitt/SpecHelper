@@ -184,7 +184,14 @@ def runtime_call(path, payload=None, timeout=15):
                 failure.get("quota_windows"),
                 {
                     key: result[key]
-                    for key in ("context_usage", "context_audit", "database_checks")
+                    for key in (
+                        "context_usage",
+                        "context_audit",
+                        "database_checks",
+                        "web_checks",
+                        "loaded_skills",
+                        "skills_audit",
+                    )
                     if key in result
                 },
             )

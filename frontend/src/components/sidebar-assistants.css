@@ -1,0 +1,13 @@
+.sidebar-assistant { margin-top: 0.8rem; }
+.sidebar-assistant > p { align-items: center; }
+.sidebar-quota { margin: 0.3rem 0 0 1.75rem; }
+.quota-track { height: 0.25rem; overflow: hidden; border-radius: 999px; background: var(--muted); margin: 0.3rem 0; }
+.quota-track > span { display: block; height: 100%; border-radius: inherit; }
+[data-quota-color="green"] .quota-track > span { background: #15803d; }
+[data-quota-color="orange"] .quota-track > span { background: #b45309; }
+[data-quota-color="red"] .quota-track > span { background: #b91c1c; }
+[data-stale="true"] .quota-track { outline: 1px dashed currentColor; opacity: 0.55; }
+.dashboard-sidebar .connection-indicators { min-height: 0; overflow-y: auto; flex-shrink: 1; }
+@media (max-width: 767px) {
+  .sidebar-quota { margin-left: 0; text-align: center; }
+}

@@ -1,4 +1,5 @@
 "use client";
+import { ProviderLogo } from "@/components/provider-logo";
 import { useEffect, useRef, useState } from "react";
 import { api, send, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -121,7 +122,7 @@ export function GitSources() {
               </span>
             </div>
             <p className="mt-2 break-all text-sm muted">
-              {value.provider === "github" ? "GitHub" : "GitLab"} ·{" "}
+              <ProviderLogo provider={value.provider} /> {value.provider === "github" ? "GitHub" : "GitLab"} ·{" "}
               {value.account || value.base_url}
             </p>
             {value.error && (

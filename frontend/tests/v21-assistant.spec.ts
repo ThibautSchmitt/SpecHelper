@@ -153,6 +153,8 @@ for (const language of ["en", "fr"] as const) {
       name: t("Task queue"),
       exact: true,
     });
+    await expect(queue.getByRole("button", { name: `${t("Completed")} (2)`, exact: true })).toHaveAttribute("aria-expanded", "false");
+    await queue.getByRole("button", { name: `${t("Completed")} (2)`, exact: true }).click();
     for (const [index, [status, operation, stage]] of scenarios.entries()) {
       const card = queue.locator(`[data-job="${index + 91}"]`);
       await expect(card.locator(".queue-description")).toHaveText(t(stage));

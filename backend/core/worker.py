@@ -1,12 +1,7 @@
 import logging
-import os
-import signal
-import subprocess
-import sys
 import time
 from datetime import timedelta
 
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -18,15 +13,32 @@ logger = logging.getLogger(__name__)
 
 
 def progress(request, status, label):
+    run = getattr(request, "execution_run", None)
+    if run:
+        from .step_execution import fenced_transition
+
+        with fenced_transition(run):
+            request.status = status
+            request.progress += [{"label": label, "at": timezone.now().isoformat()}]
+            request.save(update_fields=["status", "progress", "updated_at"])
+        return
     request.status = status
     request.progress += [{"label": label, "at": timezone.now().isoformat()}]
     request.save(update_fields=["status", "progress", "updated_at"])
 
 
-def analyze(request_id, run_id=None, deadline=None):
+def analyze(request_id, run_id=None, deadline=None, attempt_id=None):
     from .analysis_flow import analyze as execute
 
-    return execute(request_id, run_id, runtime_call, request_workspace, progress, deadline=deadline)
+    return execute(
+        request_id,
+        run_id,
+        runtime_call,
+        request_workspace,
+        progress,
+        deadline=deadline,
+        attempt_id=attempt_id,
+    )
 
 
 @transaction.atomic
@@ -56,11 +68,19 @@ def claim_job():
 
         if connection.features.has_select_for_update_skip_locked:
             jobs = jobs.select_for_update(skip_locked=True)
-        for job in jobs[:100]:
-            if job.kind in {"analysis", "library_assistant"} and not reserve_for_job(job):
+        for job in jobs.iterator(chunk_size=100):
+            from .step_execution import is_incremental, reserve_step, upgrade_pending
+
+            if job.payload.get("requires_step_upgrade"):
+                upgrade_pending(job)
+
+            if is_incremental(job):
+                if not reserve_step(job):
+                    continue
+            elif job.kind in {"analysis", "library_assistant"} and not reserve_for_job(job):
                 continue
             if Job.objects.filter(pk=job.pk, status="QUEUED").update(
-                status="RUNNING", started_at=timezone.now()
+                status="RUNNING", started_at=job.started_at or timezone.now()
             ):
                 job.payload["execution"] = job.payload.get("execution", 0) + 1
                 job.save(update_fields=["payload"])
@@ -80,6 +100,10 @@ def recover_stale_jobs():
         | Q(kind="sync", started_at__lt=timezone.now() - timedelta(seconds=1210))
     )
     for job in stale:
+        from .step_execution import is_incremental
+
+        if is_incremental(job):
+            continue
         if job.kind == "library_assistant":
             from .library_assistant import fail_job
 
@@ -101,8 +125,12 @@ def recover_stale_jobs():
         )
 
 
-def perform_job(job):
+def perform_job(job, attempt_id=None):
     from .orchestration import RoleUnavailable
+    from .step_execution import is_incremental
+
+    if is_incremental(job):
+        return perform_invocation(job, attempt_id)
 
     try:
         if job.kind == "sync":
@@ -196,13 +224,12 @@ def perform_job(job):
 
 
 def work_once():
-    from .providers import (
-        ensure_connections,
-        recover_orphaned_leases,
-        refresh_unknown_connections,
-        release_connections,
-    )
+    from .providers import ensure_connections, recover_orphaned_leases, refresh_unknown_connections
+    from .step_execution import recover_steps
+    from .step_supervisor import poll_processes, start_invocation
 
+    poll_processes()
+    recover_steps()
     recover_stale_jobs()
     recover_orphaned_leases()
     ensure_connections()
@@ -210,47 +237,43 @@ def work_once():
     job = claim_job()
     if not job:
         return False
-    # Bound the entire job, including Git preparation and a stuck HTTP/CLI subprocess.
-    process = subprocess.Popen(
-        [sys.executable, str(settings.BASE_DIR / "manage.py"), "process_job", str(job.id)],
-        start_new_session=True,
-    )
-    try:
-        process.wait(timeout=295 if job.kind in {"analysis", "library_assistant"} else 1200)
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
-        process.wait()
-        if job.kind == "library_assistant":
-            from .library_assistant import fail_job
-
-            fail_job(job, "The assistant time limit was reached.")
-        elif job.kind == "analysis":
-            fail_analysis(job, "The five-minute limit was reached.")
-        else:
-            from .models import Environment
-
-            Environment.objects.filter(pk=job.target).update(
-                status="ERROR", error="The synchronization time limit was reached."
-            )
-        if job.kind not in {"analysis", "library_assistant"}:
-            Job.objects.filter(pk=job.pk).update(
-                status="ERROR", error="Time limit reached", finished_at=timezone.now()
-            )
-    if process.returncode and Job.objects.filter(pk=job.pk, status="RUNNING").exists():
-        Job.objects.filter(pk=job.pk).update(
-            status="ERROR", error="Process interrupted", finished_at=timezone.now()
-        )
-        if job.kind == "library_assistant":
-            pass  # The terminal queue state already carries the interrupted-process error.
-        elif job.kind == "analysis":
-            fail_analysis(job, "Analysis process interrupted.")
-        else:
-            from .models import Environment
-
-            Environment.objects.filter(pk=job.target).update(
-                status="ERROR", error="Synchronization process interrupted."
-            )
-    if job.kind in {"analysis", "library_assistant"}:
-        job.refresh_from_db()
-        release_connections(job.payload.get("connection_ids", []))
+    start_invocation(job)
     return True
+
+
+def perform_invocation(job, attempt_id=None):
+    """Run exactly one ready checkpoint; retain observations when the lease yields."""
+    from .step_execution import (
+        ExecutionStopped,
+        StepYield,
+        active_execution,
+        complete_invocation,
+        heartbeat,
+        wait_or_retry,
+    )
+
+    attempt_id = attempt_id or job.payload.get("attempt_id")
+    try:
+        active_execution(job, attempt_id)
+        run = AnalysisRun.objects.get(job=job)
+        with heartbeat(job, attempt_id):
+            analyze(job.target, run.pk, attempt_id=attempt_id)
+        complete_invocation(job, attempt_id)
+    except StepYield as pending:
+        complete_invocation(job, attempt_id, pending)
+    except ExecutionStopped:
+        return
+    except ProviderUnavailable:
+        wait_or_retry(job, attempt_id, "Waiting for a compatible AI connection.")
+    except Exception as exc:
+        from .analysis_flow import FlowError
+
+        message = (
+            str(exc)
+            if isinstance(exc, FlowError)
+            else "The step was interrupted. Completed observations are preserved; explicit retry is required."
+        )
+        try:
+            wait_or_retry(job, attempt_id, message, failed=True)
+        except ExecutionStopped:
+            pass

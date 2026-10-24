@@ -70,15 +70,24 @@ def outputs(code_report, bundle, verifier=True):
     ]
 
 
-def test_frozen_custom_library_survives_edits_and_deletion_during_execution(client, environment, storage, bundle, code_report):
+def test_frozen_custom_library_survives_edits_and_deletion_during_execution(
+    client, environment, storage, bundle, code_report
+):
     from core.library import DefinitionIn, save_definition
 
-    original = DefinitionIn(slug="audit-evidence", name="Audit evidence", objective="Trace evidence", instructions="FROZEN_LIBRARY_SENTINEL")
+    original = DefinitionIn(
+        slug="audit-evidence",
+        name="Audit evidence",
+        objective="Trace evidence",
+        instructions="FROZEN_LIBRARY_SENTINEL",
+    )
     save_definition("skill", original)
-    config = get_config()
+    config = get_config("legacy")
     config["default_skills"].append("audit-evidence")
     InstanceSettings.objects.update_or_create(pk=1, defaults={"orchestration": config})
-    request = Request.objects.create(environment=environment, need="Export active records", confrontation=True)
+    request = Request.objects.create(
+        environment=environment, need="Export active records", confrontation=True
+    )
     enqueue_analysis(request.pk)
     responses = outputs(code_report, bundle)
     calls = []
@@ -86,19 +95,42 @@ def test_frozen_custom_library_survives_edits_and_deletion_during_execution(clie
     def invoke(path, payload, **kwargs):
         calls.append(payload)
         if len(calls) == 1:
-            save_definition("skill", original.model_copy(update={"instructions": "REPLACED_LIBRARY_SENTINEL", "enabled": False, "expected_version": 1}), "audit-evidence")
-            assert client.delete("/api/library/skill/audit-evidence?expected_version=2").status_code == 200
+            save_definition(
+                "skill",
+                original.model_copy(
+                    update={
+                        "instructions": "REPLACED_LIBRARY_SENTINEL",
+                        "enabled": False,
+                        "expected_version": 1,
+                    }
+                ),
+                "audit-evidence",
+            )
+            assert (
+                client.delete("/api/library/skill/audit-evidence?expected_version=2").status_code
+                == 200
+            )
         assert "FROZEN_LIBRARY_SENTINEL" in payload["prompt"]
         assert "REPLACED_LIBRARY_SENTINEL" not in payload["prompt"]
         return {"session_id": str(uuid.uuid4()), "output": responses.pop(0)}
 
-    with patch("core.worker.request_workspace", return_value=storage), patch("core.worker.runtime_call", side_effect=invoke):
+    with (
+        patch("core.worker.request_workspace", return_value=storage),
+        patch("core.worker.runtime_call", side_effect=invoke),
+    ):
         perform_job(claim_job())
     request.refresh_from_db()
     assert request.status == "READY", request.error
     assert len(calls) == 5
     run = request.analysis_runs.get()
-    assert next(item for item in run.orchestration["config"]["library"]["skills"] if item["slug"] == "audit-evidence")["version"] == 1
+    assert (
+        next(
+            item
+            for item in run.orchestration["config"]["library"]["skills"]
+            if item["slug"] == "audit-evidence"
+        )["version"]
+        == 1
+    )
 
 
 @pytest.mark.parametrize("two_families", [False, True])
@@ -144,7 +176,7 @@ def test_exact_pair_distinct_role_sessions_and_independent_counter_context(
 def test_availability_wait_preserves_checkpoints_and_resumes_without_duplicate_analysis(
     environment, storage, bundle, code_report
 ):
-    config = get_config()
+    config = get_config("legacy")
     config["allow_same_family_fallback"] = False
     InstanceSettings.objects.filter(pk=1).update(orchestration=config)
     request = Request.objects.create(environment=environment, need="Export", confrontation=True)
@@ -178,7 +210,7 @@ def test_availability_wait_preserves_checkpoints_and_resumes_without_duplicate_a
 def test_verifier_disabled_uses_only_pair_and_one_targeted_followup(
     environment, storage, bundle, code_report
 ):
-    config = get_config()
+    config = get_config("legacy")
     config["verifier_enabled"] = False
     InstanceSettings.objects.filter(pk=1).update(orchestration=config)
     request = Request.objects.create(environment=environment, need="Export", confrontation=True)
@@ -241,7 +273,7 @@ def test_quota_failure_reassigns_only_failed_stage_and_keeps_validated_counter_r
 def test_global_call_budget_is_durable_across_provider_waits(
     environment, storage, bundle, code_report
 ):
-    config = get_config()
+    config = get_config("legacy")
     config["max_calls"] = 2
     InstanceSettings.objects.filter(pk=1).update(orchestration=config)
     request = Request.objects.create(environment=environment, need="Export", confrontation=True)
@@ -262,7 +294,7 @@ def test_role_selection_observes_availability_at_each_boundary(
     identity = identity_for(unavailable)
     identity.availability = "QUOTA_EXHAUSTED"
     identity.save(update_fields=["availability"])
-    config = get_config()
+    config = get_config("legacy")
     config["allow_same_family_fallback"] = False
     InstanceSettings.objects.filter(pk=1).update(orchestration=config)
     request = Request.objects.create(environment=environment, need="Export", confrontation=True)
@@ -290,7 +322,7 @@ def test_configuration_inheritance_and_explicit_skill_overrides_affect_actual_pr
 ):
     from core.models import AgentProfile, SkillDefinition
 
-    config = get_config()
+    config = get_config("legacy")
     skill = SkillDefinition.objects.create(
         slug="explicit-skill",
         name="Explicit",
@@ -383,7 +415,7 @@ def test_waiting_does_not_reset_global_deadline_or_destroy_validated_outputs(
 
     from django.utils import timezone
 
-    config = get_config()
+    config = get_config("legacy")
     config["allow_same_family_fallback"] = False
     InstanceSettings.objects.filter(pk=1).update(orchestration=config)
     request = Request.objects.create(environment=environment, need="Export", confrontation=True)
@@ -427,7 +459,7 @@ def test_counter_and_verifier_can_check_database_evidence_without_credentials_in
 def test_unresolved_focused_check_cannot_be_erased_by_ready_final_artifacts(
     environment, storage, bundle, code_report, verifier_enabled
 ):
-    config = get_config()
+    config = get_config("legacy")
     config["verifier_enabled"] = verifier_enabled
     InstanceSettings.objects.filter(pk=1).update(orchestration=config)
     request = Request.objects.create(environment=environment, need="Export", confrontation=True)

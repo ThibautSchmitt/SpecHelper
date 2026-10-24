@@ -4,14 +4,25 @@ from django.utils import timezone
 
 from .artifacts import render_goal, render_human
 from .business_outputs import BusinessOutputError, BusinessSummary, decision_rules, normative_rules
-from .models import AnalysisResult, GeneratedArtifact, Request, RequestMessage, ResultVersion
+from .models import AnalysisResult, GeneratedArtifact, Job, Request, RequestMessage, ResultVersion
 from .question_outputs import QuestionOutput, render_answer
 from .sensitive_data import configured_secrets, redact
 
 
 @transaction.atomic
 def publish(request_id, run, output):
+    if run and run.job_id and run.request.analysis_protocol == "2.4":
+        Job.objects.select_for_update().get(pk=run.job_id)
     request = Request.objects.select_for_update().get(pk=request_id)
+    if request.analysis_protocol == "2.4" and run:
+        from .step_execution import check_execution
+
+        check_execution(run)
+        existing = request.versions.filter(run=run).first()
+        if existing:
+            run.status, run.finished_at = existing.status, existing.created_at
+            run.save(update_fields=["status", "finished_at"])
+            return existing
     number = (request.versions.aggregate(last=Max("number"))["last"] or 0) + 1
     output = type(output).model_validate(redact(output.model_dump(), configured_secrets()))
     if output.questions:
@@ -36,7 +47,7 @@ def publish(request_id, run, output):
         summary = BusinessSummary.model_validate(summary).model_dump()
     output = output.model_copy(deep=True)
     evidence = {}
-    if request.analysis_protocol == "2.3":
+    if request.analysis_protocol in {"2.3", "2.4"}:
         from .analysis_evidence import ReliabilityReport
 
         evidence = ReliabilityReport.model_validate(

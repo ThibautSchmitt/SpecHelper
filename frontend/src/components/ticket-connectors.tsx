@@ -1,4 +1,5 @@
 "use client";
+import { ProviderLogo } from "@/components/provider-logo";
 import { useEffect, useState } from "react";
 import { api, send, statuses, type Environment } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -90,7 +91,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
             variant={selected === item.id ? "default" : "outline"}
             onClick={() => edit(item)}
           >
-            {item.name} · {t(statuses[item.status] || item.status)}
+            <ProviderLogo provider={item.platform} /> {item.name} · {t(statuses[item.status] || item.status)}
           </Button>
         ))}
         <Button variant="outline" onClick={() => edit()}>

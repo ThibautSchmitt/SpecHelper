@@ -1,9 +1,10 @@
 # v2.3 acceptance evidence
 
-Status: implementation validation and measured navigation evidence are separate
-from native model quality acceptance. The latter remains pending while no
-connected provider has ordinary usage available. The operator chose to wait for
-the ChatGPT quota reset rather than connect another provider.
+Status: application validation, retrieval measurements and native model observations
+are recorded separately. The native paired study completed on 2026-10-24 after
+the operator-selected ChatGPT quota reset. Its exact-source quality gate **did not
+pass**: the final Java reports contain invalid exact excerpts. Optional production
+indexing remains disabled. Measured completion is not acceptance of every result.
 
 ## Reliability requirements
 
@@ -48,7 +49,9 @@ The standalone evaluation test suite initially passed nine checks: reproducible
 Git fixtures, refusal to overwrite a study, rejection of wrong index/source/project
 identity, rejection of paths outside the authorized repository, null missing usage,
 separation of literal screening from semantic precision, and complete semantic
-review counts. Run the current suite with:
+review counts. The expanded suite passed **13 checks**, adding explicit semantic
+coverage, actual native citation auditing and a guard that keeps the quality gate
+failed despite complete measurements when exact source proof is invalid. Run it with:
 
 ```sh
 rtk proxy uv run --project backend pytest backend/tests/test_v23_evaluation.py -q
@@ -60,17 +63,47 @@ source files were reopened in each mode for every project. These measurements
 establish retrieval on those fixtures only. They do not establish analysis quality,
 representative throughput or token savings.
 
-## Pending native acceptance
+## Completed native observation and remaining quality gate
 
-The paired native benchmark requires six analyses with three independent roles
-each, then semantic review of every material conclusion against frozen sources.
-Required measurements include precision, material false claims, critical omissions,
-counterexamples, ambiguous decisions, elapsed duration and actual input/output
-tokens. Provider cost is recorded only if measured billing is available.
+The real Codex comparison completed six paired analyses and eighteen independent
+role invocations using `gpt-6-luna`. Each pair used the same frozen Python,
+TypeScript or Java project after actual source/MCP navigation. The Counter-analyst
+received no Analyst report; the Verifier received both. This is a role-level native
+benchmark, not a full application or final-ticket test.
 
-The 2026-10-24 preflight observed Codex connected with its session quota exhausted
-and ordinary usage disallowed; Claude was disconnected. No model inference was
-performed for this benchmark. All native quality/token comparisons remain pending,
-and optional indexing remains disabled. Controlled protocol tests cannot satisfy
-this real-provider quality criterion. Re-run the bounded opt-in harness once an
-authorized provider becomes available and retain partial failures honestly.
+[`native-observation.json`](../scripts/evaluation/native-observation.json) records
+the actual measurements, artifact hashes, review authority and limitations:
+
+| Mode | Analyses / native calls | Actual input / output tokens | Role elapsed seconds | Invalid final citations |
+| --- | ---: | ---: | ---: | ---: |
+| Source search | 3 / 9 | 387,164 / 17,745 | 279.71 | 3 / 16 |
+| Actual MCP navigation | 3 / 9 | 412,537 / 16,317 | 269.08 | 3 / 13 |
+
+The total was **799,701 input tokens**, including 362,240 cached input tokens,
+**34,062 output tokens** and **548.79 seconds** of role invocation time. Measured
+billing was not returned, so cost remains unknown. These totals exclude earlier
+schema-rejected attempts, preflight/setup, navigation and a small connectivity probe.
+
+An accountable agent-assisted audit read all **57 material role claims**, including
+**19 final claims**, against the twelve actual frozen files. It found no materially
+false conditional/configuration/history conclusions in those final claims. All
+24 expected critical-fact slots and twelve behavioral counterexample slots were
+covered, with no business policy choice silently invented. The review distinguishes
+paraphrases from literal-keyword checks and records minor terminology limitations.
+It is not independent human certification or a general accuracy estimate.
+
+A separate strict Git audit checked **87 citations** across all roles: **26 failed**
+exact excerpt/range checks. Six of 29 final citations failed, three in each Java
+report. Repositories and SHAs match, but indentation, punctuation or line ranges
+were changed. The original outputs remain unmodified. Correct interpretations do
+not waive invalid source proof; the application's evidence checks must downgrade
+such claims. `complete_analysis_comparison=true` means measurements and reviews
+exist; `native_quality_gate_passed=false` records this actual failed gate.
+
+Both navigation modes supplied the same four files and identical source bytes
+per project. One ordered trial, variable cache observations and one provider/model
+family cannot establish causal token/time savings or representative throughput.
+Keep indexing disabled. Exact provenance defects need resolution, and a repeated,
+independently reviewed study on representative anonymized workloads is still required
+before recommending production index activation. No live business database or
+production mutation was used.

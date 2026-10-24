@@ -168,21 +168,18 @@ def execute(request, storage, values):
 
 
 def start(environment, workflow="request"):
-    from django.test import Client
+    """Exercise persisted v2.3 work; public creation now deliberately selects v2.4."""
+    from core.services import enqueue_analysis
 
     InstanceSettings.objects.update_or_create(pk=1, defaults={"language": "en"})
-    client = Client()
-    path = "/api/questions" if workflow == "question" else "/api/requests"
-    created = client.post(
-        path,
-        {"environment_id": environment.pk, "need": "Explain the configured export scope."},
-        content_type="application/json",
+    value = Request.objects.create(
+        environment=environment,
+        workflow=workflow,
+        analysis_protocol="2.3",
+        need="Explain the configured export scope.",
+        language="en",
     )
-    assert created.status_code == 201, created.content
-    value = Request.objects.get(pk=created.json()["id"])
-    assert value.analysis_protocol == "2.3"
-    launched = client.post(path + f"/{value.pk}/analyze")
-    assert launched.status_code == 200, launched.content
+    enqueue_analysis(value.pk)
     return value
 
 
@@ -338,10 +335,14 @@ def test_material_contradiction_performs_focused_check_then_independent_verifica
 
 
 def test_current_configuration_never_allows_independent_review_to_be_disabled(client):
+    from core.orchestration_settings import GlobalOrchestrationIn
+
     config = get_config()
     assert config["verifier_enabled"] and config["allow_confrontation"]
-    assert config["reliability_protocol"] == "2.3"
-    config.pop("reliability_protocol")
+    assert config["reliability_protocol"] == "2.4"
+    config = {
+        key: value for key, value in config.items() if key in GlobalOrchestrationIn.model_fields
+    }
     assert (
         client.put(
             "/api/orchestration-settings",
@@ -353,8 +354,8 @@ def test_current_configuration_never_allows_independent_review_to_be_disabled(cl
 
 
 @pytest.mark.parametrize("workflow", ["request", "question"])
-def test_public_answer_upgrades_legacy_request_and_preserves_human_decision(
-    client, environment, storage, repository, bundle, workflow
+def test_historical_v23_resume_preserves_human_decision(
+    environment, storage, repository, bundle, workflow
 ):
     request = Request.objects.create(
         environment=environment,
@@ -373,14 +374,14 @@ def test_public_answer_upgrades_legacy_request_and_preserves_human_decision(
         [{**requirement(), "status": "NEEDS_CLARIFICATION", "questions": [question]}],
     )
     assert request.status == "NEEDS_CLARIFICATION"
-    base = "questions" if workflow == "question" else "requests"
-    response = client.post(
-        f"/api/{base}/{request.pk}/answers",
-        {"answers": {"scope": "Include only active rows."}, "expected_decision_revision": 0},
-        content_type="application/json",
+    # Historical engine compatibility is a service contract, not the current public route.
+    resumed = enqueue_analysis(
+        request.pk,
+        answers={"scope": "Include only active rows."},
+        expected_decision_revision=0,
+        analysis_protocol="2.3",
     )
-    assert response.status_code == 200, response.content
-    assert response.json()["analysis_protocol"] == "2.3"
+    assert resumed.analysis_protocol == "2.3"
     calls, job = execute(request, storage, outputs(repository, bundle, workflow))
     assert job.status == "DONE" and request.status == "READY", request.error
     assert len(calls) == 6

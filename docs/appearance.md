@@ -22,10 +22,10 @@ green completed and red error. Text labels accompany colors.
 
 ## Simplified business forms
 
-Requests collect an environment, type, description and optional attachments.
-Request types are Automatic, Feature, Bug and Documentation. Questions offer
-General, Technical, Functional and Architecture. Categories are persisted and
-included in the analysis dossier; they do not grant extra technical capabilities.
+Requests and Questions collect an environment, free text and optional attachments.
+Neither form asks the user to classify the need. Analysis infers a presentation
+intent, which can suggest a real destination template after verification. A required
+publication issue type is chosen in the ticket dialog, not before exploration.
 The existing 20-file and 25 MB per-file limits apply. Files can be selected or
 dropped, and removed before submission. A partial upload retains its draft and
 resume behavior.
@@ -37,30 +37,31 @@ follow-up and request-handoff actions remain available below it.
 
 ## Automatic independent analysis
 
-Open **Settings → AI & Agents → Analysis configuration** to enable or disable independent
-counter-analysis for newly created requests and questions. Configure each
-assistant's roles through **Edit**. One authenticated assistant with analyst and
-counter-analyst roles can perform independent sessions; two accounts are not
-required. Model diversity and verifier policy follow the existing orchestration
-settings. Instructions and skills are available through the advanced controls.
+All current analyses use Analyst, independent Counter-analyst and Verifier.
+Configure each connection's eligible roles through **Edit**. One authenticated
+assistant may perform the three roles in fresh contexts when its roles permit,
+with an explicit model-diversity limitation. Global instructions live in General,
+specific instructions on the connection, and active global skills are discovered
+automatically without manual provider assignments.
 
 There is no comparison checkbox in Requests or Questions. The backend ignores
-legacy form flags and freezes the creation policy from the instance setting and
-enabled authenticated counter-analyst configurations. Temporary quota exhaustion,
-busy accounts or model availability do not silently downgrade the chosen intent;
-the normal queue reports waiting or fallback explicitly. If counter-analysis is
-disabled or no authenticated enabled counter role exists at creation, the normal
-single-analysis workflow applies.
+legacy form flags that would remove mandatory independent checks. Temporary quota
+exhaustion, busy accounts or model availability do not silently downgrade review;
+the queue reports waiting or qualified family fallback explicitly. There is no
+fixed business-analysis deadline.
 
 Existing requests keep their recorded policy, sessions and immutable result
 versions. A request derived from a question uses the current creation policy and
-its own selected category. Historical result content is never rewritten.
+its own free-text need. Historical result content is never rewritten.
 
 ## Shared task panel
 
 The desktop task panel stays available across Requests, Questions, Tickets and
 Settings. Smaller viewports use the **Task queue** drawer. Groups show running
-work first, then queued work, clarification pauses, completed work and errors.
+work first, then queued/blocked work and clarification. Completed work is collapsed
+by default; successful Git synchronization does not crowd this panel. One analysis
+card groups the business item's roles and links to its detailed history. Execution
+completion and result completeness are separate, including explicit partial limits.
 Each card shows its title on one line beside a `#` task identifier, followed by
 its state, the actual assistant's official mark/name and a public-role badge.
 The current stage or pause/error reason uses at most two visible lines. Complete

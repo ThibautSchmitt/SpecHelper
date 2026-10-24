@@ -55,8 +55,9 @@ for (const language of ["en", "fr"] as const) {
     await page.getByLabel(t("Name"), { exact: true }).fill("Contract review");
     await page.getByLabel(t("Objective"), { exact: true }).fill("Check contract boundaries.");
     await page.getByLabel(t("Instructions"), { exact: true }).fill("Inspect the existing implementation and cite files.");
-    await page.getByLabel("Claude Code", { exact: true }).check();
-    await page.getByLabel(t("Read project sources"), { exact: true }).check();
+    await expect(page.getByRole("group", { name: t("Compatible assistants"), exact: true })).toHaveCount(0);
+    await expect(page.getByRole("group", { name: t("Required capabilities"), exact: true })).toHaveCount(0);
+    await expect(page.getByLabel(t("Calculated skill metadata"), { exact: true })).toContainText("ChatGPT / Codex, Claude Code");
     await page.getByRole("button", { name: t("Save definition"), exact: true }).click();
     await expect(page.getByRole("status")).toContainText(t("Library definition saved."));
     await expect(page.getByRole("button", { name: t("Delete {name}").replace("{name}", "Contract review"), exact: true })).toBeDisabled();

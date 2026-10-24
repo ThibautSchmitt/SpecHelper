@@ -85,6 +85,7 @@ def test_confirmed_http_creation_and_lost_response_reconciliation(
     try:
         request = Request.objects.create(environment=environment, need="Export contracts")
         version = publish(request.pk, None, bundle)
+        original_ticket = version.artifacts.get(name="ticket.md").content
         connector = TicketConnector.objects.create(
             environment=environment,
             name="Controlled HTTP fixture",
@@ -102,20 +103,46 @@ def test_confirmed_http_creation_and_lost_response_reconciliation(
         )
         assert prepared.status_code == 200
         preview = prepared.json()
+        assert preview["ticket_format"] == "standard"
+        assert preview["body"] != original_ticket
+        assert version.artifacts.get(name="ticket.md").content == original_ticket
         payload = {
             "connector_id": connector.pk,
             "project": "7",
-            "title": preview["title"],
-            "body": preview["body"],
+            "title": preview["title"] + " (reviewed)",
+            "body": " \n" + preview["body"] + "\n\nConfirmed human presentation adjustment.\n  ",
             "fields": {},
             "labels": [],
             "assignees": [],
             "template_id": "",
             "issue_type": "",
             "options_revision": preview["revision"],
+            "draft_id": preview["draft_id"],
+            "draft_revision": preview["draft_revision"],
+            "ticket_format": preview["ticket_format"],
+            "include_business_analysis": False,
+            "include_technical_analysis": False,
+            "include_attachments": False,
+            "attachment_ids": [],
+            "include_goal": False,
             "idempotency_key": str(uuid.uuid4()),
             "confirmed": False,
         }
+        saved = client.put(
+            endpoint + "/publication-draft",
+            data=json.dumps(
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key not in {"idempotency_key", "confirmed"}
+                }
+            ),
+            content_type="application/json",
+        )
+        assert saved.status_code == 200, saved.content
+        reviewed = saved.json()
+        payload["draft_revision"] = reviewed["draft_revision"]
+        assert state["posts"] == 0
         denied = client.post(
             endpoint + "/publications", data=json.dumps(payload), content_type="application/json"
         )
@@ -132,10 +159,15 @@ def test_confirmed_http_creation_and_lost_response_reconciliation(
         assert repeated.status_code == 200
         assert repeated.json()["status"] == "PUBLISHED"
         assert repeated.json()["external_id"] == "901"
+        assert repeated.json()["external_reference"] == reviewed["publication_reference"]
         assert state["posts"] == 1
+        assert state["issues"][0]["title"] == reviewed["title"]
+        assert state["issues"][0]["description"] == reviewed["rendered_body"]
+        assert state["issues"][0]["labels"] == ""
+        assert state["issues"][0]["assignee_ids"] == []
         assert state["authorized"] > 1
         assert len(client.get("/api/tickets").json()["items"]) == 1
-        assert version.artifacts.get(name="ticket.md").content == preview["body"]
+        assert version.artifacts.get(name="ticket.md").content == original_ticket
     finally:
         server.shutdown()
         server.server_close()

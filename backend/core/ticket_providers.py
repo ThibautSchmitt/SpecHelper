@@ -170,7 +170,17 @@ class Provider:
             raise NetworkUncertain("Ticket response contains an invalid external URL") from None
         return value
 
-    def request(self, method, path, *, params=None, data=None, optional=False):
+    def request(
+        self,
+        method,
+        path,
+        *,
+        params=None,
+        data=None,
+        optional=False,
+        files=None,
+        extra_headers=None,
+    ):
         # All paths are locally constructed. Never follow remote URLs or redirects with credentials.
         if not path.startswith("/") or path.startswith("//") or ".." in path.split("/"):
             raise TicketProviderError("Invalid ticket API path")
@@ -185,13 +195,17 @@ class Provider:
                 follow_redirects=False,
                 trust_env=False,
             ) as client:
+                headers = {**self.headers, **(extra_headers or {})}
+                if files:
+                    headers.pop("Content-Type", None)
+                content_arguments = {"files": files, "data": data} if files else {"json": data}
                 with client.stream(
                     method,
                     self.base + path,
-                    headers=self.headers,
+                    headers=headers,
                     auth=self.auth,
                     params=params,
-                    json=data,
+                    **content_arguments,
                 ) as response:
                     self.last_content_range = response.headers.get("Content-Range", "")
                     self.last_status = response.status_code
@@ -253,6 +267,15 @@ class Provider:
             if len(items) < 100:
                 return rows
         raise TicketProviderError("Too many ticket platform results; narrow the destination")
+
+    def attach(self, project, issue, metadata, content):
+        raise TicketProviderError("This connector cannot transfer ticket attachments")
+
+    def attachment_policy(self, project):
+        return {
+            "enabled": self.connector.platform in {"gitlab", "jira", "glpi"},
+            "max_bytes": 25 * 1024 * 1024,
+        }
 
     def options(self, project, template_id="", issue_type=""):
         value = self._options(str(project), template_id, issue_type)
@@ -319,8 +342,7 @@ class Provider:
         self.projects()
 
     def body(self, payload, reference):
-        text = payload["body"]
-        return text if has_reference(text, reference) else text + "\n\n" + reference
+        return render_body(payload, {}, reference)
 
 
 class GitHubProvider(Provider):
@@ -334,7 +356,9 @@ class GitHubProvider(Provider):
             raise TicketProviderError("Configure a dedicated ticket publication credential.")
         credential = decrypt(connector.secret)
         if credential in git_credentials():
-            raise TicketProviderError("Ticket publication must use a credential distinct from Git source access.")
+            raise TicketProviderError(
+                "Ticket publication must use a credential distinct from Git source access."
+            )
         self.headers["Authorization"] = "Bearer " + credential
         self.headers["Accept"] = "application/vnd.github+json"
         self.headers["X-GitHub-Api-Version"] = "2022-11-28"
@@ -560,6 +584,25 @@ class GitLabProvider(Provider):
             )
         )
 
+    def attach(self, project, issue, metadata, content):
+        result = self.request(
+            "POST",
+            self.project(project) + "/uploads",
+            files={"file": (metadata["name"], content, metadata["mime"])},
+        )
+        path = result.get("url", "") if isinstance(result, dict) else ""
+        # Never reflect arbitrary remote Markdown, URLs or instructions into a
+        # ticket. Native GitLab upload links are relative to the current project.
+        if not re.fullmatch(r"/uploads/[a-zA-Z0-9_-]+/[^\s?#()\\]+", path):
+            raise NetworkUncertain("The attachment upload returned an unsafe link")
+        name = metadata["name"].replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+        note = self.request(
+            "POST",
+            self.project(project) + "/issues/" + quote(str(issue), safe="") + "/notes",
+            data={"body": "[" + name + "](" + path + ")"},
+        )
+        return {"id": str(result.get("id", note.get("id", "")))}
+
     def find(self, project, reference):
         for item in self.pages(
             self.project(project) + "/issues",
@@ -675,6 +718,38 @@ class JiraProvider(Provider):
             )
         except (KeyError, TypeError):
             raise NetworkUncertain("Ticket creation response is incomplete") from None
+
+    def attach(self, project, issue, metadata, content):
+        settings = self.request("GET", "/rest/api/3/attachment/meta")
+        if not settings.get("enabled") or metadata["size"] > int(settings.get("uploadLimit", 0)):
+            raise TicketProviderError(
+                "Attachments are disabled or the selected file exceeds the Jira limit"
+            )
+        result = self.request(
+            "POST",
+            "/rest/api/3/issue/" + quote(str(issue), safe="") + "/attachments",
+            files={"file": (metadata["name"], content, metadata["mime"])},
+            extra_headers={"X-Atlassian-Token": "no-check"},
+        )
+        if not isinstance(result, list) or len(result) != 1:
+            raise NetworkUncertain("The attachment response is incomplete")
+        return {"id": positive_id(result[0].get("id"))}
+
+    def attachment_policy(self, project):
+        settings = self.request("GET", "/rest/api/3/attachment/meta")
+        permissions = self.request(
+            "GET",
+            "/rest/api/3/mypermissions",
+            params={"projectId": project, "permissions": "CREATE_ATTACHMENTS"},
+        )
+        allowed = (
+            permissions.get("permissions", {}).get("CREATE_ATTACHMENTS", {}).get("havePermission")
+            is True
+        )
+        return {
+            "enabled": settings.get("enabled") is True and allowed,
+            "max_bytes": min(25 * 1024 * 1024, int(settings.get("uploadLimit", 0))),
+        }
 
     def create(self, project, payload, reference):
         options = self.validate(project, payload)
@@ -965,6 +1040,36 @@ class GLPIProvider(Provider):
             ):
                 return self.external(item["id"])
         return None
+
+    def attach(self, project, issue, metadata, content):
+        manifest = {
+            "input": {
+                "name": metadata["name"],
+                "_filename": [metadata["name"]],
+                "entities_id": int(project),
+            }
+        }
+        result = self.request(
+            "POST",
+            "/Document",
+            data={"uploadManifest": json.dumps(manifest)},
+            files={"filename[0]": (metadata["name"], content, metadata["mime"])},
+        )
+        identifier = positive_id(result.get("id"))
+        linked = self.request(
+            "POST",
+            "/Document_Item",
+            data={
+                "input": {
+                    "documents_id": int(identifier),
+                    "itemtype": "Ticket",
+                    "items_id": int(issue),
+                }
+            },
+        )
+        if not isinstance(linked, dict) or not linked.get("id"):
+            raise NetworkUncertain("The uploaded document link could not be confirmed")
+        return {"id": identifier}
 
 
 def provider_for(connector):

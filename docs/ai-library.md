@@ -1,27 +1,24 @@
 # AI connections, models and the shared library
 
-Open **Settings → AI & Agents**. Five sections separate connections, models,
-public roles/orchestration, agent definitions and skill definitions.
-
-A connection selects an authenticated provider identity, model, eligible public
-roles and execution preferences. An agent defines a mission and required skills.
-A skill defines a reusable declarative procedure. Two connections do not establish
-independent subscription quotas; an agent never introduces a new execution privilege.
+Open **Settings → AI & Agents** for connections, models, role eligibility and the
+global skill library. Mandatory Analyst, Counter-analyst and Verifier missions come
+from the orchestrator. Configure common instructions in General and specific
+instructions on a connection. Neither layer grants extra execution privileges.
 
 ## Portable definitions and versions
 
-Create an agent or skill with an identifier, display name, objective, instructions,
-expected checks, active status, allowed providers and required capabilities. An empty provider
-selection allows both supported adapters. Capabilities describe prerequisites for
-existing read-only operations; they never grant permissions. Agents reference
-active skills from the shared library without copying their contents.
+Create a global skill with an identifier, display name, objective, instructions,
+expected checks and active status. New skills are global across both supported
+adapters; authoring does not ask for provider assignments or permission checkboxes.
+Calculated capability metadata describes prerequisites for existing read-only
+operations and never grants permissions. Every compatible connection discovers
+active skills automatically. Full contents load only when useful.
 
 Edits create immutable numbered revisions. Expected-version checks reject stale
 submissions. The version viewer records action, timestamp and pseudonymous editing
 session. Shared-password access does not identify the individual human behind it.
 
-Disable a definition before deleting it. Remove references from agents and explicit
-environment selections first. Required workflow agents cannot be deleted. Deletion
+Disable a skill before deleting it. Historical associations do not block current global-skill deletion. Deletion
 archives the entry while retaining revisions and historical analysis snapshots.
 Identifiers cannot be reused for unrelated definitions.
 
@@ -39,15 +36,14 @@ of an analysis that has already started.
 
 ## Guided creation
 
-Choose **Generate an agent** or **Generate a skill** from the corresponding library
-section. Describe the mission in your own words: for example, reviewing dependency
+Choose **Generate a skill** from the global library. Describe the mission in your own words: for example, reviewing dependency
 boundaries between services. The assistant asks targeted clarification questions
 and proposes a declarative configuration; it does not require every field before
 the conversation starts.
 
 The discussion appears beside the editable definition and validation results.
-Review the name, objective, instructions, expected checks, required skills and
-supported providers. The assistant can recommend an existing definition from the
+Review the name, objective, instructions, expected checks and calculated metadata.
+The assistant can recommend an existing definition from the
 configured library when it fits the mission. No external extension registry is
 searched or installed.
 
@@ -60,36 +56,30 @@ The test result is evidence to review, not an automatic approval.
 
 **Activate** explicitly validates and publishes a versioned library definition.
 Generation and testing cannot invoke that approval on their own. **Cancel** leaves
-the current library unchanged. Choose the allowed environments and compatible
-connections after activation, using the existing preview controls.
+the current library unchanged. Active compatible skills become discoverable automatically. Inspect applicability without assigning environments or roles.
 
-Provider compatibility is an explicit declaration checked against the selected
-adapter and required skills. A provider-specific procedure must keep that
-limitation or be revised to a portable common procedure. Changing the provider
-label does not prove that a feature works on another provider.
+Current skill definitions use the common read-only tool surface. Provider-specific
+operations do not become available merely because a skill names them. Historical
+compatibility declarations remain in recorded revisions; restoring or saving a
+current skill uses the global portable contract and still requires review.
 
-## Environment selection and preview
+## Discovery, applicability and historical context
 
-Under **Settings → Environments**, open **Agents and skills for this environment**.
-Inherit active definitions or select explicit references. Requirement, code and
-writer agents remain necessary. Custom agents supplement the workflow with mission
-instructions; they do not add executable hooks.
+The lightweight registry provides name, description, version, compatibility and
+missing capabilities. Each assistant selects useful procedures and reads exact
+read-only versioned files under `/skills` when needed. Discoverability does not
+mean a procedure was loaded. Runtime file-read observations record actual loaded
+versions and hashes; unavailable audit remains explicitly unknown.
 
-Select an AI connection and preview the unsaved selection. The preview includes
-selected versions, provider adaptation, model, connection instructions and
-public-role instructions. Incompatible providers, missing capabilities, unavailable
-required skills and conflicting connection overrides produce explicit diagnostics.
-The interface requires a compatible preview before saving; the backend validates
-references and revision independently. Incompatible execution fails rather than
-selecting a more permissive tool.
+Missing database/source/Web capabilities do not grant
+new tools. They mark a procedure non-applicable while ordinary system analysis can
+continue with the available tools. A new step observes current skill activation;
+a step already running retains its frozen contents.
 
-An enqueued analysis freezes full library definitions alongside its environment
-context. Actual connection instructions/skill overrides are retained per working
-session. Later edits, deactivation and deletion do not rewrite those instructions
-or published artifacts. Legacy analyses cannot retroactively recover configuration
-that was never stored.
-The historical result's frozen-context panel shows retained agent/skill versions
-and their original instructions without consulting the current library.
+The job freezes global instructions and source/environment snapshots. Connection
+instructions are captured when assigned; edits cannot silently rewrite previously
+used instructions. Archived agent definitions and old associations remain available
+for historical audit. They no longer configure current system roles.
 
 ## Models and access evidence
 
@@ -98,6 +88,7 @@ connection where the adapter exposes it. Codex uses the installed app-server's
 bounded model-list protocol without starting inference. Claude currently has no
 validated non-inference discovery here: add documented identifiers explicitly;
 no model list is invented.
+The detected catalogue is shown first; manual additions remain behind a secondary action.
 
 | Status | Evidence for the selected identity |
 | --- | --- |
@@ -120,7 +111,7 @@ share capacity; absent observations remain unknown.
 ## Roles, diversity and history
 
 A connection may simultaneously allow Analyst, Counter-analyst and Verifier. Each
-role uses a separate working session. Verification is optional. With two eligible
+role uses a separate working session. Independent verification is mandatory. With two eligible
 families, orchestration prefers A → B → A; with three it prefers A → B → C.
 Explicit model-family metadata takes precedence over provider defaults. Display
 names, separate sessions and accounts do not establish different families. Declare

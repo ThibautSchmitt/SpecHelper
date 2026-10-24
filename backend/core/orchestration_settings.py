@@ -2,12 +2,14 @@
 
 from typing import Literal
 
+from django.db import transaction
 from ninja import Router, Schema
 from ninja.errors import HttpError
 from pydantic import ConfigDict, Field, field_validator
 
 from .catalogue import ensure_catalogue
 from .models import AgentProfile, InstanceSettings, SkillDefinition
+from .official_sources import WEB_POLICY
 
 PUBLIC_ROLES = ("analyst", "counter_analyst", "verifier")
 REQUIRED_AGENTS = {"requirement", "code", "writer"}
@@ -60,6 +62,28 @@ class LegacyOrchestrationIn(OrchestrationIn):
     max_calls: int = Field(default=10, ge=2, le=20)
 
 
+class GlobalOrchestrationIn(Schema):
+    """Current settings support partial edits and no assignment or role-text layer."""
+
+    model_config = ConfigDict(extra="forbid")
+    global_instructions: str = Field(default=WEB_POLICY, max_length=24000)
+    allow_same_family_fallback: bool = True
+    max_calls: int = Field(default=20, ge=6, le=100)
+    tool_timeout_seconds: int = Field(default=300, ge=30, le=600)
+    allow_confrontation: bool = True
+    verifier_enabled: bool = True
+
+    @field_validator("global_instructions")
+    @classmethod
+    def safe_global_instructions(cls, value):
+        from .environment_context import reject_credentials
+        from .library import validate_instruction_policy
+
+        reject_credentials(value)
+        validate_instruction_policy(value)
+        return value.strip()
+
+
 def validate_lists(value):
     ensure_catalogue()
     if len(set(value.active_internal_agents)) != len(value.active_internal_agents) or len(
@@ -80,10 +104,37 @@ def validate_lists(value):
         )
 
 
-def get_config(protocol="2.3"):
+def get_config(protocol="2.4"):
     base = defaults()
     settings, _ = InstanceSettings.objects.get_or_create(pk=1)
     saved = settings.orchestration or {}
+    if protocol == "2.4":
+        current = GlobalOrchestrationIn.model_validate(
+            {
+                key: value
+                for key, value in saved.items()
+                if key in GlobalOrchestrationIn.model_fields
+            }
+            | {
+                "allow_confrontation": True,
+                "verifier_enabled": True,
+                "max_calls": max(6, saved.get("max_calls", 20)),
+            }
+        ).model_dump()
+        current.update(
+            reliability_protocol="2.4",
+            global_instruction_version=saved.get("global_instruction_version", 1),
+            migration_review=saved.get("v24_migration_review", []),
+            # Internal compatibility fields are fixed missions, never editable associations.
+            active_internal_agents=sorted(REQUIRED_AGENTS | {"attachment", "reviewer"}),
+            default_skills=[],
+            role_instructions={role: "" for role in PUBLIC_ROLES},
+            timeout_seconds=current["tool_timeout_seconds"],
+        )
+        return current
+    # A newer administrative save must not invalidate an older persisted job's
+    # budget schema. Migration retains the exact earlier configurable layer.
+    saved = saved.get("v24_legacy_configuration", saved)
     merged = {**base, **{key: value for key, value in saved.items() if key in base}}
     merged["role_instructions"] = {
         **base["role_instructions"],
@@ -96,6 +147,8 @@ def get_config(protocol="2.3"):
     merged["verifier_enabled"] = True if protocol == "2.3" else saved.get("verifier_enabled", True)
     if protocol == "2.3":
         merged["max_calls"] = max(6, merged["max_calls"])
+    merged["max_calls"] = min(20, merged["max_calls"])
+    merged["timeout_seconds"] = min(285, merged["timeout_seconds"])
     schema = OrchestrationIn if protocol == "2.3" else LegacyOrchestrationIn
     config = schema.model_validate(merged).model_dump()
     config["reliability_protocol"] = protocol
@@ -104,6 +157,18 @@ def get_config(protocol="2.3"):
 
 def public_config():
     config = get_config()
+    if config["reliability_protocol"] == "2.4":
+        return {
+            key: value
+            for key, value in config.items()
+            if key
+            not in {
+                "active_internal_agents",
+                "default_skills",
+                "role_instructions",
+                "timeout_seconds",
+            }
+        }
     config["available_agents"] = [
         {
             "slug": item.slug,
@@ -126,21 +191,22 @@ def read_settings(request):
 
 
 @router.put("/orchestration-settings")
-def update_settings(request, payload: OrchestrationIn):
+@transaction.atomic
+def update_settings(request, payload: GlobalOrchestrationIn):
     if payload.allow_confrontation is False or not payload.verifier_enabled:
         raise HttpError(
             422, "Independent counter-analysis and verification are required for new analyses."
         )
-    validate_lists(payload)
-    values = payload.model_dump()
-    values["role_instructions"] = {
-        role: payload.role_instructions.get(role, "") for role in PUBLIC_ROLES
-    }
-    allow_confrontation = values.pop("allow_confrontation")
-    changes = {"orchestration": values}
-    if allow_confrontation is not None:
-        changes["allow_confrontation"] = allow_confrontation
-    InstanceSettings.objects.update_or_create(pk=1, defaults=changes)
+    settings, _ = InstanceSettings.objects.select_for_update().get_or_create(pk=1)
+    values = settings.orchestration.copy()
+    incoming = payload.model_dump(exclude_unset=True)
+    if "global_instructions" in incoming and incoming["global_instructions"] != values.get(
+        "global_instructions", ""
+    ):
+        values["global_instruction_version"] = values.get("global_instruction_version", 1) + 1
+    values.update(incoming)
+    settings.orchestration = values
+    settings.save(update_fields=["orchestration"])
     return public_config()
 
 
@@ -148,13 +214,5 @@ def validate_connection_overrides(roles=None, skills=None):
     if roles is not None and (len(set(roles)) != len(roles) or not set(roles) <= set(PUBLIC_ROLES)):
         raise HttpError(422, "Select each supported AI role only once.")
     if skills is not None:
-        ensure_catalogue()
-        known = set(
-            SkillDefinition.objects.filter(enabled=True, deleted=False).values_list(
-                "slug", flat=True
-            )
-        )
-        if not set(skills) <= known or any(
-            type(enabled) is not bool for enabled in skills.values()
-        ):
-            raise HttpError(422, "Select known skills with explicit enabled or disabled overrides.")
+        if skills:
+            raise HttpError(422, "Skills are global and cannot be assigned to an AI connection.")

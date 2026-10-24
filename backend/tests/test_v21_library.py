@@ -76,7 +76,7 @@ def test_safe_readonly_guardrails_and_expected_checks_are_preserved(client):
     assert saved.json()["enabled"] is False
 
 
-def test_expected_checks_reach_provider_instructions_from_frozen_definition(client):
+def test_expected_checks_are_readable_from_lazy_frozen_skill_files(client, tmp_path):
     from core.library import effective, snapshot
     from core.orchestration_settings import get_config
 
@@ -87,8 +87,15 @@ def test_expected_checks_reach_provider_instructions_from_frozen_definition(clie
     config["default_skills"] = [payload["slug"]]
     compiled = effective(frozen, None, ["code"], config)
     assert compiled["compatible"] is True
-    for expected in payload["expected_checks"]:
-        assert expected in compiled["instructions"]
+    from runtime.global_skills import SkillResources
+
+    with SkillResources(compiled["skill_snapshot"]["definitions"], tmp_path, "codex") as files:
+        source = next(
+            path for identifier, path, _ in files.resources if identifier == payload["slug"] + "@1"
+        )
+        for expected in payload["expected_checks"]:
+            assert expected not in compiled["instructions"]
+            assert expected in source.read_text()
 
 
 @pytest.mark.parametrize(
@@ -186,13 +193,27 @@ def test_restore_creates_new_disabled_revision_without_rewriting_existing_snapsh
     assert versions[0].definition["instructions"] == first["instructions"]
 
 
-def test_agent_compatibility_cannot_claim_a_provider_missing_from_required_skill(client):
-    assert send(client, "/api/library/skill", declaration(enabled=True, compatibility=["claude"])).status_code == 200
-    agent = declaration(slug="dependency-agent", skills=["interservice-review"], compatibility=["codex"])
+def test_new_global_skill_has_no_manual_provider_assignment(client):
+    assert (
+        send(
+            client, "/api/library/skill", declaration(enabled=True, compatibility=["claude"])
+        ).status_code
+        == 200
+    )
+    agent = declaration(
+        slug="dependency-agent", skills=["interservice-review"], compatibility=["codex"]
+    )
     response = send(client, "/api/library/validate", {"kind": "agent", "definition": agent})
     assert response.status_code == 200, response.content
-    assert response.json()["valid"] is False
+    assert response.json()["valid"] is True
+    assert SkillDefinition.objects.get(pk="interservice-review").compatibility == []
     assert not AgentProfile.objects.filter(pk=agent["slug"]).exists()
+
+    # Historical agent editing still validates restrictions retained in old data;
+    # normalizing a newly authored global skill does not rewrite that audit data.
+    SkillDefinition.objects.filter(pk="interservice-review").update(compatibility=["claude"])
+    legacy = send(client, "/api/library/validate", {"kind": "agent", "definition": agent})
+    assert legacy.json()["valid"] is False
 
 
 @pytest.mark.parametrize(
@@ -216,18 +237,24 @@ def test_restore_revalidates_current_skill_references_and_preserves_previous_rev
         slug="dependency-agent", skills=["interservice-review"], enabled=True
     )
     assert send(client, "/api/library/agent", original_agent).status_code == 200
-    assert send(
-        client,
-        "/api/library/agent/dependency-agent",
-        {**original_agent, "expected_version": 1, "skills": [], "enabled": False},
-        method="put",
-    ).status_code == 200
-    assert send(
-        client,
-        "/api/library/skill/interservice-review",
-        declaration(expected_version=1, enabled=False),
-        method="put",
-    ).status_code == 200
+    assert (
+        send(
+            client,
+            "/api/library/agent/dependency-agent",
+            {**original_agent, "expected_version": 1, "skills": [], "enabled": False},
+            method="put",
+        ).status_code
+        == 200
+    )
+    assert (
+        send(
+            client,
+            "/api/library/skill/interservice-review",
+            declaration(expected_version=1, enabled=False),
+            method="put",
+        ).status_code
+        == 200
+    )
     restore = send(
         client,
         "/api/library/agent/dependency-agent/restore",
@@ -240,7 +267,9 @@ def test_restore_revalidates_current_skill_references_and_preserves_previous_rev
     assert LibraryRevision.objects.filter(kind="agent", slug=agent.slug).count() == 2
 
 
-def test_configured_credentials_rejected_in_expected_checks_without_echoing_values(client, monkeypatch):
+def test_configured_credentials_rejected_in_expected_checks_without_echoing_values(
+    client, monkeypatch
+):
     synthetic = "synthetic-secret-value-that-must-never-be-returned"
     monkeypatch.setattr("core.sensitive_data.configured_secrets", lambda: [synthetic])
     response = send(
@@ -329,15 +358,21 @@ def test_assistant_migration_preserves_existing_library_and_frozen_analysis_valu
         for name, rows in originals.items():
             model = current.get_model("core", name)
             primary_key = model._meta.pk.attname
-            assert list(
-                model.objects.filter(pk__in=[row[primary_key] for row in rows])
-                .order_by("pk")
-                .values(*rows[0])
-            ) == rows
+            assert (
+                list(
+                    model.objects.filter(pk__in=[row[primary_key] for row in rows])
+                    .order_by("pk")
+                    .values(*rows[0])
+                )
+                == rows
+            )
         restored_agent = current.get_model("core", "AgentProfile").objects.get(pk=agent.pk)
         assert restored_agent.expected_checks == []
         assert list(restored_agent.skills.values_list("pk", flat=True)) == [skill.pk]
-        assert current.get_model("core", "SkillDefinition").objects.get(pk=skill.pk).expected_checks == []
+        assert (
+            current.get_model("core", "SkillDefinition").objects.get(pk=skill.pk).expected_checks
+            == []
+        )
         navigation = current.get_model("core", "SkillDefinition").objects.get(
             pk="effective-navigation"
         )

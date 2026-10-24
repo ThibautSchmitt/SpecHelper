@@ -2,7 +2,8 @@
 
 from uuid import UUID
 
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Q, Subquery
+from django.utils import timezone
 
 from .models import AIConnection, AnalysisRun, Environment, Job, PublishedTicket, Request
 
@@ -100,12 +101,54 @@ def execution_state(job, run):
     return "previous" if assignments_for(job, run) else "unassigned"
 
 
+def result_state(job, run):
+    """A completed process is not evidence of a complete independently checked result."""
+    if job.kind != "analysis":
+        return {"result_status": None, "result_limits": []}
+    evidence = run.orchestration.get("evidence", {}) if run else {}
+    limits = list(evidence.get("limitations", []))
+    limits.extend(
+        claim.get("verification_notes", claim.get("statement", ""))
+        for claim in evidence.get("claims", [])
+        if claim.get("material", True) and claim.get("status") != "supported"
+    )
+    roles = {
+        step.get("public_role")
+        for step in (run.steps if run else [])
+        if step.get("status") == "DONE"
+    }
+    if job.status in {"RUNNING", "QUEUED"} or (run and run.status == "NEEDS_CLARIFICATION"):
+        state = "pending"
+    elif not run or run.status in {"ERROR", "CANCELLED"}:
+        state = "unusable"
+    elif run.status == "PARTIAL" or evidence.get("blocking"):
+        state = "partial"
+    elif (
+        run.request.analysis_protocol in {"2.3", "2.4"}
+        and not {"analyst", "counter_analyst", "verifier"} <= roles
+    ):
+        state = "partial"
+        limits.append("Independent analysis, counter-analysis and verification are required.")
+    else:
+        state = "complete" if run.status in {"READY", "DONE"} else "pending"
+    return {
+        "result_status": state,
+        "result_limits": list(dict.fromkeys(value for value in limits if value))[:30],
+    }
+
+
 def snapshot():
-    jobs = list(Job.objects.filter(status__in=["RUNNING", "QUEUED"]).order_by("created_at", "id"))
+    latest_analysis = Job.objects.filter(kind="analysis", target=OuterRef("target")).order_by(
+        "-created_at", "-id"
+    )
+    visible = Job.objects.filter(
+        ~Q(kind="analysis") | Q(pk=Subquery(latest_analysis.values("pk")[:1]))
+    )
+    jobs = list(visible.filter(status__in=["RUNNING", "QUEUED"]).order_by("created_at", "id"))
     jobs += list(
-        Job.objects.exclude(status__in=["RUNNING", "QUEUED"]).order_by(
-            "-finished_at", "-created_at", "-id"
-        )[:RECENT_LIMIT]
+        visible.exclude(status__in=["RUNNING", "QUEUED"])
+        .exclude(kind="sync", status="DONE")
+        .order_by("-finished_at", "-created_at", "-id")[:RECENT_LIMIT]
     )
     # Clarification is not a scheduler state: retain its latest completed job even
     # when it falls outside the bounded terminal history, without creating work.
@@ -157,6 +200,16 @@ def snapshot():
             and job.pk in paused_ids
         )
         queue_state = "PAUSED" if paused else job.status
+        incremental = bool(item and item.analysis_protocol == "2.4")
+        if incremental and job.status == "QUEUED":
+            queue_state = "WAITING_AI"
+        public_role = (
+            (current_assignment(job, run) or {}).get("public_role")
+            or job.payload.get("current_role")
+            or "analyst"
+        )
+        elapsed_start = run.started_at if run and run.started_at else job.started_at
+        elapsed_end = (run.finished_at if run else None) or job.finished_at or timezone.now()
         progress = item.progress[-1].get("label", "") if item and item.progress else ""
         stage = (progress or "Analysis in progress") if job.status == "RUNNING" else ""
         if paused:
@@ -188,12 +241,28 @@ def snapshot():
             provider_names = list(dict.fromkeys(a["agent"] for a in assignments if a["agent"]))
         values.append(
             {
+                **result_state(job, run),
                 "id": job.pk,
                 "kind": job.kind,
                 "workflow": item.workflow if item else None,
                 "status": job.status,
                 "queue_state": queue_state,
                 "assignment_state": assignment_state,
+                "stage_number": {"analyst": 1, "counter_analyst": 2, "verifier": 3}.get(
+                    public_role, 1
+                )
+                if incremental
+                else None,
+                "stage_count": 3 if incremental else None,
+                "elapsed_seconds": max(0, int((elapsed_end - elapsed_start).total_seconds()))
+                if elapsed_start
+                else 0,
+                "can_cancel": bool(incremental and job.status in {"QUEUED", "RUNNING"}),
+                "can_retry": bool(
+                    incremental
+                    and job.status in {"ERROR", "CANCELLED"}
+                    and not job.payload.get("connection_ids")
+                ),
                 "stage": stage,
                 "pause_reason": "A business answer is needed." if paused else "",
                 "executor_name": "Git synchronization" if job.kind == "sync" else None,
@@ -319,7 +388,7 @@ def snapshot():
     ordered = sorted(
         values,
         key=lambda value: (
-            {"RUNNING": 0, "QUEUED": 1, "PAUSED": 2, "DONE": 3, "ERROR": 3}.get(
+            {"RUNNING": 0, "QUEUED": 1, "WAITING_AI": 1, "PAUSED": 2, "DONE": 3, "ERROR": 3}.get(
                 value["queue_state"], 5
             ),
             value["queue_position"] or 0
@@ -327,8 +396,14 @@ def snapshot():
             else -(value["finished_at"] or value["created_at"]).timestamp(),
         ),
     )
-    active = [value for value in ordered if value["queue_state"] in {"RUNNING", "QUEUED", "PAUSED"}]
+    active = [
+        value
+        for value in ordered
+        if value["queue_state"] in {"RUNNING", "QUEUED", "WAITING_AI", "PAUSED"}
+    ]
     recent = [
-        value for value in ordered if value["queue_state"] not in {"RUNNING", "QUEUED", "PAUSED"}
+        value
+        for value in ordered
+        if value["queue_state"] not in {"RUNNING", "QUEUED", "WAITING_AI", "PAUSED"}
     ]
     return active + recent[:RECENT_LIMIT]

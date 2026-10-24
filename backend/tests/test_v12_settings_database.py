@@ -29,7 +29,7 @@ def test_legacy_policy_cannot_disable_mandatory_review_for_new_requests(client, 
     )
     assert created.status_code == 201
     assert created.json()["confrontation"] is True
-    assert created.json()["analysis_protocol"] == "2.3"
+    assert created.json()["analysis_protocol"] == "2.4"
     assert Request.objects.count() == 2
     queued = enqueue_analysis(original.json()["id"])
     assert queued.confrontation is True and queued.status == "QUEUED"

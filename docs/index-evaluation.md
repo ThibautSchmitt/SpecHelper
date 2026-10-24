@@ -78,13 +78,27 @@ the whole paired run. Inference is bounded to 18 calls, 45 seconds per call and 
 they do not become successful comparison scores. Repeated launches are separate
 runs and may consume additional subscription quota.
 
-On 2026-10-24, Codex was connected but its official session window reported 100%
-used and `ordinary_usage_allowed=false`; Claude was disconnected. The native
-comparison therefore stopped before inference. **Analysis precision, material
-false claims, critical fact omissions, detected counterexamples, ambiguous
-decisions, inference duration and actual input/output tokens remain unmeasured.**
-Cost remains null whenever the provider does not return a measured cost; token
-counts are never inferred from characters or subscription price.
+On 2026-10-24, the initial session quota block was followed by a successful
+operator-authorized run after reset. The eighteen real calls completed six analyses
+with `gpt-6-luna`. The [native observation](../scripts/evaluation/native-observation.json)
+contains exact per-project usage, durations and review limits. Source mode used
+387,164 input / 17,745 output tokens over 279.71 seconds; MCP-context mode used
+412,537 input / 16,317 output tokens over 269.08 seconds. Input totals include
+provider-reported cached tokens. Monetary cost remains null because no measured
+billing was returned.
+
+All nineteen final material statements were reviewed against the actual frozen
+sources, with no materially false conditional rule found and no missing critical
+behavioral fact in the closed corpus. This was an accountable agent-assisted audit,
+not independent human certification. Across eighteen reports, strict source checking
+found 26 invalid citations out of 87; six invalid citations remained in the two
+final Java reports. The defects involve exact excerpts and ranges, not wrong project
+SHAs. No generated proof was repaired. The native quality gate therefore failed,
+although the measurement run completed. See [acceptance evidence](acceptance-v2.3.md).
+
+One ordered trial with identical retrieved source bytes and differing cache usage
+does not establish that indexing saves time/tokens or preserves quality on a
+representative workload. The production index remains disabled.
 
 To score a completed run, supply its `responses` array to `compare --responses`.
 Each response carries `case_id`, `mode`, `git_sha`, structured `output`, role usage,
@@ -93,7 +107,10 @@ elapsed time and actual tokens. Add a semantic `review` with reviewer, method,
 The corpus supplies critical facts, forbidden universal conclusions and expected
 counterexamples. Literal keyword/source checks are reported separately and cannot
 substitute for semantic review. Review critical omissions and business decisions
-against the actual report, not merely literal matches.
+against the actual report, not merely literal matches. Record explicit per-fact,
+per-counterexample and business-decision reviews. `audit_native_sources` separately
+checks every role citation against the actual frozen Git files. A complete measurement
+set never overrides a failed exact-source quality gate.
 
 ## Activation decision
 

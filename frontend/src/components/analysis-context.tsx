@@ -16,21 +16,24 @@ export function AnalysisContext({ requestId, runNumber, snapshot, usage = [], wo
   const { t, dateLocale } = useI18n();
   if (!snapshot?.schema_version) return <p className="mt-3 text-xs muted">{t("Environment context was not recorded for this historical analysis.")}</p>;
   const resources = snapshot.resources || [];
+  const factual = snapshot.analysis_protocol === "2.4" || snapshot.instructions?.mode === "factual";
   return <details className="mt-3 min-w-0 rounded-lg border p-3">
     <summary className="cursor-pointer text-sm font-medium">{t("Frozen analysis context")}</summary>
     <p className="mt-2 text-xs muted">{t("These document versions and instructions were frozen when this analysis started. Current environment changes do not affect them.")}</p>
     {snapshot.environment && <p className="mt-2 text-xs">{snapshot.environment.name} · {t("Context revision {number}", { number: snapshot.environment.revision })}</p>}
+    {!!snapshot.official_references?.length && <section className="mt-3 text-sm"><h4 className="font-medium">{t("Official reference sources")}</h4><ul className="mt-2 space-y-2">{snapshot.official_references.map((reference, index) => <li key={index} className="break-words"><a className="text-primary underline" href={reference.url} target="_blank" rel="noreferrer noopener">{reference.url}</a>{reference.note && <p className="mt-1 muted">{reference.note}</p>}</li>)}</ul></section>}
     {snapshot.instructions && <details className="mt-3 text-sm">
-      <summary className="cursor-pointer">{t("Environment instructions")} · {snapshot.instructions.enabled ? t("Enabled") : t("Disabled")}</summary>
+      <summary className="cursor-pointer">{t(factual ? "Business terminology and factual context" : "Environment instructions")} · {snapshot.instructions.enabled ? t("Enabled") : t("Disabled")}</summary>
       <p className="mt-2 whitespace-pre-wrap break-words">{snapshot.instructions.text || t("No environment instructions.")}</p>
       <p className="mt-2 break-all text-xs muted">SHA-256: <code>{snapshot.instructions.sha256}</code></p>
     </details>}
-    {snapshot.library && <section className="mt-4 text-sm">
+    {snapshot.library && factual && <p className="mt-3 text-xs muted">{t("Skills are discovered globally for each step. Actual loads are recorded in assignment history.")}</p>}
+    {snapshot.library && !factual && <section className="mt-4 text-sm">
       <h4 className="font-medium">{t("Frozen agent and skill versions")}</h4>
       <p className="mt-1 text-xs muted">{t("These definitions were available to this analysis. Later library changes do not replace them.")}</p>
       {(["agents", "skills"] as const).map(kind => <div key={kind} className="mt-3">
         <h5 className="text-xs font-medium">{t(kind === "agents" ? "Agents" : "Skills")}</h5>
-        <ul className="mt-2 space-y-2">{snapshot.library![kind].map(item => <li key={`${item.slug}:${item.version}`}>
+        <ul className="mt-2 space-y-2">{(snapshot.library![kind] || []).map(item => <li key={`${item.slug}:${item.version}`}>
           <details className="rounded border p-2"><summary className="cursor-pointer break-words">{item.name} · v{item.version}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs">{item.instructions}</p></details>
         </li>)}</ul>
       </div>)}

@@ -20,7 +20,7 @@ from .models import (
     TicketConnector,
 )
 from .secrets import decrypt, encrypt
-from .ticket_providers import provider_for
+from .ticket_providers import provider_for, render_body
 from .ticket_publication import (
     accessible_projects,
     connector_dict,
@@ -56,10 +56,16 @@ class PreviewIn(StrictSchema):
     project: str = Field(min_length=1, max_length=255)
     template_id: str = Field(default="", max_length=500)
     issue_type: str = Field(default="", max_length=255)
+    ticket_format: Literal["", "project", "standard"] = ""
+    include_business_analysis: bool = False
+    include_technical_analysis: bool = False
+    include_attachments: bool = False
+    attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    include_goal: bool = False
 
 
-class PublicationIn(PreviewIn):
-    title: str = Field(min_length=1, max_length=500)
+class PublicationDraftIn(PreviewIn):
+    title: str = Field(default="", max_length=500)
     body: str = Field(default="", max_length=200000)
     fields: dict[str, str | list[str] | int | float | bool | None] = Field(
         default_factory=dict, max_length=100
@@ -67,15 +73,8 @@ class PublicationIn(PreviewIn):
     labels: list[str] = Field(default_factory=list, max_length=100)
     assignees: list[str] = Field(default_factory=list, max_length=100)
     options_revision: str = Field(min_length=1, max_length=128)
-    idempotency_key: UUID
-    confirmed: Literal[True]
-
-    @field_validator("confirmed", mode="before")
-    @classmethod
-    def require_confirmation(cls, value):
-        if value is not True:
-            raise ValueError("Explicit human confirmation is required")
-        return value
+    draft_id: UUID | None = None
+    draft_revision: int | None = Field(default=None, ge=1)
 
     @field_validator("fields")
     @classmethod
@@ -85,6 +84,19 @@ class PublicationIn(PreviewIn):
         if any(isinstance(value, float) and not math.isfinite(value) for value in fields.values()):
             raise ValueError("Ticket field values must be finite numbers")
         return fields
+
+
+class PublicationIn(PublicationDraftIn):
+    title: str = Field(min_length=1, max_length=500)
+    idempotency_key: UUID
+    confirmed: Literal[True]
+
+    @field_validator("confirmed", mode="before")
+    @classmethod
+    def require_confirmation(cls, value):
+        if value is not True:
+            raise ValueError("Explicit human confirmation is required")
+        return value
 
 
 def connector_values(payload, existing=None):
@@ -110,7 +122,9 @@ def connector_values(payload, existing=None):
     if not candidate:
         raise HttpError(422, "Configure a dedicated ticket publication credential.")
     if candidate in git_credentials():
-        raise HttpError(422, "Ticket publication must use a credential distinct from Git source access.")
+        raise HttpError(
+            422, "Ticket publication must use a credential distinct from Git source access."
+        )
     if existing and payload.platform != existing.platform:
         raise HttpError(422, "Create a new connector to change its platform.")
     if existing and values["base_url"] != existing.base_url and existing.published_tickets.exists():
@@ -259,7 +273,107 @@ def publication_preview(request, request_id: UUID, number: int, payload: Preview
         ResultVersion, request_id=request_id, number=number, request__workflow="request"
     )
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
-    return preview(version, connector, payload.project, payload.template_id, payload.issue_type)
+    return preview(
+        version,
+        connector,
+        payload.project,
+        payload.template_id,
+        payload.issue_type,
+        payload.model_dump(mode="json"),
+    )
+
+
+@router.get("/requests/{request_id}/versions/{number}/publication-draft")
+def publication_draft(request, request_id: UUID, number: int, connector_id: int, project: str):
+    from .models import TicketPublicationDraft
+
+    version = get_object_or_404(
+        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+    )
+    connector = get_object_or_404(TicketConnector, pk=connector_id)
+    draft = TicketPublicationDraft.objects.filter(
+        version=version, connector=connector, project=project
+    ).first()
+    presentation = (
+        draft.presentation
+        if draft
+        else PreviewIn(connector_id=connector_id, project=project).model_dump(mode="json")
+    )
+    return preview(
+        version,
+        connector,
+        project,
+        presentation.get("template_id", ""),
+        presentation.get("issue_type", ""),
+        presentation,
+        restore=True,
+    )
+
+
+@router.put("/requests/{request_id}/versions/{number}/publication-draft")
+def update_publication_draft(request, request_id: UUID, number: int, payload: PublicationDraftIn):
+    from .models import TicketPublicationDraft
+    from .ticket_presentation import (
+        PRESENTATION_KEYS,
+        draft_metadata,
+        publication_reference,
+        save_draft,
+    )
+
+    version = get_object_or_404(
+        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+    )
+    connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
+    previous = TicketPublicationDraft.objects.filter(
+        version=version, connector=connector, project=payload.project
+    ).first()
+    if payload.draft_revision is not None and (
+        previous is None or previous.revision != payload.draft_revision
+    ):
+        raise HttpError(409, "The ticket draft changed. Reload it before saving your edits.")
+    values = payload.model_dump(mode="json")
+    result = preview(
+        version,
+        connector,
+        payload.project,
+        payload.template_id,
+        payload.issue_type,
+        values,
+        restore=True,
+    )
+    if values["options_revision"] != result["revision"]:
+        raise HttpError(
+            409,
+            "The destination options or template changed. Review the publication preview again.",
+        )
+    content = {
+        key: values[key]
+        for key in ("title", "body", "fields", "labels", "assignees", "options_revision")
+    }
+    content["selected_attachments"] = result["selected_attachments"]
+    presentation = {key: result[key] for key in PRESENTATION_KEYS}
+    draft = save_draft(
+        version,
+        connector,
+        payload.project,
+        presentation,
+        content,
+        expected_revision=result["draft_revision"],
+    )
+    return {
+        **result,
+        "title": content["title"],
+        "body": content["body"],
+        "defaults": {
+            **result.get("defaults", {}),
+            "labels": content["labels"],
+            "assignees": content["assignees"],
+        },
+        "values": content["fields"],
+        **draft_metadata(draft, version),
+        "publication_reference": publication_reference(draft),
+        "rendered_body": render_body(content, result, publication_reference(draft)),
+    }
 
 
 @router.post("/requests/{request_id}/versions/{number}/publications")
@@ -268,4 +382,13 @@ def create_publication(request, request_id: UUID, number: int, payload: Publicat
         ResultVersion, request_id=request_id, number=number, request__workflow="request"
     )
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
-    return publication_dict(publish(version, connector, payload.model_dump()))
+    values = payload.model_dump(mode="json")
+    if "ticket_format" not in payload.model_fields_set:
+        # Historical publication snapshots predate presentation options. Schema
+        # defaults must not change their digest during read-only reconciliation.
+        from .ticket_presentation import PRESENTATION_KEYS
+
+        for key in PRESENTATION_KEYS:
+            if key not in {"template_id", "issue_type"}:
+                values.pop(key, None)
+    return publication_dict(publish(version, connector, values))

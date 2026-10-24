@@ -84,6 +84,7 @@ export function AIModels() {
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState({ identifier: "", name: "", family: "" });
   const [editing, setEditing] = useState<AIModel | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
   const editor = useRef<HTMLFormElement>(null);
   useEffect(() => { if (editing) editor.current?.querySelector<HTMLInputElement>("#model-name")?.focus(); }, [editing]);
   const generation = useRef(0);
@@ -118,15 +119,16 @@ export function AIModels() {
         <div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" disabled={busy} aria-label={t("Edit {name}",{name:item.name})} onClick={() => {setEditing(item);setForm({identifier:item.identifier,name:item.name,family:item.family});}}><Pencil size={14} aria-hidden="true" /></Button><Button type="button" size="sm" variant="outline" disabled={busy || !connectionId} onClick={() => action(() => send(`/ai-connections/${connectionId}/models/${item.id}/test`))}>{t("Check model")}</Button><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => action(() => send(`/ai-models/${item.id}`, {enabled: !item.enabled}, "PUT"))}>{t(item.enabled ? "Disable" : "Enable")}</Button></div></div>
       </li>)}</ul>
     </>}
-    <form ref={editor} className="mt-6 border-t pt-4" onSubmit={e => { e.preventDefault(); action(async () => { if(editing) await send(`/ai-models/${editing.id}`, {name:form.name,family:form.family}, "PUT"); else await send("/ai-models", {agent, ...form}); setEditing(null);setForm({identifier:"",name:"",family:""}); }); }}>
+    {!editing && <Button type="button" variant="outline" className="mt-6" aria-expanded={manualOpen} aria-controls="manual-model-form" onClick={() => setManualOpen(value => !value)}>{t("Add a documented model")}</Button>}
+    {(editing || manualOpen) && <form id="manual-model-form" ref={editor} className="mt-6 border-t pt-4" onSubmit={e => { e.preventDefault(); action(async () => { if(editing) await send(`/ai-models/${editing.id}`, {name:form.name,family:form.family}, "PUT"); else await send("/ai-models", {agent, ...form}); setEditing(null);setManualOpen(false);setForm({identifier:"",name:"",family:""}); }); }}>
       <h3>{t(editing ? "Edit model" : "Add a documented model")}</h3>
       <fieldset disabled={busy}>
         <div className="field"><label htmlFor="model-identifier">{t("Model identifier")}</label><Input id="model-identifier" disabled={!!editing} required maxLength={100} value={form.identifier} onChange={e => setForm({...form,identifier:e.target.value})} /></div>
         <div className="field"><label htmlFor="model-name">{t("Name")}</label><Input id="model-name" required maxLength={100} value={form.name} onChange={e => setForm({...form,name:e.target.value})} /></div>
         <div className="field"><label htmlFor="model-family">{t("Model family")}</label><Input id="model-family" pattern="[a-zA-Z0-9._-]*" maxLength={100} value={form.family} onChange={e => setForm({...form,family:e.target.value})} /></div>
-        <div className="mt-4 flex flex-wrap gap-2"><Button disabled={busy}>{t(editing ? "Save model" : "Add model")}</Button>{editing && <Button type="button" variant="outline" disabled={busy} onClick={() => {setEditing(null);setForm({identifier:"",name:"",family:""});}}>{t("Cancel")}</Button>}</div>
+        <div className="mt-4 flex flex-wrap gap-2"><Button disabled={busy}>{t(editing ? "Save model" : "Add model")}</Button><Button type="button" variant="outline" disabled={busy} onClick={() => {setEditing(null);setManualOpen(false);setForm({identifier:"",name:"",family:""});}}>{t("Cancel")}</Button></div>
       </fieldset>
-    </form>
+    </form>}
     <p className="mt-4 text-xs muted">{t("Model checks read metadata and do not consume an analysis. Copilot remains experimental and unavailable for production.")}</p>
   </Card>;
 }

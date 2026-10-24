@@ -94,6 +94,8 @@ for (const reduced of [false, true])
     await page.route("**/api/queue", (r) => r.fulfill({ json: values }));
     await page.goto("/questions");
     const queue = await openQueue(page, test.info().project.name === "mobile");
+    await expect(queue.getByRole("button", { name: "Completed (1)", exact: true })).toHaveAttribute("aria-expanded", "false");
+    await queue.getByRole("button", { name: "Completed (1)", exact: true }).click();
     await expect(queue.locator("[data-job]")).toHaveCount(5);
     await expect(queue.locator("[data-job]").first()).toHaveAttribute(
       "data-job",
@@ -273,6 +275,7 @@ for (const theme of ["light", "dark"])
     await expect(card.locator(".queue-role")).toHaveText("Analyst");
     await expect(card.locator(".queue-assignment")).toHaveAttribute("title", /recorded-model/);
     await expect(card.locator(".queue-assignment")).toHaveAttribute("title", /^Current AI/);
+    await queue.getByRole("button", { name: "Completed (1)", exact: true }).click();
     await expect(queue.locator('[data-job="43"] [data-provider="claude"]')).toBeVisible();
     await expect(queue.locator('[data-job="43"] [data-assignment="previous"]')).toHaveAttribute("title", /Previous AI/);
     const bounds = await card.evaluate((node) => {

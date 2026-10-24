@@ -26,6 +26,7 @@ a fully compromised host is outside the analysis sandbox's protection.
 | Runtime supervisor to analysis child | Linux namespace supervisor | UID/GID 10001, no capabilities, no new privileges, isolated PID/mount/network namespaces, read-only runtime/source/document mounts and a single writable session. Failure to establish isolation aborts execution. |
 | Child to AI provider | Per-run broker | Synthetic short-lived capability, exact provider endpoint allowlist, real OAuth injected only by the trusted broker, no redirects/environment proxies, bounded request/response/time. Arbitrary destinations are denied. |
 | Child to business database | Controlled query capability | Dedicated role must be non-owner and have no write/CREATE privileges. Read-only transaction, SQL validation, timeout and row limit provide additional controls. No database password enters the child. |
+| Child to public references | Optional step-scoped Web reader | Public HTTPS only, validated/pinned DNS, redirect revalidation, no cookies/forwarded credentials, bounded text/time/transfers. No arbitrary proxy or private-network access. Search terms and selected URLs are sent publicly. |
 | Attachment to parser | Constrained analysis namespace | Actual type checks, bounded upload/ZIP expansion, random internal names and read-only mounts. PDF/DOCX/image data cannot grant executable permissions or alter the namespace. |
 | Human to ticket destination | Publication service | Explicit confirmation and allowed target. Publication credentials must be distinct from repository-read credentials. AI analysis cannot invoke publication through its broker. |
 
@@ -64,8 +65,11 @@ artifacts before sharing them outside the team.
 
 Code excerpts, submitted business needs, selected context documents, attachment
 contents and permitted database results may be sent to the selected AI provider.
-The destination restriction prevents arbitrary network exfiltration; it does not
-prevent business data transfer to that selected provider. Configure only accounts
+The provider relay has a fixed endpoint allowlist; it does not prevent business data
+transfer to that selected provider. Source/reviewer steps may additionally use the
+bounded public reference reader. It blocks private destinations and credential forwarding,
+but is not semantic data-loss prevention: public queries and URL paths reach their
+destinations. Instructions forbid placing private material there. Configure only accounts
 whose contractual data handling and retention meet the team's requirements.
 SpecHelper cannot override a provider's retention or account policies.
 

@@ -17,13 +17,13 @@ a trusted team with shared GitHub, ChatGPT and/or Claude connections.
 - Optional read-only PostgreSQL connection per environment
 - ChatGPT / Codex and Claude / Claude Code support
 - Named assistant configurations, model selection and shared account availability
-- Versioned agent/skill library with environment selection and compatibility preview
-- Guided agent/skill creation with clarification, editable drafts and sandbox tests
+- Versioned global skills with on-demand loading and compatibility feedback
+- Guided skill creation with clarification, editable drafts and sandbox tests
 - Guided business clarification with explained choices and confirmed decisions
-- Optional environment instructions and versioned reference documents
+- Environment business terminology and versioned reference documents
 - Screenshots and document attachments
 - Automatic independent analyses based on configured AI roles, with one or two connected assistants
-- Configurable analyst/counter-analyst roles and optional independent verification
+- Mandatory independent analysis, omission discovery and verification
 - Concise tickets and detailed `goal.md` files
 - Project questions with source-backed explanations and optional documentation
 - Reviewed question context transferred to independent change requests
@@ -85,7 +85,7 @@ Open **Settings** at the bottom left after starting the application. Its three t
    See [publishing tickets](docs/ticketing.md) for
    supported API versions, credentials and template behavior.
 
-Optional [environment context](docs/environment-context.md) adds short project instructions
+Optional [environment context](docs/environment-context.md) adds factual terminology
 and reference documents. Existing analyses retain their original document versions.
 
 ## Usage
@@ -95,15 +95,14 @@ From **Requests**:
 1. Select an environment.
 2. Describe the business need.
 3. Attach screenshots or documents if useful.
-4. Choose a request type: automatic, feature, bug or documentation.
-5. Start the analysis and answer any clarification questions.
+4. Start the analysis and answer any clarification questions.
 
 Clarifications use explained choices only when useful, with a free-text alternative.
 Confirmed decisions remain available for review and the resulting ticket and
 `goal.md`. See [business clarification](docs/business-clarification.md).
 
-Independent comparison is selected automatically from Settings and enabled assistant
-roles. Business forms contain no per-request comparison control.
+Independent analysis, counter-analysis and verification use eligible connected
+assistants automatically. Business forms contain no per-request comparison control.
 
 The main sidebar provides **Requests**, **Questions** and **Tickets**; **Settings**
 is available at the bottom left. A shared task queue
@@ -121,15 +120,23 @@ separate immutable version; previous versions remain available. SpecHelper does
 not create external tickets automatically. Use **Publish ticket** to review the
 target, fields and preview, then explicitly confirm creation. Published tickets
 remain linked to the exact result version under **Tickets**.
+Choose a real project template or the short standard format in this dialog. Detailed
+business/technical sections are optional; files transfer only after explicit opt-in
+and individual selection. Partial results remain readable but cannot be published
+before their mandatory checks are complete.
 
-From **Questions**, choose a general, technical, functional or architecture question
-and ask how the selected project works. The shared analysis engine
+From **Questions**, select an environment and ask how the project works in free text.
+The shared analysis engine
 can ask for clarification and produces an explanation with Git references, verified
 facts and uncertainties. Copy the displayed answer, download optional business,
 technical or mixed Markdown documentation, or choose **Create a request**. The
 normal request form opens with a removable context attachment; describe the
 change you want explicitly. Questions generate no ticket or `goal.md`. See
 [questions and reusable context](docs/questions.md).
+
+Analyses can consult [official external references](docs/official-references.md)
+when the need depends on an external rule or version. Internal code questions do
+not trigger research automatically.
 
 ## Architecture
 
@@ -147,10 +154,12 @@ The stack uses Next.js / React / TypeScript, shadcn/ui, Tailwind CSS, Django /
 Django Ninja, PostgreSQL, Codex CLI and Claude Code.
 
 AI agents operate inside an isolated Linux runtime with read-only access to
-project sources and request attachments. The default worker processes queued
-requests sequentially.
+project sources and request attachments. One shared queue schedules compatible
+steps across free AI connections; different requests may progress concurrently
+while each request remains sequential.
 
-See [architecture and implementation notes](docs/implementation.md) for sandboxing,
+See [step scheduling and global skills](docs/orchestration-v2.4.md) and
+[architecture and implementation notes](docs/implementation.md) for sandboxing,
 networking, worktrees, PostgreSQL capabilities, orchestration and operations.
 
 ## Security
@@ -174,6 +183,8 @@ Further documentation:
 - [Evidence and independent analysis](docs/analysis-reliability.md)
 - [Optional source index evaluation](docs/index-evaluation.md)
 - [v2.3 acceptance evidence](docs/acceptance-v2.3.md)
+- [v2.5 acceptance evidence](docs/acceptance-v2.5.md)
+- [Conditional official references](docs/official-references.md)
 - [AI connections, models and shared agent/skill library](docs/ai-library.md)
 - [Business clarification and confirmed decisions](docs/business-clarification.md)
 - [v2.2 acceptance report](docs/acceptance-v2.2.md)

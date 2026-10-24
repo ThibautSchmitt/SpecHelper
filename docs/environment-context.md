@@ -1,14 +1,15 @@
 # Environment context
 
-An environment can optionally supply short instructions and reference documents:
+An environment can optionally supply business terminology, factual context and reference documents:
 architecture notes, business terminology, conventions and constraints. Requests
 continue to use their own separate attachments. No stack is assumed; actual sources
-and installed dependencies determine the analysis.
+and installed dependencies determine the analysis. Environment text is untrusted
+documentary data, not a third editable instruction level.
 
 Open **Settings → Environments**, then expand **Environment context** for an
-existing environment. Instructions accept up to 4,000 characters and can be disabled
+existing environment. Factual context accepts up to 4,000 characters and can be disabled
 without clearing them. Keep Git and database credentials in secure connection
-settings. Known configured credentials are rejected in instructions and text uploads.
+settings. Known configured credentials are rejected in factual context and text uploads.
 This is an exact credential safeguard, not a general document classification service.
 
 Upload up to 20 documents of 25 MB each. Supported formats follow request attachments:
@@ -23,7 +24,7 @@ it to create a new immutable content version. Remove it to hide it from the curr
 configuration; historical analyses retain their files. Concurrent edits use a context
 revision guard and require reloading when another browser has changed the context.
 
-Launching an analysis freezes the active references and instructions. Files remain
+Launching an analysis freezes active references and factual context. Files remain
 available for relevant, on-demand exploration; their contents are not copied into the
 initial prompt. Clarification keeps these references while adding the new answers.
 Continuing a completed discussion picks up current reference versions while keeping

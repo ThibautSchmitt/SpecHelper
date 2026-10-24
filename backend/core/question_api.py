@@ -77,7 +77,23 @@ def get_question(request, question_id: UUID):
 @router.post("/questions/{question_id}/analyze")
 def analyze_question(request, question_id: UUID):
     actions.question(question_id)
-    return actions.question_dict(enqueue_analysis(question_id, analysis_protocol="2.3"), full=True)
+    return actions.question_dict(enqueue_analysis(question_id, analysis_protocol="2.4"), full=True)
+
+
+@router.post("/questions/{question_id}/cancel")
+def cancel_question_analysis(request, question_id: UUID):
+    from .step_execution import cancel_analysis
+
+    actions.question(question_id)
+    return actions.question_dict(cancel_analysis(question_id), full=True)
+
+
+@router.post("/questions/{question_id}/retry")
+def retry_question_analysis(request, question_id: UUID):
+    from .step_execution import retry_analysis
+
+    actions.question(question_id)
+    return actions.question_dict(retry_analysis(question_id), full=True)
 
 
 @router.post("/questions/{question_id}/answers")
@@ -90,7 +106,7 @@ def answer_question(request, question_id: UUID, payload: AnswersIn):
             payload.choices,
             payload.expected_decision_revision,
             payload.confirm_changes,
-            analysis_protocol="2.3",
+            analysis_protocol="2.4",
         ),
         full=True,
     )
@@ -100,7 +116,7 @@ def answer_question(request, question_id: UUID, payload: AnswersIn):
 def continue_question(request, question_id: UUID, payload: ContinuationIn):
     actions.question(question_id)
     value = continue_conversation(
-        question_id, payload.message, payload.expected_version, analysis_protocol="2.3"
+        question_id, payload.message, payload.expected_version, analysis_protocol="2.4"
     )
     return actions.question_dict(value, full=True)
 

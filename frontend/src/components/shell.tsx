@@ -16,10 +16,8 @@ import {
 import { AccessGate } from "@/components/access-gate";
 import { ThemeProvider, applyAccent } from "@/lib/theme";
 import { TaskQueue, TaskQueueProvider } from "@/components/task-queue";
-import { statuses } from "@/lib/api";
 import { api } from "@/lib/api";
-import type { AIConnection } from "@/components/ai-connections";
-import type { GitConnection } from "@/components/git-sources";
+import { SidebarAssistants } from "@/components/sidebar-assistants";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -42,35 +40,6 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
   const settingsVersion = useRef(0);
-  const [connections, setConnections] = useState<AIConnection[] | null>(null);
-  const [gitConnections, setGitConnections] = useState<GitConnection[] | null>(
-    null,
-  );
-  useEffect(() => {
-    let alive = true;
-    let pending = false;
-    const update = async () => {
-      if (pending) return;
-      pending = true;
-      const [ai, git] = await Promise.allSettled([
-        api<AIConnection[]>("/ai-connections"),
-        api<GitConnection[]>("/git-connections"),
-      ]);
-      if (alive) {
-        setConnections(ai.status === "fulfilled" ? ai.value : null);
-        setGitConnections(git.status === "fulfilled" ? git.value : null);
-      }
-      pending = false;
-    };
-    update();
-    const timer = setInterval(update, 10000);
-    window.addEventListener("connections-updated", update);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-      window.removeEventListener("connections-updated", update);
-    };
-  }, []);
   useEffect(() => {
     drawer.current?.close();
   }, [pathname]);
@@ -150,68 +119,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div
-          className="connection-indicators"
-          aria-label={t("Connection status")}
-        >
-          <h2 className="connections-title">{t("Connected assistants")}</h2>
-          {(connections || []).map((ai) => (
-            <p key={ai.id}>
-              <span
-                className="connection-dot"
-                data-connected={
-                  ai.enabled &&
-                  ai.status === "CONNECTED" &&
-                  ["AVAILABLE", "BUSY"].includes(ai.availability)
-                }
-              />
-              <span>
-                {ai.name ||
-                  (ai.agent === "codex" ? "ChatGPT / Codex" : "Claude")}
-                <small>
-                  {t(
-                    ai.enabled === false
-                      ? "Disabled"
-                      : ai.status !== "CONNECTED"
-                        ? statuses[ai.status] || "Unknown"
-                        : statuses[ai.availability] || "Connected",
-                  )}
-                </small>
-              </span>
-            </p>
-          ))}
-          {!connections && (
-            <p>
-              {t("AI connections")}: {t("Unknown")}
-            </p>
-          )}
-          <div className="mt-4 border-t pt-3">
-            <span className="text-xs font-semibold">{t("Sources Git")}</span>
-            {(["github", "gitlab"] as const).map((provider) => {
-              const sources =
-                gitConnections?.filter((c) => c.provider === provider) || [];
-              const ready = sources.filter(
-                (c) => c.enabled && c.status === "CONNECTED",
-              ).length;
-              return (
-                <p key={provider}>
-                  <span className="connection-dot" data-connected={ready > 0} />
-                  <span>
-                    {provider === "github" ? "GitHub" : "GitLab"}
-                    <small>
-                      {gitConnections === null
-                        ? t("Unknown")
-                        : t("{ready} of {total} connected", {
-                            ready,
-                            total: sources.length,
-                          })}
-                    </small>
-                  </span>
-                </p>
-              );
-            })}
-          </div>
-        </div>
+        <SidebarAssistants />
         <Link
           href="/admin"
           className="sidebar-admin"

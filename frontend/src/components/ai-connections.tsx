@@ -1,4 +1,5 @@
 "use client";
+import { ProviderLogo } from "@/components/provider-logo";
 import { Bot, Pencil, Plus, Power, RefreshCw, Trash2, Gauge, ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
@@ -55,8 +56,10 @@ const emptyForm = {
 };
 export function AIConnections({
   onChanged,
+  simplified = false,
 }: {
   values?: AIConnection[];
+  simplified?: boolean;
   onChanged: () => Promise<void>;
 }) {
   const { t, dateLocale } = useI18n();
@@ -166,7 +169,8 @@ export function AIConnections({
             className="rounded-lg border p-4"
           >
             <div className="flex flex-wrap justify-between gap-2">
-              <h3>
+              <h3 className="flex items-center gap-2">
+                <ProviderLogo provider={value.agent} />
                 {value.name ||
                   (value.agent === "codex" ? "ChatGPT / Codex" : "Claude")}
                 {value.is_default && (
@@ -285,7 +289,7 @@ export function AIConnections({
                         roles: value.roles ?? [...publicRoles],
                         additional_instructions:
                           value.additional_instructions || "",
-                        skill_overrides: value.skill_overrides || {},
+                        ...(!simplified ? { skill_overrides: value.skill_overrides || {} } : {}),
                       },
                       "PUT",
                     ),
@@ -383,7 +387,8 @@ export function AIConnections({
           onSubmit={(event) => {
             event.preventDefault();
             action(async () => {
-              const { share_identity_from, ...body } = form;
+              const { share_identity_from, skill_overrides, ...common } = form;
+              const body = simplified ? common : { ...common, skill_overrides };
               await send(
                 editing ? `/ai-connections/${editing.id}` : "/ai-connections",
                 {
@@ -529,11 +534,11 @@ export function AIConnections({
           </fieldset>
           <details className="mt-5 rounded-lg border p-4">
             <summary className="cursor-pointer text-sm font-medium">
-              {t("Connection instructions and skills")}
+              {t(simplified ? "Specific instructions" : "Connection instructions and skills")}
             </summary>
             <div className="field">
               <label htmlFor="ai-config-instructions">
-                {t("Additional instructions")}
+                {t(simplified ? "Specific instructions" : "Additional instructions")}
               </label>
               <Textarea
                 id="ai-config-instructions"
@@ -547,6 +552,7 @@ export function AIConnections({
                 }
               />
             </div>
+            {simplified ? <p className="mt-3 text-xs muted">{t("All active compatible skills are discoverable automatically. Each assistant loads only the skills useful for its current mission.")}</p> : <>
             <p className="mt-3 text-xs muted">
               {t(
                 "Global instructions and skills are inherited. Only explicit skill overrides are stored for this connection.",
@@ -598,6 +604,7 @@ export function AIConnections({
                 )}
               </p>
             )}
+            </>}
             <p className="mt-3 text-xs muted">
               {t(
                 "Instructions and skills cannot grant write access to analyzed repositories or databases.",

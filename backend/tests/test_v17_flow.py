@@ -100,9 +100,13 @@ def execute(question, storage, values):
         patch("core.worker.request_workspace", return_value=storage),
         patch("core.worker.runtime_call", side_effect=invoke),
     ):
-        job = claim_job()
-        assert job is not None
-        perform_job(job)
+        for _ in range(20 if question.analysis_protocol == "2.4" else 1):
+            job = claim_job()
+            assert job is not None
+            perform_job(job)
+            question.refresh_from_db()
+            if question.status in {"READY", "PARTIAL", "ERROR", "NEEDS_CLARIFICATION"}:
+                break
     question.refresh_from_db()
     return calls
 
@@ -378,15 +382,36 @@ def test_derived_request_uses_current_baseline_and_runs_independent_ticket_pipel
         [
             assessment("standard"),
             {"observations": [], "questions": []},
-            {**code_report, "claims": [claim]},
-            {**code_report, "claims": [claim]},
+            {
+                **code_report,
+                "claims": [claim],
+                "coverage": {
+                    "inspected_areas": ["Export filter"],
+                    "new_elements": [],
+                    "unexplored_zones": [],
+                },
+            },
+            {
+                **code_report,
+                "claims": [claim],
+                "coverage": {
+                    "inspected_areas": ["Export filter and caller scope"],
+                    "new_elements": [],
+                    "unexplored_zones": [],
+                },
+            },
             approved(),
-            {"report": {"claims": verified}, "questions": []},
+            {
+                "report": {"claims": verified},
+                "questions": [],
+                "coverage_resolutions": [],
+                "additional_omissions": [],
+            },
             bundle.model_dump(),
         ],
     )
     assert request.status == "READY", request.error
-    assert request.analysis_protocol == "2.3" and len(calls) == 7
+    assert request.analysis_protocol == "2.4" and len(calls) == 7
     assert request.baseline[0]["sha"] == sha
     assert original.baseline[0]["sha"] == "a" * 40
     assert all("TRANSFERRED QUESTION CONTEXT" in call["prompt"] for call in calls)

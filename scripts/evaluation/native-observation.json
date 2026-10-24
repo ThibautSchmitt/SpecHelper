@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "kind": "Single-run native paired synthetic corpus observation",
+  "measured_at": "2026-10-24T10:33:02Z",
+  "provider": "codex",
+  "model": "gpt-6-luna",
+  "independent_roles": [
+    "analyst",
+    "counter_analyst",
+    "verifier"
+  ],
+  "complete_native_measurements": true,
+  "native_quality_gate_passed": false,
+  "quality_gate_reason": "Strict exact Git citation defects remain in both Java final reports; no production index activation is justified.",
+  "production_index_enabled": false,
+  "native_calls": 18,
+  "analyses": 6,
+  "corpus_projects": 3,
+  "semantic_review": {
+    "reviewer": "Codex source-review agent",
+    "authority": "Agent-assisted frozen-source audit, not independent human certification",
+    "all_role_material_claims_reviewed": 57,
+    "final_material_claims_reviewed": 19,
+    "material_semantic_errors": 0,
+    "critical_fact_slots_reviewed": 24,
+    "semantic_critical_omissions": 0,
+    "expected_counterexample_slots_reviewed": 12,
+    "unresolved_business_decisions": 0,
+    "minor_observations": [
+      "The Java source-mode report loosely calls an imported legacy state an anomaly. It also explains the pre-cutoff exception and disclaims current-policy authorization. The MCP final report explicitly states compatibility with that exception.",
+      "The Python MCP report describes an open non-subscription counterexample without the literal word single; this covers the behavioral branch, not an explicit citation of fixture row2."
+    ]
+  },
+  "source_provenance": {
+    "all_role_citations": 87,
+    "invalid_all_role_citations": 26,
+    "final_citations": 29,
+    "invalid_final_citations": 6,
+    "all_source_repositories_and_shas_match": true,
+    "defects": "Mismatched line ranges, removed punctuation, or dedented multi-line excerpts; no quote or result was repaired."
+  },
+  "total_actual_usage": {
+    "input_tokens": 799701,
+    "output_tokens": 34062,
+    "cached_input_tokens": 362240,
+    "analysis_seconds": 548.787618345581,
+    "cost": null
+  },
+  "modes": {
+    "source": {
+      "analysis_seconds": 279.7054536221549,
+      "input_tokens": 387164,
+      "output_tokens": 17745,
+      "cached_input_tokens": 158336,
+      "final_material_conclusions": 10,
+      "material_semantic_errors": 0,
+      "all_role_sources_checked": 46,
+      "invalid_all_role_citations": 13,
+      "final_sources_checked": 16,
+      "invalid_final_citations": 3
+    },
+    "codebase-memory-mcp": {
+      "analysis_seconds": 269.0821647234261,
+      "input_tokens": 412537,
+      "output_tokens": 16317,
+      "cached_input_tokens": 203904,
+      "final_material_conclusions": 9,
+      "material_semantic_errors": 0,
+      "all_role_sources_checked": 41,
+      "invalid_all_role_citations": 13,
+      "final_sources_checked": 13,
+      "invalid_final_citations": 3
+    }
+  },
+  "measurements": [
+    {
+      "case_id": "python-orders",
+      "mode": "source",
+      "git_sha": "3c9bb5247fea8387187ee0c4fd5871a3e2ac7491",
+      "native_calls": 3,
+      "analysis_seconds": 91.23939030617476,
+      "input_tokens": 140677,
+      "output_tokens": 5883,
+      "cached_input_tokens": 31360,
+      "cost": null,
+      "final_material_conclusions": 3,
+      "material_semantic_errors": 0,
+      "semantic_critical_omissions": [],
+      "semantic_counterexamples_detected": [
+        "single",
+        "legacy"
+      ],
+      "unresolved_business_decisions": 0,
+      "all_role_sources_checked": 15,
+      "invalid_all_role_citations": 1,
+      "final_sources_checked": 5,
+      "invalid_final_citations": 0
+    },
+    {
+      "case_id": "python-orders",
+      "mode": "codebase-memory-mcp",
+      "git_sha": "3c9bb5247fea8387187ee0c4fd5871a3e2ac7491",
+      "native_calls": 3,
+      "analysis_seconds": 94.50058726873249,
+      "input_tokens": 132370,
+      "output_tokens": 6102,
+      "cached_input_tokens": 57600,
+      "cost": null,
+      "final_material_conclusions": 2,
+      "material_semantic_errors": 0,
+      "semantic_critical_omissions": [],
+      "semantic_counterexamples_detected": [
+        "single",
+        "legacy"
+      ],
+      "unresolved_business_decisions": 0,
+      "all_role_sources_checked": 14,
+      "invalid_all_role_citations": 3,
+      "final_sources_checked": 4,
+      "invalid_final_citations": 0
+    },
+    {
+      "case_id": "typescript-stock",
+      "mode": "source",
+      "git_sha": "5faa2a2acb6a2e60f46586fe4da0c3d4248f2852",
+      "native_calls": 3,
+      "analysis_seconds": 84.89820280391723,
+      "input_tokens": 116816,
+      "output_tokens": 5581,
+      "cached_input_tokens": 48000,
+      "cost": null,
+      "final_material_conclusions": 4,
+      "material_semantic_errors": 0,
+      "semantic_critical_omissions": [],
+      "semantic_counterexamples_detected": [
+        "digital",
+        "legacy"
+      ],
+      "unresolved_business_decisions": 0,
+      "all_role_sources_checked": 16,
+      "invalid_all_role_citations": 2,
+      "final_sources_checked": 6,
+      "invalid_final_citations": 0
+    },
+    {
+      "case_id": "typescript-stock",
+      "mode": "codebase-memory-mcp",
+      "git_sha": "5faa2a2acb6a2e60f46586fe4da0c3d4248f2852",
+      "native_calls": 3,
+      "analysis_seconds": 77.62449868489057,
+      "input_tokens": 114488,
+      "output_tokens": 4357,
+      "cached_input_tokens": 48000,
+      "cost": null,
+      "final_material_conclusions": 4,
+      "material_semantic_errors": 0,
+      "semantic_critical_omissions": [],
+      "semantic_counterexamples_detected": [
+        "digital",
+        "legacy"
+      ],
+      "unresolved_business_decisions": 0,
+      "all_role_sources_checked": 12,
+      "invalid_all_role_citations": 1,
+      "final_sources_checked": 4,
+      "invalid_final_citations": 0
+    },
+    {
+      "case_id": "java-billing",
+      "mode": "source",
+      "git_sha": "edfb1c837d951a68c080f0d36d167fa4852b36bb",
+      "native_calls": 3,
+      "analysis_seconds": 103.56786051206291,
+      "input_tokens": 129671,
+      "output_tokens": 6281,
+      "cached_input_tokens": 78976,
+      "cost": null,
+      "final_material_conclusions": 3,
+      "material_semantic_errors": 0,
+      "semantic_critical_omissions": [],
+      "semantic_counterexamples_detected": [
+        "2022",
+        "legacy"
+      ],
+      "unresolved_business_decisions": 0,
+      "all_role_sources_checked": 15,
+      "invalid_all_role_citations": 10,
+      "final_sources_checked": 5,
+      "invalid_final_citations": 3
+    },
+    {
+      "case_id": "java-billing",
+      "mode": "codebase-memory-mcp",
+      "git_sha": "edfb1c837d951a68c080f0d36d167fa4852b36bb",
+      "native_calls": 3,
+      "analysis_seconds": 96.95707876980305,
+      "input_tokens": 165679,
+      "output_tokens": 5858,
+      "cached_input_tokens": 98304,
+      "cost": null,
+      "final_material_conclusions": 3,
+      "material_semantic_errors": 0,
+      "semantic_critical_omissions": [],
+      "semantic_counterexamples_detected": [
+        "2022",
+        "legacy"
+      ],
+      "unresolved_business_decisions": 0,
+      "all_role_sources_checked": 15,
+      "invalid_all_role_citations": 9,
+      "final_sources_checked": 5,
+      "invalid_final_citations": 3
+    }
+  ],
+  "artifact_integrity": {
+    "native_result_sha256": "3e4f3cdefa886be2889174a9de110c1f24bd9cd6e7426df0fe1fe505af2d3fc4",
+    "reviewed_result_sha256": "25dc185a06a63e5cdef92cb0dee7598f0928a654206a885b0056d67845df0933"
+  },
+  "limitations": [
+    "Three tiny synthetic projects, one ordered run per mode: no representative workload or statistical estimate.",
+    "Both modes reopened the same four files per project and supplied identical source bytes; timing/token differences cannot be attributed to indexing.",
+    "One authorized provider/model family; roles used fresh independent contexts, not different providers.",
+    "Analysis durations include three actual role invocations and exclude the earlier navigation/index construction study and preflight/setup.",
+    "Usage is provider-reported; input totals include cached tokens, and measured monetary billing was not provided. Earlier schema-rejected attempts and a small connectivity probe are not included in these eighteen-call totals.",
+    "No live business database, business records or production mutation was used.",
+    "The harness benchmarks raw role reports, not the complete application flow, final ticket writing or production evidence acceptance.",
+    "Exact-source proof failures remain visible; semantic interpretation review does not waive them. Independent human review is still required before index activation."
+  ]
+}

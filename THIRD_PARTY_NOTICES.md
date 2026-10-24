@@ -66,3 +66,8 @@ to [OpenAI brand guidelines](https://openai.com/brand/). The Claude symbol is fr
 to OpenAI and Anthropic respectively; they are not covered by SpecHelper's MIT
 license and do not imply endorsement. Artwork is bundled locally; viewing a queue
 does not request assets from either provider.
+
+GitHub and GitLab identification uses the locally bundled Lucide icons under
+Lucide's ISC license. Jira, GLPI and unknown platforms use a neutral ticket icon
+beside their visible platform name when no redistributable provider artwork is
+bundled. No external image request or third-party logo download is needed.

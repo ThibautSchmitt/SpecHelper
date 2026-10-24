@@ -55,6 +55,34 @@ def render_evidence(report, language="en"):
                     f"{source['repository']} · `{source['commit']}` · `{source['path']}`:{source['line_start']}-{source['line_end']}",
                     "",
                 ]
+            elif source["kind"] == "web":
+                receipt = next(
+                    (
+                        row
+                        for row in report.get("web_references", [])
+                        if row["reference_id"] == source["reference_id"]
+                    ),
+                    None,
+                )
+                if receipt:
+                    lines += [
+                        translate("External reference", language) + ": " + receipt["title"],
+                        receipt["url"],
+                        translate("Consulted on", language) + ": " + receipt["consulted_at"],
+                        "SHA-256: " + receipt["sha256"],
+                        translate("Reference applicability", language)
+                        + ": "
+                        + source["applicability_notes"],
+                        "",
+                    ]
+                    for key, label in (
+                        ("effective_date", "Effective date"),
+                        ("version", "Version"),
+                        ("jurisdiction", "Jurisdiction"),
+                        ("scope", "Reference scope"),
+                    ):
+                        if source.get(key):
+                            lines += [translate(label, language) + ": " + source[key], ""]
             else:
                 receipt = next(
                     (

@@ -1,4 +1,5 @@
 "use client";
+import { SkillMetadata } from "@/components/skill-metadata";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -69,6 +70,7 @@ const capLabels: Record<string, string> = {
   read_sources: "Read project sources",
   read_attachments: "Read attachments",
   read_database: "Read the business database",
+  read_web: "Read official web sources",
   structured_output: "Produce structured results",
 };
 const toggle = (values: string[], value: string) =>
@@ -712,6 +714,7 @@ export function LibraryAssistant({
                         {t("One check per line.")}
                       </p>
                     </div>
+                    {kind === "skill" ? <SkillMetadata definition={definition} /> : <>
                     <fieldset className="min-w-0 space-y-2">
                       <legend className="mb-2 text-sm font-medium">
                         {t("Compatible assistants")}
@@ -775,6 +778,7 @@ export function LibraryAssistant({
                         </label>
                       ))}
                     </fieldset>
+                    </>}
                     {kind === "agent" && (
                       <fieldset className="min-w-0 space-y-2">
                         <legend className="mb-2 text-sm font-medium">

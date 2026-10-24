@@ -5,12 +5,14 @@ export type ContextResource = {
 };
 export type ContextSnapshot = {
   schema_version?: number; snapshot_id?: string;
+  analysis_protocol?: string;
   environment?: { id: number; name: string; revision: number };
-  instructions?: { text: string; enabled: boolean; sha256: string };
+  instructions?: { text: string; enabled: boolean; sha256: string; mode?: "factual" | "instructions" };
   resources?: ContextResource[];
+  official_references?: { url: string; note: string }[];
   library?: {
-    agents: {slug: string; name: string; version: number; instructions: string}[];
-    skills: {slug: string; name: string; version: number; instructions: string}[];
+    agents?: {slug: string; name: string; version: number; instructions?: string}[];
+    skills?: {slug: string; name: string; version: number; instructions?: string}[];
   };
 };
 export type ContextUsage = {

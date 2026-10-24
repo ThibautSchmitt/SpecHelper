@@ -9,6 +9,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .web_evidence import WebReceipt, WebSource, actual_web_receipts, check_web_source
+
 Text = Annotated[str, Field(min_length=1, max_length=4000)]
 
 
@@ -85,9 +87,10 @@ class EvidenceClaim(StrictEvidence):
     statement: Text
     kind: Literal["observed", "interpretation", "contradiction", "unknown"]
     status: Literal["supported", "partial", "contradicted", "unverified"]
+    basis: Literal["deployment", "official_rule", "external_contract"] = "deployment"
     scope: ClaimScope
-    sources: list[Annotated[GitSource | SQLSource, Field(discriminator="kind")]] = Field(
-        default_factory=list, max_length=20
+    sources: list[Annotated[GitSource | SQLSource | WebSource, Field(discriminator="kind")]] = (
+        Field(default_factory=list, max_length=20)
     )
     counterexamples: list[Counterexample] = Field(default_factory=list, max_length=12)
     verification_notes: str = Field(default="", max_length=4000)
@@ -107,6 +110,7 @@ class ReliabilityReport(StrictEvidence):
     database: DatabaseEvidence = Field(default_factory=DatabaseEvidence)
     limitations: list[Text] = Field(default_factory=list, max_length=30)
     blocking: bool = False
+    web_references: list[WebReceipt] = Field(default_factory=list, max_length=64)
 
     @model_validator(mode="after")
     def distinct_claims(self):
@@ -170,6 +174,17 @@ def check_report(report, request, run, workspace):
     raw = report.model_dump() if isinstance(report, ReliabilityReport) else report
     value = ReliabilityReport.model_validate(redact(copy.deepcopy(raw), configured_secrets()))
     receipts = actual_receipts(run)
+    web_receipts = actual_web_receipts(run)
+    # Page observations come exclusively from the runtime; ignore model-authored copies.
+    cited_web_ids = {
+        source.reference_id
+        for claim in value.claims
+        for source in claim.sources
+        if isinstance(source, WebSource)
+    }
+    value.web_references = [
+        receipt for receipt in web_receipts if receipt.reference_id in cited_web_ids
+    ]
     successful = {item.query_id: item for item in receipts if item.status == "checked"}
     has_database = bool(request.database_snapshot)
     value.database.checks = receipts
@@ -217,8 +232,17 @@ def check_report(report, request, run, workspace):
         for source in claim.sources:
             if isinstance(source, GitSource):
                 verified = checked_git_source(source, baseline, workspace)
-            else:
+            elif isinstance(source, SQLSource):
                 verified = has_database and source.query_id in successful
+            else:
+                verified, web_problems = check_web_source(source, web_receipts)
+                if claim.basis == "official_rule" and not source.effective_date:
+                    web_problems.append(
+                        "An external rule without a stated effective date does not establish a current obligation."
+                    )
+                problems.extend(web_problems)
+                if web_problems and claim.status == "supported":
+                    claim.status = "partial"
             if verified:
                 verified_sources.append(source)
             else:
@@ -226,6 +250,16 @@ def check_report(report, request, run, workspace):
                     "A cited source could not be matched to the frozen code or an actual authorized query."
                 )
         claim.sources = verified_sources
+        if (
+            claim.basis == "deployment"
+            and verified_sources
+            and all(isinstance(source, WebSource) for source in verified_sources)
+        ):
+            problems.append(
+                "External documentation does not establish this deployment's observed behavior."
+            )
+            if claim.status == "supported":
+                claim.status = "partial"
         if (
             claim.scope.environment
             and expected_environment

@@ -356,13 +356,15 @@ def recover_orphaned_leases():
     active = {
         pk
         for payload in Job.objects.filter(
-            kind__in=["analysis", "library_assistant"], status="RUNNING"
+            kind__in=["analysis", "library_assistant"], status__in=["RUNNING", "CANCELLED"]
         ).values_list("payload", flat=True)
         for pk in payload.get("connection_ids", [])
     }
-    active_identity_ids = AIConnection.objects.filter(pk__in=active).values_list(
-        "identity_id", flat=True
-    )
+    active_identity_ids = {
+        identity_id
+        for connection in AIConnection.objects.filter(pk__in=active)
+        for identity_id in quota_group(identity_for(connection)).values_list("pk", flat=True)
+    }
     AIIdentity.objects.filter(availability="BUSY", retry_after__isnull=True).exclude(
         pk__in=active_identity_ids
     ).update(availability="AVAILABLE")
@@ -457,7 +459,7 @@ def reserve_for_job(job, exclude=()):
 
         run = AnalysisRun.objects.filter(job=job).first()
         state = run.orchestration if run else {}
-        config = state.get("config") or get_config()
+        config = state.get("config") or get_config(request.analysis_protocol)
         if (
             state.get("deadline_at")
             and datetime.fromisoformat(state["deadline_at"]) <= timezone.now()

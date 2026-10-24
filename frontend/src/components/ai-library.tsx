@@ -1,4 +1,5 @@
 "use client";
+import { SkillMetadata } from "@/components/skill-metadata";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -59,6 +60,7 @@ export const libraryCapabilities = [
   ["read_sources", "Read project sources"],
   ["read_attachments", "Read attachments"],
   ["read_database", "Read the business database"],
+  ["read_web", "Read official web sources"],
   ["structured_output", "Produce structured results"],
 ] as const;
 export function libraryPayload(item: LibraryDefinition): LibraryDraft {
@@ -83,6 +85,7 @@ function toggle(values: string[], value: string) {
 
 export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
   const { t, dateLocale } = useI18n();
+  const [search, setSearch] = useState("");
   const [items, setItems] = useState<LibraryDefinition[]>([]);
   const [skills, setSkills] = useState<LibraryDefinition[]>([]);
   const [draft, setDraft] = useState<LibraryDraft | null>(null);
@@ -173,9 +176,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
             {t(kind === "agent" ? "Agent library" : "Skill library")}
           </h2>
           <p className="mt-2 text-sm muted">
-            {t(
-              "One shared library, reusable across environments and supported assistants.",
-            )}
+            {t(kind === "skill" ? "All active compatible skills are discoverable automatically. Each assistant loads only the skills useful for its current mission." : "One shared library, reusable across environments and supported assistants.")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -379,7 +380,8 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
           )}
         </p>
       )}
-      {items.map((item) => (
+      <div className="field"><label htmlFor={`${prefix}-search`}>{t(kind === "skill" ? "Search skills" : "Search agents")}</label><Input id={`${prefix}-search`} type="search" value={search} onChange={event => setSearch(event.target.value)} /></div>
+      {items.filter(item => `${item.name} ${item.objective} ${item.slug}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).map((item) => (
         <article key={item.slug} className="rounded-lg border p-4">
           <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
             <div className="min-w-0 flex-1">
@@ -392,7 +394,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
               </p>
               <p className="mt-2 text-xs muted">
                 {t(item.enabled ? "Active" : "Inactive")} ·{" "}
-                {item.compatibility.length
+                {kind === "agent" && item.compatibility.length
                   ? item.compatibility
                       .map((value) =>
                         value === "codex" ? "ChatGPT / Codex" : "Claude Code",
@@ -672,6 +674,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
               />
               {t("Active")}
             </label>
+            {kind === "skill" ? <SkillMetadata definition={draft} /> : <>
             <fieldset className="mt-5 min-w-0">
               <legend className="text-sm font-medium">
                 {t("Compatible assistants")}
@@ -736,6 +739,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                 ))}
               </div>
             </fieldset>
+            </>}
             {kind === "agent" && (
               <fieldset className="mt-5 min-w-0">
                 <legend className="text-sm font-medium">

@@ -19,6 +19,7 @@ class InstructionsIn(Schema):
     instructions: str = Field(max_length=4000)
     instructions_enabled: bool
     expected_revision: int = Field(ge=1)
+    official_references: list[dict] | None = Field(default=None, max_length=12)
 
 
 class ResourceIn(Schema):
@@ -40,6 +41,7 @@ def update_context(request, environment_id: int, payload: InstructionsIn):
         payload.instructions,
         payload.instructions_enabled,
         payload.expected_revision,
+        payload.official_references,
     )
 
 

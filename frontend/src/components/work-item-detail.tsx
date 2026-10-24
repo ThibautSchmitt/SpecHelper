@@ -4,6 +4,8 @@ import { QuestionResult } from "@/components/question-result";
 import { PublishTicket } from "@/components/publish-ticket";
 import { AnalysisContext } from "@/components/analysis-context";
 import { AnalysisEvidence } from "@/components/analysis-evidence";
+import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
+import { AnalysisRetryButton } from "@/components/analysis-retry-button";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels, warningMessage } from "@/lib/orchestration";
 import Link from "next/link";
@@ -372,9 +374,10 @@ function RequestContent({
                   "It will be processed when an assistant is available. Queue time does not reduce analysis time.",
                 )
               : t(
-                  "An analysis is limited to five minutes once started. You can leave this page and return later.",
+                  "The analysis continues until its checks are complete. You can leave this page and return later.",
                 )}
           </p>
+          {value.analysis_protocol === "2.4" && <div className="mt-3"><AnalysisCancelButton requestId={id} workflow={isQuestion ? "question" : "request"} onCancelled={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} /></div>}
           <ol className="mt-5 space-y-3">
             {value.progress.map((p, i) => (
               <li key={i} className="flex items-center gap-3 text-sm">
@@ -388,6 +391,11 @@ function RequestContent({
           </ol>
         </Card>
       )}
+      {(value.status === "CANCELLED" || (value.analysis_protocol === "2.4" && value.status === "ERROR")) && <Card>
+        <h2>{t(value.status === "CANCELLED" ? "Analysis cancelled" : "Analysis interrupted")}</h2>
+        <p className="mt-2 text-sm muted">{t(value.status === "CANCELLED" ? "Execution has stopped. Earlier results and recorded evidence remain available." : "Completed checks and previous results are kept. Only the interrupted step is retried.")}</p>
+        {value.analysis_protocol === "2.4" && <div className="mt-4"><AnalysisRetryButton requestId={id} workflow={isQuestion ? "question" : "request"} onRetried={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} /></div>}
+      </Card>}
       {["QUEUED", "CONTINUING_CONVERSATION"].includes(value.status) && (
         <p className="text-sm muted">
           {t("You can")}{" "}
@@ -487,6 +495,12 @@ function RequestContent({
       {loadingVersion && (
         <p role="status">{t("Loading the selected version…")}</p>
       )}
+      {result && !loadingVersion && (result.status === "PARTIAL" || result.status === "ERROR") && <section role="status" className="rounded-xl border border-amber-500/50 bg-card p-5 text-sm" aria-label={t("Result reliability")}>
+        <h2 className="text-base">{t(result.status === "PARTIAL" ? "Partial result" : "No usable result")}</h2>
+        <p className="mt-2">{t("Execution has ended, but the required independent checks are incomplete. This result is not a fully verified analysis.")}</p>
+        {!!result.evidence?.limitations.length && <ul className="mt-3 list-disc space-y-1 pl-5">{result.evidence.limitations.map((limit, index) => <li key={index}>{t(limit)}</li>)}</ul>}
+        {!isQuestion && <p className="mt-3 font-medium">{t("Publication is blocked until the required checks are complete. You can still review the draft and download the artifacts.")}</p>}
+      </section>}
       {isQuestion && result && !loadingVersion && (
         <QuestionResult
           key={`${id}-${result.number}`}
@@ -745,6 +759,17 @@ function RequestContent({
                             {t("Model family")}: {step.model_family}
                           </p>
                         )}
+                        {step.instruction_snapshot && <details className="mt-3 rounded border p-3 text-xs">
+                          <summary className="cursor-pointer font-medium">{t("Recorded execution configuration")}</summary>
+                          <p className="mt-2 muted">{t("These instructions belong to this step. Later settings changes do not replace them.")}</p>
+                          <h4 className="mt-3 font-medium">{t("Global instructions")}{step.instruction_snapshot.global_instruction_version !== undefined && ` · v${step.instruction_snapshot.global_instruction_version}`}</h4>
+                          <p className="mt-1 whitespace-pre-wrap break-words">{step.instruction_snapshot.global_instructions || t("None")}</p>
+                          <h4 className="mt-3 font-medium">{t("Specific instructions")}</h4>
+                          <p className="mt-1 whitespace-pre-wrap break-words">{step.instruction_snapshot.connection_instructions?.additional_instructions || t("None")}</p>
+                          {step.instruction_snapshot.connection_instructions?.version && <p className="mt-1 break-all muted">SHA-256: {step.instruction_snapshot.connection_instructions.version}</p>}
+                          <h4 className="mt-3 font-medium">{t("Skills actually loaded")}</h4>
+                          {step.skills_audit === "observed" ? step.loaded_skills?.length ? <ul className="mt-2 space-y-2">{step.loaded_skills.map(skill => <li key={`${skill.slug}:${skill.version}`} className="break-words">{skill.name || skill.slug} · v{skill.version}{skill.sha256 && <span className="mt-1 block break-all muted">SHA-256: {skill.sha256}</span>}</li>)}</ul> : <p className="mt-1 muted">{t("No skill-content read was observed during this step.")}</p> : <p className="mt-1 muted">{t("Skill read telemetry is unavailable. Available skills are not evidence of use.")}</p>}
+                        </details>}
                         {!!step.warnings?.length && (
                           <ul
                             className="mt-2 space-y-1 text-amber-800"

@@ -9,8 +9,10 @@ import {
   useState,
   Fragment,
 } from "react";
-import { Activity, Bot, CheckCircle2, Clock3, GitBranch, LoaderCircle, PauseCircle, ShieldCheck, Ticket, UserRound, UsersRound, XCircle } from "lucide-react";
+import { ChevronDown, Activity, Bot, CheckCircle2, Clock3, GitBranch, LoaderCircle, PauseCircle, ShieldCheck, Ticket, UserRound, UsersRound, XCircle } from "lucide-react";
 import { AssistantLogo } from "@/components/assistant-logo";
+import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
+import { AnalysisRetryButton } from "@/components/analysis-retry-button";
 import { api, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -26,6 +28,12 @@ export type QueueJob = {
   status: string;
   queue_state?: string;
   stage?: string;
+  stage_number?: number;
+  stage_count?: number;
+  elapsed_seconds?: number;
+  request_id?: string | null;
+  can_cancel?: boolean;
+  can_retry?: boolean;
   pause_reason?: string;
   waiting_reason?: string;
   assignment_state?: "current" | "previous" | "unassigned";
@@ -48,6 +56,8 @@ export type QueueJob = {
     model_family?: string;
   }[];
   request_status: string;
+  result_status?: "complete" | "partial" | "unusable" | "pending";
+  result_limits?: string[];
   queue_position: number | null;
   created_at: string;
   started_at: string | null;
@@ -87,9 +97,11 @@ export function TaskQueueProvider({ children }: { children: React.ReactNode }) {
         });
     update();
     const timer = setInterval(update, 3000);
+    window.addEventListener("queue-updated", update);
     return () => {
       alive = false;
       clearInterval(timer);
+      window.removeEventListener("queue-updated", update);
     };
   }, []);
   return (
@@ -102,6 +114,7 @@ export function TaskQueueProvider({ children }: { children: React.ReactNode }) {
 export function TaskQueue() {
   const { t } = useI18n();
   const { jobs, error, now, loading } = useContext(QueueContext);
+  const [showCompleted, setShowCompleted] = useState(false);
   const list = useRef<HTMLOListElement>(null);
   const positions = useRef(new Map<string, number>());
   useLayoutEffect(() => {
@@ -136,18 +149,29 @@ export function TaskQueue() {
   const groups = [
     { state: "RUNNING", label: "In progress", icon: LoaderCircle },
     { state: "QUEUED", label: "Waiting", icon: Clock3 },
+    { state: "WAITING_AI", label: "Waiting for AI", icon: Clock3 },
     { state: "PAUSED", label: "Needs clarification", icon: PauseCircle },
-    { state: "DONE", label: "Completed", icon: CheckCircle2 },
     { state: "ERROR", label: "Failed", icon: XCircle },
+    { state: "CANCELLED", label: "Cancelled", icon: XCircle },
+    { state: "DONE", label: "Completed", icon: CheckCircle2 },
   ];
-  const recent = jobs
-    .filter((j) => ["DONE", "ERROR"].includes(stateOf(j)))
+  // Retained jobs are history, not additional live cards for the same request.
+  // The newest analysis owns the card even if an older attempt had a higher state.
+  const latest = new Map<string, QueueJob>();
+  for (const job of jobs) {
+    const key = job.kind === "analysis" && job.request_id ? `${job.workflow || "request"}:${job.request_id}` : `${job.kind}:${job.id}`;
+    const previous = latest.get(key);
+    if (!previous || Date.parse(job.created_at) > Date.parse(previous.created_at) || (job.created_at === previous.created_at && Number(job.id) > Number(previous.id))) latest.set(key, job);
+  }
+  const cards = Array.from(latest.values()).filter(job => !(job.kind === "sync" && stateOf(job) === "DONE"));
+  const recent = cards
+    .filter((j) => ["DONE", "ERROR", "CANCELLED"].includes(stateOf(j)))
     .slice(0, 8);
   const visible = groups.flatMap((group) =>
-    jobs.filter(
+    cards.filter(
       (job) =>
         stateOf(job) === group.state &&
-        (!["DONE", "ERROR"].includes(group.state) || recent.includes(job)),
+        (!["DONE", "ERROR", "CANCELLED"].includes(group.state) || recent.includes(job)),
     ),
   );
 
@@ -189,8 +213,11 @@ export function TaskQueue() {
           const RoleIcon = role === "verifier" ? ShieldCheck : role === "counter_analyst" ? UsersRound : UserRound;
           const warning = job.warnings?.map((value) => t(warningMessage(value))).join(" · ");
           const description = t(job.error || job.pause_reason || job.waiting_reason || (clarification ? "A business answer is needed." : job.stage || job.operation || job.kind));
+          const resultState = job.result_status || (job.request_status === "PARTIAL" ? "partial" : job.request_status === "READY" ? "complete" : ["ERROR", "CANCELLED"].includes(job.request_status) ? "unusable" : "pending");
+          const resultLabel = resultState === "partial" ? "Partial result" : resultState === "complete" ? "Complete result" : resultState === "unusable" ? "No usable result" : "";
+          const limits = job.result_limits?.map(reason => t(reason)).join(" · ") || (resultState === "partial" ? t("Required independent checks are incomplete. Publication is blocked.") : "");
           const identifier = `#${String(job.id).replace(/^publication:/, "").slice(0, typeof job.id === "number" ? undefined : 8)}`;
-          const elapsed = job.started_at
+          const elapsed = typeof job.elapsed_seconds === "number" ? Math.max(0, Math.floor(job.elapsed_seconds)) : job.started_at
             ? Math.max(
                 0,
                 Math.floor(
@@ -204,10 +231,10 @@ export function TaskQueue() {
             <Fragment key={job.id}>
               {firstInGroup && (
                 <li className="queue-group-heading" role="presentation">
-                  <h3 data-state={state}><group.icon size={14} aria-hidden="true" />{t(group.label)} ({visible.filter((item) => stateOf(item) === state).length})</h3>
+                  {state === "DONE" ? <h3 data-state={state}><button type="button" className="flex w-full items-center gap-2 text-left" aria-expanded={showCompleted} onClick={() => setShowCompleted(value => !value)}><group.icon size={14} aria-hidden="true" />{t(group.label)} ({visible.filter((item) => stateOf(item) === state).length})<ChevronDown className={`ml-auto transition-transform ${showCompleted ? "rotate-180" : ""}`} size={14} aria-hidden="true" /></button></h3> : <h3 data-state={state}><group.icon size={14} aria-hidden="true" />{t(group.label)} ({visible.filter((item) => stateOf(item) === state).length})</h3>}
                 </li>
               )}
-              <li
+              {(state !== "DONE" || showCompleted) && <li
                 data-job={String(job.id)}
                 className="queue-card"
                 data-state={state}
@@ -255,8 +282,18 @@ export function TaskQueue() {
                     )}
                   </div>
                   <p className="queue-description" data-error={!!job.error} title={[description, warning].filter(Boolean).join(" · ")}>{warning && !job.error ? `${warning} · ${description}` : description}</p>
+                  {(job.stage_number || elapsed !== null) && <p className="mt-2 flex flex-wrap justify-between gap-2 text-[10px] muted">
+                    {job.stage_number && job.stage_count === 3 ? <span>{t("Step {step} of {total}", { step: job.stage_number, total: job.stage_count })}</span> : <span />}
+                    {elapsed !== null && <span>{t("Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(elapsed / 60), seconds: elapsed % 60 })}</span>}
+                  </p>}
+                  {job.kind === "analysis" && resultLabel && <div className="mt-2 text-xs" data-result-status={resultState}>
+                    <p className={resultState === "partial" ? "font-medium text-amber-700 dark:text-amber-300" : "muted"}>{t(resultLabel)}</p>
+                    {limits && <p className="mt-1 line-clamp-2 muted" title={limits}>{limits}</p>}
+                  </div>}
                 </Link>
-              </li>
+                {job.can_cancel && job.request_id && <div className="border-t px-1"><AnalysisCancelButton requestId={job.request_id} workflow={job.workflow} title={job.title} /></div>}
+                {job.can_retry && job.request_id && ["ERROR", "CANCELLED"].includes(state) && <div className="border-t p-2"><AnalysisRetryButton requestId={job.request_id} workflow={job.workflow} title={job.title} /></div>}
+              </li>}
             </Fragment>
           );
         })}

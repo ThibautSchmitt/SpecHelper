@@ -9,21 +9,21 @@ import { OrchestrationSettingsForm } from "@/components/orchestration-settings";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 
-export function AISettings({ onChanged }: { onChanged: () => Promise<void> }) {
+export function AISettings({ onChanged, simplified = false }: { onChanged: () => Promise<void>; simplified?: boolean }) {
   const { t } = useI18n();
   const [tab, setTab] = useState("connections");
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     if (query.has("library_draft"))
-      setTab(query.get("library_kind") === "skill" ? "skills" : "agents");
-  }, []);
+      setTab(simplified || query.get("library_kind") === "skill" ? "skills" : "agents");
+  }, [simplified]);
   const tabs = [
     { id: "connections", label: "Connections", icon: Plug },
     { id: "models", label: "Models", icon: Layers },
     { id: "roles", label: "Roles and orchestration", icon: Network },
     { id: "agents", label: "Agents", icon: Bot },
     { id: "skills", label: "Skills", icon: BookOpen },
-  ];
+  ].filter(item => !simplified || item.id !== "agents");
   return (
     <div className="space-y-6">
       <nav className="flex flex-wrap gap-1" aria-label={t("AI settings")}>
@@ -39,10 +39,10 @@ export function AISettings({ onChanged }: { onChanged: () => Promise<void> }) {
           </Button>
         ))}
       </nav>
-      {tab === "connections" && <AIConnections onChanged={onChanged} />}
+      {tab === "connections" && <AIConnections onChanged={onChanged} simplified={simplified} />}
       {tab === "models" && <AIModels />}
       {tab === "roles" && <OrchestrationSettingsForm />}
-      {tab === "agents" && <AILibrary kind="agent" />}
+      {!simplified && tab === "agents" && <AILibrary kind="agent" />}
       {tab === "skills" && <AILibrary kind="skill" />}
     </div>
   );

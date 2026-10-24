@@ -134,6 +134,26 @@ jobs:
           --memory 2g --cpus 2 --pids-limit 256
           spechelper-security:runtime python -m runtime.v19_smoke
           > security-reports/runtime-boundaries.jsonl
+      - name: Verify parallel isolation, lazy skills and cancellation
+        if: matrix.component == 'runtime'
+        run: >-
+          docker run --rm --init --network none --read-only
+          --cap-add SYS_ADMIN --cap-add NET_ADMIN
+          --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+          --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777
+          --memory 2g --cpus 2 --pids-limit 256
+          spechelper-security:runtime python -m runtime.v24_smoke
+          > security-reports/runtime-v24.json
+      - name: Verify bounded public-reference capability and private destination denial
+        if: matrix.component == 'runtime'
+        run: >-
+          docker run --rm --init --network none --read-only
+          --cap-add SYS_ADMIN --cap-add NET_ADMIN
+          --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+          --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777
+          --memory 2g --cpus 2 --pids-limit 256
+          spechelper-security:runtime python -m runtime.v25_smoke
+          > security-reports/runtime-v25.json
       - name: Export image without exposing Docker socket to scanner
         run: docker save "spechelper-security:${{ matrix.component }}" -o security-reports/image.tar
       - name: Scan container packages and image configuration

@@ -5,8 +5,8 @@ Requests, Questions and Tickets.
 
 | Tab | Configuration |
 | --- | --- |
-| General | Browser theme; shared instance name, short label, language and color |
-| AI & Agents | Connections, models, roles, account usage and one analysis configuration form |
+| General | Browser theme; shared instance name, short label, language, color and global instructions |
+| AI & Agents | Connections and their specific instructions, models, allowed roles, account usage and global skills |
 | Environments | Git connections, read-only databases, environment repositories/branches/context and ticket connectors |
 
 Connection actions use labeled icons with tooltips: refresh status/quotas, edit,
@@ -37,13 +37,31 @@ observations and do not turn them into current data. Unknown quota never means
 unlimited capacity. Authentication success alone does not clear known quota
 exhaustion; provider permission or the normal scheduler's recovery remains required.
 Configurations sharing an authentication identity share quota observations.
+The sidebar shows the limiting observed remaining percentage: green at60–100%,
+orange at20–<60% and red below20%. Unknown and authentication-required states have
+no invented bar. Last observations and stale states remain visible offline. Visible
+tabs refresh metadata every120seconds; a shared identity lock/throttle coordinates
+multiple browsers, and busy analyses are not probed.
 
-## One analysis configuration
+## Instructions and skills
 
-Independent counter-analysis, verification, model-family fallback, limits and
-advanced role instructions/tools use one form and one save operation. The backend
-updates the comparison policy together with orchestration without changing instance
-identity, language or color. Existing requests keep their frozen creation policy.
+Set shared instructions in General and specific instructions on each AI connection.
+Security rules and the mandatory role mission take priority. Environments retain
+business terminology, factual context, source repositories and documents; they do
+not introduce a third configurable instruction level.
+
+The global library exposes active compatible skills without role, connection or
+environment assignments. Assistants select relevant procedures and load full text
+on demand. Current steps retain captured content and report actually loaded
+versions; the discovery registry alone does not prove loading. Migration notices
+identify legacy content preserved for review rather than silently promoted.
+Current skill editing does not ask business users to select compatible assistants or
+tool permissions. Requirements are calculated metadata, checked against each step's
+actual capabilities. The detected model catalogue is primary; manual additions
+remain available through a secondary action.
+
+There is no fixed analysis-duration setting. The interface shows observed elapsed
+time and explicit AI/user waits. See [current orchestration](orchestration-v2.4.md).
 
 ## Environment ticket destinations
 
@@ -51,8 +69,11 @@ Each environment owns its connectors, credentials and allowed destinations. New
 publication is checked against the request's environment on the server, including
 retries. Existing ticket history is immutable. See [ticket publication](ticketing.md)
 for migration, legacy assignment, recovery and deletion rules.
+Environments also accept optional official reference URLs/domains with notes.
+These are non-exclusive factual starting points, with no priority over role or security
+rules. See [official references](official-references.md).
 
-## Validation
+## Historical settings validation
 
 The consolidated change passes 443 backend tests on disposable PostgreSQL 17 (one
 Linux-only host test skipped), 118 desktop/mobile browser scenarios and six final

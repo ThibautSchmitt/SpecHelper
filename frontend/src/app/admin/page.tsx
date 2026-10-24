@@ -20,6 +20,8 @@ import {
 } from "@/components/repository-picker";
 import { type AIConnection } from "@/components/ai-connections";
 import { AISettings } from "@/components/ai-settings";
+import { GlobalInstructionsForm } from "@/components/global-instructions";
+import type { OrchestrationSettings } from "@/components/orchestration-settings";
 import { EnvironmentLibrary } from "@/components/environment-library";
 import {
   DatabaseConnections,
@@ -27,6 +29,7 @@ import {
 } from "@/components/database-connections";
 import { EnvironmentActions } from "@/components/environment-actions";
 import { EnvironmentContext } from "@/components/environment-context";
+import { EnvironmentSyncHistory } from "@/components/environment-sync-history";
 import { api, send, statuses, type Environment } from "@/lib/api";
 
 type Connections = {
@@ -47,6 +50,7 @@ function AdminPanel() {
   const libraryDraft = searchParams.get("library_draft");
   const libraryKind = searchParams.get("library_kind");
   const [tab, setTab] = useState("general");
+  const [protocol, setProtocol] = useState("");
   const [connections, setConnections] = useState<Connections | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [settings, setSettings] = useState({
@@ -75,12 +79,14 @@ function AdminPanel() {
   async function refresh() {
     const version = ++refreshVersion.current;
     const draft = draftVersion.current;
-    const [c, e, s] = await Promise.all([
+    const [c, e, s, config] = await Promise.all([
       api<Connections>("/connections"),
       api<Environment[]>("/environments"),
       api<typeof settings>("/settings"),
+      api<OrchestrationSettings>("/orchestration-settings").catch(() => null),
     ]);
     if (version !== refreshVersion.current) return;
+    if (config) setProtocol(config.reliability_protocol || "");
     setConnections(c);
     setEnvironments(e);
     if (draft === draftVersion.current) setSettings(s);
@@ -176,6 +182,7 @@ function AdminPanel() {
         <AISettings
           key={`${libraryKind}:${libraryDraft}`}
           onChanged={refresh}
+          simplified={protocol === "2.4"}
         />
       )}
       {tab === "environments" && (
@@ -265,8 +272,9 @@ function AdminPanel() {
               {e.error && (
                 <p className="mt-3 text-sm text-red-700">{t(e.error)}</p>
               )}
-              <EnvironmentContext environmentId={e.id} />
-              <EnvironmentLibrary environmentId={e.id} />
+              <EnvironmentContext environmentId={e.id} factualOnly={protocol === "2.4"} />
+              <EnvironmentSyncHistory environmentId={e.id} />
+              {protocol !== "2.4" && <EnvironmentLibrary environmentId={e.id} />}
               <TicketConnectors environmentId={e.id} environmentName={e.name} />
             </Card>
           ))}
@@ -339,6 +347,7 @@ function AdminPanel() {
         </div>
       )}
       {tab === "general" && (
+        <div className="space-y-6">
         <Card className="max-w-2xl">
           <h2 className="flex items-center gap-2">
             <Paintbrush size={20} /> {t("Instance settings")}
@@ -452,6 +461,8 @@ function AdminPanel() {
             </fieldset>
           </form>
         </Card>
+        {protocol === "2.4" && <GlobalInstructionsForm />}
+        </div>
       )}
     </div>
   );

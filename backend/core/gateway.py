@@ -39,7 +39,8 @@ class Handler(BaseHTTPRequestHandler):
             bool(re.fullmatch(r"/auth/(?:start|[a-f0-9-]{36}/(?:code|cancel))", parsed.path))
             and self.command == "POST"
         )
-        if not (health or auth_get or auth_post):
+        cancel_run = parsed.path == "/runs/cancel" and self.command == "POST"
+        if not (health or auth_get or auth_post or cancel_run):
             self.respond(404, {"detail": "Command unavailable"})
             return
         target = parsed.path
@@ -74,7 +75,15 @@ class Handler(BaseHTTPRequestHandler):
                     self.respond(413, {"detail": "Request too large"})
                     return
                 payload = json.loads(self.rfile.read(length) or b"{}")
-            result = runtime_call(target, payload, timeout=25) if read_quota else runtime_call(target, payload)
+                if cancel_run:
+                    if set(payload) != {"request_id", "attempt_id"}:
+                        raise ValueError("Invalid cancellation")
+                    payload = {key: str(uuid.UUID(value)) for key, value in payload.items()}
+            result = (
+                runtime_call(target, payload, timeout=25)
+                if read_quota
+                else runtime_call(target, payload)
+            )
             self.respond(200, result)
         except ValueError:
             self.respond(502, {"detail": "Connection service unavailable"})

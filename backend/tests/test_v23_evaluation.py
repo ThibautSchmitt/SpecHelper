@@ -115,3 +115,195 @@ def test_semantic_review_must_cover_every_material_conclusion():
     invalid["material_conclusions"] = 0
     with pytest.raises(ValueError, match="every returned"):
         benchmark.score_response(case, response, invalid)
+
+
+def test_semantic_fact_review_can_recognize_paraphrases_without_relabeling_literal_checks():
+    case = benchmark.cases()[0]
+    output = {
+        "conclusions": [
+            {
+                "id": "C1",
+                "statement": "An ordinary purchase may be cancelled with a running service; imports have a separate path.",
+                "status": "supported",
+                "sources": ["policy.py", "history.py", "records.json", "settings.py"],
+            }
+        ]
+    }
+    review = {
+        "reviewer": "accountable-source-reviewer",
+        "method": "Reopened frozen source and checked every claim and corpus fact.",
+        "material_conclusions": 1,
+        "material_errors": 0,
+        "conclusion_reviews": [
+            {
+                "claim_id": "C1",
+                "material_error": False,
+                "reason": "The source predicate and separate importer support the qualified statement.",
+            }
+        ],
+        "critical_fact_reviews": [
+            {
+                "id": fact["id"],
+                "covered": True,
+                "claim_ids": ["C1"],
+                "reason": "Coverage audited from the complete claim and its cited frozen sources.",
+            }
+            for fact in case["critical_facts"]
+        ],
+        "counterexample_reviews": [
+            {
+                "id": value,
+                "covered": True,
+                "claim_ids": ["C1"],
+                "reason": "The qualified ordinary-purchase/import paths are explicit.",
+            }
+            for value in case["expected_counterexamples"]
+        ],
+        "unresolved_business_decisions": 0,
+        "business_decision_reason": "This fixture asks for observed behavior, not a policy choice.",
+    }
+    quality = benchmark.score_response(case, output, review)
+    assert quality["critical_omissions"]  # Literal words are absent; the distinction is preserved.
+    assert quality["semantic_critical_omissions"] == []
+    assert quality["semantic_unresolved_business_decisions"] == 0
+    invalid = copy.deepcopy(review)
+    invalid["critical_fact_reviews"][0]["claim_ids"] = ["invented"]
+    with pytest.raises(ValueError, match="frozen corpus"):
+        benchmark.score_response(case, output, invalid)
+
+
+def test_semantic_coverage_remains_unknown_without_explicit_review():
+    quality = benchmark.score_response(
+        benchmark.cases()[0],
+        {
+            "conclusions": [
+                {"statement": "A qualified rule.", "status": "partial", "sources": ["policy.py"]}
+            ]
+        },
+    )
+    assert quality["semantic_critical_omissions"] is None
+    assert quality["semantic_counterexamples_detected"] is None
+    assert quality["semantic_unresolved_business_decisions"] is None
+
+
+def test_native_role_citation_audit_checks_actual_excerpt_and_commit(tmp_path):
+    study = tmp_path / "study"
+    manifest = benchmark.prepare(study)
+    case = manifest["cases"][0]
+    path = "policy.py"
+    excerpt = (study / "repos" / case["id"] / path).read_text().splitlines()[0]
+    source = {
+        "kind": "git",
+        "repository": case["id"],
+        "commit": case["git_sha"],
+        "path": path,
+        "line_start": 1,
+        "line_end": 1,
+        "excerpt": excerpt,
+    }
+    output = {
+        "claims": [
+            {
+                "id": "C1",
+                "statement": "A bounded source observation.",
+                "status": "supported",
+                "sources": [source],
+            }
+        ]
+    }
+    response = {
+        "case_id": case["id"],
+        "mode": "source",
+        "git_sha": case["git_sha"],
+        "output": output,
+        "role_outputs": [output],
+    }
+    assert benchmark.audit_native_sources(study, [response])["invalid_sources"] == 0
+    source["excerpt"] = "invented excerpt"
+    assert benchmark.audit_native_sources(study, [response])["invalid_sources"] == 1
+    source["excerpt"] = excerpt
+    source["commit"] = "0" * 40
+    assert benchmark.audit_native_sources(study, [response])["invalid_sources"] == 1
+
+
+def test_complete_measurements_cannot_pass_quality_gate_with_invalid_native_citation(tmp_path):
+    study = tmp_path / "study"
+    manifest = benchmark.prepare(study)
+    responses = []
+    for case in benchmark.cases():
+        navigation = benchmark.source_navigation(study, case["id"])
+        expected = next(item for item in manifest["cases"] if item["id"] == case["id"])
+        path = case["expected_files"][0]
+        excerpt = (study / "repos" / case["id"] / path).read_text().splitlines()[0]
+        for mode in ("source", "codebase-memory-mcp"):
+            # Controlled records test the report gate, not actual MCP/provider performance.
+            benchmark.write_json(
+                study / "navigation" / f"{case['id']}-{mode}.json", {**navigation, "mode": mode}
+            )
+            output = {
+                "claims": [
+                    {
+                        "id": "C1",
+                        "statement": "Controlled test claim.",
+                        "status": "supported",
+                        "sources": [
+                            {
+                                "kind": "git",
+                                "repository": case["id"],
+                                "commit": expected["git_sha"],
+                                "path": path,
+                                "line_start": 1,
+                                "line_end": 1,
+                                "excerpt": excerpt,
+                            }
+                        ],
+                    }
+                ]
+            }
+            review = {
+                "reviewer": "controlled-test-fixture",
+                "method": "Tests gate separation only, not native quality.",
+                "material_conclusions": 1,
+                "material_errors": 0,
+                "critical_fact_reviews": [
+                    {
+                        "id": fact["id"],
+                        "covered": True,
+                        "claim_ids": ["C1"],
+                        "reason": "Controlled coverage fixture.",
+                    }
+                    for fact in case["critical_facts"]
+                ],
+                "counterexample_reviews": [
+                    {
+                        "id": value,
+                        "covered": True,
+                        "claim_ids": ["C1"],
+                        "reason": "Controlled coverage fixture.",
+                    }
+                    for value in case["expected_counterexamples"]
+                ],
+                "unresolved_business_decisions": 0,
+                "business_decision_reason": "Controlled fixture.",
+            }
+            responses.append(
+                {
+                    "case_id": case["id"],
+                    "mode": mode,
+                    "git_sha": expected["git_sha"],
+                    "output": output,
+                    "review": review,
+                    "input_tokens": 1,
+                    "output_tokens": 1,
+                    "cost": None,
+                }
+            )
+    benchmark.write_json(study / "responses.json", responses)
+    passing = benchmark.compare(study, study / "responses.json")
+    assert passing["complete_analysis_comparison"] and passing["native_quality_gate_passed"]
+    responses[0]["output"]["claims"][0]["sources"][0]["excerpt"] = "incorrect native excerpt"
+    benchmark.write_json(study / "responses.json", responses)
+    failing = benchmark.compare(study, study / "responses.json")
+    assert failing["complete_analysis_comparison"]
+    assert not failing["native_quality_gate_passed"]
+    assert failing["source_provenance"]["invalid_sources"] == 1

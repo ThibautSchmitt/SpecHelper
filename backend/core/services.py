@@ -17,12 +17,16 @@ from .models import (
 
 
 def queue_run(request, continuing=False, changed_decision_keys=None):
-    if request.analysis_protocol == "2.3":
+    if request.analysis_protocol in {"2.3", "2.4"}:
         request.confrontation = True
     if not request.messages.exists():
         RequestMessage.objects.create(
             request=request, role="user", kind="need", content=request.need
         )
+    if request.analysis_protocol == "2.4" and request.status == Request.Status.NEEDS_CLARIFICATION:
+        previous = request.analysis_runs.select_related("job").order_by("-number").first()
+        if previous and previous.job and previous.job.payload.get("analysis_protocol") == "2.4":
+            return resume_clarification(request, previous, changed_decision_keys or [])
     job = Job.objects.create(
         kind="analysis",
         target=str(request.id),
@@ -46,8 +50,63 @@ def queue_run(request, continuing=False, changed_decision_keys=None):
     )
     run = AnalysisRun.objects.create(request=request, job=job, number=number)
     freeze_context(request, run, reuse=reuse)
+    if request.analysis_protocol == "2.4":
+        from .orchestration_settings import get_config
+
+        run.orchestration = {
+            "version": "2.4",
+            "config": get_config("2.4"),
+            "outputs": {},
+            "sessions": {},
+            "calls": 0,
+        }
+        run.save(update_fields=["orchestration"])
     request.status = Request.Status.CONTINUING_CONVERSATION if continuing else Request.Status.QUEUED
     request.error, request.progress = "", []
+    request.save()
+    return request
+
+
+def resume_clarification(request, run, changed_keys):
+    """Keep the job identity and validated checkpoints preceding the blocking question."""
+    import copy
+
+    from .environment_context import freeze_context
+
+    job = Job.objects.select_for_update().get(pk=run.job_id)
+    if job.status != "DONE" or run.status != "NEEDS_CLARIFICATION":
+        raise HttpError(409, "This request is not awaiting an answer")
+    state = run.orchestration
+    checkpoint = state.get("checkpoint", "requirement")
+    role = state.get("current_role", "analyst")
+    state.setdefault("clarification_history", []).append(
+        {
+            "context_snapshot": copy.deepcopy(run.context_snapshot),
+            "checkpoint": checkpoint,
+            "output": copy.deepcopy(state.get("outputs", {}).get(checkpoint, {})),
+        }
+    )
+    replaced = request.business_decisions.filter(
+        revision=request.decision_revision, previous_id__isnull=False
+    ).exists()
+    if replaced:
+        state["outputs"], checkpoint, role = {}, "requirement", "analyst"
+    else:
+        state.get("outputs", {}).pop(checkpoint, None)
+    freeze_context(request, run, reuse=run.context_snapshot)
+    state["waiting_role"], state["waiting_reason"] = role, ""
+    run.orchestration, run.status, run.finished_at = state, "QUEUED", None
+    run.save(update_fields=["orchestration", "status", "finished_at"])
+    job.status, job.finished_at, job.error = "QUEUED", None, ""
+    job.payload.update(
+        next_checkpoint=checkpoint,
+        current_role=role,
+        decision_revision=request.decision_revision,
+        changed_decision_keys=changed_keys,
+        connection_ids=[],
+    )
+    job.save(update_fields=["status", "finished_at", "error", "payload"])
+    request.status, request.error = "QUEUED", ""
     request.save()
     return request
 
@@ -133,8 +192,8 @@ def enqueue_analysis(
             data={"questions": request.questions, "answers": answers},
         )
         request.questions = []
-    if analysis_protocol == "2.3":
-        request.analysis_protocol = "2.3"
+    if analysis_protocol in {"2.3", "2.4"}:
+        request.analysis_protocol = analysis_protocol
     return queue_run(request, changed_decision_keys=changed_decision_keys)
 
 
@@ -156,8 +215,8 @@ def continue_conversation(request_id, message, expected_version, analysis_protoc
         request=request, role="user", kind="followup", content=message.strip(), version=latest
     )
     request.questions = []
-    if analysis_protocol == "2.3":
-        request.analysis_protocol = "2.3"
+    if analysis_protocol in {"2.3", "2.4"}:
+        request.analysis_protocol = analysis_protocol
     return queue_run(request, continuing=True)
 
 

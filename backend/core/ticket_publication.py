@@ -13,7 +13,7 @@ from django.utils import timezone
 from ninja.errors import HttpError
 
 from .i18n import translate
-from .models import PublishedTicket
+from .models import PublishedTicket, TicketPublicationDraft
 from .ticket_providers import NetworkUncertain, TicketProviderError, provider_for, render_body
 
 
@@ -67,6 +67,14 @@ def connector_dict(connector):
 
 
 def publication_dict(value):
+    delivery = [dict(row) for row in value.attachment_delivery]
+    if value.updated_at < timezone.now() - timedelta(seconds=90):
+        for row in delivery:
+            if row.get("status") == "TRANSFERRING":
+                row.update(
+                    status="UNCERTAIN",
+                    error="The issue exists, but this attachment transfer could not be confirmed. Check the destination before any manual retry.",
+                )
     return {
         **value.snapshot,
         "id": str(value.pk),
@@ -96,6 +104,7 @@ def publication_dict(value):
         "updated_at": value.updated_at,
         "finished_at": value.finished_at,
         "idempotency_key": str(value.idempotency_key),
+        "attachment_delivery": delivery,
     }
 
 
@@ -213,13 +222,33 @@ def mapped_value(ticket, label):
     return str(value) if value is not None else ""
 
 
-def preview(version, connector, project, template_id="", issue_type=""):
+def preview(
+    version, connector, project, template_id="", issue_type="", presentation=None, *, restore=False
+):
     require_environment(version, connector)
     if version.request.workflow != "request":
         raise HttpError(409, "A question cannot publish an external ticket.")
     if version.status not in {"READY", "PARTIAL"}:
         raise HttpError(409, "Only a completed result version can be published.")
-    _, options = checked_options(connector, project, template_id, issue_type)
+    provider, options = checked_options(connector, project, template_id, issue_type)
+    if presentation is not None:
+        from .ticket_presentation import suggest_choice
+
+        selected_format = presentation.get("ticket_format", "")
+        templates = options.get("templates", [])
+        if selected_format != "standard" and not template_id and templates:
+            template_id = suggest_choice(version, templates) or (
+                str(templates[0]["id"]) if len(templates) == 1 else ""
+            )
+        types = options.get("issue_types", [])
+        if not issue_type and types:
+            issue_type = suggest_choice(version, types) or (
+                str(types[0]["id"]) if len(types) == 1 else ""
+            )
+        if template_id != presentation.get("template_id", "") or issue_type != presentation.get(
+            "issue_type", ""
+        ):
+            provider, options = checked_options(connector, project, template_id, issue_type)
     artifact = version.artifacts.filter(name="ticket.md").first()
     body = artifact.content if artifact else ""
     template = options.get("template_body", "")
@@ -248,11 +277,103 @@ def preview(version, connector, project, template_id="", issue_type=""):
             and field.get("type", "text") in {"text", "textarea", "string"}
         ):
             values[field_id] = mapped
-    return {
+    result = {
         **options,
         "title": str(options.get("defaults", {}).get("title") or version.ticket.get("title", "")),
         "body": body,
         "values": values,
+    }
+    if presentation is None:
+        return result
+    from .ticket_attachments import attachment_policy, available_attachments, selected_attachments
+    from .ticket_presentation import (
+        PRESENTATION_KEYS,
+        detailed_sections,
+        draft_metadata,
+        publication_reference,
+        save_draft,
+        standard_body,
+    )
+
+    fallback = ""
+    selected_format = presentation.get("ticket_format", "") or (
+        "project" if options.get("templates") else "standard"
+    )
+    if selected_format == "project" and not options.get("templates"):
+        selected_format = "standard"
+        fallback = "This project exposes no usable ticket template. The standard SpecHelper format is selected; required destination fields still apply."
+    elif not presentation.get("ticket_format") and not options.get("templates"):
+        fallback = "This project exposes no usable ticket template. The standard SpecHelper format is selected; required destination fields still apply."
+    selection = {
+        key: presentation.get(
+            key, False if key.startswith("include_") else [] if key == "attachment_ids" else ""
+        )
+        for key in PRESENTATION_KEYS
+    }
+    selection.update(
+        ticket_format=selected_format,
+        template_id=template_id if selected_format == "project" else "",
+        issue_type=issue_type,
+    )
+    # A standard presentation clears a project template but never bypasses Jira
+    # issue-type or other destination-wide required fields.
+    if selected_format == "standard" and template_id:
+        return preview(
+            version,
+            connector,
+            project,
+            "",
+            issue_type,
+            {**selection, "ticket_format": "standard"},
+            restore=restore,
+        )
+    if selected_format == "standard":
+        result["body"] = standard_body(version)
+    extra = detailed_sections(version, selection)
+    if extra:
+        result["body"] += "\n\n" + extra
+    content = {
+        "title": result["title"],
+        "body": result["body"],
+        "fields": result["values"],
+        "labels": options.get("defaults", {}).get("labels", []),
+        "assignees": options.get("defaults", {}).get("assignees", []),
+        "options_revision": options.get("revision", ""),
+    }
+    existing = TicketPublicationDraft.objects.filter(
+        version=version, connector=connector, project=project
+    ).first()
+    if restore and existing and existing.presentation == selection:
+        # Only restore against the same destination metadata revision. A changed
+        # template requires recomposition and another human review.
+        if existing.content.get("options_revision") == options.get("revision"):
+            content = existing.content
+    policy = attachment_policy(connector, project) if selection.get("include_attachments") else None
+    chosen = selected_attachments(version, connector, selection, policy=policy)
+    content = {**content, "selected_attachments": chosen}
+    draft = save_draft(version, connector, project, selection, content)
+    return {
+        **result,
+        "title": content["title"],
+        "body": content["body"],
+        "defaults": {
+            **options.get("defaults", {}),
+            "labels": content["labels"],
+            "assignees": content["assignees"],
+        },
+        "options_revision": content["options_revision"],
+        "values": content["fields"],
+        **draft_metadata(draft, version),
+        "fallback_reason": fallback,
+        "available_attachments": available_attachments(version, connector, policy),
+        "selected_attachments": chosen,
+        "attachment_destination": connector.base_url.rstrip("/") + " · " + project,
+        "validation_errors": {},
+        "requires_template_choice": selected_format == "project"
+        and len(options.get("templates", [])) > 1
+        and not template_id,
+        "publication_reference": publication_reference(draft),
+        "rendered_body": render_body(content, options, publication_reference(draft)),
     }
 
 
@@ -381,6 +502,9 @@ def publish(version, connector, payload):
         raise HttpError(409, "A question cannot publish an external ticket.")
     if version.status not in {"READY", "PARTIAL"}:
         raise HttpError(409, "Only a completed result version can be published.")
+    from .ticket_presentation import publication_blockers
+
+    blockers = publication_blockers(version)
     project = payload["project"]
     destination = canonical_hash(
         {
@@ -402,9 +526,39 @@ def publish(version, connector, payload):
             "options_revision",
         )
     }
+    draft = None
+    if "ticket_format" in payload:
+        from .ticket_attachments import selected_attachments
+        from .ticket_presentation import PRESENTATION_KEYS
+
+        snapshot.update({key: payload.get(key) for key in PRESENTATION_KEYS})
+        snapshot["selected_attachments"] = selected_attachments(
+            version, connector, payload, project
+        )
+        snapshot["baseline"] = version.baseline
+        snapshot["environment_name"] = version.environment_name
+        snapshot["version_id"] = str(version.pk)
+        if payload.get("draft_id"):
+            draft = TicketPublicationDraft.objects.filter(
+                pk=payload["draft_id"], version=version, connector=connector, project=project
+            ).first()
+            content_keys = ("title", "body", "fields", "labels", "assignees", "options_revision")
+            if (
+                draft is None
+                or any(draft.content.get(key) != payload[key] for key in content_keys)
+                or any(draft.presentation.get(key) != payload.get(key) for key in PRESENTATION_KEYS)
+                or draft.content.get("selected_attachments", []) != snapshot["selected_attachments"]
+            ):
+                raise HttpError(409, "Save and review the exact ticket draft before publication.")
     digest = canonical_hash(snapshot)
     key = payload["idempotency_key"]
     existing = PublishedTicket.objects.filter(idempotency_key=key).first()
+    if existing is None and draft:
+        from .ticket_presentation import publication_reference
+
+        existing = PublishedTicket.objects.filter(
+            external_reference=publication_reference(draft)
+        ).first()
     if existing and (
         existing.payload_hash != digest
         or existing.version_id != version.pk
@@ -438,6 +592,11 @@ def publish(version, connector, payload):
             PublishedTicket.Status.UNCERTAIN,
         }
     )
+    if blockers and not legacy_recovery:
+        raise HttpError(
+            409,
+            "Publication is blocked until the mandatory independent checks are complete.",
+        )
     if not legacy_recovery:
         require_environment(version, connector)
     if existing is not None:
@@ -445,6 +604,13 @@ def publish(version, connector, payload):
         # historical shared connectors retained by the environment migration.
         connector = existing.connector
     if existing and existing.status == PublishedTicket.Status.PUBLISHED:
+        selected_ids = {row["id"] for row in existing.snapshot.get("selected_attachments", [])}
+        observed_ids = {row["id"] for row in existing.attachment_delivery}
+        if selected_ids - observed_ids:
+            from .ticket_attachments import deliver_attachments
+
+            provider = checked_access(connector, project)
+            deliver_attachments(existing, provider)
         return existing
     if (
         existing
@@ -465,6 +631,14 @@ def publish(version, connector, payload):
         provider, options = checked_options(
             connector, project, payload["template_id"], payload["issue_type"]
         )
+        if (
+            payload.get("ticket_format") == "project"
+            and options.get("templates")
+            and not payload["template_id"]
+        ):
+            raise HttpError(422, "Choose one of the project's available ticket templates.")
+        if options.get("issue_types") and not payload["issue_type"]:
+            raise HttpError(422, "Choose an available issue type before publication.")
         if payload["options_revision"] != options.get("revision"):
             raise HttpError(
                 409,
@@ -482,7 +656,9 @@ def publish(version, connector, payload):
                     project=project,
                     destination=destination,
                     idempotency_key=key,
-                    external_reference="spechelper:" + str(uuid.uuid4()),
+                    external_reference=publication_reference(draft)
+                    if draft
+                    else "spechelper:" + str(uuid.uuid4()),
                     title=payload["title"],
                     body=payload["body"],
                     fields=payload["fields"],
@@ -550,4 +726,10 @@ def publish(version, connector, payload):
             finished_at=timezone.now(),
         )
     record.refresh_from_db()
+    if record.status == PublishedTicket.Status.PUBLISHED and record.snapshot.get(
+        "selected_attachments"
+    ):
+        from .ticket_attachments import deliver_attachments
+
+        deliver_attachments(record, provider)
     return record

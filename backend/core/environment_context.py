@@ -90,6 +90,7 @@ def describe(environment):
         "instructions": environment.context_instructions,
         "instructions_enabled": environment.instructions_enabled,
         "revision": environment.context_revision,
+        "official_references": environment.official_references,
         "max_files": MAX_FILES,
         "max_file_size": MAX_FILE_SIZE,
         "resources": [
@@ -110,19 +111,35 @@ def locked_environment(environment_id, expected_revision):
 def advance(environment):
     environment.context_revision += 1
     environment.save(
-        update_fields=["context_revision", "context_instructions", "instructions_enabled"]
+        update_fields=[
+            "context_revision",
+            "context_instructions",
+            "instructions_enabled",
+            "official_references",
+        ]
     )
     return describe(environment)
 
 
 @transaction.atomic
-def update_instructions(environment_id, instructions, enabled, expected_revision):
+def update_instructions(
+    environment_id, instructions, enabled, expected_revision, official_references=None
+):
     environment = locked_environment(environment_id, expected_revision)
     if len(instructions) > MAX_INSTRUCTIONS or "\x00" in instructions:
         raise HttpError(422, "Context instructions must contain at most 4000 text characters.")
     reject_credentials(instructions)
     environment.context_instructions = instructions
     environment.instructions_enabled = enabled
+    if official_references is not None:
+        from .official_sources import validate_references
+
+        try:
+            references = validate_references(official_references)
+        except ValueError as error:
+            raise HttpError(422, str(error)) from error
+        reject_credentials(json.dumps(references))
+        environment.official_references = references
     return advance(environment)
 
 
@@ -243,6 +260,7 @@ def snapshot_environment(environment):
             "sha256": hashlib.sha256(instructions.encode()).hexdigest(),
         },
         "resources": resources,
+        "official_references": environment.official_references,
         "library": library_snapshot(environment),
     }
 
@@ -257,6 +275,9 @@ def freeze_context(request, run=None, reuse=None):
     from .sensitive_data import configured_secrets, redact
 
     snapshot["snapshot_id"] = str(uuid.uuid4())
+    if request.analysis_protocol == "2.4":
+        snapshot["analysis_protocol"] = "2.4"
+        snapshot.setdefault("instructions", {})["mode"] = "factual"
     from .business_decisions import snapshot_for_request
 
     snapshot["business_decisions"] = snapshot_for_request(request)

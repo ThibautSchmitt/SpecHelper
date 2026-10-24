@@ -41,6 +41,7 @@ def question(**changes):
 
 
 def waiting(environment, workflow="request", questions=None):
+    """Seed a historical clarification, including older records with an empty context."""
     return Request.objects.create(
         environment=environment,
         environment_name_snapshot=environment.name,
@@ -70,12 +71,22 @@ def answer(client, request, **changes):
 
 
 def settle(request, number=1):
+    """Seed a completed-result fixture for decision API tests, without invoking publication.
+
+    Current publication fencing and mandatory review are exercised by the v2.4
+    workflow suite, not by these business validation/optimistic revision units.
+    """
     request.refresh_from_db()
     request.status = "READY"
     request.save(update_fields=["status"])
     Job.objects.filter(target=str(request.pk)).update(status="DONE")
+    run = request.analysis_runs.order_by("-number").first()
+    if run:
+        run.status = "READY"
+        run.save(update_fields=["status"])
     return ResultVersion.objects.create(
         request=request,
+        run=run,
         number=number,
         status="READY",
         environment_name=request.environment_name_snapshot,
@@ -91,6 +102,7 @@ def test_guided_choice_is_recorded_in_order_and_resumes_shared_queue(client, env
     assert result.status_code == 200, result.content
     data = result.json()
     assert data["status"] == "QUEUED" and data["decision_revision"] == 1
+    assert data["analysis_protocol"] == "2.4"
     assert data["decisions"][0]["option_id"] == "b"
     assert data["decisions"][0]["value"] == "Allow termination with a warning."
     assert data["decisions"][0]["sequence"] == 1
@@ -98,9 +110,23 @@ def test_guided_choice_is_recorded_in_order_and_resumes_shared_queue(client, env
     request.refresh_from_db()
     run = request.analysis_runs.get()
     assert run.job.kind == "analysis" and run.job.status == "QUEUED"
+    assert run.job.payload["analysis_protocol"] == "2.4"
+    assert run.orchestration["version"] == "2.4"
+    assert run.orchestration["outputs"] == {}
     assert run.context_snapshot["business_decisions"]["decisions"][0]["option_id"] == "b"
     assert run.job.payload["changed_decision_keys"] == ["open-benefits"]
     assert request.conversation[-1]["answers"]["termination"] == "Allow termination with a warning."
+
+
+def test_empty_historical_context_can_upgrade_to_current_public_protocol(client, environment):
+    request = waiting(environment)
+    assert request.context_snapshot == {} and request.analysis_protocol == "legacy"
+    response = answer(client, request)
+    assert response.status_code == 200, response.content
+    request.refresh_from_db()
+    assert request.analysis_protocol == "2.4"
+    assert request.context_snapshot["instructions"]["mode"] == "factual"
+    assert request.context_snapshot["business_decisions"]["decisions"][0]["option_id"] == "b"
 
 
 @pytest.mark.parametrize(
@@ -179,6 +205,13 @@ def test_conflicting_answer_does_not_modify_rule_until_explicit_confirmation(cli
         )
     ]
     request.save()
+    # Seed the later user-waiting checkpoint consistently on both persisted states.
+    # Merely changing Request.status would describe a still-queued, non-paused job.
+    run = request.analysis_runs.get()
+    run.status = "NEEDS_CLARIFICATION"
+    run.orchestration.update(checkpoint="requirement", current_role="analyst")
+    run.save(update_fields=["status", "orchestration"])
+    Job.objects.filter(pk=run.job_id).update(status="DONE")
     changed = answer(client, request, choices={"termination": {"option_id": "a"}})
     assert changed.status_code == 409, changed.content
     assert changed.json()["code"] == "DECISION_CONFLICT"
@@ -224,6 +257,9 @@ def test_decision_revision_queues_focused_reanalysis_and_preserves_old_result(cl
     assert revised.status_code == 200, revised.content
     request.refresh_from_db()
     run = request.analysis_runs.order_by("-number").first()
+    assert request.analysis_protocol == "2.4"
+    assert run.job.payload["analysis_protocol"] == "2.4"
+    assert run.orchestration["version"] == "2.4"
     assert run.job.payload["changed_decision_keys"] == ["open-benefits"]
     assert run.context_snapshot["changed_decision_keys"] == ["open-benefits"]
     assert run.context_snapshot["business_decisions"]["decisions"][0]["option_id"] == "a"

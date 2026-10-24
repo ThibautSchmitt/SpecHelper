@@ -48,7 +48,7 @@ def create(environment_id, need, confrontation=False, category="general"):
     environment = get_object_or_404(Environment, pk=environment_id)
     value = Request.objects.create(
         workflow="question",
-        analysis_protocol="2.3",
+        analysis_protocol="2.4",
         environment=environment,
         environment_name_snapshot=environment.name,
         need=need.strip(),
@@ -203,7 +203,7 @@ def create_request(
     preview = transfer_preview(question_id, number) if include_context else None
     value = Request.objects.create(
         workflow="request",
-        analysis_protocol="2.3",
+        analysis_protocol="2.4",
         source_question_version=version,
         environment=environment,
         environment_name_snapshot=environment.name,
