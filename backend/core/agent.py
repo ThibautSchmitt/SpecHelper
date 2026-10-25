@@ -122,6 +122,7 @@ def output_language_instruction(language):
 def prompt(request, phase):
     data = {
         "need": request.need,
+        "project_relationship_clarification": request.scope_clarification,
         "baseline": request.baseline,
         "conversation": request.conversation,
         "database": request.database_snapshot.get("name"),

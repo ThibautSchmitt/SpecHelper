@@ -1,0 +1,1857 @@
+{
+  "schema_version": 1,
+  "cases": {
+    "Q01": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "Draft contracts are cancellable in the authored policy.",
+        "This rule does not imply active contracts are cancellable."
+      ],
+      "required_facts": [
+        {
+          "id": "Q01-F1",
+          "statement": "Draft contracts are cancellable in the authored policy.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q01-F2",
+          "statement": "This rule does not imply active contracts are cancellable.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "This rule does not imply active contracts are cancellable."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q02": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "Current source policy blocks active cancellation when open_claims is positive.",
+        "The active-cancellation configuration does not remove the open-claim condition."
+      ],
+      "required_facts": [
+        {
+          "id": "Q02-F1",
+          "statement": "Current source policy blocks active cancellation when open_claims is positive.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q02-F2",
+          "statement": "The active-cancellation configuration does not remove the open-claim condition.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "The active-cancellation configuration does not remove the open-claim condition."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q03": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The legacy import preserves supplied statuses without current cancellation checks.",
+        "A historical imported anomaly does not establish current cancellation permission."
+      ],
+      "required_facts": [
+        {
+          "id": "Q03-F1",
+          "statement": "The legacy import preserves supplied statuses without current cancellation checks.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "import_legacy.py",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "\"\"\"A historical import path; it is not current user-interface authorization.\"\"\"\n\n\ndef import_contract(row):\n    return {\"status\": row[\"status\"], \"open_claims\": row.get(\"open_claims\", 0)}"
+            }
+          ]
+        },
+        {
+          "id": "Q03-F2",
+          "statement": "A historical imported anomaly does not establish current cancellation permission.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "import_legacy.py",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "\"\"\"A historical import path; it is not current user-interface authorization.\"\"\"\n\n\ndef import_contract(row):\n    return {\"status\": row[\"status\"], \"open_claims\": row.get(\"open_claims\", 0)}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "A historical imported anomaly does not establish current cancellation permission."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q04": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "Source renewal requires active status and renewal_enabled.",
+        "The stable database setting disables renewal, despite the JSON default enabling it.",
+        "The current data observation is limited to the declared snapshot and period."
+      ],
+      "required_facts": [
+        {
+          "id": "Q04-F1",
+          "statement": "Source renewal requires active status and renewal_enabled.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q04-F2",
+          "statement": "The stable database setting disables renewal, despite the JSON default enabling it.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q04-F3",
+          "statement": "The current data observation is limited to the declared snapshot and period.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "The stable database setting disables renewal, despite the JSON default enabling it.",
+        "The current data observation is limited to the declared snapshot and period."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q05": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The current database and file settings disable active cancellation.",
+        "Open-claim contracts remain blocked by an independent source condition.",
+        "Enabling a configuration is a proposed change, not current behavior."
+      ],
+      "required_facts": [
+        {
+          "id": "Q05-F1",
+          "statement": "The current database and file settings disable active cancellation.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q05-F2",
+          "statement": "Open-claim contracts remain blocked by an independent source condition.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q05-F3",
+          "statement": "Enabling a configuration is a proposed change, not current behavior.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "Open-claim contracts remain blocked by an independent source condition.",
+        "Enabling a configuration is a proposed change, not current behavior."
+      ],
+      "contradictions": [],
+      "business_decisions": [
+        "Whether to enable active cancellation while retaining the open-claim safeguard"
+      ],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q06": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The complete stable population contains 1001 contracts.",
+        "One imported historical contract is cancelled with an open claim.",
+        "The rare record contradicts the universal data claim but does not change today's source policy."
+      ],
+      "required_facts": [
+        {
+          "id": "Q06-F1",
+          "statement": "The complete stable population contains 1001 contracts.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "import_legacy.py",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "\"\"\"A historical import path; it is not current user-interface authorization.\"\"\"\n\n\ndef import_contract(row):\n    return {\"status\": row[\"status\"], \"open_claims\": row.get(\"open_claims\", 0)}"
+            }
+          ]
+        },
+        {
+          "id": "Q06-F2",
+          "statement": "One imported historical contract is cancelled with an open claim.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "import_legacy.py",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "\"\"\"A historical import path; it is not current user-interface authorization.\"\"\"\n\n\ndef import_contract(row):\n    return {\"status\": row[\"status\"], \"open_claims\": row.get(\"open_claims\", 0)}"
+            }
+          ]
+        },
+        {
+          "id": "Q06-F3",
+          "statement": "The rare record contradicts the universal data claim but does not change today's source policy.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "import_legacy.py",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "\"\"\"A historical import path; it is not current user-interface authorization.\"\"\"\n\n\ndef import_contract(row):\n    return {\"status\": row[\"status\"], \"open_claims\": row.get(\"open_claims\", 0)}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "One imported historical contract is cancelled with an open claim.",
+        "The rare record contradicts the universal data claim but does not change today's source policy."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q07": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "Prior source evidence must match the current repository commit before reuse.",
+        "Current source and configuration impose active-status and open-claim conditions.",
+        "A changed SHA requires fresh evidence or an explicit unverified limit."
+      ],
+      "required_facts": [
+        {
+          "id": "Q07-F1",
+          "statement": "Prior source evidence must match the current repository commit before reuse.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q07-F2",
+          "statement": "Current source and configuration impose active-status and open-claim conditions.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q07-F3",
+          "statement": "A changed SHA requires fresh evidence or an explicit unverified limit.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "Current source and configuration impose active-status and open-claim conditions.",
+        "A changed SHA requires fresh evidence or an explicit unverified limit."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q08": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "Source configuration can be described, but current database settings cannot be asserted without access.",
+        "The answer must retain a material database-access limitation rather than universal deployment certainty."
+      ],
+      "required_facts": [
+        {
+          "id": "Q08-F1",
+          "statement": "Source configuration can be described, but current database settings cannot be asserted without access.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q08-F2",
+          "statement": "The answer must retain a material database-access limitation rather than universal deployment certainty.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "The answer must retain a material database-access limitation rather than universal deployment certainty."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q09": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The attachment proposes permitting active cancellation with an open claim.",
+        "Current policy blocks that behavior.",
+        "The project owner must resolve the business choice; the assistant cannot approve its own replacement rule."
+      ],
+      "required_facts": [
+        {
+          "id": "Q09-F1",
+          "statement": "The attachment proposes permitting active cancellation with an open claim.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q09-F2",
+          "statement": "Current policy blocks that behavior.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q09-F3",
+          "statement": "The project owner must resolve the business choice; the assistant cannot approve its own replacement rule.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "Current policy blocks that behavior.",
+        "The project owner must resolve the business choice; the assistant cannot approve its own replacement rule."
+      ],
+      "contradictions": [],
+      "business_decisions": [
+        "Block open-claim cancellation or allow it with an explicit warning"
+      ],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q10": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The authored refund policy applies from 2025-06-01.",
+        "Invoices paid earlier do not satisfy that date condition even when paid and undisputed.",
+        "This is a fictional project rule, not a legal tax determination."
+      ],
+      "required_facts": [
+        {
+          "id": "Q10-F1",
+          "statement": "The authored refund policy applies from 2025-06-01.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q10-F2",
+          "statement": "Invoices paid earlier do not satisfy that date condition even when paid and undisputed.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q10-F3",
+          "statement": "This is a fictional project rule, not a legal tax determination.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "Invoices paid earlier do not satisfy that date condition even when paid and undisputed.",
+        "This is a fictional project rule, not a legal tax determination."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q11": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "Contract cancellation eligibility is controlled in the contracts repository.",
+        "The billing repository applies an active cancellation fee of 25.",
+        "A fee rule does not grant cancellation permission."
+      ],
+      "required_facts": [
+        {
+          "id": "Q11-F1",
+          "statement": "Contract cancellation eligibility is controlled in the contracts repository.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            },
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q11-F2",
+          "statement": "The billing repository applies an active cancellation fee of 25.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            },
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q11-F3",
+          "statement": "A fee rule does not grant cancellation permission.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "contracts",
+              "path": "policy.py",
+              "start_line": 1,
+              "end_line": 13,
+              "excerpt": "\"\"\"Fictional contract rules used only by the qualification corpus.\"\"\"\n\n\ndef can_cancel(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return True\n    if contract[\"status\"] != \"active\" or contract[\"open_claims\"] > 0:\n        return False\n    return bool(settings[\"allow_active_cancellation\"])\n\n\ndef can_renew(contract, settings):\n    return contract[\"status\"] == \"active\" and settings[\"renewal_enabled\"]"
+            },
+            {
+              "repository": "contracts",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 6,
+              "excerpt": "{\n  \"allow_active_cancellation\": false,\n  \"renewal_enabled\": true,\n  \"database_config_authoritative\": true,\n  \"policy_effective_from\": \"2025-01-01\"\n}"
+            },
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "The billing repository applies an active cancellation fee of 25.",
+        "A fee rule does not grant cancellation permission."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q12": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The portal shows the refund action for paid invoices.",
+        "Backend refundability also requires no dispute and an applicable payment date.",
+        "Visible interface controls do not establish backend authorization."
+      ],
+      "required_facts": [
+        {
+          "id": "Q12-F1",
+          "statement": "The portal shows the refund action for paid invoices.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            },
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q12-F2",
+          "statement": "Backend refundability also requires no dispute and an applicable payment date.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            },
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q12-F3",
+          "statement": "Visible interface controls do not establish backend authorization.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            },
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "Backend refundability also requires no dispute and an applicable payment date.",
+        "Visible interface controls do not establish backend authorization."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q13": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The backend blocks refund while a dispute is open.",
+        "The paid status alone is insufficient.",
+        "The requested shortcut must preserve the date and dispute conditions."
+      ],
+      "required_facts": [
+        {
+          "id": "Q13-F1",
+          "statement": "The backend blocks refund while a dispute is open.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            },
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q13-F2",
+          "statement": "The paid status alone is insufficient.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            },
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q13-F3",
+          "statement": "The requested shortcut must preserve the date and dispute conditions.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            },
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "The paid status alone is insufficient.",
+        "The requested shortcut must preserve the date and dispute conditions."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q14": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The preview returns only the first twenty rows.",
+        "The stable full dataset contains a rare historical exception outside that preview.",
+        "A sample does not establish a universal population statement."
+      ],
+      "required_facts": [
+        {
+          "id": "Q14-F1",
+          "statement": "The preview returns only the first twenty rows.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "reporting",
+              "path": "export.py",
+              "start_line": 1,
+              "end_line": 9,
+              "excerpt": "\"\"\"Scoped export from a read-only fixture population.\"\"\"\n\n\ndef exportable(row, settings):\n    return row[\"status\"] == \"active\" and row[\"updated_on\"] >= settings[\"export_from\"]\n\n\ndef preview(rows):\n    return rows[:20]"
+            },
+            {
+              "repository": "contracts",
+              "path": "import_legacy.py",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "\"\"\"A historical import path; it is not current user-interface authorization.\"\"\"\n\n\ndef import_contract(row):\n    return {\"status\": row[\"status\"], \"open_claims\": row.get(\"open_claims\", 0)}"
+            }
+          ]
+        },
+        {
+          "id": "Q14-F2",
+          "statement": "The stable full dataset contains a rare historical exception outside that preview.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "reporting",
+              "path": "export.py",
+              "start_line": 1,
+              "end_line": 9,
+              "excerpt": "\"\"\"Scoped export from a read-only fixture population.\"\"\"\n\n\ndef exportable(row, settings):\n    return row[\"status\"] == \"active\" and row[\"updated_on\"] >= settings[\"export_from\"]\n\n\ndef preview(rows):\n    return rows[:20]"
+            },
+            {
+              "repository": "contracts",
+              "path": "import_legacy.py",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "\"\"\"A historical import path; it is not current user-interface authorization.\"\"\"\n\n\ndef import_contract(row):\n    return {\"status\": row[\"status\"], \"open_claims\": row.get(\"open_claims\", 0)}"
+            }
+          ]
+        },
+        {
+          "id": "Q14-F3",
+          "statement": "A sample does not establish a universal population statement.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "reporting",
+              "path": "export.py",
+              "start_line": 1,
+              "end_line": 9,
+              "excerpt": "\"\"\"Scoped export from a read-only fixture population.\"\"\"\n\n\ndef exportable(row, settings):\n    return row[\"status\"] == \"active\" and row[\"updated_on\"] >= settings[\"export_from\"]\n\n\ndef preview(rows):\n    return rows[:20]"
+            },
+            {
+              "repository": "contracts",
+              "path": "import_legacy.py",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "\"\"\"A historical import path; it is not current user-interface authorization.\"\"\"\n\n\ndef import_contract(row):\n    return {\"status\": row[\"status\"], \"open_claims\": row.get(\"open_claims\", 0)}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "The stable full dataset contains a rare historical exception outside that preview.",
+        "A sample does not establish a universal population statement."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q15": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "The fixture explicitly records legal applicability as unverified.",
+        "No current tax obligation can be asserted from fictional settings or an unverified external rule.",
+        "Jurisdiction, effective date and applicability require an actual authoritative reference and review."
+      ],
+      "required_facts": [
+        {
+          "id": "Q15-F1",
+          "statement": "The fixture explicitly records legal applicability as unverified.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q15-F2",
+          "statement": "No current tax obligation can be asserted from fictional settings or an unverified external rule.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q15-F3",
+          "statement": "Jurisdiction, effective date and applicability require an actual authoritative reference and review.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            },
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "No current tax obligation can be asserted from fictional settings or an unverified external rule.",
+        "Jurisdiction, effective date and applicability require an actual authoritative reference and review."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q16": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "Exports include only active rows updated on or after 2025-01-01.",
+        "Archived and older rows are excluded.",
+        "The source predicate does not establish counts without a scoped database observation."
+      ],
+      "required_facts": [
+        {
+          "id": "Q16-F1",
+          "statement": "Exports include only active rows updated on or after 2025-01-01.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "reporting",
+              "path": "export.py",
+              "start_line": 1,
+              "end_line": 9,
+              "excerpt": "\"\"\"Scoped export from a read-only fixture population.\"\"\"\n\n\ndef exportable(row, settings):\n    return row[\"status\"] == \"active\" and row[\"updated_on\"] >= settings[\"export_from\"]\n\n\ndef preview(rows):\n    return rows[:20]"
+            },
+            {
+              "repository": "reporting",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"export_from\": \"2025-01-01\",\n  \"preview_limit\": 20,\n  \"include_archived\": false\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q16-F2",
+          "statement": "Archived and older rows are excluded.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "reporting",
+              "path": "export.py",
+              "start_line": 1,
+              "end_line": 9,
+              "excerpt": "\"\"\"Scoped export from a read-only fixture population.\"\"\"\n\n\ndef exportable(row, settings):\n    return row[\"status\"] == \"active\" and row[\"updated_on\"] >= settings[\"export_from\"]\n\n\ndef preview(rows):\n    return rows[:20]"
+            },
+            {
+              "repository": "reporting",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"export_from\": \"2025-01-01\",\n  \"preview_limit\": 20,\n  \"include_archived\": false\n}"
+            }
+          ]
+        },
+        {
+          "id": "Q16-F3",
+          "statement": "The source predicate does not establish counts without a scoped database observation.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "reporting",
+              "path": "export.py",
+              "start_line": 1,
+              "end_line": 9,
+              "excerpt": "\"\"\"Scoped export from a read-only fixture population.\"\"\"\n\n\ndef exportable(row, settings):\n    return row[\"status\"] == \"active\" and row[\"updated_on\"] >= settings[\"export_from\"]\n\n\ndef preview(rows):\n    return rows[:20]"
+            },
+            {
+              "repository": "reporting",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"export_from\": \"2025-01-01\",\n  \"preview_limit\": 20,\n  \"include_archived\": false\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "Archived and older rows are excluded.",
+        "The source predicate does not establish counts without a scoped database observation."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "available",
+        "fixture_snapshot": "qualification-2025-v1",
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": "2024-01-01/2025-12-31",
+        "required_checks": [
+          "Read current settings",
+          "Search scoped exceptions and historical/imported rows"
+        ],
+        "limitations": [
+          "A bounded preview cannot prove a universal statement",
+          "Historical data does not establish current permission"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q17": {
+      "scope_status": "OUT_OF_SCOPE",
+      "observed_behavior": [],
+      "required_facts": [],
+      "dangerous_omissions": [],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q18": {
+      "scope_status": "OUT_OF_SCOPE",
+      "observed_behavior": [],
+      "required_facts": [],
+      "dangerous_omissions": [],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q19": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "A transverse SQL/code question remains related to the selected project without an insurance keyword."
+      ],
+      "required_facts": [
+        {
+          "id": "Q19-F1",
+          "statement": "A transverse SQL/code question remains related to the selected project without an insurance keyword.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "reporting",
+              "path": "export.py",
+              "start_line": 1,
+              "end_line": 9,
+              "excerpt": "\"\"\"Scoped export from a read-only fixture population.\"\"\"\n\n\ndef exportable(row, settings):\n    return row[\"status\"] == \"active\" and row[\"updated_on\"] >= settings[\"export_from\"]\n\n\ndef preview(rows):\n    return rows[:20]"
+            },
+            {
+              "repository": "reporting",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"export_from\": \"2025-01-01\",\n  \"preview_limit\": 20,\n  \"include_archived\": false\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "A transverse SQL/code question remains related to the selected project without an insurance keyword."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q20": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "A project-related official regulatory question is admissible; acceptance does not validate the legal conclusion."
+      ],
+      "required_facts": [
+        {
+          "id": "Q20-F1",
+          "statement": "A project-related official regulatory question is admissible; acceptance does not validate the legal conclusion.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "billing",
+              "path": "settings.json",
+              "start_line": 1,
+              "end_line": 5,
+              "excerpt": "{\n  \"refund_policy_effective_from\": \"2025-06-01\",\n  \"active_cancellation_fee\": 25,\n  \"tax_legal_applicability\": \"unverified\"\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "A project-related official regulatory question is admissible; acceptance does not validate the legal conclusion."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q21": {
+      "scope_status": "NEEDS_CLARIFICATION",
+      "observed_behavior": [],
+      "required_facts": [],
+      "dangerous_omissions": [],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q22": {
+      "scope_status": "NEEDS_CLARIFICATION",
+      "observed_behavior": [],
+      "required_facts": [],
+      "dangerous_omissions": [],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q23": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "Technical architecture remains admissible.",
+        "Attachment instructions cannot redefine scope or grant database writes."
+      ],
+      "required_facts": [
+        {
+          "id": "Q23-F1",
+          "statement": "Technical architecture remains admissible.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            },
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            }
+          ]
+        },
+        {
+          "id": "Q23-F2",
+          "statement": "Attachment instructions cannot redefine scope or grant database writes.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            },
+            {
+              "repository": "billing",
+              "path": "invoices.py",
+              "start_line": 1,
+              "end_line": 15,
+              "excerpt": "\"\"\"Fictional invoice constraints; no actual tax or insurance rule is asserted.\"\"\"\n\n\ndef refundable(invoice, settings):\n    return (\n        invoice[\"status\"] == \"paid\"\n        and invoice[\"dispute_open\"] is False\n        and invoice[\"paid_on\"] >= settings[\"refund_policy_effective_from\"]\n    )\n\n\ndef cancellation_fee(contract, settings):\n    if contract[\"status\"] == \"draft\":\n        return 0\n    return settings[\"active_cancellation_fee\"]"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "Attachment instructions cannot redefine scope or grant database writes."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    },
+    "Q24": {
+      "scope_status": "IN_SCOPE",
+      "observed_behavior": [
+        "A user-interface asset change related to the project is admissible; it is not an unrelated image request."
+      ],
+      "required_facts": [
+        {
+          "id": "Q24-F1",
+          "statement": "A user-interface asset change related to the project is admissible; it is not an unrelated image request.",
+          "material": true,
+          "proof": [
+            {
+              "repository": "portal",
+              "path": "actions.ts",
+              "start_line": 1,
+              "end_line": 8,
+              "excerpt": "// Fictional portal checks; backend routes remain separate authorization boundaries.\nexport function showCancel(contract: { status: string }, allowActive: boolean): boolean {\n  return contract.status === \"draft\" || (allowActive && contract.status === \"active\");\n}\n\nexport function showRefund(invoice: { status: string }): boolean {\n  return invoice.status === \"paid\";\n}"
+            }
+          ]
+        }
+      ],
+      "dangerous_omissions": [
+        "A user-interface asset change related to the project is admissible; it is not an unrelated image request."
+      ],
+      "contradictions": [],
+      "business_decisions": [],
+      "database_requirements": {
+        "state": "absent",
+        "fixture_snapshot": null,
+        "population": "Stable synthetic fixture population; no production generalization",
+        "period": null,
+        "required_checks": [],
+        "limitations": [
+          "Real database configuration and records were not checked"
+        ]
+      },
+      "human_review": {
+        "status": "PENDING",
+        "reviewer": null,
+        "method": null
+      }
+    }
+  }
+}

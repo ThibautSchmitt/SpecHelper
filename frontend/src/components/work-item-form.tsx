@@ -24,10 +24,12 @@ import {
   api,
   send,
   statuses,
+  scopeNeedsContext,
   type Environment,
   type RequestItem,
   type QuestionTransfer,
   type RequestDetail,
+  type ScopeAssessment,
 } from "@/lib/api";
 
 export function WorkItemForm({
@@ -58,6 +60,7 @@ export function WorkItemForm({
   const [previewError, setPreviewError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftScope, setDraftScope] = useState<ScopeAssessment | null>(null);
   const [uploaded, setUploaded] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -123,11 +126,12 @@ export function WorkItemForm({
       )
         throw new Error(t("One of the file formats is not allowed."));
       let id = draftId;
+      let assessment = draftScope;
       if (!id) {
         const created = await send<RequestItem>(
           sourceQuestion ? `/questions/${sourceQuestion}/requests` : base,
           {
-            environment_id: Number(environment),
+            environment_id: environment ? Number(environment) : null,
             need,
             ...(sourceQuestion
               ? {
@@ -138,7 +142,9 @@ export function WorkItemForm({
           },
         );
         id = created.id;
+        assessment = created.scope_assessment || null;
         setDraftId(id);
+        setDraftScope(assessment);
       }
       for (let i = uploaded; i < files.length; i++) {
         const body = new FormData();
@@ -146,7 +152,7 @@ export function WorkItemForm({
         await api(`${base}/${id}/attachments`, { method: "POST", body });
         setUploaded(i + 1);
       }
-      await send(`${base}/${id}/analyze`);
+      if (!scopeNeedsContext(assessment)) await send(`${base}/${id}/analyze`);
       router.push(`${base}/${id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -281,7 +287,6 @@ export function WorkItemForm({
               <label htmlFor="environment">{t("Environment")}</label>
               <select
                 id="environment"
-                required
                 value={environment}
                 disabled={busy || !!draftId}
                 onChange={(e) => setEnvironment(e.target.value)}
@@ -295,6 +300,7 @@ export function WorkItemForm({
                     </option>
                   ))}
               </select>
+              <p className="mt-2 text-xs muted">{t("Choose the project environment when known. You can clarify it before analysis.")}</p>
               {loaded && !environments.some((e) => e.status === "READY") && (
                 <p className="mt-2 text-xs muted">
                   {t("No environment is available.")}{" "}
@@ -313,7 +319,7 @@ export function WorkItemForm({
             <Textarea
               id="need"
               required
-              minLength={isQuestion ? 1 : 10}
+              minLength={1}
               maxLength={30000}
               className="min-h-36"
               value={need}
@@ -452,7 +458,7 @@ export function WorkItemForm({
               )}
             </p>
             <Button
-              disabled={busy || !environment || (!!sourceQuestion && !transfer)}
+              disabled={busy || (!!sourceQuestion && !transfer)}
             >
               <Sparkles size={16} />
               {busy

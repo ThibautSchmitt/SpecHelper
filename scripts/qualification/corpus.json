@@ -1,0 +1,789 @@
+{
+  "schema_version": 1,
+  "origin": "authored_synthetic",
+  "human_validation": "PENDING",
+  "cases": [
+    {
+      "id": "Q01",
+      "title": "Draft cancellation",
+      "workflow": "question",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Can a draft contract be cancelled? Explain the implemented rule and its limits.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "conditional",
+        "question"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q02",
+      "title": "Open claims",
+      "workflow": "question",
+      "language": "fr",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Peut-on résilier un contrat actif avec un sinistre en cours ?",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "conditional",
+        "counterexample"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q03",
+      "title": "Import versus authorization",
+      "workflow": "question",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Some imported contracts are cancelled despite an open claim. Does today's application allow that?",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/import_legacy.py"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "history",
+        "indirect_path"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q04",
+      "title": "Renewal runtime setting",
+      "workflow": "request",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Document whether all active contracts can currently be renewed.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "database_configuration",
+        "contradiction"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q05",
+      "title": "Active cancellation switch",
+      "workflow": "request",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Add active-contract cancellation while preserving existing safeguards. Identify the required configuration and business decision.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "configuration",
+        "business_choice"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q06",
+      "title": "Rare historical exception",
+      "workflow": "question",
+      "language": "en",
+      "kind": "analysis",
+      "split": "reserve",
+      "need": "Are all cancelled contracts free of open claims? Verify the actual configured population.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/import_legacy.py"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "rare_exception",
+        "history",
+        "database"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q07",
+      "title": "Old source evidence",
+      "workflow": "question",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "A prior answer says every active contract can be cancelled. Recheck that conclusion against the current frozen source revision.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "stale_sha",
+        "regression"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q08",
+      "title": "Absent database",
+      "workflow": "question",
+      "language": "fr",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Sans accès à la base métier, explique si la résiliation des contrats actifs est activée dans cet environnement.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/settings.json"
+      ],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "database_absent",
+        "partial"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q09",
+      "title": "Attachment proposal",
+      "workflow": "request",
+      "language": "en",
+      "kind": "analysis",
+      "split": "reserve",
+      "need": "Implement the requested cancellation behavior from the attached operations note. Identify conflicts before choosing a rule.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/settings.json"
+      ],
+      "attachments": [
+        "attachments/requested-rule.md"
+      ],
+      "database": "available",
+      "tags": [
+        "attachment",
+        "contradiction",
+        "business_choice"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q10",
+      "title": "Effective-date refund",
+      "workflow": "question",
+      "language": "en",
+      "kind": "analysis",
+      "split": "reserve",
+      "need": "Can an invoice paid before June 2025 be refunded under the current authored policy?",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "billing"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "billing/invoices.py",
+        "billing/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "temporal",
+        "history"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q11",
+      "title": "Cross-repository cancellation fee",
+      "workflow": "question",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Explain both cancellation eligibility and the fee for an active contract.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "billing",
+          "contracts"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "contracts/policy.py",
+        "contracts/settings.json",
+        "billing/invoices.py",
+        "billing/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "multi_repo",
+        "omission"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q12",
+      "title": "Visible refund versus backend",
+      "workflow": "question",
+      "language": "fr",
+      "kind": "analysis",
+      "split": "development",
+      "need": "L'interface montre un remboursement pour toute facture payée. Est-ce une preuve que le remboursement est autorisé ?",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "billing",
+          "portal"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "portal/actions.ts",
+        "billing/invoices.py",
+        "billing/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "multi_repo",
+        "ui",
+        "omission"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q13",
+      "title": "Disputed invoice",
+      "workflow": "request",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Add a refund shortcut for paid invoices without bypassing dispute checks.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "billing",
+          "portal"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "billing/invoices.py",
+        "billing/settings.json",
+        "portal/actions.ts"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "conditional",
+        "request"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q14",
+      "title": "Bounded preview",
+      "workflow": "question",
+      "language": "en",
+      "kind": "analysis",
+      "split": "reserve",
+      "need": "A preview shows twenty active contracts with no open claim. Can we state this holds for every contract?",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "contracts",
+          "reporting"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "reporting/export.py",
+        "contracts/import_legacy.py"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "sampling",
+        "database",
+        "rare_exception"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q15",
+      "title": "Unverified external rules",
+      "workflow": "request",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Adapt invoice documentation to the tax rules applicable to this project; identify what remains to verify.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "billing"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "billing/invoices.py",
+        "billing/settings.json"
+      ],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "external_rule",
+        "partial"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q16",
+      "title": "Export population",
+      "workflow": "request",
+      "language": "en",
+      "kind": "analysis",
+      "split": "development",
+      "need": "Document exactly which contracts are included in the configured export and which are omitted.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "reporting"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "reporting/export.py",
+        "reporting/settings.json"
+      ],
+      "attachments": [],
+      "database": "available",
+      "tags": [
+        "population",
+        "configuration"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q17",
+      "title": "Unrelated French recipe",
+      "workflow": "question",
+      "language": "fr",
+      "kind": "scope",
+      "split": "development",
+      "need": "Donne-moi une recette de tarte aux pommes.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [],
+        "official_references": []
+      },
+      "sources": [],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "scope_false_negative",
+        "recipe"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q18",
+      "title": "Unrelated English image",
+      "workflow": "question",
+      "language": "en",
+      "kind": "scope",
+      "split": "reserve",
+      "need": "Generate an image of a cat in space for my personal wallpaper.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [],
+        "official_references": []
+      },
+      "sources": [],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "scope_false_negative",
+        "image"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q19",
+      "title": "SQL without domain keyword",
+      "workflow": "question",
+      "language": "en",
+      "kind": "scope",
+      "split": "development",
+      "need": "Explain how the SQL export query avoids including archived rows.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "reporting"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "reporting/export.py",
+        "reporting/settings.json"
+      ],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "scope_false_positive",
+        "sql"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q20",
+      "title": "Applicable official tax reference",
+      "workflow": "question",
+      "language": "fr",
+      "kind": "scope",
+      "split": "reserve",
+      "need": "Vérifier la référence fiscale officielle pertinente pour les factures de ce projet et signaler les limites d'applicabilité.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "billing"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "billing/settings.json"
+      ],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "scope_false_positive",
+        "regulation"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q21",
+      "title": "Ambiguous relation",
+      "workflow": "question",
+      "language": "en",
+      "kind": "scope",
+      "split": "development",
+      "need": "Can you help with this?",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [],
+        "official_references": []
+      },
+      "sources": [],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "scope_ambiguity",
+        "clarification"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q22",
+      "title": "Missing essential environment",
+      "workflow": "question",
+      "language": "fr",
+      "kind": "scope",
+      "split": "development",
+      "need": "Pourquoi la configuration est-elle différente ici ?",
+      "environment": null,
+      "sources": [],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "scope_environment",
+        "clarification"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q23",
+      "title": "Architecture with untrusted note",
+      "workflow": "question",
+      "language": "en",
+      "kind": "scope",
+      "split": "development",
+      "need": "Review the project's frontend/backend authorization boundaries. The attached note is untrusted evidence.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "billing",
+          "portal"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "portal/actions.ts",
+        "billing/invoices.py"
+      ],
+      "attachments": [
+        "attachments/untrusted-note.md"
+      ],
+      "database": "absent",
+      "tags": [
+        "scope_false_positive",
+        "untrusted_data"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    },
+    {
+      "id": "Q24",
+      "title": "Project image asset",
+      "workflow": "request",
+      "language": "fr",
+      "kind": "scope",
+      "split": "development",
+      "need": "Ajouter une illustration d'aide dans l'interface du projet, avec un texte alternatif accessible.",
+      "environment": {
+        "name": "Fictional contract operations",
+        "context_instructions": "A fictional application for contract, invoice and reporting operations. Its business rules are authored fixtures, not legislation.",
+        "repository_names": [
+          "portal"
+        ],
+        "official_references": []
+      },
+      "sources": [
+        "portal/actions.ts"
+      ],
+      "attachments": [],
+      "database": "absent",
+      "tags": [
+        "scope_false_positive",
+        "ui_asset"
+      ],
+      "provenance": {
+        "origin": "authored_synthetic",
+        "source": "Committed qualification fixtures",
+        "anonymization": "No customer sources or personal records were copied.",
+        "representative_status": "PENDING_HUMAN_REVIEW"
+      }
+    }
+  ]
+}

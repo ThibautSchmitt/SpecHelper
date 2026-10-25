@@ -1,0 +1,22 @@
+{
+  "origin": "authored_synthetic",
+  "contains_personal_records": false,
+  "snapshot_id": "qualification-2025-v1",
+  "observation_period": "2024-01-01/2025-12-31",
+  "settings": [
+    {"name": "allow_active_cancellation", "value": "false", "effective_from": "2025-01-01"},
+    {"name": "renewal_enabled", "value": "false", "effective_from": "2025-01-01"}
+  ],
+  "contract_population": {
+    "regular_count": 1000,
+    "regular": {"status": "active", "open_claims": 0, "imported": false, "updated_on": "2025-07-01"},
+    "exceptions": [
+      {"id": 1001, "status": "cancelled", "open_claims": 1, "imported": true, "updated_on": "2024-12-31"}
+    ]
+  },
+  "invoices": [
+    {"id": 1, "status": "paid", "dispute_open": false, "paid_on": "2025-07-01"},
+    {"id": 2, "status": "paid", "dispute_open": true, "paid_on": "2025-07-02"},
+    {"id": 3, "status": "paid", "dispute_open": false, "paid_on": "2025-05-31"}
+  ]
+}

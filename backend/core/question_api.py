@@ -14,6 +14,7 @@ from . import question_actions as actions
 from .clarification_schema import AnswersIn
 from .file_validation import attachment_path
 from .models import GeneratedArtifact, QuestionDocument, Request, RequestAttachment
+from .scope_service import ScopeIn
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
 router = Router(tags=["Questions"])
@@ -21,7 +22,7 @@ router = Router(tags=["Questions"])
 
 class QuestionIn(Schema):
     model_config = ConfigDict(extra="forbid")
-    environment_id: int
+    environment_id: int | None = None
     need: str = Field(min_length=1, max_length=30000)
     confrontation: bool = False
     category: Literal["general", "technical", "functional", "architecture"] = "general"
@@ -38,7 +39,7 @@ class DocumentIn(Schema):
 
 
 class TransferIn(QuestionIn):
-    need: str = Field(min_length=10, max_length=30000)
+    need: str = Field(min_length=1, max_length=30000)
     source_version: int = Field(ge=1)
     include_context: bool = True
     category: Literal["auto", "feature", "bug", "documentation"] = "auto"
@@ -67,6 +68,13 @@ def create_question(request, payload: QuestionIn):
         payload.environment_id, payload.need, payload.confrontation, payload.category
     )
     return Status(201, actions.question_dict(value, full=True))
+
+
+@router.post("/questions/{question_id}/scope")
+def revise_question_scope(request, question_id: UUID, payload: ScopeIn):
+    from .scope_service import revise
+
+    return actions.question_dict(revise(question_id, payload, workflow="question"), full=True)
 
 
 @router.get("/questions/{question_id}")

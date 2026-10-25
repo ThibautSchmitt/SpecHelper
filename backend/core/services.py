@@ -16,7 +16,11 @@ from .models import (
 )
 
 
-def queue_run(request, continuing=False, changed_decision_keys=None):
+def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_text=None, scope_operation="analyze"):
+    from .scope_service import assess
+
+    if not assess(request, text=scope_text, operation=scope_operation):
+        return request
     if request.analysis_protocol in {"2.3", "2.4"}:
         request.confrontation = True
     if not request.messages.exists():
@@ -151,6 +155,10 @@ def enqueue_analysis(
     if answers is None and choices is None:
         if request.status != Request.Status.DRAFT:
             raise HttpError(409, "This request has already been started")
+        from .scope_service import assess
+
+        if not assess(request):
+            return request
         require_session_connection(request)
         environment = request.environment
         if environment is None:
@@ -210,6 +218,14 @@ def continue_conversation(request_id, message, expected_version, analysis_protoc
         raise HttpError(409, "The result has changed. Refresh the page before continuing.")
     if not message.strip():
         raise HttpError(422, "Enter your message.")
+    from .scope_service import assess
+
+    if not assess(request, text=message.strip(), operation="continue"):
+        request.scope_pending_message = message.strip()
+        request.save(update_fields=["scope_pending_message", "updated_at"])
+        return request
+    request.scope_pending_message = ""
+    request.save(update_fields=["scope_pending_message"])
     require_session_connection(request)
     RequestMessage.objects.create(
         request=request, role="user", kind="followup", content=message.strip(), version=latest
@@ -217,7 +233,7 @@ def continue_conversation(request_id, message, expected_version, analysis_protoc
     request.questions = []
     if analysis_protocol in {"2.3", "2.4"}:
         request.analysis_protocol = analysis_protocol
-    return queue_run(request, continuing=True)
+    return queue_run(request, continuing=True, scope_text=message.strip(), scope_operation="continue")
 
 
 def add_attachment(request_id, upload):

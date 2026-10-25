@@ -172,6 +172,9 @@ def context(request, run=None):
         "category": request.category,
         "output_language": request.language,
         "need": request.need,
+        "project_relationship_clarification": frozen.get("dossier", {}).get(
+            "project_relationship_clarification", request.scope_clarification
+        ),
         "understanding": request.understanding,
         "recent_messages": messages,
         "clarification_answers": request.conversation,

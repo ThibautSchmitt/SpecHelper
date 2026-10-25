@@ -6,6 +6,7 @@ import { AnalysisContext } from "@/components/analysis-context";
 import { AnalysisEvidence } from "@/components/analysis-evidence";
 import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
 import { AnalysisRetryButton } from "@/components/analysis-retry-button";
+import { ScopeAssessmentPanel } from "@/components/scope-assessment";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels, warningMessage } from "@/lib/orchestration";
 import Link from "next/link";
@@ -26,6 +27,7 @@ import {
   api,
   send,
   statuses,
+  scopeNeedsContext,
   type RequestDetail,
   type ResultVersion,
 } from "@/lib/api";
@@ -113,6 +115,12 @@ function RequestContent({
   const [goalCopied, setGoalCopied] = useState(false);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
+    if (value?.scope_pending_message) {
+      setMessage((current) => current || value.scope_pending_message || "");
+      setShowDiscussion(true);
+    }
+  }, [value?.id, value?.scope_pending_message]);
+  useEffect(() => {
     const version = Number(search.get("version"));
     setSelectedNumber(
       Number.isInteger(version) && version > 0 ? version : null,
@@ -169,12 +177,15 @@ function RequestContent({
     setBusy(true);
     setError("");
     try {
-      setValue(
-        await send<RequestDetail>(`${base}/${id}/continue`, {
+      const updated = await send<RequestDetail>(`${base}/${id}/continue`, {
           message,
           expected_version: value!.latest_version!.number,
-        }),
-      );
+        });
+      setValue(updated);
+      if (scopeNeedsContext(updated.scope_assessment) && updated.scope_assessment?.operation === "continue") {
+        setShowDiscussion(true);
+        return;
+      }
       router.replace(`${base}/${id}`, { scroll: false });
       setMessage("");
       setShowDiscussion(false);
@@ -252,11 +263,29 @@ function RequestContent({
           {t(error || value.error)}
         </div>
       )}
+      {scopeNeedsContext(value.scope_assessment) && <ScopeAssessmentPanel
+        key={`${value.id}-${value.scope_assessment?.operation || "initial"}`}
+        value={value}
+        base={base}
+        disabled={busy}
+        onUpdated={(updated) => {
+          setValue(updated);
+          setError("");
+          if (updated.scope_pending_message) {
+            setMessage(updated.scope_pending_message);
+            setShowDiscussion(true);
+          }
+        }}
+      />}
       <Card>
         <h2>
           {t(isQuestion ? "Your original question" : "Your original need")}
         </h2>
-        <p className="mt-3 whitespace-pre-wrap leading-7">{value.need}</p>
+        <p className="mt-3 whitespace-pre-wrap leading-7">{value.original_need || value.messages?.find((item) => item.kind === "need")?.content || value.need}</p>
+        {value.original_need && value.original_need !== value.need && <div className="mt-4 rounded-lg bg-muted p-4">
+          <h3 className="text-sm">{t("Current formulation")}</h3>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{value.need}</p>
+        </div>}
         {value.understanding && (
           <div className="mt-5 rounded-lg bg-muted p-4">
             <h3 className="text-sm">{t("What SpecHelper understood")}</h3>
@@ -412,7 +441,7 @@ function RequestContent({
             : t("Independent analyses are enabled for this analysis.")}
         </p>
       )}
-      {value.status === "DRAFT" && (
+      {value.status === "DRAFT" && !scopeNeedsContext(value.scope_assessment) && (
         <Card>
           <p className="mb-4">
             {t(
@@ -642,6 +671,7 @@ function RequestContent({
       {value.latest_version &&
         ["READY", "PARTIAL", "ERROR"].includes(value.status) &&
         !value.validated_version &&
+        !(scopeNeedsContext(value.scope_assessment) && value.scope_assessment?.operation === "continue") &&
         (!isQuestion || showDiscussion) && (
           <Card id="discussion">
             <h2>

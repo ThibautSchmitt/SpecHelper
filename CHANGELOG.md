@@ -5,6 +5,19 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 
 ## Unreleased
 
+### Project scope and qualification groundwork (v2.8, in progress)
+
+- Check Request and Question scope before reserving providers or queueing analysis.
+- Preserve original text and follow-ups during recoverable clarification or reformulation.
+- Add revision-checked scope editing and English/French interface messages.
+- Add 24 explicitly synthetic qualification cases, a separate reserve and frozen
+  Git/database packets with independent review and measured-usage contracts.
+- Keep missing measurements unknown and qualification unapproved until reviewed.
+
+Human validation of expected answers and representative business coverage, live
+comparative AI runs and browser acceptance remain outstanding. This entry does
+not declare v2.8 complete. See [qualification groundwork](docs/qualification.md).
+
 ### Antigravity provider (v2.7)
 
 - Add Antigravity to existing AI connections, exact model discovery and role selection.

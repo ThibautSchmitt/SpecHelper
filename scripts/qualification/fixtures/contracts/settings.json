@@ -1,0 +1,6 @@
+{
+  "allow_active_cancellation": false,
+  "renewal_enabled": true,
+  "database_config_authoritative": true,
+  "policy_effective_from": "2025-01-01"
+}

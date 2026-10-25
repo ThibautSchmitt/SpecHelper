@@ -45,18 +45,21 @@ def create(environment_id, need, confrontation=False, category="general"):
     if not need.strip():
         raise HttpError(422, "Enter your question.")
     options = creation_settings()
-    environment = get_object_or_404(Environment, pk=environment_id)
+    environment = get_object_or_404(Environment, pk=environment_id) if environment_id else None
     value = Request.objects.create(
         workflow="question",
         analysis_protocol="2.4",
         environment=environment,
-        environment_name_snapshot=environment.name,
+        environment_name_snapshot=environment.name if environment else "",
         need=need.strip(),
         confrontation=automatic_comparison(options),
         category=category,
         language=options.language,
     )
     RequestMessage.objects.create(request=value, role="user", kind="need", content=value.need)
+    from .scope_service import assess
+
+    assess(value)
     return value
 
 
@@ -199,20 +202,23 @@ def create_request(
         raise HttpError(422, "Describe the requested change explicitly.")
     version = source_version(question_id, number)
     options = creation_settings()
-    environment = get_object_or_404(Environment, pk=environment_id)
+    environment = get_object_or_404(Environment, pk=environment_id) if environment_id else None
     preview = transfer_preview(question_id, number) if include_context else None
     value = Request.objects.create(
         workflow="request",
         analysis_protocol="2.4",
         source_question_version=version,
         environment=environment,
-        environment_name_snapshot=environment.name,
+        environment_name_snapshot=environment.name if environment else "",
         need=need.strip(),
         confrontation=automatic_comparison(options),
         category=category,
         language=options.language,
     )
     RequestMessage.objects.create(request=value, role="user", kind="need", content=value.need)
+    from .scope_service import assess
+
+    assess(value)
     if preview:
         attachment = add_attachment(
             value.id,

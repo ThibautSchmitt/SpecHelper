@@ -63,6 +63,19 @@ export type Environment = {
     sha: string;
   }[];
 };
+export type ScopeAssessment = {
+  status: "IN_SCOPE" | "OUT_OF_SCOPE" | "NEEDS_CLARIFICATION";
+  reason_code: string;
+  policy_version: string;
+  message: string;
+  question: string;
+  operation?: string;
+  revision?: number;
+  assessed_at?: string;
+};
+export function scopeNeedsContext(assessment?: ScopeAssessment | null) {
+  return assessment?.status === "OUT_OF_SCOPE" || assessment?.status === "NEEDS_CLARIFICATION";
+}
 export type RequestItem = {
   id: string;
   need: string;
@@ -76,6 +89,11 @@ export type RequestItem = {
   environment_id: number | null;
   environment_name: string;
   created_at: string;
+  original_need?: string;
+  scope_assessment?: ScopeAssessment | null;
+  scope_clarification?: string;
+  scope_pending_message?: string;
+  scope_revision?: number;
 };
 export type ResultVersion = {
   id: string;

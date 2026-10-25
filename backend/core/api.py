@@ -36,6 +36,7 @@ from .models import (
     SkillDefinition,
 )
 from .postgres import check_connection
+from .scope_service import ScopeIn
 from .secrets import encrypt
 from .services import add_attachment, continue_conversation, enqueue_analysis
 
@@ -108,8 +109,8 @@ class EnvironmentDeleteIn(Schema):
 
 
 class RequestIn(Schema):
-    environment_id: int
-    need: str = Field(min_length=10, max_length=30000)
+    environment_id: int | None = None
+    need: str = Field(min_length=1, max_length=30000)
     confrontation: bool = False
     category: Literal["auto", "feature", "bug", "documentation"] = "auto"
 
@@ -212,9 +213,11 @@ def request_dict(value, full=False):
         "confrontation": value.confrontation,
         "language": value.language,
         "status": value.status,
+        "scope_assessment": value.scope_assessment,
+        "scope_revision": value.scope_revision,
         "environment_id": value.environment_id,
         "environment_name": value.environment_name_snapshot
-        or (value.environment.name if value.environment_id else "Deleted environment"),
+        or (value.environment.name if value.environment_id else "Environment not selected" if not value.baseline else "Deleted environment"),
         "created_at": value.created_at,
         "updated_at": value.updated_at,
     }
@@ -230,6 +233,10 @@ def request_dict(value, full=False):
         )
         result.update(
             {
+                "original_need": value.messages.filter(kind="need").order_by("created_at", "id").values_list("content", flat=True).first() or value.need,
+                "scope_clarification": value.scope_clarification,
+                "scope_pending_message": value.scope_pending_message,
+                "scope_history": value.scope_history,
                 "decisions": decisions["decisions"],
                 "decision_history": decisions["history"],
                 "decision_revision": value.decision_revision,
@@ -611,18 +618,30 @@ def create_request(request, payload: RequestIn):
     from .creation_policy import automatic_comparison, creation_settings
 
     options = creation_settings()
-    environment = get_object_or_404(Environment, pk=payload.environment_id)
+    if not payload.need.strip():
+        raise HttpError(422, "Describe a need related to the project.")
+    environment = get_object_or_404(Environment, pk=payload.environment_id) if payload.environment_id else None
     value = Request.objects.create(
         environment=environment,
         analysis_protocol="2.4",
-        environment_name_snapshot=environment.name,
-        need=payload.need,
+        environment_name_snapshot=environment.name if environment else "",
+        need=payload.need.strip(),
         confrontation=automatic_comparison(options),
         category=payload.category,
         language=options.language,
     )
     RequestMessage.objects.create(request=value, role="user", kind="need", content=value.need)
+    from .scope_service import assess
+
+    assess(value)
     return Status(201, request_dict(value, full=True))
+
+
+@api.post("/requests/{request_id}/scope")
+def revise_request_scope(request, request_id: UUID, payload: ScopeIn):
+    from .scope_service import revise
+
+    return request_dict(revise(request_id, payload, workflow="request"), full=True)
 
 
 @api.get("/requests/{request_id}")
