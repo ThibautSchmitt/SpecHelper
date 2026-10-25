@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { api, send } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { libraryValidationMessage } from "@/lib/library-validation";
+import { assistantName, assistantProviders } from "@/lib/assistant-providers";
 
 export type LibraryDefinition = {
   slug: string;
@@ -396,9 +397,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                 {t(item.enabled ? "Active" : "Inactive")} ·{" "}
                 {kind === "agent" && item.compatibility.length
                   ? item.compatibility
-                      .map((value) =>
-                        value === "codex" ? "ChatGPT / Codex" : "Claude Code",
-                      )
+                      .map(assistantName)
                       .join(", ")
                   : t("All supported assistants")}
               </p>
@@ -680,13 +679,10 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                 {t("Compatible assistants")}
               </legend>
               <p className="mt-1 text-xs muted">
-                {t("Leave both unchecked for all supported assistants.")}
+                {t("Leave all unchecked for all supported assistants.")}
               </p>
               <div className="mt-2 flex flex-wrap gap-4">
-                {[
-                  ["codex", "ChatGPT / Codex"],
-                  ["claude", "Claude Code"],
-                ].map(([value, label]) => (
+                {assistantProviders.map(({ id: value, name: label }) => (
                   <label
                     key={value}
                     className="flex items-center gap-2 text-sm"

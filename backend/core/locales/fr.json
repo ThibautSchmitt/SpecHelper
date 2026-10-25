@@ -671,5 +671,11 @@
   "Choose one of the project's available ticket templates.": "Choisissez l'un des modèles de ticket disponibles pour ce projet.",
   "Choose an available issue type before publication.": "Choisissez un type de ticket disponible avant la publication.",
   "An external rule without a stated effective date does not establish a current obligation.": "Une règle externe sans date d’effet explicite ne prouve pas une obligation actuelle.",
-  "A material conclusion lacks the required verification.": "Une conclusion importante ne dispose pas des vérifications requises."
+  "A material conclusion lacks the required verification.": "Une conclusion importante ne dispose pas des vérifications requises.",
+  "A necessary analysis tool was refused by the assistant's permission policy; related findings remain unverified.": "Un outil nécessaire à l'analyse a été refusé par la politique d'autorisation de l'assistant ; les conclusions concernées restent non vérifiées.",
+  "Antigravity reported an unresolved tool error during this analysis.": "Antigravity a signalé une erreur d'outil non résolue pendant cette analyse.",
+  "A necessary analysis tool was refused by the assistant's permission policy.": "Un outil nécessaire à l'analyse a été refusé par la politique d'autorisation de l'assistant.",
+  "API-key authentication is available only for Antigravity.": "L'authentification par clé API est disponible uniquement pour Antigravity.",
+  "Explicit API billing consent is required.": "Votre accord explicite pour la facturation de l'API est nécessaire.",
+  "Enter a supported API key without spaces or control characters.": "Saisissez une clé API compatible, sans espaces ni caractères de contrôle."
 }

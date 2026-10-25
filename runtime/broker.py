@@ -6,6 +6,7 @@ import http.client
 import json
 import logging
 import os
+import re
 import secrets
 import socketserver
 import tempfile
@@ -23,6 +24,27 @@ from fastapi.encoders import jsonable_encoder
 LOG = logging.getLogger("spechelper.runtime.security")
 MAX_BODY = 2 * 1024 * 1024
 MAX_RESPONSE = 16 * 1024 * 1024
+
+
+def read_chunked_body(stream):
+    """Decode only bounded HTTP chunks; extensions and trailers are unsupported."""
+    body = bytearray()
+    for _ in range(1024):
+        line = stream.readline(128)
+        if not re.fullmatch(rb"[0-9a-fA-F]{1,8}\r\n", line):
+            raise ValueError("Invalid chunk framing")
+        size = int(line[:-2], 16)
+        if not size:
+            if stream.readline(128) != b"\r\n":
+                raise ValueError("Unexpected trailers")
+            return bytes(body)
+        if len(body) + size > MAX_BODY:
+            raise ValueError("Body limit exceeded")
+        chunk = stream.read(size)
+        if len(chunk) != size or stream.read(2) != b"\r\n":
+            raise ValueError("Truncated chunk")
+        body.extend(chunk)
+    raise ValueError("Too many chunks")
 
 
 class Broker:
@@ -100,6 +122,32 @@ class Broker:
             }
             if (method, parsed.path) in allowed:
                 return "https://api.anthropic.com" + path.removeprefix("/claude")
+        elif self.provider == "antigravity":
+            if self.credentials.get("auth_mode") == "google_oauth":
+                # Preserve the native personal-account protocol. The child may
+                # select a read/inference method, never a host or account token.
+                allowed = {
+                    "loadCodeAssist", "fetchAvailableModels", "listExperiments", "fetchUserInfo",
+                    "streamGenerateContent", "generateContent", "countTokens",
+                }
+                prefix = "/antigravity-oauth/v1internal:"
+                if (
+                    method == "POST" and parsed.path.startswith(prefix)
+                    and parsed.path.removeprefix(prefix) in allowed
+                    and parsed.query in {"", "alt=sse"}
+                ):
+                    return "https://daily-cloudcode-pa.googleapis.com" + path.removeprefix(
+                        "/antigravity-oauth"
+                    )
+                return None
+            # The official explicit Gemini API mode supports a custom base URL.
+            # No OAuth profile or caller-chosen endpoint is forwarded.
+            match = re.fullmatch(
+                r"/antigravity/v1beta/models/([A-Za-z0-9._-]{1,100}):"
+                r"(generateContent|streamGenerateContent|countTokens)", parsed.path
+            )
+            if method == "POST" and match and parsed.query in {"", "alt=sse"}:
+                return "https://generativelanguage.googleapis.com" + path.removeprefix("/antigravity")
         return None
 
     def headers(self, incoming):
@@ -119,8 +167,13 @@ class Broker:
             headers["Authorization"] = "Bearer " + tokens["access_token"]
             if tokens.get("account_id"):
                 headers["ChatGPT-Account-Id"] = tokens["account_id"]
-        else:
+        elif self.provider == "claude":
             headers["Authorization"] = "Bearer " + self.credentials["claudeAiOauth"]["accessToken"]
+        elif self.provider == "antigravity":
+            if self.credentials.get("auth_mode") == "google_oauth":
+                headers["Authorization"] = "Bearer " + self.credentials["credential"]["token"]["access_token"]
+            else:
+                headers["x-goog-api-key"] = self.credentials["api_key"]
         return headers
 
     def __enter__(self):
@@ -182,10 +235,21 @@ class Broker:
                     length = int(self.headers.get("Content-Length", "0"))
                 except ValueError:
                     return self.reply(400, {"error": "Invalid request size"})
-                if self.headers.get("Transfer-Encoding") or not 0 <= length <= MAX_BODY:
+                transfer = self.headers.get("Transfer-Encoding")
+                chunked = (
+                    transfer == "chunked" and broker.provider == "antigravity"
+                    and broker.credentials.get("auth_mode") == "google_oauth"
+                    and not self.headers.get_all("Content-Length")
+                    and len(self.headers.get_all("Transfer-Encoding", [])) == 1
+                )
+                if (transfer and not chunked) or not 0 <= length <= MAX_BODY:
                     broker.audit("network_denied")
                     return self.reply(413, {"error": "Provider request exceeds limits"})
-                body = self.rfile.read(length)
+                try:
+                    body = read_chunked_body(self.rfile) if chunked else self.rfile.read(length)
+                except (ValueError, OSError):
+                    broker.audit("network_denied")
+                    return self.reply(413, {"error": "Provider request exceeds limits"})
                 if self.command == "POST" and self.path in {"/web", "/web/search"}:
                     if not broker.web:
                         broker.audit("network_denied")
@@ -228,9 +292,17 @@ class Broker:
                     except (ValueError, TypeError):
                         return self.reply(422, {"error": "Read-only query rejected"})
                 target = broker.destination(self.command, self.path)
-                if not target or not secrets.compare_digest(
+                authenticated = secrets.compare_digest(
                     self.headers.get("Authorization", ""), "Bearer " + broker.token
+                )
+                if (
+                    broker.provider == "antigravity"
+                    and broker.credentials.get("auth_mode") != "google_oauth"
                 ):
+                    authenticated = secrets.compare_digest(
+                        self.headers.get("x-goog-api-key", ""), broker.token
+                    )
+                if not target or not authenticated:
                     broker.audit("network_denied")
                     return self.reply(403, {"error": "Destination or credential denied"})
                 try:
@@ -333,6 +405,14 @@ class Broker:
 
     def redact(self, value):
         encoded = json.dumps(value)
+        if self.provider == "antigravity":
+            secret = self.credentials.get("api_key", "")
+            if isinstance(secret, str) and len(secret) >= 8:
+                encoded = encoded.replace(secret, "[REDACTED]")
+            for name in ("access_token", "refresh_token", "id_token"):
+                secret = self.credentials.get("credential", {}).get("token", {}).get(name, "")
+                if isinstance(secret, str) and len(secret) >= 8:
+                    encoded = encoded.replace(secret, "[REDACTED]")
         for section in ("tokens", "claudeAiOauth"):
             for key, secret in self.credentials.get(section, {}).items():
                 if (

@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { api, send, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { libraryValidationMessage } from "@/lib/library-validation";
+import { assistantName, assistantProviders } from "@/lib/assistant-providers";
 
 type AssistantDraft = {
   id: string;
@@ -137,9 +138,7 @@ function DefinitionComparison({
         item
           .map((entry) =>
             key === "compatibility"
-              ? entry === "codex"
-                ? "ChatGPT / Codex"
-                : "Claude Code"
+              ? assistantName(entry)
               : key === "required_capabilities"
                 ? t(capLabels[entry] || entry)
                 : key === "skills"
@@ -721,14 +720,11 @@ export function LibraryAssistant({
                       </legend>
                       <p className="text-xs muted">
                         {t(
-                          "Leave both unchecked for all supported assistants.",
+                          "Leave all unchecked for all supported assistants.",
                         )}
                       </p>
                       <div className="flex flex-wrap gap-4">
-                        {[
-                          ["codex", "ChatGPT / Codex"],
-                          ["claude", "Claude Code"],
-                        ].map(([value, label]) => (
+                        {assistantProviders.map(({ id: value, name: label }) => (
                           <label key={value} className="flex gap-2 text-sm">
                             <input
                               type="checkbox"
@@ -844,9 +840,7 @@ export function LibraryAssistant({
                           current.validation.compatibility || {},
                         ).map(([provider, compatible]) => (
                           <p key={provider}>
-                            {provider === "codex"
-                              ? "ChatGPT / Codex"
-                              : "Claude Code"}{" "}
+                            {assistantName(provider)}{" "}
                             · {t(compatible ? "Compatible" : "Not compatible")}
                           </p>
                         ))}

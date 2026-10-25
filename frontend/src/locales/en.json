@@ -1539,5 +1539,22 @@
   "Started on": "Started on",
   "Finished on": "Finished on",
   "Refresh history": "Refresh history",
-  "Git synchronization failed: check authentication and read permissions.": "Git synchronization failed: check authentication and read permissions."
+  "Git synchronization failed: check authentication and read permissions.": "Git synchronization failed: check authentication and read permissions.",
+  "Leave all unchecked for all supported assistants.": "Leave all unchecked for all supported assistants.",
+  "Complete the official browser authorization. If this runtime cannot use browser sign-in, you can explicitly configure a Gemini API key instead.": "Complete the official browser authorization. If this runtime cannot use browser sign-in, you can explicitly configure a Gemini API key instead.",
+  "Credential saved. Model access remains unverified until an analysis succeeds.": "Credential saved. Model access remains unverified until an analysis succeeds.",
+  "Use official browser sign-in when supported by the runtime. A Gemini API key is an optional, explicitly configured alternative.": "Use official browser sign-in when supported by the runtime. A Gemini API key is an optional, explicitly configured alternative.",
+  "Continue with browser sign-in": "Continue with browser sign-in",
+  "Use a Gemini API key": "Use a Gemini API key",
+  "Gemini API use may be billed by Google. SpecHelper uses this key only for this explicitly configured identity; it never inherits a key from your environment.": "Gemini API use may be billed by Google. SpecHelper uses this key only for this explicitly configured identity; it never inherits a key from your environment.",
+  "Gemini API key": "Gemini API key",
+  "I authorize use of this API key and accept any charges from my provider.": "I authorize use of this API key and accept any charges from my provider.",
+  "Save API credential": "Save API credential",
+  "Quotas and reset times remain Unknown unless observed. API credentials are used only when explicitly configured.": "Quotas and reset times remain Unknown unless observed. API credentials are used only when explicitly configured.",
+  "Antigravity denied a tool required for this analysis.": "Antigravity denied a tool required for this analysis.",
+  "Antigravity CLI is unavailable or incompatible.": "Antigravity CLI is unavailable or incompatible.",
+  "Browser sign-in is not supported by this Antigravity runtime.": "Browser sign-in is not supported by this Antigravity runtime.",
+  "This runtime connects Antigravity through a Gemini API key. Browser account sessions are not imported.": "This runtime connects Antigravity through a Gemini API key. Browser account sessions are not imported.",
+  "Sign in with your Google account. Antigravity will verify whether your account can use the service. No API key is required.": "Sign in with your Google account. Antigravity will verify whether your account can use the service. No API key is required.",
+  "Continue with Google": "Continue with Google"
 }

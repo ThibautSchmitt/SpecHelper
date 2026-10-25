@@ -56,5 +56,7 @@ does not prevent authorized data from reaching the selected AI provider.
 - [Review known limitations](known-limitations.md) and [security boundaries](threat-model.md)
 - [Find historical evidence](archive/README.md) or [future scope](roadmap.md)
 
-The application baseline is v2.5. The [v2.6 documentation change](../CHANGELOG.md)
-adds no application behavior; future proposals are not available product features.
+The established application baseline is v2.5; v2.6 consolidated its documentation.
+The [Antigravity adapter](antigravity.md) adds Google-account authorization with
+one verified live Gemini execution and explicit evaluation limits. Other future
+proposals are not available product features.

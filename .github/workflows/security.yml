@@ -144,6 +144,28 @@ jobs:
           --memory 2g --cpus 2 --pids-limit 256
           spechelper-security:runtime python -m runtime.v24_smoke
           > security-reports/runtime-v24.json
+      - name: Verify native Antigravity permissions and cancellation with synthetic transport
+        if: matrix.component == 'runtime'
+        run: >-
+          docker run --rm --init --network none --read-only
+          --cap-add SYS_ADMIN --cap-add NET_ADMIN
+          --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+          --tmpfs /tmp:rw,nosuid,nodev,size=512m,mode=1777
+          --memory 2g --cpus 2 --pids-limit 256
+          -e RUNTIME_TOKEN=fixture-only-native-smoke-control
+          spechelper-security:runtime python -m runtime.v27_smoke
+          > security-reports/runtime-v27.json
+      - name: Verify native Google account authorization and credential relay with synthetic transport
+        if: matrix.component == 'runtime'
+        run: >-
+          docker run --rm --init --network none --read-only
+          --cap-add SYS_ADMIN --cap-add NET_ADMIN
+          --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+          --tmpfs /tmp:rw,nosuid,nodev,size=512m,mode=1777
+          --memory 2g --cpus 2 --pids-limit 256
+          -e RUNTIME_TOKEN=fixture-only-native-smoke-control
+          spechelper-security:runtime python -m runtime.v27_oauth_smoke
+          > security-reports/runtime-v27-oauth.json
       - name: Verify bounded public-reference capability and private destination denial
         if: matrix.component == 'runtime'
         run: >-

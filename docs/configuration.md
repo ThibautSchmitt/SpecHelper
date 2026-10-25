@@ -44,9 +44,11 @@ environment synchronization. Ticket publication retains its separate authorizati
 
 ## AI connections
 
-Add named Codex CLI or Claude Code configurations, set a model, and choose a
+Add named Codex CLI, Claude Code or Antigravity configurations, set a model, and choose a
 default or numeric preference. A configuration can share an existing provider
-identity or authorize another account through the official browser flow. Credential
+identity. All three assistants use official browser authorization. Antigravity
+accepts a Google account, with service eligibility checked by Google; an explicitly
+configured Gemini API key with billing consent is an optional alternative. Credential
 namespaces and session contexts remain isolated between identities.
 
 Use **Settings → AI & Agents → Models** to refresh adapter metadata or register a
@@ -56,11 +58,13 @@ model does not prove subscription entitlement. See [model access](#models-and-ac
 The runtime passes the selected model to the CLI. Provider rejection makes that
 configuration unavailable with an explicit diagnostic; another eligible configuration
 can be tried through bounded fallback. No model is silently substituted within
-the rejected configuration. A blank model delegates to the configured runtime/CLI
-default; historical model attribution remains unknown when it was not recorded.
+the rejected configuration. For Codex/Claude, a blank model delegates to the
+runtime/CLI default. Antigravity requires a selected discovered model. Historical
+model attribution remains unknown when it was not recorded.
 
-Only subscription OAuth credentials are accepted. An API key from the environment
-or a user's CLI configuration is not an implicit paid fallback.
+Codex/Claude accept subscription OAuth only. Antigravity's explicit API mode is
+separate and never an implicit fallback from Google sign-in, another provider or the host environment.
+See the [Antigravity contract](antigravity.md) for supported authentication and limits.
 
 ## Status and quota observations
 
@@ -86,6 +90,8 @@ observations and do not turn them into current data. Unknown quota never means
 unlimited capacity. Authentication success alone does not clear known quota
 exhaustion; provider permission or the normal scheduler's recovery remains required.
 Configurations sharing an authentication identity share quota observations.
+Antigravity's account quota remains unknown; an invocation's token counts cannot
+be converted into session/weekly percentages, reset times or cost.
 The sidebar shows the limiting observed remaining percentage: green at 60–100%,
 orange at 20–<60% and red below 20%. Unknown and authentication-required states have
 no invented bar. Last observations and stale states remain visible offline. Visible
@@ -117,7 +123,7 @@ instructions are captured when that connection is assigned.
 ### Definitions and versions
 
 Create a global skill with an identifier, display name, objective, instructions,
-expected checks and active status. New skills are global across both supported
+expected checks and active status. New skills are global across supported
 adapters; authoring does not ask for provider assignments or permission checkboxes.
 Calculated capability metadata describes prerequisites for existing read-only
 operations and never grants permissions. Every compatible connection discovers

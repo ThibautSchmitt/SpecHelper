@@ -7,6 +7,7 @@ import type { AIConnection } from "@/components/ai-connections";
 import { api, send, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { observedQuota } from "@/lib/quota";
+import { assistantName } from "@/lib/assistant-providers";
 import "./sidebar-assistants.css";
 
 export function SidebarAssistants() {
@@ -66,8 +67,8 @@ export function SidebarAssistants() {
         const reset = window.reset_at || window.resets_at;
         return `${t(name === "weekly" ? "Weekly quota" : "Session quota")}: ${remaining === null ? t("Quota unknown") : t("{percent}% remaining", { percent: Number(remaining.toFixed(1)) })}${reset && Number.isFinite(Date.parse(reset)) ? ` · ${t("Reset")}: ${new Date(reset).toLocaleString(dateLocale)}` : ""}`;
       }).join("\n");
-      return <section key={connection.id} className="sidebar-assistant" data-connection={connection.id} data-quota-state={quota.state} aria-label={connection.name || (connection.agent === "codex" ? "ChatGPT / Codex" : "Claude")}>
-        <p><AssistantLogo agent={connection.agent} /><span className="min-w-0 break-words">{connection.name || (connection.agent === "codex" ? "ChatGPT / Codex" : "Claude")}<small>{t(connection.enabled ? statuses[connection.status === "CONNECTED" ? connection.availability : connection.status] || "Unknown" : "Disabled")}</small></span></p>
+      return <section key={connection.id} className="sidebar-assistant" data-connection={connection.id} data-quota-state={quota.state} aria-label={connection.name || assistantName(connection.agent)}>
+        <p><AssistantLogo agent={connection.agent} /><span className="min-w-0 break-words">{connection.name || assistantName(connection.agent)}<small>{t(connection.enabled ? statuses[connection.status === "CONNECTED" ? connection.availability : connection.status] || "Unknown" : "Disabled")}</small></span></p>
         <div title={details} className="sidebar-quota" data-quota-color={quota.color} data-stale={quota.stale || unavailable}>
           <span className="text-xs">{quota.state === "Quota remaining" ? t("{percent}% remaining", { percent: Number(quota.remaining!.toFixed(1)) }) : t(quota.state)}</span>
           {quota.remaining !== null && <div className="quota-track" role="meter" aria-label={t("Quota remaining")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={quota.remaining} aria-valuetext={t("{percent}% remaining", { percent: Number(quota.remaining.toFixed(1)) })}><span style={{ width: `${quota.remaining}%` }} /></div>}

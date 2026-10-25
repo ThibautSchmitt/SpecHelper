@@ -58,12 +58,20 @@ Run from the repository root in a disposable Compose project:
 docker compose run --rm --no-deps agent-runtime python -m runtime.v19_smoke
 docker compose run --rm --no-deps agent-runtime python -m runtime.v24_smoke
 docker compose run --rm --no-deps agent-runtime python -m runtime.v25_smoke
+docker compose run --rm --no-deps agent-runtime python -m runtime.v27_smoke
+docker compose run --rm --no-deps agent-runtime python -m runtime.v27_oauth_smoke
 ```
 
 These cover containment, parallel context/skill/Git isolation, cancellation and the
 public-reference broker. Controlled terminal/HTTP fixtures do not measure real AI
 quality. Older adapter/workflow and process-regression commands remain available
 below; they exercise historical contracts, not complete current-provider acceptance.
+
+The Antigravity probe uses the pinned real CLI with synthetic Gemini responses and
+credentials. It invokes no live model. CLI upgrades require updating the explicit
+release manifest/checksums and passing native metadata, schema, permission, tool,
+isolation and cancellation checks again; do not use a rolling installer or silently
+auto-update the running image. See [Antigravity](antigravity.md).
 
 ```sh
 docker compose run --rm --no-deps agent-runtime python -m runtime.smoke

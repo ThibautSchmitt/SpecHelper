@@ -25,9 +25,13 @@ Built containers include dependencies and operating system packages; they must
 not be represented as licensed exclusively under MIT. Distribution of a combined
 backend including GPL components must also respect those components' licenses.
 
-Codex CLI, Claude Code and GitHub CLI are installed from upstream by the Dockerfiles.
+Codex CLI, Claude Code, Antigravity CLI and GitHub CLI are installed from upstream by the Dockerfiles.
 Their licenses and the providers' account/service terms apply independently.
 SpecHelper does not grant rights to their brands, credentials, or services.
+Antigravity uses exact official Linux archives and SHA-512 values recorded in
+`runtime/antigravity-release.json`; no native binary is vendored in this repository.
+Its binary/service is not relicensed under MIT. Antigravity identification uses a
+neutral bundled Lucide icon alongside the provider name, without a vendor logo claim.
 
 ## Adapted shadcn/ui components
 

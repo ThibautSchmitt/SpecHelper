@@ -17,7 +17,7 @@ from .skill_metadata import CAPABILITIES, normalize_skill
 
 router = Router(tags=["Agent and skill library"])
 MODELS = {"agent": AgentProfile, "skill": SkillDefinition}
-PROVIDERS = {"codex", "claude"}
+PROVIDERS = {"codex", "claude", "antigravity"}
 
 
 def editor_for(request):
@@ -34,7 +34,7 @@ class DefinitionIn(Schema):
     objective: str = Field(min_length=1, max_length=4000)
     instructions: str = Field(min_length=1, max_length=12000)
     enabled: bool = True
-    compatibility: list[str] = Field(default_factory=list, max_length=2)
+    compatibility: list[str] = Field(default_factory=list, max_length=3)
     required_capabilities: list[str] = Field(default_factory=list, max_length=5)
     skills: list[str] = Field(default_factory=list, max_length=100)
     expected_checks: list[str] = Field(default_factory=list, max_length=20)
@@ -615,7 +615,11 @@ def preview_configuration(environment, connection, config):
         roles=connection.roles,
         role_instructions=config["role_instructions"],
         connection_instructions=connection.additional_instructions,
-        adapter="codex_cli" if connection.agent == "codex" else "claude_code_cli",
+        adapter={
+            "codex": "codex_cli",
+            "claude": "claude_code_cli",
+            "antigravity": "antigravity_cli",
+        }.get(connection.agent, "unsupported"),
     )
     if config.get("reliability_protocol") == "2.4":
         value.update(

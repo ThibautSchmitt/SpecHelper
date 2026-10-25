@@ -14,7 +14,7 @@ from .models import AIConnection, AIModel, AIModelDiscovery, AIModelObservation
 from .providers import identity_for, runtime_identity
 
 router = Router(tags=["AI models"])
-Agent = Literal["codex", "claude"]
+Agent = Literal["codex", "claude", "antigravity"]
 IDENTIFIER_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$"
 
 
@@ -41,7 +41,9 @@ def public(model, identity=None):
         "identifier": model.identifier,
         "name": model.name,
         "family": model.family
-        or {"codex": "openai", "claude": "anthropic"}.get(model.agent, model.agent),
+        or {"codex": "openai", "claude": "anthropic", "antigravity": "google"}.get(
+            model.agent, model.agent
+        ),
         "source": model.source,
         "enabled": model.enabled,
         "status": observation.status if observation else "UNKNOWN",
@@ -175,8 +177,11 @@ def refresh(connection):
                     model, _ = AIModel.objects.get_or_create(
                         agent=connection.agent,
                         identifier=item.identifier,
-                        defaults={"name": item.name, "source": "adapter"},
+                        defaults={"name": item.name, "family": item.family, "source": "adapter"},
                     )
+                    if item.family and not model.family:
+                        model.family = item.family
+                        model.save(update_fields=["family"])
                     present.add(model.pk)
                     previous = (
                         AIModelObservation.objects.select_for_update()

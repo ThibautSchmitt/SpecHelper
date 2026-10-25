@@ -28,7 +28,9 @@ def family(connection):
         model = AIModel.objects.filter(agent=connection.agent, identifier=connection.model).first()
         if model and model.family:
             return model.family
-    return {"codex": "openai", "claude": "anthropic"}.get(connection.agent, connection.agent)
+    return {"codex": "openai", "claude": "anthropic", "antigravity": "google"}.get(
+        connection.agent, connection.agent
+    )
 
 
 def select_connection(role, config, previous_family=None, used_families=(), exclude=()):

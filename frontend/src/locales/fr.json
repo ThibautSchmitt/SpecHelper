@@ -1539,5 +1539,22 @@
   "Started on": "Démarrage le",
   "Finished on": "Fin le",
   "Refresh history": "Actualiser l’historique",
-  "Git synchronization failed: check authentication and read permissions.": "La synchronisation Git a échoué : vérifiez l’authentification et les droits de lecture."
+  "Git synchronization failed: check authentication and read permissions.": "La synchronisation Git a échoué : vérifiez l’authentification et les droits de lecture.",
+  "Leave all unchecked for all supported assistants.": "Ne cochez aucune option pour tous les assistants pris en charge.",
+  "Complete the official browser authorization. If this runtime cannot use browser sign-in, you can explicitly configure a Gemini API key instead.": "Terminez l’autorisation officielle dans le navigateur. Si cette installation ne prend pas en charge cette connexion, vous pouvez configurer explicitement une clé API Gemini.",
+  "Credential saved. Model access remains unverified until an analysis succeeds.": "Identifiant enregistré. L’accès au modèle reste non vérifié jusqu’à la réussite d’une analyse.",
+  "Use official browser sign-in when supported by the runtime. A Gemini API key is an optional, explicitly configured alternative.": "Utilisez la connexion officielle par navigateur lorsque l’installation la prend en charge. Une clé API Gemini peut être configurée explicitement comme alternative facultative.",
+  "Continue with browser sign-in": "Continuer avec la connexion par navigateur",
+  "Use a Gemini API key": "Utiliser une clé API Gemini",
+  "Gemini API use may be billed by Google. SpecHelper uses this key only for this explicitly configured identity; it never inherits a key from your environment.": "L’utilisation de l’API Gemini peut être facturée par Google. SpecHelper utilise cette clé uniquement pour cette identité configurée explicitement et ne récupère jamais de clé depuis votre environnement.",
+  "Gemini API key": "Clé API Gemini",
+  "I authorize use of this API key and accept any charges from my provider.": "J’autorise l’utilisation de cette clé API et j’accepte les éventuels frais de mon fournisseur.",
+  "Save API credential": "Enregistrer l’identifiant API",
+  "Quotas and reset times remain Unknown unless observed. API credentials are used only when explicitly configured.": "Les quotas et dates de réinitialisation restent inconnus en l’absence d’observation. Les identifiants API ne sont utilisés qu’après configuration explicite.",
+  "Antigravity denied a tool required for this analysis.": "Antigravity a refusé un outil nécessaire à cette analyse.",
+  "Antigravity CLI is unavailable or incompatible.": "Antigravity CLI est indisponible ou incompatible.",
+  "Browser sign-in is not supported by this Antigravity runtime.": "Cette installation d’Antigravity ne prend pas en charge la connexion par navigateur.",
+  "This runtime connects Antigravity through a Gemini API key. Browser account sessions are not imported.": "Cette instance connecte Antigravity avec une clé API Gemini. Les sessions de connexion du navigateur ne sont pas importées.",
+  "Sign in with your Google account. Antigravity will verify whether your account can use the service. No API key is required.": "Connectez-vous avec votre compte Google. Antigravity vérifiera si votre compte peut utiliser le service. Aucune clé API n’est nécessaire.",
+  "Continue with Google": "Continuer avec Google"
 }

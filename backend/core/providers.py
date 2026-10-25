@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from .models import AIConnection, AIIdentity, AISession, Job, Request
 
-PROVIDERS = {"codex": 1, "claude": 2}
+PROVIDERS = {"codex": 1, "claude": 2, "antigravity": None}
 
 
 def identity_for(connection):
@@ -45,9 +45,17 @@ def connection_for(agent):
     value = AIConnection.objects.filter(agent=agent).order_by("id").first()
     if value is None:
         legacy_id = PROVIDERS[agent]
-        values = {"pk": legacy_id} if not AIConnection.objects.filter(pk=legacy_id).exists() else {}
+        values = (
+            {"pk": legacy_id}
+            if legacy_id is not None and not AIConnection.objects.filter(pk=legacy_id).exists()
+            else {}
+        )
         value = AIConnection.objects.create(
-            **values, agent=agent, name="ChatGPT / Codex" if agent == "codex" else "Claude"
+            **values,
+            agent=agent,
+            name={"codex": "ChatGPT / Codex", "claude": "Claude", "antigravity": "Antigravity"}[
+                agent
+            ],
         )
     identity_for(value)
     return value
@@ -56,7 +64,7 @@ def connection_for(agent):
 def ensure_connections():
     # Bootstrap legacy installations only; deleted user configurations stay deleted.
     if not AIConnection.objects.exists() and not AIIdentity.objects.exists():
-        return [connection_for(agent) for agent in PROVIDERS]
+        return [connection_for(agent) for agent, legacy_id in PROVIDERS.items() if legacy_id]
     return list(AIConnection.objects.select_related("identity").order_by("id"))
 
 
@@ -247,6 +255,20 @@ def public(connection):
 def observe(connection, value):
     identity = identity_for(connection)
     connected = value.get("status") == "CONNECTED"
+    # An API key being configured is weaker evidence than a successful login.
+    # Preserve an actual upstream authentication rejection until the credential
+    # changes or a real provider-access observation establishes recovery.
+    rejected_key = (
+        connection.agent == "antigravity"
+        and identity.availability == "AUTH_ERROR"
+        and value.get("access_verified") is False
+        and (
+            not value.get("account_key")
+            or value.get("account_key") == identity.account_key
+        )
+    )
+    if rejected_key:
+        connected = False
     changes = {
         "status": "CONNECTED" if connected else "DISCONNECTED",
         "checked_at": timezone.now(),
@@ -256,7 +278,9 @@ def observe(connection, value):
     if isinstance(key, str) and len(key) == 64 and all(char in "0123456789abcdef" for char in key):
         changes["account_key"] = key
     # Authentication health does not establish that an exhausted quota recovered.
-    if identity.availability != "QUOTA_EXHAUSTED" and not quota_exhausted(identity):
+    if rejected_key:
+        changes["availability"] = "AUTH_ERROR"
+    elif identity.availability != "QUOTA_EXHAUSTED" and not quota_exhausted(identity):
         changes["availability"] = "AVAILABLE" if connected else "UNKNOWN"
     AIIdentity.objects.filter(pk=identity.pk).update(**changes)
     mirror_changes = {key: value for key, value in changes.items() if key != "account_key"}
@@ -278,7 +302,11 @@ def observe(connection, value):
         # Persist only fixed public diagnostics; provider error bodies may contain secrets.
         safe = {
             "state": metadata["state"],
-            "source": "codex_app_server" if connection.agent == "codex" else "claude_cli",
+            "source": {
+                "codex": "codex_app_server",
+                "claude": "claude_cli",
+                "antigravity": "antigravity_cli",
+            }[connection.agent],
             "checked_at": timezone.now().isoformat(),
             "reason": metadata.get("reason")
             if metadata.get("reason")

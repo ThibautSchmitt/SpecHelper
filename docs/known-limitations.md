@@ -1,7 +1,7 @@
 # Known limitations and open work
 
 This register retains active limitations from historical reviews. Passing an archived
-test certifies neither a current installation nor every model response. Reviewed 2026-10-24.
+test certifies neither a current installation nor every model response. Reviewed 2026-10-25.
 
 | ID | Current limit | Consequence / evidence still needed |
 | --- | --- | --- |
@@ -13,6 +13,8 @@ test certifies neither a current installation nor every model response. Reviewed
 | DATA-03 | Exact credential redaction is not general confidential-data detection; public URLs/search disclose submitted terms or paths. | Review submitted/exported content. The public reader is not semantic data-loss prevention. |
 | AI-01 | Claude standalone quota/model discovery is not validated here; metadata does not prove subscription entitlement. | Keep unknowns explicit and verify actual authorized use. |
 | AI-02 | Fresh contexts do not create family diversity; authentication alone does not clear exhaustion. | Preserve role eligibility, explicit fallback/waiting and quota leases. |
+| AI-03 | Google account eligibility for Antigravity must be verified by the service. Native OAuth profiles do not guarantee a stable account identifier; separate logins or API keys do not prove separate upstream quota. | Share identities for local serialization; retain unknown quota and no implicit API billing fallback. [Provider contract](antigravity.md). |
+| AI-04 | One authorized native Gemini execution with fixture sources/skills proves connection and structured output, not representative business accuracy or live three-account throughput. | Keep monetary cost and missing quota unknown; qualify real application analyses independently. [Observed scope](antigravity.md#verification-boundaries). |
 | TK-01 | GitHub Issues attachment upload is unavailable through supported APIs here; v2.5 upload evidence uses controlled transports. | Do not claim live vendor upload validation. The actual disposable GLPI 11.0.7 creation/reconciliation trial predates uploads. |
 | TK-02 | Remote writes can succeed despite lost responses; search may be delayed. | Reconcile uncertain issues/files and inspect the destination; never blindly repeat writes. |
 | WEB-01 | Some official sites need unsupported formats/authentication; provenance does not certify applicability. | Report unavailable/unknown research. Web evidence alone cannot prove deployed behavior. |
@@ -22,7 +24,7 @@ test certifies neither a current installation nor every model response. Reviewed
 | SEC-04 | Local automated review is agent-assisted, not an independent professional pentest. | Review actual TLS, firewall, kernel, backups and provider retention before broad exposure. |
 | OPS-01 | A source push or clean startup does not upgrade an existing team instance. | Rehearse migrations and report deployment/remote CI separately. |
 | SCOPE-01 | One trusted team shares equal access and capacity; no individual accounts, private spaces or tenancy. | Do not host mutually untrusted teams together; capacity can delay work across browsers. |
-| SCOPE-02 | Source modification, PRs, business DB writes, production Copilot/Antigravity/local models and cross-request knowledge are not delivered. | [Future scope](roadmap.md) adds no current capabilities. |
+| SCOPE-02 | Source modification, PRs, business DB writes, production Copilot/local models and cross-request knowledge are not delivered. | [Future scope](roadmap.md) adds no current capabilities. Antigravity source integration has the explicit verification limits above. |
 
 [Historical evidence](archive/README.md) retains original decisions, incidents and
 measurement boundaries. Resolve a limitation with actual evidence and a changelog

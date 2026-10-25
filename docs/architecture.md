@@ -1,6 +1,7 @@
 # Architecture
 
-The application baseline is v2.5. [Analysis](analysis.md) is the reference for
+The established application baseline is v2.5 with the current
+[Antigravity adapter](antigravity.md). [Analysis](analysis.md) is the reference for
 execution and evidence; [operations](operations.md) owns deployment, backups and
 runtime commands. Read [SECURITY](../SECURITY.md) before remote exposure.
 
@@ -12,7 +13,7 @@ runtime commands. Read [SECURITY](../SECURITY.md) before remote exposure.
 | backend | Django / Django Ninja, configuration and business API |
 | worker | Persistent PostgreSQL queue, synchronization and analyses |
 | database | Application data, separate from analyzed business databases |
-| agent-runtime | Codex CLI / Claude Code, isolated on Linux with Bubblewrap |
+| agent-runtime | Codex CLI / Claude Code / Antigravity CLI, isolated on Linux with Bubblewrap |
 
 One Git mirror per remote supplies detached worktrees. Named sources use a stable
 provider/instance/remote identifier, independent of account and branch. Mirror locks
@@ -38,7 +39,7 @@ Bubblewrap provides the effective sandbox. Codex's internal sandbox is disabled 
 Compose networks separate the runtime from the frontend, backend and application
 database. The worker reaches it through an internal control network; the backend
 uses a restricted authenticated control relay. A separate per-run Unix broker
-injects real provider OAuth into a fixed upstream endpoint allowlist. The child
+injects real provider credentials into a fixed upstream endpoint allowlist. The child
 receives only a synthetic expiring capability and a loopback relay in an isolated
 network namespace. Provider calls cannot select arbitrary destinations or follow
 redirects. Source/reviewer steps may separately request bounded public HTTPS references

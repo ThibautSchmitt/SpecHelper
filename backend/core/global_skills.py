@@ -37,7 +37,7 @@ def catalog(connection, has_database=False, *, available_capabilities=None):
         value = definition(item, "skill")
         required = set(inferred_capabilities(value))
         missing = sorted(required - capabilities)
-        compatible = provider in {"codex", "claude"}
+        compatible = provider in {"codex", "claude", "antigravity"}
         applicable = compatible and not missing
         metadata = {
             "slug": item.slug,

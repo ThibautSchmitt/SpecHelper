@@ -10,6 +10,10 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev && pip uninstall -y uv
 ARG CLAUDE_VERSION=2.1.309
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION}
+COPY runtime/antigravity-release.json /tmp/antigravity-release.json
+COPY scripts/install_antigravity.py /tmp/install_antigravity.py
+RUN python /tmp/install_antigravity.py /tmp/antigravity-release.json /usr/local/bin/agy \
+    && rm /tmp/install_antigravity.py /tmp/antigravity-release.json
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /root/.npm /root/.cache
 RUN apt-get update && apt-get install -y --no-install-recommends libseccomp2 && rm -rf /var/lib/apt/lists/*
 COPY backend/core/ ./core/

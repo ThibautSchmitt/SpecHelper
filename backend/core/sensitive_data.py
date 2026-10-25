@@ -35,6 +35,7 @@ def redact(value, secrets):
                 value = value.replace(encoded, "[REDACTED]")
         value = re.sub(r"(?i)(https?://|postgres(?:ql)?://)([^/\s:@]+):([^/@\s]+)@", r"\1[REDACTED]@", value)
         value = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,})", "[REDACTED]", value)
+        value = re.sub(r"\bAIza[0-9A-Za-z_-]{35}\b", "[REDACTED]", value)
         return value
     if isinstance(value, list):
         return [redact(item, secrets) for item in value]

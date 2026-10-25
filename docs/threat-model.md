@@ -47,7 +47,14 @@ closed instead. Losing or replacing the control secret prevents
 decryption: restore the matching secret from a protected backup or reconnect the AI
 accounts. Do not rotate the control secret independently of the credential backup.
 
-Only the trusted supervisor decrypts provider OAuth. Status/quota/login operations
+Only the trusted supervisor decrypts provider credentials. Antigravity stores its
+native consumer OAuth profile, or an explicitly consented optional Gemini API key,
+in the same encrypted vault. The child receives a synthetic capability; the relay
+injects real credentials at fixed native Cloud Code or Gemini API endpoints according
+to the configured mode. Account mutations and switching billing modes are denied.
+Neither host keyrings nor ambient keys are imported. Native CLI
+metadata and captured permission observations do not imply model entitlement.
+Status/quota/login operations
 may materialize private plaintext files in `/tmp`, which is a container tmpfs with
 private temporary directories and file mode 0600. They are removed at operation end.
 Analysis children receive synthetic credentials for their per-run broker. Real

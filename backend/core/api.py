@@ -120,7 +120,7 @@ class ContinuationIn(Schema):
 
 
 class ConnectIn(Schema):
-    provider: Literal["github", "codex", "claude"]
+    provider: Literal["github", "codex", "claude", "antigravity"]
 
 
 class ConnectionOptionsIn(Schema):
@@ -149,7 +149,10 @@ def connection_attempt(request, attempt_id: UUID):
 @api.post("/connections/attempts/{attempt_id}/code")
 def submit_connection_code(request, attempt_id: UUID, payload: CodeIn):
     attempt = get_object_or_404(ConnectionAttempt, pk=attempt_id)
-    if attempt.provider != "claude" or attempt.status not in connection_flows.ACTIVE:
+    if (
+        attempt.provider not in {"claude", "antigravity"}
+        or attempt.status not in connection_flows.ACTIVE
+    ):
         raise HttpError(409, "No confirmation code is expected")
     state = runtime_call("/auth/" + str(attempt.id) + "/code", {"code": payload.code.strip()})
     return connection_flows.update(attempt, state)
@@ -822,7 +825,9 @@ def system(request):
         ),
         "usage": "UNKNOWN",
         "runtime": " / ".join(
-            "ChatGPT" if c.agent == "codex" else "Claude"
+            {"codex": "ChatGPT", "claude": "Claude", "antigravity": "Antigravity"}.get(
+                c.agent, c.agent
+            )
             for c in AIConnection.objects.filter(enabled=True, status="CONNECTED")
         )
         or "No connected assistant",

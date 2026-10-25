@@ -1,0 +1,16 @@
+{
+  "version": "1.4.7",
+  "source": "https://antigravity.google/cli/install.sh",
+  "platforms": {
+    "amd64": {
+      "version": "1.4.7",
+      "url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.4.7-5900205422411776/linux-x64/cli_linux_x64.tar.gz",
+      "sha512": "beda760587589f5827b0b516c3ec2c5bd5cd2e91eb0e2533807ba1e990a27dcd63aef0191e0b76fb60feab0d16eaa8210fb79842c34dd4809e257e1712edd152"
+    },
+    "arm64": {
+      "version": "1.4.7",
+      "url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.4.7-5900205422411776/linux-arm/cli_linux_arm64.tar.gz",
+      "sha512": "6a9fa0df6300633404571f66ec7924098cc70a9f23ac55c3659139bbcbdd2ea5301fe1ef728d4c064fac65104ea14a2b74421f320a82e5bcf218c482b58e3a16"
+    }
+  }
+}

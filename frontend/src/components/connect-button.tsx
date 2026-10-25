@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, send } from "@/lib/api";
 
-type Provider = "github" | "codex" | "claude";
+type Provider = "github" | "codex" | "claude" | "antigravity";
 type Attempt = {
   id: string;
   provider: Provider;
@@ -22,6 +22,7 @@ const names: Record<Provider, string> = {
   github: "GitHub",
   codex: "ChatGPT",
   claude: "Claude",
+  antigravity: "Antigravity",
 };
 const active = new Set(["STARTING", "AWAITING_USER"]);
 
@@ -43,10 +44,19 @@ export function ConnectButton({
   const [error, setError] = useState("");
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [authChoiceOpen, setAuthChoiceOpen] = useState(false);
+  const [keyMode, setKeyMode] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [billingConfirmed, setBillingConfirmed] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
+  const keyInput = useRef<HTMLInputElement>(null);
+  const apiKeyPath = provider === "antigravity" && startPath.endsWith("/auth/start")
+    ? startPath.replace(/\/start$/, "/api-key") : null;
   const dialog = useRef<HTMLDialogElement>(null);
   const connected = useRef("");
   const closing = useRef(false);
   const notify = useRef(onConnected);
+  useEffect(() => { if (keyMode) keyInput.current?.focus(); }, [keyMode]);
   function accept(result: Attempt) {
     if (closing.current) return;
     setAttempt(result);
@@ -59,10 +69,10 @@ export function ConnectButton({
     notify.current = onConnected;
   }, [onConnected]);
   useEffect(() => {
-    if (attempt && dialog.current && !dialog.current.open)
+    if ((attempt || authChoiceOpen) && dialog.current && !dialog.current.open)
       dialog.current.showModal();
-    if (!attempt && dialog.current?.open) dialog.current.close();
-  }, [attempt]);
+    if (!attempt && !authChoiceOpen && dialog.current?.open) dialog.current.close();
+  }, [attempt, authChoiceOpen]);
   useEffect(() => {
     if (!attempt || !active.has(attempt.status)) return;
     let alive = true;
@@ -97,6 +107,10 @@ export function ConnectButton({
     setError("");
     setCode("");
     setCopied(false);
+    setKeyMode(false);
+    setApiKey("");
+    setBillingConfirmed(false);
+    setKeySaved(false);
     try {
       accept(
         await send<Attempt>(
@@ -128,7 +142,32 @@ export function ConnectButton({
       setBusy(false);
     }
     setAttempt(null);
+    setAuthChoiceOpen(false);
+    setKeyMode(false);
+    setApiKey("");
+    setBillingConfirmed(false);
+    setKeySaved(false);
     setError("");
+  }
+  async function saveApiKey(event: React.FormEvent) {
+    event.preventDefault();
+    if (!apiKeyPath || !billingConfirmed || !apiKey.trim()) return;
+    const submitted = apiKey;
+    setApiKey("");
+    setBusy(true);
+    setError("");
+    try {
+      await send(apiKeyPath, { api_key: submitted, confirm_billing: true });
+      setKeyMode(false);
+      setBillingConfirmed(false);
+      setKeySaved(true);
+      setAttempt(null);
+      notify.current();
+    } catch (e) {
+      setError((e as Error).message.replaceAll(submitted, "[redacted]"));
+    } finally {
+      setBusy(false);
+    }
   }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -151,17 +190,23 @@ export function ConnectButton({
   return (
     <div className="space-y-2">
       <Button
-        disabled={busy || !!attempt}
+        disabled={busy || !!attempt || authChoiceOpen}
         type="button"
         variant={provider === "claude" ? "outline" : "default"}
-        onClick={start}
+        onClick={() => {
+          if (provider === "antigravity") {
+            closing.current = false;
+            setAuthChoiceOpen(true);
+            setError("");
+          } else start();
+        }}
       >
         {busy && !attempt && (
           <LoaderCircle size={16} className="animate-spin" />
         )}
         {t("Connect with")} {names[provider]}
       </Button>
-      {!attempt && error && (
+      {!attempt && !authChoiceOpen && error && (
         <p role="alert" className="max-w-xs text-sm text-red-700">
           {t(error)}
         </p>
@@ -189,7 +234,7 @@ export function ConnectButton({
                 ? t(
                     "Your account is ready. You can close this window and continue in SpecHelper.",
                   )
-                : t(
+                : provider === "antigravity" ? t("Sign in with your Google account. Antigravity will verify whether your account can use the service. No API key is required.") : t(
                     "Sign in to your usual account. There is no key to create and no software to install.",
                   )}
             </p>
@@ -200,7 +245,9 @@ export function ConnectButton({
                   ? "GitHub CLI"
                   : provider === "codex"
                     ? "Codex"
-                    : "Claude Code"}
+                    : provider === "claude"
+                      ? "Claude Code"
+                      : "Antigravity CLI"}
                 {t(", the official sign-in tool used by SpecHelper.")}
               </p>
             )}
@@ -285,7 +332,8 @@ export function ConnectButton({
                 {t(error)}
               </p>
             )}
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              {apiKeyPath && !active.has(attempt.status) && attempt.status !== "CONNECTED" && <Button variant="outline" disabled={busy} onClick={() => { setAttempt(null); setKeyMode(true); setError(""); }}>{t("Use a Gemini API key")}</Button>}
               {["ERROR", "EXPIRED", "CANCELLED"].includes(attempt.status) && (
                 <Button onClick={start} disabled={busy}>
                   {t("Retry")}
@@ -297,6 +345,25 @@ export function ConnectButton({
             </div>
           </>
         )}
+        {!attempt && authChoiceOpen && <>
+          <h2 id={`login-title-${elementId}`}>{t("Sign in with")} Antigravity</h2>
+          {identityLabel && <p className="mt-2 text-sm font-medium">{identityLabel}</p>}
+          {keySaved ? <p role="status" className="mt-4 text-sm">{t("Credential saved. Model access remains unverified until an analysis succeeds.")}</p> : <>
+            <p className="mt-3 text-sm leading-6 muted">{t("Sign in with your Google account. Antigravity will verify whether your account can use the service. No API key is required.")}</p>
+            {!keyMode && <div className="mt-5 flex flex-wrap gap-3">
+              <Button disabled={busy} onClick={start}>{t("Continue with Google")}</Button>
+              {apiKeyPath && <Button variant="outline" disabled={busy} onClick={() => { setKeyMode(true); setError(""); }}>{t("Use a Gemini API key")}</Button>}
+            </div>}
+          </>}
+          {keyMode && apiKeyPath && <form onSubmit={saveApiKey} className="mt-5 space-y-4">
+            <p className="text-sm muted">{t("Gemini API use may be billed by Google. SpecHelper uses this key only for this explicitly configured identity; it never inherits a key from your environment.")}</p>
+            <div className="field"><label htmlFor={`api-key-${elementId}`}>{t("Gemini API key")}</label><Input ref={keyInput} id={`api-key-${elementId}`} type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} required maxLength={4096} autoComplete="off" spellCheck={false} disabled={busy} /></div>
+            <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={billingConfirmed} onChange={(event) => setBillingConfirmed(event.target.checked)} disabled={busy} required />{t("I authorize use of this API key and accept any charges from my provider.")}</label>
+            <Button disabled={busy || !apiKey.trim() || !billingConfirmed}>{t("Save API credential")}</Button>
+          </form>}
+          {error && <p role="alert" className="mt-4 text-sm text-red-700">{t(error)}</p>}
+          <div className="mt-6 flex justify-end"><Button variant="outline" disabled={busy} onClick={close}>{t("Close")}</Button></div>
+        </>}
       </dialog>
     </div>
   );

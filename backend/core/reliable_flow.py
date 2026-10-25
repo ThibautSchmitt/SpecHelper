@@ -256,6 +256,9 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
         if unresolved:
             report.blocking = True
             report.limitations = list(dict.fromkeys([*report.limitations, *unresolved]))
+        from .permission_evidence import qualify_report
+
+        report = qualify_report(report, self.run.orchestration.get("permission_limits", []))
         self.run.orchestration["evidence"] = report.model_dump()
         self.persist_run(update_fields=["orchestration"])
         if verified.questions:

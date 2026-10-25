@@ -454,6 +454,7 @@ class Orchestrator:
             **context(self.request, self.run),
             "environment_context": self.reference_context,
             "observations": self.facts,
+            "runtime_permission_limits": self.run.orchestration.get("permission_limits", []),
         }
         if verification:
             data["verification_request"] = verification
@@ -713,17 +714,33 @@ class Orchestrator:
                     step["diagnostic"] = (
                         "The selected model is unavailable for this AI connection. Choose an accepted model in Settings and retry."
                     )
-                else:
+                elif exc.kind != "PERMISSION_DENIED":
                     mark_failure(
                         self.session.connection_id, exc.kind, exc.retry_seconds, exc.quota_windows
+                    )
+                else:
+                    step["diagnostic"] = (
+                        "A necessary analysis tool was refused by the assistant's permission policy."
                     )
                 step["failure"] = exc.kind
             step.update(status="ERROR", finished_at=timezone.now().isoformat())
             self.persist_run(update_fields=["steps"])
+            if isinstance(exc, ProviderUnavailable) and exc.kind == "PERMISSION_DENIED":
+                raise FlowError(step["diagnostic"]) from None
             raise
 
     def observe_context(self, response, step):
         public_role = step["public_role"]
+        from .permission_evidence import observation, trace
+
+        limits, events = observation(response)
+        step.update(trace(response))
+        if limits:
+            existing = self.run.orchestration.setdefault("permission_limits", [])
+            existing[:] = list(dict.fromkeys([*existing, *limits]))
+            step["permission_limits"] = limits
+        if events:
+            step["permission_events"] = events
         if self.incremental:
             from .web_evidence import WebReceipt
 

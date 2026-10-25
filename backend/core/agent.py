@@ -173,10 +173,13 @@ def runtime_call(path, payload=None, timeout=15):
         if response.status_code != 200:
             raise ValueError("The AI runtime is unavailable or rejected the request")
         result = response.json()
-        if path == "/run" and result.get("failure"):
+        if path == "/run" and result.get("failure") and not result.get("timed_out"):
             failure = result["failure"]
             kind = failure.get("kind")
-            if kind not in {"QUOTA_EXHAUSTED", "BUSY", "ERROR", "AUTH_ERROR", "MODEL_UNAVAILABLE"}:
+            if kind not in {
+                "QUOTA_EXHAUSTED", "BUSY", "ERROR", "AUTH_ERROR", "MODEL_UNAVAILABLE",
+                "PERMISSION_DENIED",
+            }:
                 kind = "ERROR"
             raise ProviderUnavailable(
                 kind,
@@ -191,6 +194,10 @@ def runtime_call(path, payload=None, timeout=15):
                         "web_checks",
                         "loaded_skills",
                         "skills_audit",
+                        "permission_limits",
+                        "permission_events",
+                        "permission_snapshot",
+                        "permission_grants",
                     )
                     if key in result
                 },

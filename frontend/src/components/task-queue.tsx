@@ -15,6 +15,7 @@ import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
 import { AnalysisRetryButton } from "@/components/analysis-retry-button";
 import { api, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { assistantName } from "@/lib/assistant-providers";
 import {
   roleLabels,
   warningMessage,
@@ -207,7 +208,7 @@ export function TaskQueue() {
             jobIndex === 0 || stateOf(visible[jobIndex - 1]) !== state;
           const assignment = job.assignments?.at(-1);
           const previous = job.assignment_state === "previous" || (job.assignment_state !== "current" && state !== "RUNNING");
-          const assistant = assignment?.connection_name || (assignment?.agent === "claude" ? "Claude" : assignment?.agent === "codex" ? "ChatGPT / Codex" : t("Recorded AI"));
+          const assistant = assignment?.connection_name || (assignment?.agent ? assistantName(assignment.agent) : t("Recorded AI"));
           const role = assignment?.public_role || job.public_role;
           const roleName = role ? t(roleLabels[role] || role) : "";
           const RoleIcon = role === "verifier" ? ShieldCheck : role === "counter_analyst" ? UsersRound : UserRound;
@@ -270,7 +271,7 @@ export function TaskQueue() {
                           <span className="queue-assistant-name">{assistant}</span>
                         </span>
                         {roleName && <span className="queue-role" title={roleName}><RoleIcon size={13} aria-hidden="true" /><span>{roleName}</span></span>}
-                        <span className="queue-model" title={[assignment.agent === "codex" ? "ChatGPT / Codex" : assignment.agent === "claude" ? "Claude Code" : assignment.agent, assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model")].join(" · ")}>
+                        <span className="queue-model" title={[assistantName(assignment.agent), assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model")].join(" · ")}>
                           {assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model")}
                         </span>
                       </>

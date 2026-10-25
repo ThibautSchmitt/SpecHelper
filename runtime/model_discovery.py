@@ -137,6 +137,39 @@ def discover(root, provider):
     directory = credential_directory(root, provider)
     if not subscription_credentials(directory, provider):
         return {**result, "reason": "not_connected"}
+    if provider == "antigravity":
+        from .antigravity import discover_models
+        from .antigravity_auth import (
+            OAUTH_MODE,
+            credentials,
+            inspect_cli,
+            metadata_environment,
+            oauth_profile_path,
+            validate_oauth_profile,
+        )
+        from .vault import write as write_credential
+
+        if inspect_cli()["state"] != "supported":
+            return {**result, "state": "error", "reason": "refresh_failed"}
+        try:
+            # Hold the identity lock through refresh: rotating an OAuth refresh token
+            # cannot race another metadata call or a new browser login.
+            with credential_lock(root, provider):
+                original = read_credential(directory / "auth.json")
+                credential = credentials(directory)
+                with tempfile.TemporaryDirectory(prefix="antigravity-models-") as temporary:
+                    oauth = credential.get("credential") if credential["auth_mode"] == OAUTH_MODE else None
+                    environment = metadata_environment(temporary, credential.get("api_key"), oauth)
+                    value = discover_models(environment)
+                    if oauth is not None:
+                        rotated = validate_oauth_profile(json.loads(oauth_profile_path(temporary).read_text()))
+                        if rotated != oauth and read_credential(directory / "auth.json") == original:
+                            write_credential(directory / "auth.json", json.dumps({
+                                "auth_mode": OAUTH_MODE, "credential": rotated,
+                            }).encode())
+            return {**result, **value}
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return {**result, "state": "error", "reason": "refresh_failed"}
     if provider != "codex":
         return result
     try:

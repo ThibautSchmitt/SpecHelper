@@ -189,7 +189,7 @@ def connection_snapshot(connection, operation):
 
 def enqueue(draft, operation, demo=""):
     connection = draft.connection
-    if not connection.enabled or connection.agent not in {"codex", "claude"}:
+    if not connection.enabled or connection.agent not in {"codex", "claude", "antigravity"}:
         raise HttpError(422, "Choose an enabled, supported AI connection.")
     if "analyst" not in connection.roles:
         raise HttpError(422, "This AI connection must allow the analyst role.")
@@ -475,8 +475,8 @@ def run_job(job, caller=None):
             "Otherwise propose an editable canonical configuration with expected_checks. "
             "Recommend an existing definition instead of duplicating one when appropriate, "
             "searching only existing_library. Never imply compatibility without the supported "
-            "codex/claude adapters; explain portability limits or propose a reduced common "
-            "configuration. Skills are global across both adapters; use compatibility=[] and "
+            "codex/claude/antigravity adapters; explain portability limits or propose a reduced common "
+            "configuration. Skills are global across supported adapters; use compatibility=[] and "
             "never ask the administrator to assign assistants or capabilities. Required "
             "capabilities are calculated informative metadata and may only be read_sources, "
             "read_attachments, read_database, read_web and structured_output; they never grant "
@@ -557,7 +557,7 @@ def run_job(job, caller=None):
             record_execution(
                 AIConnection.objects.get(pk=assignment["connection_id"]), assignment["model"], False
             )
-        else:
+        elif exc.kind != "PERMISSION_DENIED":
             mark_failure(
                 assignment["connection_id"], exc.kind, exc.retry_seconds, exc.quota_windows
             )
@@ -565,6 +565,12 @@ def run_job(job, caller=None):
     if result.get("timed_out"):
         raise TimeoutError("Assistant time limit reached")
     output = schema.model_validate(redact(result["output"], secrets))
+    from .permission_evidence import observation, trace
+
+    permission_limits, permission_events = observation(result)
+    if operation == "test" and permission_limits:
+        output.limitations = list(dict.fromkeys([*output.limitations, *permission_limits]))
+        output = schema.model_validate(output.model_dump())
     from .model_catalog import record_execution
 
     record_execution(
@@ -581,6 +587,9 @@ def run_job(job, caller=None):
         "outcome": output.status if operation == "generate" else "TESTED",
         "loaded_skills": result.get("loaded_skills", []),
         "skills_audit": result.get("skills_audit", "unavailable"),
+        "permission_limits": permission_limits,
+        "permission_events": permission_events,
+        **trace(result),
     }
     job.save(update_fields=["payload"])
     if result.get("quota_windows"):

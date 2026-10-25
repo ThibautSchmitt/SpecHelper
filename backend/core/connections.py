@@ -45,7 +45,11 @@ def update(attempt, state):
                 {
                     "status": "CONNECTED",
                     "account": state.get("account")
-                    or ("ChatGPT" if attempt.provider == "codex" else "Claude"),
+                    or {
+                        "codex": "ChatGPT",
+                        "claude": "Claude",
+                        "antigravity": "Antigravity",
+                    }.get(attempt.provider, attempt.provider),
                     "account_key": state.get("account_key", ""),
                 },
             )

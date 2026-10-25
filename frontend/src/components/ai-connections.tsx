@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { ConnectButton } from "@/components/connect-button";
 import { ModelSelect } from "@/components/ai-models";
 import { api, send, statuses } from "@/lib/api";
+import { assistantName, assistantProviders, type AssistantProvider } from "@/lib/assistant-providers";
 
 export type QuotaWindow = {
   remaining_percent?: number;
@@ -24,7 +25,7 @@ export type QuotaWindow = {
 export type AIConnection = {
   id: number;
   name?: string;
-  agent: "codex" | "claude";
+  agent: AssistantProvider;
   model?: string;
   status: string;
   availability: string;
@@ -171,8 +172,7 @@ export function AIConnections({
             <div className="flex flex-wrap justify-between gap-2">
               <h3 className="flex items-center gap-2">
                 <ProviderLogo provider={value.agent} />
-                {value.name ||
-                  (value.agent === "codex" ? "ChatGPT / Codex" : "Claude")}
+                {value.name || assistantName(value.agent)}
                 {value.is_default && (
                   <span className="ml-2 text-xs muted">{t("Default")}</span>
                 )}
@@ -188,7 +188,7 @@ export function AIConnections({
               </span>
             </div>
             <p className="mt-2 break-words text-sm muted">
-              {value.agent === "codex" ? "ChatGPT / Codex" : "Claude Code"} ·{" "}
+              {assistantName(value.agent)} ·{" "}
               {value.account ||
                 t(
                   value.status === "CONNECTED"
@@ -377,7 +377,7 @@ export function AIConnections({
       </div>
       <p className="mt-3 text-xs muted">
         {t(
-          "Missing quotas and reset times remain Unknown. No paid API key or billable fallback is enabled here.",
+          "Quotas and reset times remain Unknown unless observed. API credentials are used only when explicitly configured.",
         )}
       </p>
       {showForm && (
@@ -435,8 +435,9 @@ export function AIConnections({
                 })
               }
             >
-              <option value="codex">ChatGPT / Codex</option>
-              <option value="claude">Claude Code</option>
+              {assistantProviders.map((provider) => (
+                <option key={provider.id} value={provider.id}>{provider.name}</option>
+              ))}
             </select>
           </div>
           {!editing && (

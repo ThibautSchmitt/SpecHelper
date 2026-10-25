@@ -1,8 +1,8 @@
 # Future scope
 
-Active guides describe the implemented v2.5 baseline. v2.6 is documentary only.
-The versioned target summaries below identify future scope explicitly; they are
-public summaries, not claims that future specifications or acceptance gates are implemented.
+Active guides describe the implemented v2.5 baseline and v2.7 Antigravity adapter.
+v2.6 is documentary only. The summaries for v2.8 and later are future targets,
+not claims that those specifications or acceptance gates are implemented.
 
 Target-specification summaries: [v2.7](#v27---additional-ai-adapter),
 [v2.8](#v28---reliability-qualification),
@@ -11,9 +11,11 @@ Target-specification summaries: [v2.7](#v27---additional-ai-adapter),
 
 ## v2.7 - Additional AI adapter
 
-Target: Antigravity CLI integration with legitimate authentication, actual model
-discovery, quota/role handling and the same read-only sandbox. Antigravity integration
-and local-model execution are not delivered now.
+Implemented: [Antigravity](antigravity.md) supports Google-account authorization,
+optional explicit API credentials, native model discovery and the existing roles
+and sandbox. One authorized native Gemini execution verified scoped source/skill
+reads and structured output. Evaluation limits remain explicit; local-model
+execution remains outside scope.
 
 ## v2.8 - Reliability qualification
 

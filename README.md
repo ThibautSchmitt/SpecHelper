@@ -32,7 +32,8 @@ docker compose up --build -d
 Open <http://localhost:3000>. In **Settings** at the bottom left:
 
 1. Connect GitHub or GitLab.
-2. Connect ChatGPT / Codex or Claude / Claude Code using the guided authorization.
+2. Connect ChatGPT / Codex or Claude / Claude Code using guided authorization,
+   or sign in to [Antigravity](docs/antigravity.md) with your Google account.
 3. Create an environment with repositories and branches, then wait for synchronization.
 4. Create a Request or Question with the environment, free text and optional files.
 

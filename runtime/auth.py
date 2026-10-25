@@ -78,6 +78,15 @@ class Logins:
         self.lock = threading.Lock()
 
     def start(self, attempt_id, provider, identity_id=None):
+        if provider == "antigravity":
+            from .antigravity_auth import CLI_UNAVAILABLE, inspect_cli
+
+            if inspect_cli()["state"] != "supported":
+                return {
+                    "status": "ERROR", "provider": provider,
+                    "message": CLI_UNAVAILABLE,
+                    "verification_uri": "", "user_code": "", "input_required": False,
+                }
         target_root = identity_root(self.credential_root(), identity_id)
         with self.lock:
             for login in self.attempts.values():
@@ -90,6 +99,16 @@ class Logins:
                     raise ValueError("A connection is already in progress")
 
             def complete(home, env):
+                if provider == "antigravity":
+                    from .antigravity_auth import OAUTH_MODE, read_oauth_profile
+
+                    profile = read_oauth_profile(home)
+                    destination = target_root / provider
+                    with credential_lock(target_root, provider):
+                        write_credential(destination / "auth.json", json.dumps({
+                            "auth_mode": OAUTH_MODE, "credential": profile,
+                        }).encode())
+                    return {"account": PROVIDERS[provider], "account_key": ""}
                 source = home / provider
                 files = (
                     ["auth.json"] if provider == "codex" else [".credentials.json", ".claude.json"]
@@ -108,7 +127,18 @@ class Logins:
                     "account_key": account_key(destination, provider),
                 }
 
-            login = TerminalLogin(provider, complete)
+            def ready(home):
+                from .antigravity_auth import read_oauth_profile
+
+                try:
+                    read_oauth_profile(home)
+                    return True
+                except (OSError, ValueError, TypeError):
+                    return False
+
+            login = TerminalLogin(
+                provider, complete, completion_ready=ready if provider == "antigravity" else None,
+            )
             login.identity_id = identity_id
             self.attempts[attempt_id] = login
             login.start()
@@ -154,6 +184,10 @@ def credential_directory(root: Path, provider):
 
 def connection_status(root, provider, include_quota=False):
     directory = credential_directory(root, provider)
+    if provider == "antigravity":
+        from .antigravity_auth import status
+
+        return status(directory, include_quota)
     if not subscription_credentials(directory, provider):
         value = {
             "status": "DISCONNECTED",
@@ -245,6 +279,10 @@ def quota_status(root, directory, provider, status):
 
 def account_key(directory, provider):
     """Opaque quota grouping from provider account IDs, never a display-name guess."""
+    if provider == "antigravity":
+        from .antigravity_auth import account_key as antigravity_account_key
+
+        return antigravity_account_key(directory)
     try:
         filename = "auth.json" if provider == "codex" else ".claude.json"
         value = json.loads(read_credential(directory / filename))
@@ -262,6 +300,12 @@ def account_key(directory, provider):
 
 def subscription_credentials(directory, provider):
     """Subscription OAuth only: an administrator's billed API key is never inherited."""
+    if provider == "antigravity":
+        from .antigravity_auth import valid_credentials
+
+        # The documented Gemini API mode requires explicit authenticated setup
+        # and billing confirmation; environment keys are never used implicitly.
+        return valid_credentials(directory)
     try:
         filename = "auth.json" if provider == "codex" else ".credentials.json"
         value = json.loads(read_credential(directory / filename))

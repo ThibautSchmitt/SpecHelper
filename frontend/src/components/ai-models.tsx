@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { AIConnection } from "@/components/ai-connections";
+import { assistantProviders } from "@/lib/assistant-providers";
 
 export type AIModel = {
   id: number;
@@ -105,7 +106,7 @@ export function AIModels() {
     <h2>{t("Models")}</h2>
     <p className="mt-2 text-sm muted">{t("Refresh the provider catalog or add a documented model. Availability stays unknown until verified.")}</p>
     <fieldset disabled={busy}>
-      <div className="field"><label htmlFor="model-provider">{t("Provider")}</label><select id="model-provider" value={agent} onChange={e => { setAgent(e.target.value); setConnectionId(""); setEditing(null); setForm({identifier:"",name:"",family:""}); }}><option value="codex">ChatGPT / Codex</option><option value="claude">Claude Code</option></select></div>
+      <div className="field"><label htmlFor="model-provider">{t("Provider")}</label><select id="model-provider" value={agent} onChange={e => { setAgent(e.target.value); setConnectionId(""); setEditing(null); setForm({identifier:"",name:"",family:""}); }}>{assistantProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></div>
       <div className="field"><label htmlFor="model-connection">{t("AI connection")}</label><select id="model-connection" value={connectionId} onChange={e => setConnectionId(e.target.value)}><option value="">{t("Select a connection")}</option>{connections.filter(c => c.agent === agent).map(c => <option key={c.id} value={c.id}>{c.name || c.agent}</option>)}</select></div>
       <Button type="button" variant="outline" disabled={!connectionId || busy} onClick={() => action(() => send(`/ai-connections/${connectionId}/models/refresh`))}><RefreshCw size={15} aria-hidden="true" />{t("Refresh models")}</Button>
     </fieldset>

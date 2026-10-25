@@ -1,5 +1,6 @@
 """Administration of named terminal configurations without credential disclosure."""
 
+import re
 import uuid
 from typing import Literal
 
@@ -10,7 +11,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from ninja import Router, Schema
 from ninja.errors import HttpError
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, SecretStr, field_validator
 
 from .agent import runtime_call
 from .connections import ACTIVE, start
@@ -31,7 +32,7 @@ router = Router(tags=["AI connections"])
 class ConfigurationIn(Schema):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=100)
-    agent: Literal["codex", "claude"]
+    agent: Literal["codex", "claude", "antigravity"]
     model: str = Field(default="", max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$|^$")
     enabled: bool = True
     is_default: bool = False
@@ -45,7 +46,7 @@ class ConfigurationIn(Schema):
 class ConfigurationPatch(Schema):
     model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=100)
-    agent: Literal["codex", "claude"] | None = None
+    agent: Literal["codex", "claude", "antigravity"] | None = None
     model: str | None = Field(
         default=None, max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$|^$"
     )
@@ -55,6 +56,28 @@ class ConfigurationPatch(Schema):
     roles: list[Role] | None = None
     additional_instructions: str | None = Field(default=None, max_length=12000)
     skill_overrides: dict[str, bool] | None = None
+
+
+class APIKeyAuthenticationIn(Schema):
+    """Explicit billed-provider opt-in; never inherited from the host environment."""
+
+    model_config = ConfigDict(extra="forbid")
+    api_key: SecretStr = Field(min_length=16, max_length=256)
+    confirm_billing: Literal[True]
+
+    @field_validator("api_key")
+    @classmethod
+    def bounded_api_key(cls, value):
+        if not re.fullmatch(r"[A-Za-z0-9_-]{16,256}", value.get_secret_value()):
+            raise ValueError("Enter a supported API key without spaces or control characters.")
+        return value
+
+    @field_validator("confirm_billing", mode="before")
+    @classmethod
+    def explicit_billing_consent(cls, value):
+        if value is not True:
+            raise ValueError("Explicit API billing consent is required.")
+        return value
 
 
 def not_processing(connection):
@@ -225,3 +248,44 @@ def refresh_quota(request, connection_id: int):
 def start_connection(request, connection_id: int):
     value = get_object_or_404(AIConnection, pk=connection_id)
     return start(value.agent, identity_id=identity_for(value).pk)
+
+
+@router.post("/ai-connections/{connection_id}/auth/api-key")
+@transaction.atomic
+def configure_api_key(request, connection_id: int, payload: APIKeyAuthenticationIn):
+    """Send an explicitly approved key directly to the trusted encrypted runtime vault.
+
+    The backend stores neither the key nor an authentication request payload. Saving
+    credentials does not run inference or prove access to the selected model.
+    """
+    value = get_object_or_404(AIConnection.objects.select_for_update(), pk=connection_id)
+    if value.agent != "antigravity":
+        raise HttpError(422, "API-key authentication is available only for Antigravity.")
+    not_processing(value)
+    identity = AIIdentity.objects.select_for_update().get(pk=identity_for(value).pk)
+    if identity.credential_id is None:
+        identity.credential_id = uuid.uuid4()
+        identity.save(update_fields=["credential_id"])
+    try:
+        state = runtime_call(
+            "/auth/api-key",
+            {
+                "provider": "antigravity",
+                "identity_id": str(identity.credential_id),
+                "api_key": payload.api_key.get_secret_value(),
+                "confirm_billing": True,
+            },
+            timeout=25,
+        )
+    except ValueError as exc:
+        raise HttpError(
+            503, "The connection service is not responding. Try again shortly."
+        ) from exc
+    from .sensitive_data import redact
+
+    state = redact(state, [payload.api_key.get_secret_value()])
+    return {
+        **observe(value, state),
+        "authentication_mode": "api_key",
+        "access_verified": False,
+    }

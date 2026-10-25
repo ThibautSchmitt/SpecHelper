@@ -42,6 +42,13 @@ that requires explicit human confirmation and an allowed destination. Review
 the target and content before creating a ticket. After an uncertain response,
 verify the recorded operation rather than creating another ticket manually.
 
+Antigravity supports official Google account sign-in and a separate optional Gemini
+API mode requiring explicit billing consent. The trusted runtime encrypts the OAuth
+profile or API key and injects credentials only at the fixed provider relay for that
+mode; the analysis child receives a synthetic expiring capability.
+No host API key or browser/keyring account is imported as an implicit fallback.
+Configuration does not prove model access. See the [provider contract](docs/antigravity.md).
+
 The Linux sandbox requires specific namespace capabilities and network boundaries.
 Preserve those boundaries when adapting deployment; see
 [architecture](docs/architecture.md#services-and-runtime).
