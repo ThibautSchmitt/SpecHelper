@@ -13,9 +13,17 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 - Add 24 explicitly synthetic qualification cases, a separate reserve and frozen
   Git/database packets with independent review and measured-usage contracts.
 - Keep missing measurements unknown and qualification unapproved until reviewed.
+- Keep requirement-stage AI findings out of the counter-analyst's blind exploration,
+  while retaining the original need, confirmed user choices and frozen project context.
+- Collect actual application steps with separate development/reserve results;
+  reject model/version or frozen-input substitutions and retain failed-call usage.
+- Accept short project actions and contextual follow-ups without admitting unrelated
+  personal tasks; cover both workflows and languages on desktop and mobile.
+- Allow Antigravity to inspect its exact service-authored output schema while
+  keeping the rest of its session directory outside the file-read grants.
 
 Human validation of expected answers and representative business coverage, live
-comparative AI runs and browser acceptance remain outstanding. This entry does
+comparative AI runs and independent output review remain outstanding. This entry does
 not declare v2.8 complete. See [qualification groundwork](docs/qualification.md).
 
 ### Antigravity provider (v2.7)

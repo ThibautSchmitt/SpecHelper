@@ -14,10 +14,10 @@ KNOWN_TOOLS = {
 }
 KNOWN_ALLOW_RULES = {
     "command(" + command + ")"
-    for command in ("git", "rg", "ls", "cat", "sed", "head", "tail", "find", "wc", "python3", "curl")
+    for command in ("git", "rg", "ls", "cat", "sed", "head", "tail", "find", "readlink", "wc", "python3", "curl")
 } | {
     "read_file(/workspace)", "read_file(/skills)", "read_file(/context)",
-    "read_file(/attachments)",
+    "read_file(/attachments)", "read_file(/session/schema.json)",
 }
 KNOWN_DENY_RULES = {"write_file(*)"}
 

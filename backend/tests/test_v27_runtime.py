@@ -127,7 +127,11 @@ def test_cli_metadata_ignores_ambient_keys_and_session_policy_is_scoped(tmp_path
     assert "GEMINI_API_KEY" not in env and "GOOGLE_GEMINI_BASE_URL" not in env
     grants = prepare_session(tmp_path / "session")
     assert "command(git)" in grants["allow"] and "command(curl)" in grants["allow"]
+    assert "command(readlink)" in grants["allow"]
     assert grants["deny"] == ["write_file(*)"]
+    assert "read_file(/session/schema.json)" in grants["allow"]
+    assert "read_file(/session)" not in grants["allow"]
+    assert "read_file(/session/.gemini)" not in grants["allow"]
     assert not any("skip" in value or "*" in value for value in grants["allow"])
     settings = json.loads((tmp_path / "session/.gemini/antigravity-cli/settings.json").read_text())
     assert settings["modelProvider"] == "gemini" and settings["trustedWorkspaces"] == ["/workspace"]

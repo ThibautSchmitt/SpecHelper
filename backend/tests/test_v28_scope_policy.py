@@ -184,3 +184,15 @@ def test_classification_does_not_open_files_or_network_connections(monkeypatch):
     monkeypatch.setattr("socket.socket", denied)
     assert classify("Donne une recette de tarte.", environment=PROJECT)["status"] == "OUT_OF_SCOPE"
     assert classify("Explain the SQL query plan.", environment=PROJECT)["status"] == "IN_SCOPE"
+
+
+@pytest.mark.parametrize("need", ["Export", "First export", "Domain change", "Exportation"])
+def test_selected_project_supports_short_functional_requests_without_a_domain_vocabulary(need):
+    assert classify(need, environment=PROJECT)["status"] == "IN_SCOPE"
+
+
+@pytest.mark.parametrize("need", ["More", "Clarify", "Continue", "Encore"])
+def test_short_followup_uses_existing_project_context_without_admitting_personal_tasks(need):
+    assert classify(need, environment=PROJECT, contextual_followup=True)["status"] == "IN_SCOPE"
+    assert classify("Give me a pie recipe.", environment=PROJECT, contextual_followup=True)["status"] == "OUT_OF_SCOPE"
+    assert classify("Help", environment=PROJECT)["status"] == "NEEDS_CLARIFICATION"

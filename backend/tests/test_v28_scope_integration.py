@@ -128,3 +128,18 @@ def test_followup_scope_does_not_destroy_an_existing_answer_and_recovers_after_c
     assert queued.status_code == 200 and Job.objects.count() == 1
     assert queued.json()["scope_pending_message"] == ""
     assert request.versions.count() == 1
+
+
+@pytest.mark.parametrize("workflow", ["requests", "questions"])
+def test_short_followup_can_refer_to_the_existing_result(client, environment, workflow):
+    request = Request.objects.create(
+        environment=environment, need="Explain the export query.", status="READY",
+        workflow="question" if workflow == "questions" else "request", analysis_protocol="2.4",
+    )
+    ResultVersion.objects.create(request=request, number=1, environment_name=environment.name)
+    response = client.post(f"/api/{workflow}/{request.id}/continue", {
+        "message": "More", "expected_version": 1,
+    }, content_type="application/json")
+    assert response.status_code == 200
+    assert response.json()["scope_assessment"]["status"] == "IN_SCOPE"
+    assert Job.objects.filter(target=str(request.id)).count() == 1

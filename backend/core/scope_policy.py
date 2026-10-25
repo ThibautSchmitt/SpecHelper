@@ -68,6 +68,10 @@ FUNCTIONAL_REQUEST = re.compile(
     r"modifi\w*|supprim\w*|desactiv\w*|automatis\w*|suivr\w*|valid\w*|calcul\w*|"
     r"comprendr\w*|expliqu\w*|verifi\w*|cre\w*|corrig\w*|connect\w*)\s+\S.{2,}"
 )
+FUNCTIONAL_TERM = re.compile(
+    r"\b(?:export|exports|import|imports|change|changes|clarify|"
+    r"exportation|importation|changement|changements|preciser|clarifier)\b"
+)
 APPLICABILITY = re.compile(
     r"\b(?:applicab\w*|compliance|conformite|regulat\w*|reglement\w*|legislation|"
     r"official|officiel\w*|obligation\w*|juridique|legal|legale|norme|standard)\b"
@@ -79,7 +83,8 @@ VAGUE = re.compile(
     r"explain(?: this| that| it)?|explique(?: moi)?(?: ceci| cela| ca)?|"
     r"analy[sz]e(?: this| that| it)?|analyse(?: ceci| cela| ca)?|"
     r"improve(?: this| that| it)?|ameliore(?: ceci| cela| ca)?|"
-    r"make it better|do it|fais le|continue|more|encore|need|besoin)?"
+    r"make it better|do it|fais le|continue|more|encore|need|besoin|"
+    r"the change|this change|that change|le changement|ce changement|la modification)?"
     r"(?:\s*(?:please|merci))?$"
 )
 STOPWORDS = frozenset(
@@ -139,7 +144,7 @@ def _result(status, reason_code):
     }
 
 
-def classify(need, *, environment=None, clarification="", language="en"):
+def classify(need, *, environment=None, clarification="", language="en", contextual_followup=False):
     """Route supported-language requests without logging, fetching or granting anything.
 
     Messages are canonical English translation keys; the interface owns EN/FR display.
@@ -164,6 +169,8 @@ def classify(need, *, environment=None, clarification="", language="en"):
     if not isinstance(environment, dict) or not environment:
         return _result("NEEDS_CLARIFICATION", "environment_required")
     if not text or (VAGUE.fullmatch(initial) and (not detail or VAGUE.fullmatch(detail))):
+        if contextual_followup and text:
+            return _result("IN_SCOPE", "contextual_project_followup")
         return _result("NEEDS_CLARIFICATION", "unclear_project_relation")
     if relation:
         return _result("IN_SCOPE", "relevant_project_request")
@@ -175,6 +182,10 @@ def classify(need, *, environment=None, clarification="", language="en"):
         return _result("IN_SCOPE", "relevant_business_context")
     if FUNCTIONAL_REQUEST.search(text) and not VAGUE.fullmatch(text):
         return _result("IN_SCOPE", "selected_project_context")
+    if FUNCTIONAL_TERM.search(text):
+        return _result("IN_SCOPE", "selected_project_context")
     if len(text.split()) < 3:
+        if contextual_followup:
+            return _result("IN_SCOPE", "contextual_project_followup")
         return _result("NEEDS_CLARIFICATION", "unclear_project_relation")
     return _result("IN_SCOPE", "selected_project_context")

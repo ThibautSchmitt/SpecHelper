@@ -403,11 +403,18 @@ def test_invalid_exports_do_not_echo_private_validation_input(answer, storage, k
     assert not QuestionDocument.objects.exists()
 
 
-def test_transfer_requires_normal_request_minimum_length(answer, storage):
+def test_transfer_rejects_empty_need_and_preserves_short_need_for_scope_clarification(answer, storage):
     response = post(
         Client(),
         f"/api/questions/{answer.request_id}/requests",
-        {"source_version": 1, "environment_id": answer.request.environment_id, "need": "Change"},
+        {"source_version": 1, "environment_id": answer.request.environment_id, "need": " "},
     )
     assert response.status_code == 422
     assert not Request.objects.filter(source_question_version=answer).exists()
+    response = post(
+        Client(),
+        f"/api/questions/{answer.request_id}/requests",
+        {"source_version": 1, "environment_id": answer.request.environment_id, "need": "Help"},
+    )
+    assert response.status_code == 201
+    assert response.json()["scope_assessment"]["status"] == "NEEDS_CLARIFICATION"

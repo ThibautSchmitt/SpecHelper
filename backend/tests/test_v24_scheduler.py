@@ -164,8 +164,8 @@ def test_two_jobs_really_overlap_on_distinct_compatible_connections(prepared):
         branch="main",
         sha=source["commit"],
     )
-    first, first_job = start(environment, "FIRST_JOB_FACTS_ONLY")
-    second, second_job = start(other_environment, "SECOND_JOB_FACTS_ONLY")
+    first, first_job = start(environment, "Explain the application: FIRST_JOB_FACTS_ONLY")
+    second, second_job = start(other_environment, "Explain the application: SECOND_JOB_FACTS_ONLY")
     first_workspace, second_workspace = storage / "first", storage / "second"
     first_workspace.mkdir()
     second_workspace.mkdir()

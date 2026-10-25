@@ -56,6 +56,7 @@ def assess(request, *, text=None, operation="analyze", clarification=None):
     decision = classify(
         text, environment=basis["environment"], clarification=request.scope_clarification,
         language=request.language,
+        contextual_followup=operation == "continue" and request.versions.exists(),
     )
     if environment is None and decision["status"] != "OUT_OF_SCOPE":
         decision = {

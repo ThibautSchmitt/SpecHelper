@@ -42,6 +42,7 @@ def run_records(study):
             definition = cases[row["id"]]
             attempts = [] if definition["kind"] == "scope" else [
                 {"role": role, "context_id": config["id"] + ":" + row["id"] + ":" + role,
+                 **{key: config["roles"][role].get(key) for key in ("provider", "model", "family", "effort", "cli_version")},
                  "status": "SUCCESS", "usage": {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}}
                 for role in sorted(harness.ROLES)
             ]
@@ -157,3 +158,22 @@ def test_identical_family_effort_distributions_are_not_two_comparison_configurat
     value["configurations"][1]["roles"] = value["configurations"][0]["roles"]
     with pytest.raises(ValueError, match="family distribution"):
         harness.validate_protocol(value)
+
+
+@pytest.mark.parametrize("key", ["provider", "model", "family", "effort", "cli_version"])
+def test_observed_role_cannot_silently_use_a_different_configuration(study, key):
+    runs = run_records(study)
+    runs[0]["cases"][0]["attempts"][0][key] = "different"
+    with pytest.raises(ValueError, match="Observed role identity"):
+        harness.compare(study, runs, [])
+
+
+def test_held_out_results_are_reported_separately_from_development(study):
+    runs = run_records(study)
+    result = harness.compare(study, runs, [])
+    splits = result["configurations"][0]["splits"]
+    assert splits["development"]["cases"] == 18
+    assert splits["reserve"]["cases"] == 6
+    assert splits["reserve"]["material_errors"] is None
+    assert splits["reserve"]["scope_measured_cases"] == 2
+    assert splits["reserve"]["scope_false_negatives"] == 1

@@ -32,10 +32,64 @@ exact packets. Unknown token usage, billing costs and unreviewed semantic result
 remain unknown. Missing mandatory independent stages cannot count as complete.
 Keep generated studies and review receipts in private storage such as `.local/`.
 
+## Independent exploration
+
+The counter-analyst's first exploration receives the original need, confirmed
+user choices and frozen project context. It does not receive the first analyst's
+report or AI-generated requirement findings and understanding, which can already
+contain code conclusions. Comparison receives both reports only after that
+independent exploration finishes.
+
+## Collect application results
+
+Run corpus cases through the normal Request/Question worker in an isolated test
+application database. Use only the authorized frozen fixture sources and database;
+keep evaluator answers outside every agent workspace. Preserve required independent
+stages and any business clarification instead of fabricating answers to finish a run.
+
+Record each actual request UUID in a bindings file:
+
+```json
+{"Q01": "the-actual-request-uuid"}
+```
+
+Record CLI versions from the binaries that executed the runs, separately from the
+expected configuration. Each provider entry requires `version`, `observed_at` and
+`source` (the command used to observe it). Never substitute a configured version
+for an observation.
+
+With the isolated application's database environment loaded, collect results from
+the repository root using its backend dependencies:
+
+```sh
+PYTHONPATH=backend:. uv run --project backend python -m scripts.qualification.collect \
+  .local/study --configuration gpt-first \
+  --bindings .local/bindings.json --cli-versions .local/cli-versions.json \
+  --output .local/run-gpt-first.json
+```
+
+The collector performs no AI inference. It rejects mismatched request text,
+workflow, language, source SHA, attachments, database availability and explicitly
+frozen instructions/skills. Actual database contents must also be held stable and
+verified by the operator; a matching connection name is not snapshot evidence.
+Running work remains running. Failed stages and legitimate human clarification
+are partial outcomes. Their observed tokens and duration remain in the report.
+Provider usage is recorded for failed responses and format repairs as well as
+successful responses; missing counts stay unknown.
+Measured subtotals are shown separately when some calls lack usage. Wall elapsed
+time includes queue/operator delays; execution time sums persisted invocation
+durations when all of them are available. Scope-only cases measure admission,
+not a generated business answer or completion of the independent analysis stages.
+
+The comparison keeps development and reserve results separate and rejects role
+observations that differ from the frozen model, family, effort or CLI version.
+Independent semantic review remains mandatory for error and omission counts.
+
 ## Outstanding validation
 
 The current implementation is groundwork, not completed qualification. Human
-review of expected answers and business coverage, actual comparative runs through
-the application pipeline, independent review of those outputs and browser
-acceptance remain outstanding. The harness does not itself execute native AI
+review of expected answers and business coverage, the full comparative corpus run
+through the application pipeline and independent review of those outputs remain
+outstanding. Scope interface checks cover both languages, desktop/mobile,
+attachments, concurrent edits and recoverable follow-ups. The harness does not itself execute native AI
 comparisons. Synthetic tests do not establish accuracy on real business requests.

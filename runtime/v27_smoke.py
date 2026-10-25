@@ -35,6 +35,8 @@ def run_probe(root):
         workspace = server.DATA / "analysis-workspaces" / str(request_id)
         workspace.mkdir(parents=True)
         (workspace / "evidence.txt").write_text("v27 synthetic source evidence")
+        (workspace / "symbolic-target-for-qualification.txt").write_text("Synthetic linked source")
+        (workspace / "source-link").symlink_to("symbolic-target-for-qualification.txt")
         workspace.chmod(0o777)
         (workspace / "evidence.txt").chmod(0o666)
         (server.DATA / "requests" / str(request_id) / "attachments").mkdir(parents=True)
@@ -97,6 +99,11 @@ def run_probe(root):
                 calls = [
                     {"name": "read_file", "args": {"Path": "/workspace/evidence.txt"}},
                     {"name": "read_file", "args": {"Path": "/skills/v27-procedure/v2.md"}},
+                    {"name": "read_file", "args": {"Path": "/session/schema.json"}},
+                    {"name": "run_command", "args": {
+                        "CommandLine": "readlink /workspace/source-link",
+                        "WaitMsBeforeAsync": 1000, "toolSummary": "Read source link metadata",
+                    }},
                 ]
             elif case == "deny":
                 calls = [{"name": "run_command", "args": {
@@ -174,6 +181,10 @@ def run_probe(root):
         assert result.get("output") == {"ok": True}, result
         assert "v27 synthetic source evidence" in json.dumps(captured_tools)
         assert "v27 skill marker" in json.dumps(captured_tools)
+        assert "properties" in json.dumps(captured_tools)
+        assert "symbolic-target-for-qualification.txt" in json.dumps(captured_tools)
+        assert "read_file(/session/schema.json)" in result["permission_grants"]["allow"]
+        assert "read_file(/session)" not in result["permission_grants"]["allow"]
         assert result["loaded_skills"][0]["slug"] == "v27-procedure", result
         assert result["permission_snapshot"]["mode"] == "request-review"
         assert "command(git)" in result["permission_grants"]["allow"]
@@ -182,6 +193,8 @@ def run_probe(root):
         second = server.run(read)
         assert second.get("output") == {"ok": True} and second["session_id"] != first_sid
         checks["native_structured_output_and_actual_source_skill_reads"] = True
+        checks["native_read_of_exact_structured_output_schema"] = True
+        checks["native_readlink_scoped_source_navigation"] = True
         checks["no_implicit_conversation_reuse"] = True
 
         state["case"] = "deny"

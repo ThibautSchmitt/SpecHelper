@@ -484,7 +484,7 @@ def test_independent_omission_is_carried_to_final_scoped_outputs(
     values = [
         {
             "status": "READY_TO_ANALYZE",
-            "understanding": "Explain cancellation conditions.",
+            "understanding": "PRIVATE_REQUIREMENT_CODE_FINDING",
             "questions": [],
             "ticket": None,
             "complexity": "simple",
@@ -523,7 +523,10 @@ def test_independent_omission_is_carried_to_final_scoped_outputs(
     assert value.status == ("READY" if resolved else "PARTIAL"), value.error
     assert len(calls) == 6 and not values
     counter = next(call for call in calls if call["profile"] == "independent")
+    assert "PRIVATE_REQUIREMENT_CODE_FINDING" in calls[1]["prompt"]
     assert "PRIVATE_INITIAL_ANALYST_FINDING" not in counter["prompt"]
+    assert "PRIVATE_REQUIREMENT_CODE_FINDING" not in counter["prompt"]
+    assert value.need in counter["prompt"]
     assert "OMISSION DISCOVERY POLICY" in counter["prompt"]
     assert counter["context_id"] != calls[1]["context_id"]
     verifier = next(call for call in calls if call["profile"] == "synthesis")

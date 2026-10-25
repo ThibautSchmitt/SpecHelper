@@ -194,13 +194,16 @@ def prepare_session(session, token=None, auth_mode=MODE):
     if any(path.is_symlink() for path in (settings, *settings.parents)):
         raise ValueError("Invalid Antigravity session.")
     settings.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    commands = ("git", "rg", "ls", "cat", "sed", "head", "tail", "find", "wc", "python3", "curl")
+    commands = ("git", "rg", "ls", "cat", "sed", "head", "tail", "find", "readlink", "wc", "python3", "curl")
     config = {
         "historySize": 0,
         "trustedWorkspaces": ["/workspace"],
         "permissions": {
             "allow": ["command(" + command + ")" for command in commands]
-            + ["read_file(" + path + ")" for path in ("/workspace", "/skills", "/context", "/attachments")],
+            + ["read_file(" + path + ")" for path in ("/workspace", "/skills", "/context", "/attachments")]
+            # The CLI may inspect its service-authored output schema before
+            # finishing. Grant this exact file, never the session directory.
+            + ["read_file(/session/schema.json)"],
             "deny": ["write_file(*)"],
         },
     }

@@ -54,7 +54,7 @@ def relative_file(root, relative):
 
 def git(repository, *arguments, environment=None):
     return subprocess.check_output(
-        ["rtk", "proxy", "git", "-C", str(repository), *arguments],
+        ["git", "-c", "safe.directory=" + str(Path(repository).resolve()), "-C", str(repository), *arguments],
         env=environment, text=True, stderr=subprocess.PIPE,
     ).strip()
 
@@ -285,6 +285,23 @@ def measured_number(value, *, integer=False):
     return isinstance(value, int if integer else (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0
 
 
+def measured_usage(attempts):
+    """Separate complete totals from measured subtotals when a provider omits usage."""
+    totals, coverage = {}, {}
+    for metric in ("input_tokens", "output_tokens", "total_tokens"):
+        values = [
+            attempt["usage"].get(metric) if isinstance(attempt.get("usage"), dict) else None
+            for attempt in attempts
+        ]
+        known = [value for value in values if measured_number(value, integer=True)]
+        totals[metric] = sum(known) if values and len(known) == len(values) else None
+        coverage[metric] = {
+            "observed_attempts": len(known), "unknown_attempts": len(values) - len(known),
+            "observed_tokens": sum(known) if known else None,
+        }
+    return totals, coverage
+
+
 def compare(study, runs, reviews):
     manifest, protocol, corpus, expected = check_study(study)
     configs = {row["id"]: row for row in protocol["configurations"]}
@@ -307,6 +324,7 @@ def compare(study, runs, reviews):
             row = supplied.get(case_id)
             baseline = expected["cases"][case_id]
             summary = {"case_id": case_id, "split": frozen["split"], "human_expected_review": human_reviewed(study, manifest, case_id),
+                       "kind": case_definitions[case_id]["kind"],
                        "status": row.get("status", "NOT_RUN") if row else "NOT_RUN", "semantic_review": "UNREVIEWED",
                        "material_errors": None, "decisive_omissions": None, "unsupported_claims": None,
                        "expected_facts": len(baseline["required_facts"]), "covered_facts": None,
@@ -318,6 +336,8 @@ def compare(study, runs, reviews):
                 successful = {item["role"] for item in attempts if item.get("status") == "SUCCESS"}
                 if case_definitions[case_id]["kind"] == "analysis" and summary["status"] == "COMPLETE" and successful != ROLES:
                     raise ValueError("A complete analysis requires all three successful independent roles")
+                if case_definitions[case_id]["kind"] == "scope" and attempts:
+                    raise ValueError("Deterministic scope cases must not invoke the analysis pipeline")
                 for attempt in attempts:
                     context = attempt.get("context_id")
                     if not context or context in contexts:
@@ -325,6 +345,11 @@ def compare(study, runs, reviews):
                     contexts.add(context)
                     if attempt.get("role") not in ROLES:
                         raise ValueError("Unknown public role")
+                    expected_role = configs[config_id]["roles"][attempt["role"]]
+                    if any(attempt.get(key) != expected_role.get(key) for key in (
+                        "provider", "model", "family", "cli_version", "effort",
+                    )):
+                        raise ValueError("Observed role identity must match the frozen model, effort and CLI version")
                     all_attempts.append(attempt)
                 if case_definitions[case_id]["kind"] == "scope":
                     if attempts:
@@ -364,15 +389,31 @@ def compare(study, runs, reviews):
                 if not measured_number(row.get("elapsed_seconds")):
                     raise ValueError("Case duration must be observed")
                 summary["elapsed_seconds"] = row["elapsed_seconds"]
+                summary["execution_seconds"] = row.get("execution_seconds")
             rows.append(summary)
-        totals = {}
-        for metric in ("input_tokens", "output_tokens", "total_tokens"):
-            values = [attempt.get("usage", {}).get(metric) for attempt in all_attempts]
-            totals[metric] = sum(values) if values and all(measured_number(value, integer=True) for value in values) else None
+        totals, usage_coverage = measured_usage(all_attempts)
         elapsed = [row.get("elapsed_seconds") for row in rows]
+        execution = [row.get("execution_seconds") for row in rows if case_definitions[row["case_id"]]["kind"] == "analysis"]
+        splits = {}
+        for split in ("development", "reserve"):
+            subset = [row for row in rows if row["split"] == split]
+            splits[split] = {
+                "cases": len(subset),
+                "measured_cases": sum(row["status"] in {"COMPLETE", "PARTIAL"} for row in subset),
+                "reviewed_cases": sum(row["semantic_review"] == "REVIEWED" for row in subset),
+                "material_errors": sum(row["material_errors"] for row in subset) if all(row["material_errors"] is not None for row in subset) else None,
+                "decisive_omissions": sum(row["decisive_omissions"] for row in subset) if all(row["decisive_omissions"] is not None for row in subset) else None,
+                "elapsed_seconds": sum(row["elapsed_seconds"] for row in subset) if all(measured_number(row.get("elapsed_seconds")) for row in subset) else None,
+                "scope_false_positives": sum(row["false_positive"] for row in subset if row["false_positive"] is not None),
+                "scope_false_negatives": sum(row["false_negative"] for row in subset if row["false_negative"] is not None),
+                "scope_measured_cases": sum(row["false_positive"] is not None for row in subset),
+            }
         summaries.append({
             "configuration_id": config_id, "cases": rows, "usage": totals,
+            "usage_coverage": usage_coverage,
+            "splits": splits,
             "elapsed_seconds": sum(elapsed) if all(measured_number(value) for value in elapsed) else None,
+            "execution_seconds": sum(execution) if execution and all(measured_number(value) for value in execution) else None,
             "monetary_cost": None,
             "reviewed_cases": sum(row["semantic_review"] == "REVIEWED" for row in rows),
             "human_approved_cases": sum(row["human_expected_review"] for row in rows),

@@ -459,6 +459,12 @@ class Orchestrator:
             "observations": self.facts,
             "runtime_permission_limits": self.run.orchestration.get("permission_limits", []),
         }
+        if role == "independent" and self.request.analysis_protocol in {"2.3", "2.4"}:
+            # Requirement assessment can itself contain code findings. Only the
+            # original user dossier, confirmed choices and frozen project data
+            # belong in the counter-analyst's first, independent exploration.
+            data.pop("understanding", None)
+            data["observations"] = {}
         if verification:
             data["verification_request"] = verification
         serialized = json.dumps(data, ensure_ascii=False)
@@ -735,7 +741,9 @@ class Orchestrator:
     def observe_context(self, response, step):
         public_role = step["public_role"]
         from .permission_evidence import observation, trace
+        from .usage_evidence import capture_usage
 
+        capture_usage(response, step)
         limits, events = observation(response)
         step.update(trace(response))
         if limits:

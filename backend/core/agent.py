@@ -189,6 +189,7 @@ def runtime_call(path, payload=None, timeout=15):
                 {
                     key: result[key]
                     for key in (
+                        "usage",
                         "context_usage",
                         "context_audit",
                         "database_checks",

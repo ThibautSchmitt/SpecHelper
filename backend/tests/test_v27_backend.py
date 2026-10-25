@@ -603,6 +603,7 @@ def test_runtime_timeout_keeps_technical_status_and_permission_observations(sett
 def test_permission_failure_keeps_safe_grants_through_provider_unavailable(settings):
     settings.RUNTIME_TOKEN = "fixture-control"
     context = {
+        "usage": {"input_tokens": 40, "output_tokens": 2, "total_tokens": 42},
         "permission_grants": {"allow": ["command(git)"], "deny": ["write_file(*)"]},
         "permission_snapshot": {"mode": "request-review", "tools": ["view_file"]},
         "permission_limits": [PERMISSION_LIMIT],
@@ -627,7 +628,10 @@ def test_unusable_permission_denial_is_explicit_error_without_false_capacity_wai
     with (
         patch("core.worker.request_workspace", return_value=storage),
         patch("core.worker.runtime_call", side_effect=ProviderUnavailable(
-            "PERMISSION_DENIED", context_observation={"permission_limits": [PERMISSION_LIMIT]}
+            "PERMISSION_DENIED", context_observation={
+                "permission_limits": [PERMISSION_LIMIT],
+                "usage": {"input_tokens": 40, "output_tokens": 2, "total_tokens": 42},
+            }
         )),
     ):
         perform_job(claim_job())
@@ -635,6 +639,7 @@ def test_unusable_permission_denial_is_explicit_error_without_false_capacity_wai
     assert request.status == "ERROR" and "permission policy" in request.error
     assert not request.versions.exists()
     assert Job.objects.get(target=str(request.pk)).status == "ERROR"
+    assert request.analysis_runs.get().steps[-1]["usage"]["total_tokens"] == 42
 
 
 def test_metadata_control_relay_allows_only_scoped_reads_not_run_or_arbitrary_targets(
