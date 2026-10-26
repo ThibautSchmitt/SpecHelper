@@ -150,6 +150,16 @@ The comparison keeps development and reserve results separate and rejects role
 observations that differ from the frozen model, family, effort or CLI version.
 Independent semantic review remains mandatory for error and omission counts.
 
+Execution metrics are separate from business correctness: each case and
+configuration reports observed checkpoint records, failed checkpoints, fixed
+failure categories and reported native-call counts. One checkpoint can contain
+multiple calls because of a bounded format repair; a failed checkpoint is not
+automatically a false business claim. Missing call counts stay unknown, with
+their observed subtotal and coverage listed separately. Application status and
+published-result availability make queued, cancelled or clarification-only
+outcomes visible. These counters cover observed records, not unrun cases; they
+do not replace independent source review or imply a complete qualification.
+
 Verification limitations can mention inaccessible runtime locations. Publication
 replaces private paths in evidence prose with a neutral marker while preserving
 the limitation, evidence status and blocking flag. Source excerpts and query/Web

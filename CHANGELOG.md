@@ -41,6 +41,8 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
   A known-model failure blocks its pool; an unscoped account failure stays global.
 - Re-evaluate a connection's model-pool block when its selected model changes;
   preserve exhausted target pools and account-wide restrictions.
+- Report observed execution failures and published-answer availability separately
+  from reviewed business errors; retain unknown native-call counts and safe diagnostics.
 
 Human validation of expected answers and representative business coverage, live
 comparative AI runs and independent output review remain outstanding. This entry does

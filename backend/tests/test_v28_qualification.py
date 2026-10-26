@@ -103,6 +103,40 @@ def test_no_semantic_review_means_unknown_errors_not_zero_or_a_quality_score(stu
         assert "confidence" not in config and "score" not in config
 
 
+def test_execution_failures_and_native_calls_are_distinct_from_business_errors(study):
+    runs = run_records(study)
+    row = runs[0]['cases'][0]
+    row.update(status='RUNNING', application_status='QUEUED', output={'result': None})
+    row['attempts'] = row['attempts'][:2]
+    row['attempts'][0]['calls'] = 2
+    row['attempts'][1].update(calls=1, status='ERROR', failure='ERROR')
+    report = harness.compare(study, runs, [])
+    configuration = report['configurations'][0]
+    case = configuration['cases'][0]
+    assert case['execution']['observed_steps'] == 2
+    assert case['execution']['failed_steps'] == 1
+    assert case['execution']['native_calls'] == 3
+    assert case['execution']['failure_categories'] == {'ERROR': 1}
+    assert case['has_published_result'] is False
+    assert case['application_status'] == 'QUEUED'
+    assert configuration['execution']['failed_steps'] == 1
+    assert configuration['execution']['native_calls'] is None  # Other fixtures omit this observation.
+    assert configuration['cases_without_published_result'] == 1
+    assert configuration['material_errors'] is None and configuration['decisive_omissions'] is None
+    assert not configuration['measurement_complete']
+
+
+@pytest.mark.parametrize('diagnostic', ['synthetic-private-provider-diagnostic', {'private': 'synthetic-private-provider-diagnostic'}, []])
+def test_execution_failure_categories_cannot_expose_arbitrary_diagnostics(study, diagnostic):
+    runs = run_records(study)
+    row = runs[0]['cases'][0]
+    row['status'] = 'PARTIAL'
+    row['attempts'][0].update(status='ERROR', failure=diagnostic)
+    report = harness.compare(study, runs, [])
+    assert report['configurations'][0]['cases'][0]['execution']['failure_categories'] == {'UNKNOWN': 1}
+    assert 'synthetic-private-provider-diagnostic' not in json.dumps(report)
+
+
 def test_missing_independent_role_or_reused_context_cannot_count_as_complete(study):
     runs = run_records(study)
     runs[0]["cases"][0]["attempts"].pop()

@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
@@ -372,6 +373,27 @@ def measured_usage(attempts):
     return totals, coverage
 
 
+def execution_metrics(attempts):
+    """Report observed execution failures separately from reviewed business claims."""
+    failed = [item for item in attempts if item.get("status") in {"ERROR", "CANCELLED", "INTERRUPTED"}]
+    counts = [item.get("calls") for item in attempts]
+    known = [value for value in counts if measured_number(value, integer=True)]
+    categories = {"AUTH_ERROR", "QUOTA_EXHAUSTED", "MODEL_UNAVAILABLE", "PERMISSION_DENIED", "TIMEOUT", "BUSY", "ERROR"}
+    failures = Counter(
+        item.get("failure") if isinstance(item.get("failure"), str) and item["failure"] in categories else "UNKNOWN"
+        for item in failed
+    )
+    return {
+        "observed_steps": len(attempts), "failed_steps": len(failed),
+        "native_calls": sum(known) if len(known) == len(counts) else None,
+        "native_call_count_coverage": {
+            "observed_steps": len(known), "unknown_steps": len(counts) - len(known),
+            "observed_calls": sum(known) if known or not attempts else None,
+        },
+        "failure_categories": dict(sorted(failures.items())),
+    }
+
+
 def compare(study, runs, reviews):
     manifest, protocol, corpus, expected = check_study(study)
     configs = {row["id"]: row for row in protocol["configurations"]}
@@ -398,11 +420,17 @@ def compare(study, runs, reviews):
                        "status": row.get("status", "NOT_RUN") if row else "NOT_RUN", "semantic_review": "UNREVIEWED",
                        "material_errors": None, "decisive_omissions": None, "unsupported_claims": None,
                        "expected_facts": len(baseline["required_facts"]), "covered_facts": None,
-                       "false_positive": None, "false_negative": None, "clarification_relevance": None}
+                       "false_positive": None, "false_negative": None, "clarification_relevance": None,
+                       "application_status": row.get("application_status") if row else None,
+                       "has_published_result": None, "execution": None}
             if row:
                 if row["packet_sha256"] != frozen["packet_sha256"]:
                     raise ValueError("A run uses another case packet")
                 attempts = row.get("attempts", [])
+                summary["execution"] = execution_metrics(attempts)
+                output = row.get("output")
+                if summary["kind"] == "analysis" and isinstance(output, dict) and "result" in output:
+                    summary["has_published_result"] = output["result"] is not None
                 successful = {item["role"] for item in attempts if item.get("status") == "SUCCESS"}
                 if case_definitions[case_id]["kind"] == "analysis" and summary["status"] == "COMPLETE" and successful != ROLES:
                     raise ValueError("A complete analysis requires all three successful independent roles")
@@ -484,6 +512,9 @@ def compare(study, runs, reviews):
             "elapsed_seconds": sum(elapsed) if all(measured_number(value) for value in elapsed) else None,
             "execution_seconds": sum(execution) if execution and all(measured_number(value) for value in execution) else None,
             "monetary_cost": None,
+            "execution": execution_metrics(all_attempts),
+            "published_results_observed": sum(row["has_published_result"] is True for row in rows),
+            "cases_without_published_result": sum(row["has_published_result"] is False for row in rows),
             "reviewed_cases": sum(row["semantic_review"] == "REVIEWED" for row in rows),
             "human_approved_cases": sum(row["human_expected_review"] for row in rows),
             "material_errors": sum(row["material_errors"] for row in rows) if all(row["material_errors"] is not None for row in rows) else None,
