@@ -37,6 +37,8 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 - Retain observed quota exhaustion when periodic refresh has only unavailable metadata
   or low usage figures; recover automatically only from an actually expired exhausted
   window or explicit provider permission.
+- Keep Antigravity's Gemini quota independent from its shared Claude/GPT quota.
+  A known-model failure blocks its pool; an unscoped account failure stays global.
 
 Human validation of expected answers and representative business coverage, live
 comparative AI runs and independent output review remain outstanding. This entry does

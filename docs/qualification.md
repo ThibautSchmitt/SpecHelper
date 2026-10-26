@@ -179,6 +179,17 @@ percentage do not by themselves establish recovery. Periodic refresh can resume
 after an exhausted window actually expires; explicit provider permission can also
 establish availability. Missing reset times stay unknown in qualification reports.
 
+Antigravity documents separate Gemini and shared Claude/GPT usage pools in its
+[model guide](https://www.antigravity.google/docs/models/). A quota error for a
+recognized Antigravity model blocks the corresponding pool across configurations
+of the same account. It does not establish exhaustion of the other pool. Unknown
+model or legacy unscoped account failures remain global until their scope is
+established; selecting another model does not erase those observations.
+Authentication or low unscoped usage cannot clear a pool failure. Explicit
+provider usage permission recovers only the observed model's pool. This does not
+invent remaining percentages or reset dates unsupported by the installed CLI.
+Switching the measured models requires a new frozen comparison protocol.
+
 ## Outstanding validation
 
 The current implementation is groundwork, not completed qualification. Human

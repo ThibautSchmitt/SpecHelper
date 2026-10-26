@@ -129,11 +129,14 @@ def record_quota(connection, windows):
     metadata = (
         identity.quota_windows.get("_status") if isinstance(identity.quota_windows, dict) else None
     )
+    model_pools = identity.quota_windows.get("_model_pools")
     identity.quota_windows = merged
     changes = {
         "quota_windows": {**merged, **({"_status": metadata} if metadata else {})},
         "checked_at": timezone.now(),
     }
+    if isinstance(model_pools, dict):
+        changes["quota_windows"]["_model_pools"] = model_pools
     if quota_exhausted(identity):
         changes["availability"] = "QUOTA_EXHAUSTED"
     identities = list(quota_group(identity).values_list("pk", flat=True))
@@ -177,6 +180,30 @@ def group_unavailable(identity):
     )
 
 
+def model_quota_pool(connection):
+    """Antigravity documents separate Gemini and shared Claude/GPT usage pools."""
+    if connection.agent != "antigravity":
+        return ""
+    if connection.model.startswith("gemini-"):
+        return "gemini"
+    if connection.model.startswith(("claude-", "gpt-")):
+        return "claude_gpt"
+    return ""
+
+
+def model_pool_exhausted(connection, identity):
+    pool = model_quota_pool(connection)
+    if not pool:
+        return False
+    for member in quota_group(identity):
+        pools = member.quota_windows.get("_model_pools", {})
+        if isinstance(pools, dict):
+            observed = pools.get(pool, {})
+            if isinstance(observed, dict) and observed.get("exhausted") is True:
+                return True
+    return False
+
+
 def candidates(exclude=(), preferred=None):
     values = []
     for connection in (
@@ -197,7 +224,7 @@ def candidates(exclude=(), preferred=None):
             "UNKNOWN",
         }:
             continue
-        if not group_unavailable(identity):
+        if not group_unavailable(identity) and not model_pool_exhausted(connection, identity):
             values.append(connection)
     return sorted(
         values,
@@ -218,6 +245,8 @@ def public(connection):
         None,
     )
     if exhausted:
+        availability = "QUOTA_EXHAUSTED"
+    if model_pool_exhausted(connection, identity):
         availability = "QUOTA_EXHAUSTED"
     if connection.model:
         from .models import AIModel
@@ -329,6 +358,14 @@ def observe(connection, value):
             AIConnection.objects.filter(identity_id__in=ids, availability="QUOTA_EXHAUSTED").update(
                 availability="AVAILABLE"
             )
+            pool = model_quota_pool(connection)
+            if pool:
+                for member in quota_group(identity_for(connection)):
+                    pools = dict(member.quota_windows.get("_model_pools", {}))
+                    pools.pop(pool, None)
+                    AIIdentity.objects.filter(pk=member.pk).update(
+                        quota_windows={**member.quota_windows, "_model_pools": pools}
+                    )
         connection.refresh_from_db()
     return public(connection)
 
@@ -341,6 +378,28 @@ def runtime_identity(connection):
 def mark_failure(connection_id, kind, retry_seconds=None, quota_windows=None):
     connection = AIConnection.objects.get(pk=connection_id)
     identity = identity_for(connection)
+    pool = model_quota_pool(connection)
+    if kind == "QUOTA_EXHAUSTED" and pool:
+        # A model-pool failure cannot release an earlier unscoped account failure.
+        # Authentication and percentages do not clear these observations either.
+        members = list(quota_group(identity))
+        checked_at = timezone.now()
+        for member in members:
+            previous = member.quota_windows.get("_model_pools", {})
+            pools = dict(previous) if isinstance(previous, dict) else {}
+            pools[pool] = {"exhausted": True, "observed_at": checked_at.isoformat()}
+            AIIdentity.objects.filter(pk=member.pk).update(
+                quota_windows={**member.quota_windows, "_model_pools": pools},
+                checked_at=checked_at,
+            )
+        configurations = AIConnection.objects.filter(identity__in=members).exclude(
+            availability="MODEL_UNAVAILABLE"
+        )
+        ids = [row.pk for row in configurations if model_quota_pool(row) == pool]
+        AIConnection.objects.filter(pk__in=ids).update(
+            availability="QUOTA_EXHAUSTED", retry_after=None, checked_at=checked_at
+        )
+        return
     retry = (
         timezone.now() + timedelta(seconds=min(max(retry_seconds or 30, 1), 3600))
         if kind == "BUSY"
