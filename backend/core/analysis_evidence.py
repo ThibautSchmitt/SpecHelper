@@ -19,7 +19,10 @@ class StrictEvidence(BaseModel):
 
 
 class ClaimScope(StrictEvidence):
-    environment: str = Field(default="", max_length=200)
+    environment: str = Field(
+        default="", max_length=200,
+        description="Copy the exact frozen environment name from the supplied context; do not replace it with a descriptive label.",
+    )
     conditions: list[Text] = Field(default_factory=list, max_length=12)
     period: str = Field(default="", max_length=1000)
     population: str = Field(default="", max_length=1000)
@@ -28,9 +31,15 @@ class ClaimScope(StrictEvidence):
 
 class GitSource(StrictEvidence):
     kind: Literal["git"]
-    repository: str = Field(min_length=1, max_length=255)
+    repository: str = Field(
+        min_length=1, max_length=255,
+        description="Exact repository identifier from the frozen baseline, including its owner when present.",
+    )
     commit: str = Field(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
-    path: str = Field(min_length=1, max_length=1000)
+    path: str = Field(
+        min_length=1, max_length=1000,
+        description="Path relative to this repository's root. Do not include /workspace or repeat the repository identifier. For repository org/repo, a file at its root is path policy.py, not org/repo/policy.py.",
+    )
     symbol: str = Field(default="", max_length=500)
     line_start: int = Field(ge=1)
     line_end: int = Field(ge=1)

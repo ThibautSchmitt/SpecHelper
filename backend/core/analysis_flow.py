@@ -680,7 +680,7 @@ class Orchestrator:
                     if isinstance(exc, RepeatedBusinessQuestion):
                         prompt += "\nBUSINESS QUESTION CORRECTION: a returned question has already been answered in confirmed_decisions. Reuse that confirmed answer, do not ask the user again. Ask only a genuinely new dependent question, or report an explicit conflict using conflicts_with and its factual reason if new information contradicts the old rule."
                     elif self.is_question:
-                        prompt += "\nFORMAT CORRECTION: strictly follow the explanation schema. Use only known repository identifiers and existing repository-relative paths. Do not include private paths, ticket fields, goal fields or internal reasoning. Leave unsupported details empty."
+                        prompt += "\nFORMAT CORRECTION: strictly follow the explanation schema. The answer field must be a JSON object with required title and summary, not a prose or Markdown string. Use only declared QuestionAnswer fields. Use only known repository identifiers and existing repository-relative paths. Do not include private paths, ticket fields, goal fields or internal reasoning. Leave unsupported details empty."
                     else:
                         prompt += "\nFORMAT CORRECTION: strictly follow the schema, a ticket of at most 700 words and a separate detailed goal.md. useful_attachments must contain only the exact provided names, without Markdown or explanations, or an empty list. Do not include internal reasoning fields."
             step.update(

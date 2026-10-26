@@ -108,6 +108,17 @@ def test_actual_git_support_and_absent_database_are_separate(context):
 
 
 @pytest.mark.django_db
+def test_repeated_repository_prefix_is_unverified_instead_of_guessed(context):
+    workspace, source, request, run = context
+    repeated = {**source, "path": source["repository"] + "/" + source["path"]}
+    checked = check_report(report(repeated), request, run, workspace)
+    assert checked.claims[0].status == "unverified"
+    assert checked.claims[0].sources == []
+    assert checked.blocking
+    assert check_report(report(source), request, run, workspace).claims[0].status == "supported"
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     "field,value",
     [

@@ -162,6 +162,17 @@ qualification with a broader assertion. If the final writer supplies no summary,
 the result retains its main narrative and evidence without resurrecting an
 unverified business-summary section.
 
+Native qualification exposed two recoverable output mistakes: repository identifiers
+repeated in file paths, and Question answers returned as prose instead of the required
+object. The central instructions and schema descriptions make these contracts explicit.
+For `repository: "org/repo"`, cite `path: "src/example.py"`, not
+`"org/repo/src/example.py"`. Copy the exact frozen environment name. A Question's
+`answer` contains at least `title` and `summary`; a Markdown string is not accepted.
+Invalid citations remain unverified, and the one bounded format repair cannot
+publish an invalid result even after the three independent reviews have completed.
+Treat instruction changes as a new protocol revision; retain earlier failed attempts
+and never mix their measurements into a claim of identical inputs.
+
 ## Outstanding validation
 
 The current implementation is groundwork, not completed qualification. Human

@@ -249,6 +249,29 @@ def test_final_reviewed_summary_cannot_inherit_unverified_earlier_assertions(
         assert stale not in artifact.content
 
 
+@pytest.mark.parametrize("answer", ["A prose answer instead of the required object.", {
+    "explanation": "A non-schema explanation.", "limits": [],
+    "policy_rule": "A policy rule.", "ui_rule": "A display rule.",
+}])
+def test_invalid_native_writer_shape_cannot_publish_after_successful_independent_reviews(
+    environment, storage, repository, bundle, answer
+):
+    request = start(environment, "question")
+    values = outputs(repository, bundle, "question")
+    invalid = {"status": "PARTIAL", "answer": answer, "business_summary": None, "questions": []}
+    values[-1] = invalid
+    values.append(invalid)
+    calls, job = execute(request, storage, values)
+    assert job.status == "ERROR"
+    assert request.status == "ERROR"
+    assert not request.versions.exists()
+    assert len(calls) == 7
+    assert "answer field must be a JSON object" in calls[-1]["prompt"]
+    run = request.analysis_runs.get()
+    assert all(step["status"] == "DONE" for step in run.steps[:-1])
+    assert run.steps[-1]["attempts"] == 2
+
+
 @pytest.mark.parametrize("workflow", ["request", "question"])
 @pytest.mark.parametrize("two_families", [False, True])
 def test_three_roles_remain_mandatory_for_simple_and_self_approved_analyses(

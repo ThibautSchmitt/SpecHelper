@@ -31,6 +31,9 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 - Accept private qualification corpora with explicit provenance/privacy records,
   declared repositories, preserved clean Git commits and a dated database fixture;
   keep expected answers and review metadata outside agent packets.
+- Clarify exact repository-relative citations, frozen environment names and structured
+  Question answers after observed native citation/format failures; retain strict
+  rejection and bounded repair instead of guessing paths or publishing invalid output.
 
 Human validation of expected answers and representative business coverage, live
 comparative AI runs and independent output review remain outstanding. This entry does

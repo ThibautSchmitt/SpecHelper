@@ -114,7 +114,9 @@ class QuestionAnswer(StrictModel):
 
 class QuestionOutput(StrictModel):
     status: Literal["READY", "PARTIAL"]
-    answer: QuestionAnswer
+    answer: QuestionAnswer = Field(
+        description="A structured JSON object with required title and summary fields, using only QuestionAnswer fields. Never replace it with a prose or Markdown string.",
+    )
     business_summary: BusinessSummary | None = None
     questions: list[Question] = Field(default_factory=list, max_length=5)
 
