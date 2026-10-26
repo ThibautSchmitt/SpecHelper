@@ -34,15 +34,26 @@ def publish(request_id, run, output):
     decisions = decision_context.get("decisions", [])
     rules = decision_rules(decisions)
     history = decision_context.get("history", [])
-    summary = dict(run.orchestration.get("business_summary", {})) if run else {}
+    independently_reviewed = request.analysis_protocol in {"2.3", "2.4"}
+    # Earlier exploration summaries are hypotheses. A final writer may narrow or
+    # remove them after verification, including by leaving a field empty.
+    summary = (
+        dict(run.orchestration.get("business_summary", {}))
+        if run and not independently_reviewed else {}
+    )
     proposed_summary = getattr(output, "business_summary", None)
+    if isinstance(output, QuestionOutput) and output.answer.business_summary is not None:
+        proposed_summary = output.answer.business_summary
     if proposed_summary:
         latest_summary = proposed_summary.model_dump()
-        uncertain = list(
-            dict.fromkeys([*summary.get("uncertainties", []), *latest_summary["uncertainties"]])
-        )
-        summary.update({key: value for key, value in latest_summary.items() if value})
-        summary["uncertainties"] = uncertain
+        if independently_reviewed:
+            summary = latest_summary
+        else:
+            uncertain = list(
+                dict.fromkeys([*summary.get("uncertainties", []), *latest_summary["uncertainties"]])
+            )
+            summary.update({key: value for key, value in latest_summary.items() if value})
+            summary["uncertainties"] = uncertain
     if summary:
         summary = BusinessSummary.model_validate(summary).model_dump()
     output = output.model_copy(deep=True)

@@ -116,6 +116,13 @@ replaces private paths in evidence prose with a neutral marker while preserving
 the limitation, evidence status and blocking flag. Source excerpts and query/Web
 receipts remain exact; this does not make an unverified claim supported.
 
+For the independent analysis protocols, publication takes the business summary
+from the final writer. A Question's nested answer summary is authoritative.
+Earlier exploration summaries cannot fill empty final fields or replace a final
+qualification with a broader assertion. If the final writer supplies no summary,
+the result retains its main narrative and evidence without resurrecting an
+unverified business-summary section.
+
 ## Outstanding validation
 
 The current implementation is groundwork, not completed qualification. Human

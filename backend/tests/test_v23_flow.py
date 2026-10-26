@@ -213,6 +213,43 @@ def test_runtime_paths_in_verification_limits_do_not_prevent_publication(
 
 
 @pytest.mark.parametrize("workflow", ["request", "question"])
+@pytest.mark.parametrize("final_summary", [False, True])
+def test_final_reviewed_summary_cannot_inherit_unverified_earlier_assertions(
+    environment, storage, repository, bundle, workflow, final_summary
+):
+    request = start(environment, workflow)
+    values = outputs(repository, bundle, workflow)
+    stale = "Every production contract can always be cancelled without restrictions."
+    values[1]["business_summary"] = {
+        "current": stale, "impacts": [stale],
+        "uncertainties": ["The initial configuration has not yet been verified."],
+    }
+    final = {
+        "current": "The inspected helper selects active rows; live operation remains unknown.",
+        "uncertainties": ["The runtime caller was not established."],
+    }
+    values[-1]["status"] = "PARTIAL"
+    if final_summary:
+        owner = values[-1]["answer"] if workflow == "question" else values[-1]
+        owner["business_summary"] = final
+    _, job = execute(request, storage, values)
+    assert job.status == "DONE", request.error
+    version = request.versions.get()
+    assert version.status == "PARTIAL"
+    assert stale not in json.dumps(version.business_summary)
+    if final_summary:
+        assert version.business_summary["current"] == final["current"]
+        assert version.business_summary["impacts"] == []
+        assert version.business_summary["uncertainties"] == final["uncertainties"]
+        if workflow == "question":
+            assert version.explanation["business_summary"] == version.business_summary
+    else:
+        assert not version.business_summary
+    for artifact in version.artifacts.all():
+        assert stale not in artifact.content
+
+
+@pytest.mark.parametrize("workflow", ["request", "question"])
 @pytest.mark.parametrize("two_families", [False, True])
 def test_three_roles_remain_mandatory_for_simple_and_self_approved_analyses(
     environment, storage, repository, bundle, workflow, two_families
