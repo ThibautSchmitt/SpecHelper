@@ -114,3 +114,16 @@ def test_interrupted_run_uses_its_persisted_step_end_without_inventing_a_complet
     assert result["status"] == "PARTIAL"
     assert result["elapsed_seconds"] == result["execution_seconds"] == 7
     assert result["finished_at_source"] == "last_persisted_step"
+
+
+def test_gate_clarification_is_measured_without_a_job_or_a_frozen_analysis_baseline(case):
+    request, packet = case
+    request.status, request.baseline = "DRAFT", []
+    request.scope_assessment = {
+        "status": "NEEDS_CLARIFICATION", "context_revision": request.environment.context_revision,
+        "assessed_at": (request.created_at + timedelta(milliseconds=2)).isoformat(),
+    }
+    result = collect_request(packet, request, {"packet_sha256": "frozen"}, {"instructions": {}}, {})
+    assert result["status"] == "PARTIAL" and result["scope_status"] == "NEEDS_CLARIFICATION"
+    assert result["elapsed_seconds"] == 0.002 and result["execution_seconds"] == 0
+    assert result["attempts"] == [] and result["output"]["result"] is None

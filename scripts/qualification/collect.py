@@ -11,15 +11,22 @@ from pathlib import Path
 from .harness import check_study, digest, read_json, write_json
 
 
-def validate_request(packet, request):
+def validate_request(packet, request, *, admission=False):
     """Do not attribute another request or Git baseline to a frozen case."""
     if any(getattr(request, key) != packet[key] for key in ("need", "workflow", "language")):
         raise ValueError("The application request differs from its frozen case")
     expected = {row["id"]: row["git_sha"] for row in packet["repositories"]}
-    actual = {row["repository"].rsplit("/", 1)[-1]: row["sha"] for row in request.baseline}
-    if actual != expected or len(actual) != len(request.baseline):
+    sources = request.baseline
+    database_available = bool(request.database_snapshot)
+    if admission:
+        if request.environment_id is None or request.scope_assessment.get("context_revision") != request.environment.context_revision:
+            raise ValueError("The admission context is unavailable or changed")
+        sources = list(request.environment.repositories.values("repository", "sha"))
+        database_available = bool(request.environment.database_id)
+    actual = {row["repository"].rsplit("/", 1)[-1]: row["sha"] for row in sources}
+    if actual != expected or len(actual) != len(sources):
         raise ValueError("The application's source baseline differs from the frozen Git inputs")
-    if bool(request.database_snapshot) != (packet["database"]["state"] == "available"):
+    if database_available != (packet["database"]["state"] == "available"):
         raise ValueError("The application's database availability differs from the frozen case")
     attachments = []
     for row in request.attachments.all():
@@ -76,8 +83,23 @@ def invocation_seconds(step):
 
 
 def collect_request(packet, request, frozen, protocol, cli_versions):
-    validate_request(packet, request)
     run = request.analysis_runs.order_by("-number").first()
+    if run is None and request.scope_assessment.get("status") in {"OUT_OF_SCOPE", "NEEDS_CLARIFICATION"}:
+        from core.models import Job
+
+        validate_request(packet, request, admission=True)
+        assessed = timestamp(request.scope_assessment.get("assessed_at"))
+        if assessed is None or assessed < request.created_at or Job.objects.filter(kind="analysis", target=str(request.pk)).exists():
+            raise ValueError("Admission-only measurement requires its timestamp and proof that no analysis job exists")
+        return {
+            "case_id": packet["case_id"], "packet_sha256": frozen["packet_sha256"],
+            "request_id": str(request.pk), "status": "PARTIAL", "application_status": request.status,
+            "scope_status": request.scope_assessment["status"], "attempts": [],
+            "elapsed_seconds": (assessed - request.created_at).total_seconds(),
+            "execution_seconds": 0.0,
+            "output": {"application_status": request.status, "scope_assessment": request.scope_assessment, "result": None},
+        }
+    validate_request(packet, request)
     if run is None or run.started_at is None:
         return None
     configuration = run.orchestration.get("config", {})
@@ -128,6 +150,7 @@ def collect_request(packet, request, frozen, protocol, cli_versions):
         "request_id": str(request.pk), "run_number": run.number,
         "status": "COMPLETE" if complete else "PARTIAL" if terminal else "RUNNING",
         "application_status": request.status,
+        "scope_status": request.scope_assessment.get("status"),
         "elapsed_seconds": (end - run.started_at).total_seconds(),
         "execution_seconds": sum(execution_seconds) if execution_seconds and all(value is not None for value in execution_seconds) else None,
         "finished_at_source": finish_source,

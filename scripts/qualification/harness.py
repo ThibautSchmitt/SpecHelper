@@ -351,13 +351,12 @@ def compare(study, runs, reviews):
                     )):
                         raise ValueError("Observed role identity must match the frozen model, effort and CLI version")
                     all_attempts.append(attempt)
-                if case_definitions[case_id]["kind"] == "scope":
-                    if attempts:
-                        raise ValueError("Deterministic scope cases must not invoke the analysis pipeline")
-                    actual = row.get("scope_status")
-                    if actual in {"IN_SCOPE", "OUT_OF_SCOPE", "NEEDS_CLARIFICATION"}:
-                        summary["false_positive"] = int(actual != "IN_SCOPE" and baseline["scope_status"] == "IN_SCOPE")
-                        summary["false_negative"] = int(actual == "IN_SCOPE" and baseline["scope_status"] != "IN_SCOPE")
+                if case_definitions[case_id]["kind"] == "scope" and attempts:
+                    raise ValueError("Deterministic scope cases must not invoke the analysis pipeline")
+                actual = row.get("scope_status")
+                if actual in {"IN_SCOPE", "OUT_OF_SCOPE", "NEEDS_CLARIFICATION"}:
+                    summary["false_positive"] = int(actual != "IN_SCOPE" and baseline["scope_status"] == "IN_SCOPE")
+                    summary["false_negative"] = int(actual == "IN_SCOPE" and baseline["scope_status"] != "IN_SCOPE")
                     summary["scope_expected"] = baseline["scope_status"]
                     summary["scope_actual"] = actual
                 independent = [review for review in reviews if review.get("configuration_id") == config_id and review.get("case_id") == case_id]

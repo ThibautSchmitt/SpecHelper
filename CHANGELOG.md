@@ -21,6 +21,11 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
   personal tasks; cover both workflows and languages on desktop and mobile.
 - Allow Antigravity to inspect its exact service-authored output schema while
   keeping the rest of its session directory outside the file-read grants.
+- Enqueue frozen cases through an explicitly isolated application database, with
+  reserve selection and model/source checks before creating normal analysis jobs.
+- Measure scope admission even when clarification prevents an analysis job.
+- Preserve verification limits in published results while removing private runtime
+  paths from evidence prose; retain exact source excerpts and query receipts.
 
 Human validation of expected answers and representative business coverage, live
 comparative AI runs and independent output review remain outstanding. This entry does

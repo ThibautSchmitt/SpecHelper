@@ -184,6 +184,35 @@ def start(environment, workflow="request"):
 
 
 @pytest.mark.parametrize("workflow", ["request", "question"])
+def test_runtime_paths_in_verification_limits_do_not_prevent_publication(
+    environment, storage, repository, bundle, workflow
+):
+    request = start(environment, workflow)
+    verified = verification(repository)
+    verified["report"]["limitations"] = [
+        "The checkout metadata in /workspace was unavailable; the commit remains unverified."
+    ]
+    verified["report"]["claims"][0]["scope"]["sample_limits"] = (
+        "Only mounted files in /sessions/private-context/sources were inspected."
+    )
+    verified["report"]["claims"][0]["verification_notes"] = (
+        "The helper was read in /workspace/company/backend/export.py; callers remain unknown."
+    )
+    verified["report"]["blocking"] = True
+    _, job = execute(request, storage, outputs(repository, bundle, workflow, verified))
+    assert job.status == "DONE", request.error
+    assert request.status == "PARTIAL"
+    version = request.versions.get()
+    assert version.evidence["blocking"] is True
+    assert "commit remains unverified" in version.evidence["limitations"][0]
+    assert version.evidence["claims"][0]["sources"][0] == repository
+    for artifact in version.artifacts.all():
+        assert "/workspace" not in artifact.content
+        assert "/sessions/private-context" not in artifact.content
+        assert "commit remains unverified" in artifact.content
+
+
+@pytest.mark.parametrize("workflow", ["request", "question"])
 @pytest.mark.parametrize("two_families", [False, True])
 def test_three_roles_remain_mandatory_for_simple_and_self_approved_analyses(
     environment, storage, repository, bundle, workflow, two_families

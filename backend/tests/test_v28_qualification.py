@@ -175,5 +175,13 @@ def test_held_out_results_are_reported_separately_from_development(study):
     assert splits["development"]["cases"] == 18
     assert splits["reserve"]["cases"] == 6
     assert splits["reserve"]["material_errors"] is None
-    assert splits["reserve"]["scope_measured_cases"] == 2
+    assert splits["reserve"]["scope_measured_cases"] == 6
     assert splits["reserve"]["scope_false_negatives"] == 1
+
+
+def test_wrong_admission_of_an_analysis_case_is_measured_without_fabricating_ai_attempts(study):
+    runs = run_records(study)
+    runs[0]["cases"][0].update(status="PARTIAL", scope_status="NEEDS_CLARIFICATION", attempts=[])
+    row = harness.compare(study, runs, [])["configurations"][0]["cases"][0]
+    assert row["kind"] == "analysis" and row["false_positive"] == 1
+    assert row["status"] == "PARTIAL" and row["material_errors"] is None

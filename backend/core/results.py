@@ -48,14 +48,14 @@ def publish(request_id, run, output):
     output = output.model_copy(deep=True)
     evidence = {}
     if request.analysis_protocol in {"2.3", "2.4"}:
-        from .analysis_evidence import ReliabilityReport
+        from .analysis_evidence import ReliabilityReport, public_report
         from .permission_evidence import qualify_report
 
         report = ReliabilityReport.model_validate(
             run.orchestration.get("evidence", {}) if run else {}
         )
         report = qualify_report(report, run.orchestration.get("permission_limits", []) if run else [])
-        evidence = ReliabilityReport.model_validate(report.model_dump()).model_dump()
+        evidence = public_report(report, request.language).model_dump()
         roles = {
             step.get("public_role")
             for step in (run.steps if run else [])

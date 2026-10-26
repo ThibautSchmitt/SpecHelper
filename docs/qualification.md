@@ -47,6 +47,32 @@ application database. Use only the authorized frozen fixture sources and databas
 keep evaluator answers outside every agent workspace. Preserve required independent
 stages and any business clarification instead of fabricating answers to finish a run.
 
+`scripts.qualification.application` can enqueue the frozen inputs without invoking
+AI itself. It requires PostgreSQL with `qualification` in the database name, an
+instance name starting with `Qualification`, and `SPECHELPER_QUALIFICATION=1`.
+Enable exactly the frozen provider/model for each role in that isolated instance.
+Map its ready environments to the two fixture database states:
+
+```json
+{"available": 1, "absent": 2}
+```
+
+With that application's database environment loaded:
+
+```sh
+SPECHELPER_QUALIFICATION=1 PYTHONPATH=backend:. uv run --project backend \
+  python -m scripts.qualification.application .local/study \
+  --configuration gpt-first --environments .local/environments.json \
+  --output .local/bindings.json
+```
+
+The default batch excludes the reserve. Select held-out cases explicitly with
+`--cases` only after the protocol is final. The normal worker processes these jobs;
+the command does not replace any analysis stage or independently call a provider.
+Repeating the same command retains existing requests and does not queue them again.
+Source/attachment mismatches and incompatible role configurations stop enqueueing.
+Finish one distribution before switching role configuration for the next batch.
+
 Record each actual request UUID in a bindings file:
 
 ```json
@@ -84,6 +110,11 @@ not a generated business answer or completion of the independent analysis stages
 The comparison keeps development and reserve results separate and rejects role
 observations that differ from the frozen model, family, effort or CLI version.
 Independent semantic review remains mandatory for error and omission counts.
+
+Verification limitations can mention inaccessible runtime locations. Publication
+replaces private paths in evidence prose with a neutral marker while preserving
+the limitation, evidence status and blocking flag. Source excerpts and query/Web
+receipts remain exact; this does not make an unverified claim supported.
 
 ## Outstanding validation
 

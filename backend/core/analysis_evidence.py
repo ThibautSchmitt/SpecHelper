@@ -105,6 +105,32 @@ class DatabaseEvidence(StrictEvidence):
     checks: list[SQLReceipt] = Field(default_factory=list, max_length=100)
 
 
+def public_report(report, language="en"):
+    """Retain verification limits while removing runtime paths from narrative prose.
+
+    Source excerpts, SQL receipts and Web receipts remain exact provenance. They
+    are not rewritten to make an otherwise invalid citation appear valid.
+    """
+    from .question_outputs import PRIVATE_PATH
+
+    path = re.compile("(?:" + PRIVATE_PATH.pattern + r")[^\s\"'`<>\[\](){},;]*")
+
+    def clean(value):
+        if isinstance(value, str):
+            marker = "[chemin privé]" if language == "fr" else "[private runtime path]"
+            return path.sub(marker, value)
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: item if key in {"sources", "checks", "web_references"} else clean(item)
+                for key, item in value.items()
+            }
+        return value
+
+    return ReliabilityReport.model_validate(clean(report.model_dump()))
+
+
 class ReliabilityReport(StrictEvidence):
     claims: list[EvidenceClaim] = Field(default_factory=list, max_length=30)
     database: DatabaseEvidence = Field(default_factory=DatabaseEvidence)
