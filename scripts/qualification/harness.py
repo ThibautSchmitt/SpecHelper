@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -54,21 +55,34 @@ def relative_file(root, relative):
 
 def git(repository, *arguments, environment=None):
     return subprocess.check_output(
-        ["git", "-c", "safe.directory=" + str(Path(repository).resolve()), "-C", str(repository), *arguments],
+        ["git", "-c", "safe.directory=" + str(Path(repository).resolve()),
+         "-c", "core.hooksPath=" + os.devnull, "-C", str(repository), *arguments],
         env=environment, text=True, stderr=subprocess.PIPE,
     ).strip()
 
 
 def source_files(root):
-    return {
-        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(Path(root).rglob("*"))
-        if path.is_file() and ".git" not in path.relative_to(root).parts
-    }
+    root, result = Path(root), {}
+    for directory, dirs, names in os.walk(root, followlinks=False):
+        dirs[:] = sorted(name for name in dirs if name != ".git")
+        for name in [*dirs, *names]:
+            if name == ".git":
+                continue
+            path = Path(directory) / name
+            if path.is_symlink():
+                raise ValueError("Source snapshots cannot contain file or directory links")
+            if path.is_file():
+                digestor = hashlib.sha256()
+                with path.open("rb") as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b""):
+                        digestor.update(block)
+                result[path.relative_to(root).as_posix()] = digestor.hexdigest()
+    return result
 
 
-def load_corpus():
-    corpus, expected = read_json(HERE / "corpus.json"), read_json(HERE / "expectations.json")
+def load_corpus(inputs=HERE):
+    inputs = Path(inputs).resolve()
+    corpus, expected = read_json(inputs / "corpus.json"), read_json(inputs / "expectations.json")
     cases = corpus.get("cases", [])
     ids = [case["id"] for case in cases]
     if not 20 <= len(cases) <= 30 or len(ids) != len(set(ids)) or set(ids) != set(expected["cases"]):
@@ -78,18 +92,27 @@ def load_corpus():
     if not REQUIRED_TAGS <= {tag for case in cases for tag in case["tags"]}:
         raise ValueError("The required qualification situations are not covered")
     for case in cases:
+        if not isinstance(case["id"], str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", case["id"]):
+            raise ValueError("Case IDs must be plain identifiers, not filesystem paths")
         if case["workflow"] not in {"request", "question"} or case["language"] not in {"en", "fr"}:
             raise ValueError("Unknown case workflow or language")
+        if case["kind"] not in {"analysis", "scope"} or case["database"] not in {"available", "absent"}:
+            raise ValueError("Unknown case kind or database availability")
         if case["provenance"].get("origin") != "authored_synthetic":
-            raise ValueError("Unexpected provenance requires an explicit privacy review")
+            review = case["provenance"].get("privacy_review", {})
+            if not case["provenance"].get("origin") or review.get("status") != "REVIEWED" or not all(
+                isinstance(review.get(key), str) and review[key].strip()
+                for key in ("reviewer", "method", "notes")
+            ):
+                raise ValueError("Non-synthetic provenance requires an explicit privacy review")
         for name in [*case["sources"], *case["attachments"]]:
-            relative_file(HERE / "fixtures", name)
+            relative_file(inputs / "fixtures", name)
         row = expected["cases"][case["id"]]
         if not isinstance(row.get("human_review"), dict) or not row.get("observed_behavior") and case["kind"] != "scope":
             raise ValueError("Expected behavior and its human-review state are required")
         for fact in row["required_facts"]:
             for proof in fact["proof"]:
-                text = relative_file(HERE / "fixtures", proof["repository"] + "/" + proof["path"]).read_text()
+                text = relative_file(inputs / "fixtures", proof["repository"] + "/" + proof["path"]).read_text()
                 excerpt = "\n".join(text.splitlines()[proof["start_line"] - 1:proof["end_line"]]).strip()
                 if excerpt != proof["excerpt"].strip():
                     raise ValueError("Expected source provenance no longer matches the actual fixture")
@@ -116,9 +139,42 @@ def validate_protocol(protocol):
     return protocol
 
 
-def prepare(destination, protocol):
-    corpus, expected = load_corpus()
+def prepare(destination, protocol, *, inputs=HERE):
+    inputs = Path(inputs).resolve()
+    corpus, expected = load_corpus(inputs)
     protocol = validate_protocol(protocol)
+    fixtures = inputs / "fixtures"
+    names = corpus.get("repository_directories")
+    if names is None and inputs == HERE:
+        names = ["contracts", "billing", "portal", "reporting"]
+    if not isinstance(names, list) or not names:
+        raise ValueError("Explicitly declare the authorized private repository directories")
+    repositories = []
+    for name in names:
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", name):
+            raise ValueError("Repository identifiers must be plain directory names")
+        source = fixtures / name
+        if not source.is_dir() or source.is_symlink():
+            raise ValueError("A declared source repository is unavailable or linked")
+        source_files(source)
+        commit = None
+        if (source / ".git").exists():
+            if Path(git(source, "rev-parse", "--show-toplevel")).resolve() != source.resolve() or git(source, "status", "--porcelain"):
+                raise ValueError("Imported Git sources must be clean repository roots")
+            commit = git(source, "rev-parse", "HEAD")
+        repositories.append((name, source, commit))
+    if not repositories or len(names) != len(set(names)):
+        raise ValueError("Declare distinct authorized source repositories")
+    if any(name.split("/", 1)[0] not in names for case in corpus["cases"] for name in case["sources"]):
+        raise ValueError("Case source references must belong to declared repositories")
+    available = any(case["database"] == "available" for case in corpus["cases"])
+    period = corpus.get("database_observation_period", "2024-01-01/2025-12-31" if inputs == HERE else None)
+    if available and (not isinstance(period, str) or not period.strip()):
+        raise ValueError("Declare the private database observation period explicitly")
+    database_files = {
+        name: relative_file(fixtures / "database", name)
+        for name in ("data.json", "schema.sql") if available or (fixtures / "database" / name).exists()
+    }
     destination = Path(destination).resolve()
     if destination.exists() and any(destination.iterdir()):
         raise ValueError("The qualification destination must be empty")
@@ -140,28 +196,40 @@ def prepare(destination, protocol):
             "repositories": [], "attachments": [],
             "database": {
                 "state": case["database"],
-                "snapshot_sha256": hashlib.sha256((HERE / "fixtures/database/data.json").read_bytes()).hexdigest() if case["database"] == "available" else None,
-                "schema_sha256": hashlib.sha256((HERE / "fixtures/database/schema.sql").read_bytes()).hexdigest() if case["database"] == "available" else None,
-                "observation_period": "2024-01-01/2025-12-31" if case["database"] == "available" else None,
+                "snapshot_sha256": hashlib.sha256(database_files["data.json"].read_bytes()).hexdigest() if case["database"] == "available" else None,
+                "schema_sha256": hashlib.sha256(database_files["schema.sql"].read_bytes()).hexdigest() if case["database"] == "available" else None,
+                "observation_period": period if case["database"] == "available" else None,
             },
         }
         # Give independent reviewers the whole small authorized project, not an
         # evaluator-selected list of only those files that contain expected facts.
         if case["kind"] == "analysis":
-            for name in ("contracts", "billing", "portal", "reporting"):
+            for name, source, commit in repositories:
                 repository = root / "repositories" / name
-                shutil.copytree(HERE / "fixtures" / name, repository)
-                git(repository, "init", "-q", "--initial-branch=main")
-                git(repository, "config", "user.name", "Qualification fixtures")
-                git(repository, "config", "user.email", "fixtures@example.invalid")
-                git(repository, "add", "--all")
-                git(repository, "commit", "-q", "-m", "test: freeze qualification sources", environment=environment)
+                if commit:
+                    repository.mkdir(parents=True)
+                    git(repository, "init", "-q")
+                    git(repository, "-c", "protocol.file.allow=always", "fetch", "-q", "--depth=1", "--no-tags", str(source), commit)
+                    git(repository, "checkout", "-q", "--detach", "FETCH_HEAD")
+                else:
+                    shutil.copytree(source, repository)
+                    git(repository, "init", "-q", "--initial-branch=main")
+                    git(repository, "config", "user.name", "Qualification fixtures")
+                    git(repository, "config", "user.email", "fixtures@example.invalid")
+                    git(repository, "add", "--all")
+                    git(repository, "commit", "-q", "-m", "test: freeze qualification sources", environment=environment)
                 packet["repositories"].append({
                     "id": name, "path": "repositories/" + name,
                     "git_sha": git(repository, "rev-parse", "HEAD"), "files": source_files(repository),
                 })
+            for fact in expected["cases"][case["id"]]["required_facts"]:
+                for proof in fact["proof"]:
+                    text = relative_file(root / "repositories", proof["repository"] + "/" + proof["path"]).read_text()
+                    excerpt = "\n".join(text.splitlines()[proof["start_line"]-1:proof["end_line"]]).strip()
+                    if excerpt != proof["excerpt"].strip():
+                        raise ValueError("Expected provenance differs from the captured Git sources")
         for index, name in enumerate(case["attachments"]):
-            source = relative_file(HERE / "fixtures", name)
+            source = relative_file(fixtures, name)
             relative = "attachments/" + str(index + 1) + "-" + source.name
             target = root / relative
             target.parent.mkdir(exist_ok=True)
@@ -172,10 +240,10 @@ def prepare(destination, protocol):
     evaluator = destination / "evaluator"
     write_json(evaluator / "corpus.json", corpus)
     write_json(evaluator / "expectations.json", expected)
-    for name in ("data.json", "schema.sql"):
+    for name, source in database_files.items():
         target = evaluator / "database" / name
         target.parent.mkdir(exist_ok=True)
-        shutil.copyfile(HERE / "fixtures/database" / name, target)
+        shutil.copyfile(source, target)
     write_json(destination / "protocol.json", protocol)
     write_json(destination / "manifest.json", manifest)
     return manifest
@@ -219,7 +287,9 @@ def check_study(study):
 def export_review(study, destination):
     manifest, _, corpus, expected = check_study(study)
     lines = ["# Qualification corpus human review", "",
-             "These 24 cases use authored synthetic business rules. No customer record or legal rule is asserted.",
+             ("These cases use authored synthetic business rules. No customer record or legal rule is asserted."
+              if corpus.get("origin") == "authored_synthetic" else
+              "This private corpus retains its declared provenance. Privacy review is separate from business and legal validation."),
              "A person familiar with the intended business use must validate the expected rules and representativeness.",
              "Review this document before viewing model results. Approval is bound to the frozen source and expected-answer hashes.",
              "", "Corpus: `" + manifest["corpus_sha256"] + "`", "",
@@ -426,17 +496,22 @@ def compare(study, runs, reviews):
             item["measurement_complete"] and item["reviewed_cases"] == len(by_case) and item["human_approved_cases"] == len(by_case)
             for item in summaries
         ) else "NOT_QUALIFIED",
-        "limits": ["Authored synthetic corpus; representativeness requires human review", "No universal confidence score or certification", "Monetary cost is unknown without actual billing observations", "Finite database observations apply only to the frozen population and period"],
+        "limits": [("Authored synthetic corpus; representativeness requires human review"
+                    if corpus.get("origin") == "authored_synthetic" else
+                    "Private corpus with declared provenance; representativeness requires human review"),
+                   "No universal confidence score or certification", "Monetary cost is unknown without actual billing observations", "Finite database observations apply only to the frozen population and period"],
     }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("validate")
+    validation = sub.add_parser("validate")
+    validation.add_argument("--inputs", type=Path, default=HERE)
     prepare_args = sub.add_parser("prepare")
     prepare_args.add_argument("study", type=Path)
     prepare_args.add_argument("--protocol", type=Path, required=True)
+    prepare_args.add_argument("--inputs", type=Path, default=HERE)
     check = sub.add_parser("check")
     check.add_argument("study", type=Path)
     review = sub.add_parser("review-document")
@@ -454,10 +529,10 @@ def main():
     comparison.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "validate":
-        corpus, _ = load_corpus()
+        corpus, _ = load_corpus(args.inputs)
         print(json.dumps({"cases": len(corpus["cases"]), "human_validation": corpus["human_validation"]}))
     elif args.command == "prepare":
-        manifest = prepare(args.study, read_json(args.protocol))
+        manifest = prepare(args.study, read_json(args.protocol), inputs=args.inputs)
         print(json.dumps({"cases": len(manifest["cases"]), "manifest_sha256": digest(manifest)}))
     elif args.command == "check":
         manifest, _, _, _ = check_study(args.study)

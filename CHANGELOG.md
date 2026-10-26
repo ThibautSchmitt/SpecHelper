@@ -28,6 +28,9 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
   paths from evidence prose; retain exact source excerpts and query receipts.
 - Publish the final independently reviewed business summary, including fields
   deliberately left empty, instead of restoring unverified exploration assertions.
+- Accept private qualification corpora with explicit provenance/privacy records,
+  declared repositories, preserved clean Git commits and a dated database fixture;
+  keep expected answers and review metadata outside agent packets.
 
 Human validation of expected answers and representative business coverage, live
 comparative AI runs and independent output review remain outstanding. This entry does

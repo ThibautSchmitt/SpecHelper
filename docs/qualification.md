@@ -32,6 +32,45 @@ exact packets. Unknown token usage, billing costs and unreviewed semantic result
 remain unknown. Missing mandatory independent stages cannot count as complete.
 Keep generated studies and review receipts in private storage such as `.local/`.
 
+### Use a private reference corpus
+
+The built-in synthetic cases are a starting point. Supply an operator-reviewed
+private corpus with `--inputs` to qualify actual project scenarios without editing
+or publishing the checked-in fixtures:
+
+```sh
+python3 -m scripts.qualification.harness validate --inputs .local/private-corpus
+python3 -m scripts.qualification.harness prepare .local/private-study \
+  --inputs .local/private-corpus --protocol .local/protocol.json
+```
+
+The input directory contains `corpus.json`, `expectations.json` and `fixtures/`.
+Use the same case/expected-answer structure as the built-in corpus, including
+20–30 traced cases, a separate reserve and the required scenario tags. Declare
+`repository_directories` explicitly in the corpus, for example `["claims", "billing"]`;
+only these directories under `fixtures/` become source repositories. Attachment
+paths remain relative to `fixtures/`. Keep expected answers outside those sources.
+
+A clean Git checkout retains its actual HEAD commit through a local shallow
+capture; project hooks are disabled and the source checkout is not modified.
+A plain fixture directory receives a reproducible fixture commit. Do not describe
+that derived fixture commit as the upstream project commit. Dirty Git inputs,
+source links, undeclared source directories and path traversal are rejected.
+Submodules are not initialized automatically; provide authorized dependencies as
+separate declared repositories when needed.
+
+Each non-synthetic case must retain its true `provenance.origin` and an explicit
+`provenance.privacy_review` record with `status: "REVIEWED"`, `reviewer`, `method`
+and `notes`. Record the review actually performed; this tool does not anonymize
+customer data or certify a declaration. Original request identifiers and privacy
+receipts remain evaluator-only and do not enter agent packets. Privacy review does
+not approve expected business answers or legal applicability.
+
+Cases with database access require `fixtures/database/data.json` and `schema.sql`,
+plus an explicit `database_observation_period` in the private corpus. The study
+freezes their exact hashes. Use an authorized anonymized snapshot or a clearly
+identified stable fixture; no production database is copied by the harness.
+
 ## Independent exploration
 
 The counter-analyst's first exploration receives the original need, confirmed
