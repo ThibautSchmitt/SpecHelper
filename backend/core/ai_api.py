@@ -20,6 +20,8 @@ from .orchestration_settings import Role, validate_connection_overrides
 from .providers import (
     ensure_connections,
     identity_for,
+    model_pool_exhausted,
+    model_quota_pool,
     observe,
     public,
     quota_group,
@@ -130,6 +132,9 @@ def create_connection(request, payload: ConfigurationIn):
 def edit_connection(request, connection_id: int, payload: ConfigurationPatch):
     value = get_object_or_404(AIConnection.objects.select_for_update(), pk=connection_id)
     not_processing(value)
+    identity = identity_for(value)
+    previous_pool = model_quota_pool(value)
+    previous_pool_exhausted = model_pool_exhausted(value, identity)
     values = payload.model_dump(exclude_unset=True)
     if "model" in values and values["model"] != value.model:
         from .model_catalog import validate_model
@@ -151,6 +156,14 @@ def edit_connection(request, connection_id: int, payload: ConfigurationPatch):
         values["availability"] = "UNKNOWN"
     for key, item in values.items():
         setattr(value, key, item)
+    if (
+        value.availability == "QUOTA_EXHAUSTED"
+        and previous_pool_exhausted
+        and identity.availability in {"AVAILABLE", "UNKNOWN"}
+        and model_quota_pool(value)
+        and model_quota_pool(value) != previous_pool
+    ):
+        value.availability = "UNKNOWN"
     value.save()
     return public(value)
 

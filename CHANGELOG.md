@@ -39,6 +39,8 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
   window or explicit provider permission.
 - Keep Antigravity's Gemini quota independent from its shared Claude/GPT quota.
   A known-model failure blocks its pool; an unscoped account failure stays global.
+- Re-evaluate a connection's model-pool block when its selected model changes;
+  preserve exhausted target pools and account-wide restrictions.
 
 Human validation of expected answers and representative business coverage, live
 comparative AI runs and independent output review remain outstanding. This entry does

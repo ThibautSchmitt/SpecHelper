@@ -189,6 +189,9 @@ Authentication or low unscoped usage cannot clear a pool failure. Explicit
 provider usage permission recovers only the observed model's pool. This does not
 invent remaining percentages or reset dates unsupported by the installed CLI.
 Switching the measured models requires a new frozen comparison protocol.
+When editing a connection to use another pool, only the previous pool-specific
+configuration block is released. The previous pool's exhaustion is retained;
+an exhausted target pool or an account-wide failure still prevents selection.
 
 ## Outstanding validation
 

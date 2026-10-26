@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from core.models import AIConnection, AIIdentity
+from core.models import AIConnection, AIIdentity, AIModel
 from core.providers import candidates, mark_failure, observe, public, record_quota
 
 pytestmark = pytest.mark.django_db
@@ -89,3 +89,23 @@ def test_explicit_provider_permission_recovers_only_the_observed_pool():
     assert rows[0].pk in {row.pk for row in candidates()}
     assert public(rows[2])["availability"] == "QUOTA_EXHAUSTED"
     assert rows[2].pk not in {row.pk for row in candidates()}
+
+
+@pytest.mark.parametrize("exhaustion", ["gemini", "both", "global"])
+def test_editing_the_model_respects_the_target_pool_and_any_global_failure(client, exhaustion):
+    import json
+
+    rows = connections()
+    for model in (rows[0].model, rows[2].model):
+        AIModel.objects.create(agent='antigravity', identifier=model, source='adapter')
+    mark_failure(rows[0].pk, 'QUOTA_EXHAUSTED')
+    if exhaustion == 'both':
+        mark_failure(rows[2].pk, 'QUOTA_EXHAUSTED')
+    elif exhaustion == 'global':
+        AIIdentity.objects.filter(pk=rows[0].identity_id).update(availability='QUOTA_EXHAUSTED')
+    response = client.put(f'/api/ai-connections/{rows[0].pk}',
+                          data=json.dumps({'model': rows[2].model}), content_type='application/json')
+    assert response.status_code == 200, response.content
+    assert (response.json()['availability'] != 'QUOTA_EXHAUSTED') == (exhaustion == 'gemini')
+    assert (rows[0].pk in {row.pk for row in candidates()}) == (exhaustion == 'gemini')
+    assert public(rows[1])['availability'] == 'QUOTA_EXHAUSTED'
