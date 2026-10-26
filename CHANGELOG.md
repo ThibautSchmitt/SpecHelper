@@ -34,6 +34,9 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 - Clarify exact repository-relative citations, frozen environment names and structured
   Question answers after observed native citation/format failures; retain strict
   rejection and bounded repair instead of guessing paths or publishing invalid output.
+- Retain observed quota exhaustion when periodic refresh has only unavailable metadata
+  or low usage figures; recover automatically only from an actually expired exhausted
+  window or explicit provider permission.
 
 Human validation of expected answers and representative business coverage, live
 comparative AI runs and independent output review remain outstanding. This entry does

@@ -6,7 +6,7 @@ import io
 import json
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -243,6 +243,25 @@ def test_antigravity_quota_is_unknown_and_authentication_does_not_clear_known_ex
     value = observe(configured, {"status": "CONNECTED"})
     assert value["availability"] == "QUOTA_EXHAUSTED"
     assert configured.pk not in [c.pk for c in candidates()]
+
+
+@pytest.mark.parametrize("windows", [
+    {},
+    {"_status": {"state": "unavailable", "reason": "unsupported_cli"}},
+    {"session": {"used_percent": 1, "exhausted": False}},
+])
+def test_periodic_refresh_cannot_infer_quota_recovery_from_missing_or_low_usage(windows):
+    from core.providers import refresh_unknown_connections
+
+    configured = assistant()
+    AIConnection.objects.exclude(pk=configured.pk).update(enabled=False)
+    mark_failure(configured.pk, "QUOTA_EXHAUSTED")
+    AIIdentity.objects.filter(pk=configured.identity_id).update(quota_windows=windows, checked_at=None)
+    caller = Mock(return_value={"status": "CONNECTED"})
+    refresh_unknown_connections(caller)
+    caller.assert_not_called()
+    assert public(configured)["availability"] == "QUOTA_EXHAUSTED"
+    assert configured.pk not in [connection.pk for connection in candidates()]
 
 
 def test_configured_key_metadata_cannot_clear_an_actual_authentication_rejection():

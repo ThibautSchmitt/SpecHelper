@@ -173,6 +173,12 @@ publish an invalid result even after the three independent reviews have complete
 Treat instruction changes as a new protocol revision; retain earlier failed attempts
 and never mix their measurements into a claim of identical inputs.
 
+An observed exhausted quota remains blocked if the provider supplies no reliable
+reset window. Authentication success, unavailable quota metadata and a low usage
+percentage do not by themselves establish recovery. Periodic refresh can resume
+after an exhausted window actually expires; explicit provider permission can also
+establish availability. Missing reset times stay unknown in qualification reports.
+
 ## Outstanding validation
 
 The current implementation is groundwork, not completed qualification. Human

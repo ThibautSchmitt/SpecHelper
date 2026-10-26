@@ -414,7 +414,10 @@ def refresh_unknown_connections(caller):
             identity.availability = "UNKNOWN"
         if (
             identity.availability == "QUOTA_EXHAUSTED"
-            and identity.quota_windows
+            and any(
+                window.get("exhausted") is True
+                for window in normalize_quota_windows(identity.quota_windows).values()
+            )
             and not quota_exhausted(identity)
         ):
             AIIdentity.objects.filter(pk=identity.pk).update(
