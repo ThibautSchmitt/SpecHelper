@@ -5,7 +5,7 @@ RUN pip install --no-cache-dir uv==0.13.4
 WORKDIR /app/backend
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev && pip uninstall -y uv
-ARG GH_VERSION=2.103.0
+ARG GH_VERSION=2.103.2
 # Official signed repository; fail if the documented trust key changes unexpectedly.
 RUN python -c 'import hashlib,pathlib,urllib.request; data=urllib.request.urlopen("https://cli.github.com/packages/githubcli-archive-keyring.gpg",timeout=60).read(); assert hashlib.sha256(data).hexdigest()=="6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b"; root=pathlib.Path("/etc/apt/keyrings"); root.mkdir(parents=True,exist_ok=True); (root/"githubcli-archive-keyring.gpg").write_bytes(data)'
 RUN echo 'deb [signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main' > /etc/apt/sources.list.d/github-cli.list \
