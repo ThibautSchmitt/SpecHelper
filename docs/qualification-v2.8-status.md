@@ -2,9 +2,10 @@
 
 **Incomplete. This report does not declare v2.8 accepted.**
 
-This is a dated snapshot of protocol 3 observations collected on 26 October 2026,
-after Q01 and Q02 were closed in both configurations. It separates implemented safeguards,
-native execution reliability and reviewed business accuracy.
+This is a dated snapshot of protocol 3 observations collected on 27 October 2026 UTC,
+after Q01/Q02 were closed in both configurations and Q03–Q05 in `claude-first`.
+It separates implemented safeguards, native execution reliability and reviewed
+business accuracy.
 
 ## Protocol and coverage
 
@@ -30,13 +31,14 @@ was compared with the frozen fixture before this protocol.
 
 ## Measured observations
 
-Only Q01 and Q02 have native observations in this snapshot. These are counts of
-persisted execution records, not successful complete analyses.
+Q01/Q02 have observations in both configurations; Q03–Q05 also have observations
+in `claude-first`. These are counts of persisted execution records, not successful
+complete analyses.
 
 | Configuration | Native calls | Failed steps | Published answers | Reviewed business errors | Reviewed material omissions |
 | --- | ---: | ---: | ---: | --- | --- |
 | `gpt-first` | 7 | 3 | 0 | Unknown | Unknown |
-| `claude-first` | 3 | 3 | 0 | Unknown | Unknown |
+| `claude-first` | 6 | 6 | 0 | Unknown | Unknown |
 
 | Configuration | Case | Application state | Native execution seconds | Outcome |
 | --- | --- | --- | ---: | --- |
@@ -44,17 +46,25 @@ persisted execution records, not successful complete analyses.
 | `gpt-first` | Q02 | Cancelled without retry | 213.45 | Requirement assessment and analyst succeeded; independent counter failed |
 | `claude-first` | Q01 | Cancelled after one retry | 286.82 | Requirement assessment failed twice |
 | `claude-first` | Q02 | Cancelled without retry | 111.78 | Requirement assessment failed once |
+| `claude-first` | Q03 | Cancelled without retry | 41.62 | Requirement assessment failed once |
+| `claude-first` | Q04 | Cancelled without retry | 43.35 | Requirement assessment failed once |
+| `claude-first` | Q05 | Cancelled without retry | 41.30 | Requirement assessment returned `QUOTA_EXHAUSTED` |
 
-All six failed steps report generic `ERROR`. Inspected native diagnostics show an empty
-model response after tool activity. They do not establish exhausted Claude quota,
-an authentication failure or a confirmed root cause. Failed executions without a
+Eight failed steps report generic `ERROR`; one reports `QUOTA_EXHAUSTED`.
+Inspected diagnostics from earlier generic failures show an empty model response
+after tool activity. Those earlier errors do not by themselves establish exhausted
+quota, an authentication failure or a confirmed root cause. Q05 separately provides
+an actual quota observation for the Claude/GPT pool, dated 26 October at 14:58 UTC.
+No reliable reset time is reported. The remaining 14 `gpt-first` and 11
+`claude-first` analysis cases have not been executed in this protocol; pending
+roles remain blocked rather than skipped. Failed executions without a
 published answer cannot be scored as zero business errors or zero omissions.
 The three independent roles remain required before publication.
 
 | Configuration | Observed input tokens | Observed output tokens | Provider-reported total tokens |
 | --- | ---: | ---: | --- |
 | `gpt-first` | 432,225 across 7/7 calls | 19,152 across 7/7 calls | Unknown overall; 92,411 reported across 3/7 calls |
-| `claude-first` | 61,129 across 3/3 calls | 4,170 across 3/3 calls | 65,299 across 3/3 calls |
+| `claude-first` | 103,012 across 6/6 calls | 5,269 across 6/6 calls | 108,281 across 6/6 calls |
 
 Token fields retain their provider-reported meanings. Missing total-token fields
 are not reconstructed. Monetary cost is unknown. Native execution duration is
@@ -81,6 +91,17 @@ Claude completion is possible through the installed integration. They do not
 explain the real-context failures or validate an end-to-end analysis. Their usage
 is excluded from the qualification tables above. No schema, permission or
 independent-role requirement was relaxed.
+
+A separate prompt-boundary replay completed its requirement assessment, but two
+fresh application pilots still failed. That experimental instruction change was
+reverted and was not deployed. An alternate installed Opus model probe failed
+before structured output; its failure category and usage remain unknown. These
+development probes are excluded from corpus measurements and do not establish
+recovery. Antigravity documents an interactive
+[`/usage` quota panel](https://www.antigravity.google/docs/cli/commands/usage),
+separate from a dedicated CLI subcommand. SpecHelper's current automated reader
+does not yet obtain a usable reading through that interface. Its displayed
+unknown quota does not establish availability or recovery.
 
 ## Remaining acceptance evidence
 
