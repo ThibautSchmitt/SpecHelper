@@ -5,7 +5,7 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 
 ## Unreleased
 
-### Project scope and qualification groundwork (v2.8, in progress)
+### Project scope and qualification groundwork (v2.8, implementation frozen)
 
 - Check Request and Question scope before reserving providers or queueing analysis.
 - Preserve original text and follow-ups during recoverable clarification or reformulation.
@@ -46,9 +46,11 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 - Document a dated comparison snapshot with actual failed calls, missing answers,
   usage coverage and explicit remaining business/reserve review requirements.
 
-Human validation of expected answers and representative business coverage, live
-comparative AI runs and independent output review remain outstanding. This entry does
-not declare v2.8 complete. See [qualification groundwork](docs/qualification.md).
+The implementation iteration was closed at the maintainer's request on 27 October
+2026. Expert review, further Antigravity runs and completion of comparative/reserve
+qualification are deferred to follow-up work and do not block subsequent development.
+Existing measurements remain partial; this decision does not certify analysis
+accuracy. See [qualification groundwork](docs/qualification.md).
 
 ### Antigravity provider (v2.7)
 

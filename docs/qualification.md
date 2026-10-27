@@ -203,12 +203,17 @@ When editing a connection to use another pool, only the previous pool-specific
 configuration block is released. The previous pool's exhaustion is retained;
 an exhausted target pool or an account-wide failure still prevents selection.
 
-## Outstanding validation
+## Deferred validation
+
+On 27 October 2026, the maintainer closed the v2.8 implementation iteration and
+deferred expert review and further Antigravity testing. These follow-ups do not
+block subsequent development. The v2.8 tracking task will not automatically wait
+for a quota reset or request another expert review.
 
 See the [dated v2.8 measurement snapshot](qualification-v2.8-status.md) for
 observed native failures, usage coverage and the remaining acceptance evidence.
 
-The current implementation is groundwork, not completed qualification. Human
+The frozen implementation is groundwork, not completed qualification. Human
 review of expected answers and business coverage, the full comparative corpus run
 through the application pipeline and independent review of those outputs remain
 outstanding. Scope interface checks cover both languages, desktop/mobile,

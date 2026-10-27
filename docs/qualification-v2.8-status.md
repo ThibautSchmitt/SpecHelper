@@ -1,6 +1,12 @@
 # v2.8 qualification status
 
-**Incomplete. This report does not declare v2.8 accepted.**
+**Implementation iteration closed; qualification deferred.**
+
+On 27 October 2026, the maintainer chose to stop this iteration with the delivered
+implementation. Expert review and further Antigravity testing are deferred, along
+with completion of the comparative and reserve evaluation. They do not block
+subsequent development. The original qualification acceptance remains unproven;
+the measurements below retain their actual outcomes and limitations.
 
 This is a dated snapshot of protocol 3 observations collected on 27 October 2026 UTC,
 after Q01/Q02 were closed in both configurations and Q03–Q05 in `claude-first`.
@@ -103,7 +109,7 @@ separate from a dedicated CLI subcommand. SpecHelper's current automated reader
 does not yet obtain a usable reading through that interface. Its displayed
 unknown quota does not establish availability or recovery.
 
-## Remaining acceptance evidence
+## Acceptance evidence deferred to follow-up
 
 - Complete both distributions, including reserve observations, retaining failed,
   clarification-only and missing-answer outcomes.
