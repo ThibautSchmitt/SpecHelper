@@ -37,8 +37,10 @@ for (const language of ["en", "fr"] as const) {
       await setup(page, language, workflow, value);
       const base = workflow === "question" ? "questions" : "requests";
       await page.goto(`/${base}/${id}`);
+      await page.getByText(t("Verification details"), { exact: true }).click();
       const panel = page.getByRole("region", { name: t("Analysis findings and limits"), exact: true });
-      for (const label of ["Supported finding", "Partially supported", "Contradicted", "Not verified", "Observed fact", "Interpretation", "Contradiction", "Unknown"]) await expect(panel.getByText(t(label), { exact: true })).toBeVisible();
+      for (const label of ["Supported finding", "Partially supported", "Contradicted", "Not verified"]) await expect(panel.getByText(t(label), { exact: true })).toBeVisible();
+      for (const label of ["Observed fact", "Interpretation", "Contradiction", "Unknown"]) await expect(panel.locator("article > p").filter({ hasText: new RegExp(`^${t(label)} ·`) })).toBeVisible();
       expect(await panel.getByRole("heading", { name: "The cancellation control checks active benefits.", exact: true }).evaluate(element => element.getBoundingClientRect().width)).toBeGreaterThan(180);
       await expect(panel).toContainText("42 closed contracts");
       await expect(panel).toContainText("The checked scope does not cover supervisor overrides.");
@@ -49,6 +51,7 @@ for (const language of ["en", "fr"] as const) {
       await expect(page.getByRole("region", { name: t("Confirmed business decisions"), exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: t("Validate business intent"), exact: true })).toHaveCount(0);
       await page.getByLabel(t("Result version"), { exact: true }).selectOption("1");
+      await page.getByText(t("Verification details"), { exact: true }).click();
       await expect(panel).toContainText(t("These findings and limits belong to the displayed result version."));
       await expect(panel.getByText(/frozen-commit-v1/)).not.toBeVisible();
       const disclosure = panel.getByText(t("Sources and verification details"), { exact: true });
@@ -65,6 +68,7 @@ for (const language of ["en", "fr"] as const) {
       const evidence = report(); evidence.database = { status, scope: "", limitations: [], checks: [] }; evidence.claims = [];
       await setup(page, language, workflow, detail(workflow, evidence));
       await page.goto(`/${workflow === "question" ? "questions" : "requests"}/${id}`);
+      await page.getByText(t("Verification details"), { exact: true }).click();
       const panel = page.getByRole("region", { name: t("Analysis findings and limits"), exact: true });
       const labels = { not_configured: "No business database is configured. Real records were not checked.", unavailable: "The business database could not be checked. Conclusions about real records remain unverified.", not_checked: "Business database records were not checked for this analysis." };
       await expect(panel).toContainText(t(labels[status]));
@@ -76,6 +80,7 @@ for (const language of ["en", "fr"] as const) {
     const value = detail("request"); value.status = "READY";
     await setup(page, language, "request", value);
     await page.goto(`/requests/${id}`);
+      await page.getByText(t("Verification details"), { exact: true }).click();
     await expect(page.getByRole("region", { name: t("Analysis findings and limits"), exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: t("Validate business intent"), exact: true })).toHaveCount(0);
   });

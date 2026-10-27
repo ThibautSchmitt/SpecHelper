@@ -256,7 +256,7 @@ export function QuestionResult({
               href={`/?from_question=${questionId}&version=${result.number}`}
             >
               <Plus size={16} />
-              {t("Create a request")}
+              {t("Evolve this behavior")}
             </Link>
           </Button>
         </div>

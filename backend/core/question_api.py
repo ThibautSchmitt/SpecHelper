@@ -43,6 +43,7 @@ class TransferIn(QuestionIn):
     source_version: int = Field(ge=1)
     include_context: bool = True
     category: Literal["auto", "feature", "bug", "documentation"] = "auto"
+    operation_id: UUID | None = None
 
 
 def markdown_response(content, filename):
@@ -204,5 +205,6 @@ def create_request(request, question_id: UUID, payload: TransferIn):
         payload.confrontation,
         payload.include_context,
         payload.category,
+        payload.operation_id,
     )
     return Status(201, request_dict(value, full=True))

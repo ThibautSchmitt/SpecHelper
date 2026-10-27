@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .diagrams import ReviewedDiagram
 from .web_evidence import WebReceipt, WebSource, actual_web_receipts, check_web_source
 
 Text = Annotated[str, Field(min_length=1, max_length=4000)]
@@ -146,6 +147,7 @@ class ReliabilityReport(StrictEvidence):
     limitations: list[Text] = Field(default_factory=list, max_length=30)
     blocking: bool = False
     web_references: list[WebReceipt] = Field(default_factory=list, max_length=64)
+    diagrams: list[ReviewedDiagram] = Field(default_factory=list, max_length=4)
 
     @model_validator(mode="after")
     def distinct_claims(self):

@@ -224,6 +224,9 @@ class Request(models.Model):
     scope_pending_message = models.TextField(blank=True)
     scope_revision = models.PositiveIntegerField(default=0)
     workflow = models.CharField(max_length=10, choices=Workflow, default=Workflow.REQUEST)
+    intent_mode = models.CharField(
+        max_length=10, choices=[("explicit", "Explicit"), ("auto", "Automatic")], default="explicit"
+    )
     category = models.CharField(max_length=20, default="auto")
     analysis_protocol = models.CharField(max_length=10, default="legacy")
     source_question_version = models.ForeignKey(

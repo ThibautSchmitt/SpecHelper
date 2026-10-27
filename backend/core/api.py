@@ -200,6 +200,7 @@ def request_dict(value, full=False):
         "need": value.need,
         "title": value.need.splitlines()[0][:160],
         "workflow": value.workflow,
+        "intent_mode": value.intent_mode,
         "category": value.category,
         "analysis_protocol": value.analysis_protocol,
         "source_question": {
@@ -222,6 +223,9 @@ def request_dict(value, full=False):
         "updated_at": value.updated_at,
     }
     if full:
+        from .need_revisions import revision_state
+
+        result.update(revision_state(value))
         analysis = AnalysisResult.objects.filter(request=value).first()
         from .business_decisions import snapshot_for_request
 
@@ -250,6 +254,7 @@ def request_dict(value, full=False):
                 "questions": value.questions,
                 "conversation": value.conversation,
                 "understanding": value.understanding,
+                "inferred_intent": latest_run.orchestration.get("inferred_intent") if latest_run else None,
                 "progress": value.progress,
                 "error": value.error,
                 "attachments": [
@@ -279,6 +284,7 @@ def request_dict(value, full=False):
                         "role": m.role,
                         "kind": m.kind,
                         "content": m.content,
+                        "data": m.data,
                         "created_at": m.created_at,
                         "version_number": m.version.number if m.version_id else None,
                     }
@@ -300,6 +306,25 @@ def request_dict(value, full=False):
                 ),
                 "latest_version": version_dict(value.versions.order_by("-number").first()),
             }
+        )
+        from .analysis_states import result_state
+        from .models import PublishedTicket
+
+        result["publications"] = [
+            {"id": str(row.pk), "title": row.title, "status": row.observed_status,
+             "url": row.url if row.status == "PUBLISHED" else "", "version_number": row.version.number,
+             "created_at": row.finished_at or row.created_at}
+            for row in PublishedTicket.objects.filter(request=value).select_related("version").order_by("created_at", "id")
+        ]
+        evidence = result["evidence"] or {}
+        result["result_state"] = result_state(
+            value.status, value.workflow,
+            latest_status=latest_version.status if latest_version else None,
+            published=bool(latest_version and PublishedTicket.objects.filter(version=latest_version, status="PUBLISHED").exists()),
+            stale=result["conclusions_stale"],
+            verification_unavailable=bool((latest_run and latest_run.orchestration.get("permission_limits"))
+                                         or (evidence.get("blocking") and evidence.get("database", {}).get("status") == "unavailable")),
+            scope_clarification=value.scope_assessment.get("status") == "NEEDS_CLARIFICATION",
         )
     return result
 
@@ -862,6 +887,7 @@ def queue(request):
 
 
 from .ai_api import router as ai_router  # noqa: E402
+from .analysis_api import router as analysis_router  # noqa: E402
 from .business_decisions import DecisionConflict  # noqa: E402
 from .business_decisions import router as business_router  # noqa: E402
 from .context_api import router as context_router  # noqa: E402
@@ -874,6 +900,7 @@ from .question_api import router as question_router  # noqa: E402
 from .ticket_api import router as ticket_router  # noqa: E402
 
 api.add_router("", question_router)
+api.add_router("", analysis_router)
 api.add_router("", context_router)
 api.add_router("", ticket_router)
 api.add_router("", git_source_router)

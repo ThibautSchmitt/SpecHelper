@@ -5,6 +5,25 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 
 ## Unreleased
 
+### Unified analysis experience and reviewed diagrams (v2.9)
+
+- Add Home and a searchable, filtered, paginated Analyses list while retaining
+  historical Question and Request URLs and their immutable results.
+- Infer understanding/change/mixed intent from one free-text entry and preserve
+  mandatory independent analysis, counter-analysis and verification.
+- Keep a chronological business history and dated need revisions; guard concurrent
+  edits, preserve confirmed decisions and block stale-result approval/publication.
+- Create retry-safe linked changes from selected answers, retain attributed source
+  context and reanalyze against the selected environment's current Git baseline.
+- Distinguish processing, partial results, unavailable verification, prepared drafts
+  and actual publications; place business conclusions before expandable evidence.
+- Retain structured diagrams only after independent relation review and accepted
+  Git/SQL evidence for existing relationships. Keep hypotheses and proposals explicit.
+- Render diagrams on demand with zoom, alternative text, source copying and a
+  readable failure fallback; export Mermaid with reports and development goals.
+- Offer an explicitly selected diagram annex for standard tickets at destinations
+  supporting file uploads, preserving existing templates, edits and timeout recovery.
+
 ### Project scope and qualification groundwork (v2.8, implementation frozen)
 
 - Check Request and Question scope before reserving providers or queueing analysis.

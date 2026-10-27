@@ -310,8 +310,9 @@ def test_a_clear_request_uses_no_artificial_multiple_choice_card(
     assert len(calls) == 2 and not request.business_decisions.exists()
 
 
+@pytest.mark.parametrize("rephrased", [False, True])
 def test_repeated_answered_question_is_repaired_once_without_asking_the_user_again(
-    environment, storage, bundle, code_report
+    environment, storage, bundle, code_report, rephrased
 ):
     request = started(environment)
     execute(request, storage, [assessment([choice()])])
@@ -324,7 +325,7 @@ def test_repeated_answered_question_is_repaired_once_without_asking_the_user_aga
         request,
         storage,
         [
-            assessment([choice()]),
+            assessment([choice(**({"question": "Which termination rule applies to ongoing benefits?"} if rephrased else {}))]),
             assessment(),
             {"analysis": code_report, "result": bundle.model_dump()},
         ],

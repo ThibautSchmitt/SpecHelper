@@ -1,5 +1,7 @@
 """Question actions reuse the shared request queue and immutable result versions."""
 
+import hashlib
+import json
 from pathlib import Path
 
 from django.conf import settings
@@ -158,6 +160,17 @@ def create_document(question_id, number, kind):
     )
 
 
+def source_need(version):
+    """Use the chosen cycle's need, never a later edit of the parent question."""
+    frozen = version.context_snapshot.get("dossier", {}).get("need")
+    if frozen:
+        return frozen
+    revision = version.request.messages.filter(kind="need_revision", created_at__lte=version.created_at).order_by("-created_at", "-id").first()
+    if revision:
+        return revision.content
+    return version.request.messages.filter(kind="need").order_by("created_at", "id").values_list("content", flat=True).first() or version.request.need
+
+
 def transfer_preview(question_id, number):
     from .question_outputs import render_transfer
 
@@ -165,7 +178,7 @@ def transfer_preview(question_id, number):
     secrets = configured_secrets()
     try:
         content = render_transfer(
-            redact(version.request.need, secrets),
+            redact(source_need(version), secrets),
             redact(version.explanation, secrets),
             redact(version.baseline, secrets),
             version=version.number,
@@ -185,6 +198,8 @@ def transfer_preview(question_id, number):
         "environment_id": version.request.environment_id,
         "baseline": redact(version.baseline, secrets),
         "language": version.language,
+        "summary": redact(version.explanation.get("summary", ""), secrets),
+        "result_status": version.status,
     }
 
 
@@ -197,10 +212,22 @@ def create_request(
     confrontation=False,
     include_context=True,
     category="auto",
+    operation_id=None,
 ):
     if not need.strip():
         raise HttpError(422, "Describe the requested change explicitly.")
-    version = source_version(question_id, number)
+    parent = question(question_id, lock=True)
+    version = source_version(parent.pk, number)
+    fingerprint = hashlib.sha256(json.dumps({
+        "version": number, "environment": environment_id, "need": need.strip(),
+        "include_context": include_context, "category": category,
+    }, sort_keys=True).encode()).hexdigest()
+    if operation_id:
+        previous = parent.messages.filter(kind="derived_request", data__operation_id=str(operation_id)).first()
+        if previous:
+            if previous.data.get("fingerprint") != fingerprint:
+                raise HttpError(409, "This submission was already used for a different change.")
+            return get_object_or_404(Request, pk=previous.data["child_id"], source_question_version=version)
     options = creation_settings()
     environment = get_object_or_404(Environment, pk=environment_id) if environment_id else None
     preview = transfer_preview(question_id, number) if include_context else None
@@ -226,6 +253,11 @@ def create_request(
         )
         attachment.source_question_version = version
         attachment.save(update_fields=["source_question_version"])
+    RequestMessage.objects.create(
+        request=parent, role="user", kind="derived_request", content=value.need, version=version,
+        data={"child_id": str(value.pk), "operation_id": str(operation_id) if operation_id else None,
+              "fingerprint": fingerprint},
+    )
     return value
 
 

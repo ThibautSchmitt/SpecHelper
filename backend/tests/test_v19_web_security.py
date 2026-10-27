@@ -47,6 +47,10 @@ def test_all_business_and_admin_ids_require_authentication(protected):
     paths = [
         "/api/settings",
         "/api/requests",
+        "/api/analyses",
+        "/api/analyses/overview",
+        f"/api/analyses/{request.pk}",
+        "/api/analyses/11111111-1111-4111-8111-111111111111",
         f"/api/requests/{request.pk}",
         "/api/requests/11111111-1111-4111-8111-111111111111",
         f"/api/requests/{request.pk}/attachments/1",

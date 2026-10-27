@@ -10,7 +10,7 @@ from .file_validation import MAX_BYTES, attachment_path, inspect_file
 from .models import PublishedTicket
 
 
-def available_attachments(version, connector, policy=None):
+def available_attachments(version, connector, policy=None, *, allow_diagrams=True):
     supported = connector.platform in {"gitlab", "jira", "glpi"}
     if policy is not None:
         supported = supported and policy.get("enabled", False)
@@ -62,6 +62,17 @@ def available_attachments(version, connector, policy=None):
                 else "This connector cannot upload issue attachments through its supported API.",
             }
         )
+    if version.evidence.get("diagrams"):
+        from .diagrams import diagram_markdown
+
+        content = diagram_markdown(version.evidence["diagrams"], version.language).encode()
+        rows.append({
+            "id": "diagrams", "name": "diagrams.md", "size": len(content), "mime": "text/plain",
+            "sha256": hashlib.sha256(content).hexdigest(), "kind": "diagrams",
+            "transferable": supported and allow_diagrams and 0 < len(content) <= MAX_BYTES,
+            "reason": "" if supported and allow_diagrams else
+            "Diagram annexes require the standard format and a destination supporting file uploads.",
+        })
     if policy:
         for row in rows:
             if row["size"] > policy.get("max_bytes", MAX_BYTES):
@@ -79,17 +90,21 @@ def available_attachments(version, connector, policy=None):
 
 def selected_attachments(version, connector, payload, project="", policy=None):
     if not payload.get("include_attachments"):
-        if payload.get("attachment_ids") or payload.get("include_goal"):
+        if payload.get("attachment_ids") or payload.get("include_goal") or payload.get("include_diagrams"):
             raise HttpError(422, "Enable Include attachments before selecting files to transfer.")
         return []
     identifiers = [str(value) for value in payload.get("attachment_ids", [])]
     if payload.get("include_goal"):
         identifiers.append("goal")
+    if payload.get("include_diagrams"):
+        identifiers.append("diagrams")
     if len(identifiers) != len(set(identifiers)):
         raise HttpError(422, "Select each attachment only once.")
     if policy is None and project:
         policy = attachment_policy(connector, project)
-    available = {row["id"]: row for row in available_attachments(version, connector, policy)}
+    available = {row["id"]: row for row in available_attachments(
+        version, connector, policy, allow_diagrams=payload.get("ticket_format") == "standard",
+    )}
     if any(
         identifier not in available or not available[identifier]["transferable"]
         for identifier in identifiers
@@ -115,6 +130,10 @@ def selected_bytes(record, row):
     if row["kind"] == "goal":
         artifact = record.version.artifacts.get(name="goal.md")
         content = artifact.content.encode()
+    elif row["kind"] == "diagrams":
+        from .diagrams import diagram_markdown
+
+        content = diagram_markdown(record.version.evidence.get("diagrams", []), record.version.language).encode()
     else:
         attachment = record.request.attachments.get(pk=row["id"])
         path = attachment_path(attachment)

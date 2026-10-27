@@ -30,7 +30,7 @@ def test_latest_question_clarification_stays_paused_outside_recent_history(clien
     paused = next(v for v in values if v["id"] == latest.pk)
     assert paused["queue_state"] == "PAUSED" and paused["status"] == "DONE"
     assert paused["pause_reason"] == "A business answer is needed."
-    assert paused["workflow"] == "question" and paused["href"].startswith("/questions/")
+    assert paused["workflow"] == "question" and paused["href"] == f"/analyses/{question.pk}"
     assert len([v for v in values if v["queue_state"] == "PAUSED"]) == 1
     assert old.pk not in [v["id"] for v in values]
     assert values[0]["id"] == queued.pk and values[0]["queue_position"] == 1

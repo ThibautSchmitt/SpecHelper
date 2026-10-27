@@ -18,6 +18,7 @@ The lock files record dependency versions; they do not relicense dependencies.
 | Lucide / Feather | ISC / MIT; icon artwork and implementation retain upstream notices. |
 | PyYAML | MIT; parses remote issue-form metadata with the safe loader. See the [upstream license](https://github.com/yaml/pyyaml/blob/main/LICENSE). |
 | react-markdown / remark-gfm | MIT; render the Markdown publication preview. Preserve their notices when distributing installed packages. |
+| Mermaid | MIT; renders reviewed explanatory diagrams in the browser. Preserve its upstream notice and dependency licenses when distributing built packages. |
 
 Other dependencies include software under MIT, BSD, Apache and PostgreSQL
 licenses. Preserve the licenses and notices supplied with installed packages.
@@ -41,6 +42,30 @@ patterns. The original notice is retained below.
 MIT License
 
 Copyright (c) 2023 shadcn
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Mermaid diagram renderer
+
+The MIT License (MIT)
+
+Copyright (c) 2014 - 2022 Knut Sveidqvist
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

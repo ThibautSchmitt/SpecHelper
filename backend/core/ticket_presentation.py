@@ -18,11 +18,14 @@ PRESENTATION_KEYS = (
     "include_attachments",
     "attachment_ids",
     "include_goal",
+    "include_diagrams",
 )
 
 
 def publication_blockers(version):
     blockers = []
+    if version.request.messages.filter(kind="need_revision", created_at__gt=version.created_at).exists():
+        blockers.append("The need changed after this result. Reanalyze before publication.")
     if version.status != "READY":
         blockers.append(
             "This analysis is partial or unusable. Complete the mandatory independent checks before publication."
@@ -178,7 +181,7 @@ def save_draft(version, connector, project, presentation, content, expected_revi
                 raise HttpError(
                     409, "The ticket draft changed. Reload it before saving your edits."
                 )
-            if draft.presentation != presentation or draft.content != content:
+            if {"include_diagrams": False, **draft.presentation} != presentation or draft.content != content:
                 draft.presentation, draft.content = presentation, content
                 draft.revision += 1
                 draft.save(update_fields=["presentation", "content", "revision", "updated_at"])

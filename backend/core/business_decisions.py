@@ -301,6 +301,8 @@ def validate_result(request_id, payload, reopen=False):
     else:
         if request.validated_version is not None:
             raise HttpError(409, "This result has already been validated.")
+        if request.messages.filter(kind="need_revision", created_at__gt=latest.created_at).exists():
+            raise HttpError(409, "The need changed after this result. Reanalyze before validation.")
         if latest.status != "READY":
             raise HttpError(409, "Resolve blocking uncertainties before validating this request.")
         request.validated_version = latest.number

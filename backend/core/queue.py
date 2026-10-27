@@ -324,7 +324,7 @@ def snapshot():
                 "started_at": job.started_at,
                 "finished_at": job.finished_at,
                 "error": job.error,
-                "href": f"/{'questions' if item.workflow == 'question' else 'requests'}/{item.pk}"
+                "href": f"/analyses/{item.pk}"
                 if item
                 else f"/admin?library_draft={job.target}&library_kind={job.payload.get('draft_kind', 'agent')}"
                 if job.kind == "library_assistant"
@@ -382,7 +382,7 @@ def snapshot():
                     if stale
                     else ""
                 ),
-                "href": f"/requests/{publication.request_id}?version={publication.version.number}",
+                "href": f"/analyses/{publication.request_id}?version={publication.version.number}",
             }
         )
     ordered = sorted(

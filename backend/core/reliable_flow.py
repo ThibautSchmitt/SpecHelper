@@ -16,24 +16,35 @@ from .analysis_flow import (
     VerificationReport,
 )
 from .artifacts import ArtifactOutput, StrictModel
+from .diagrams import DiagramProposal, DiagramRelationReview, candidates, reviewed_diagrams
 from .presets_v23 import NAVIGATION_INSTRUCTIONS, VERIFICATION_INSTRUCTIONS
 from .question_outputs import QuestionOutput, QuestionReport
 
 
 class EvidenceCodeReport(CodeReport):
     claims: list[EvidenceClaim] = Field(min_length=1, max_length=15)
+    diagrams: list[DiagramProposal] = Field(default_factory=list, max_length=2)
 
 
 class EvidenceQuestionReport(QuestionReport):
     claims: list[EvidenceClaim] = Field(min_length=1, max_length=15)
+    diagrams: list[DiagramProposal] = Field(default_factory=list, max_length=2)
 
 
 class CounterexampleAssessment(StrictModel):
     report: ReliabilityReport
     questions: list[Question] = Field(default_factory=list, max_length=5)
+    diagram_reviews: list[DiagramRelationReview] = Field(default_factory=list, max_length=160)
 
 
 RELIABILITY_POLICY = (
+    "Use optional structured diagrams only when they explain nontrivial business processes, "
+    "decisions, states, technical sequences, dependencies or table relations. For a simple "
+    "question return diagrams=[]. Never force a diagram. Use generic business/component "
+    "labels, never personal identities, contact details, secrets or raw database rows. "
+    "Distinguish existing, hypothesis and proposed edges. Each existing edge must cite the "
+    "local ids of inspected Git/SQL claims that actually support that relation. Include a "
+    "useful purpose and a complete readable alternative_text, not just a picture title. "
     "All three independent roles are mandatory. An analyst's declaration of correctness "
     "never waives counter-analysis or verification. Keep observed facts, interpretations, "
     "contradictions, unknowns and human decisions distinct. Express material claims explicitly. "
@@ -110,6 +121,7 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             "claims_for_review": [
                 claim.model_dump() for claim in self.initial_claims(analyst, counter)
             ],
+            "diagrams_for_review": [value.model_dump() for value in candidates(analyst, counter)],
         }
 
     def review_schema(self):
@@ -119,6 +131,15 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
         return report
 
     def execute(self):
+        automatic = getattr(self.request, "intent_mode", "explicit") == "auto"
+        intent_instruction = (
+            " Infer whether the original free text asks to understand current behavior "
+            "(question), requests a concrete change (bug, feature or improvement), "
+            "or combines understanding and a possible future change (mixed). For mixed "
+            "intent, first explain the existing behavior and preserve the desired change "
+            "as a user goal, never as an observed fact. Do not ask the user to choose a type."
+            if automatic else ""
+        )
         requirement = self.checkpoint(
             "requirement",
             "analyst",
@@ -127,13 +148,23 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             "Understand the business request. Ask only blocking business questions; otherwise "
             "READY_TO_ANALYZE. Infer the presentation intent from the free text (bug, feature, "
             "improvement, documentation, question or unknown); never ask the user to classify it. "
-            "Do not investigate code until the need is clear. ticket=null.",
+            "Do not investigate code until the need is clear. ticket=null." + intent_instruction,
             budget=35,
         )
         self.request.understanding = requirement.understanding
         self.run.orchestration["inferred_intent"] = requirement.intent
+        if automatic and not self.request.versions.exists():
+            # Existing published histories keep their type. A later evolution is
+            # represented by a linked child rather than rewriting its origin.
+            workflow = "question" if requirement.intent in {"question", "mixed", "unknown"} else "request"
+            self.request.workflow = workflow
+            self.is_question = workflow == "question"
+            self.run.orchestration["intent_resolution"] = {
+                "intent": requirement.intent, "workflow": workflow,
+                "source": "requirement_assessment",
+            }
         self.persist_run(update_fields=["orchestration"])
-        self.persist_request(update_fields=["understanding"])
+        self.persist_request(update_fields=["understanding", "workflow"])
         if requirement.questions:
             self.clarify(requirement.understanding, requirement.questions)
             return
@@ -182,6 +213,8 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             "Perform your own independent source reading before seeing the first analysis. "
             "Find omissions, alternative hypotheses, temporal/configuration boundaries and "
             "cases that could contradict a general claim. Return your own scoped claims. "
+            "Independently seek omitted branches, exceptions and dependencies. When useful, "
+            "propose your own diagrams without seeing the first analyst's proposals. "
             "Do not request another role's private notes or write final artifacts.",
             budget=55,
         )
@@ -198,6 +231,8 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             "reviewer_writer",
             Review,
             "Compare both independently obtained reports now. Explain material divergences. "
+            "Compare the diagram relations too, identifying omitted branches or dependencies "
+            "against independently inspected evidence. "
             "A factual contradiction requires one focused evidence check; a user-dependent "
             "rule requires NEEDS_CLARIFICATION with useful explained alternatives. "
             "APPROVED only means ready for the mandatory independent verifier, never business approval.",
@@ -243,6 +278,12 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             "Reconcile current code with historical anomalies. State precise scope and sample "
             "limits. If no counterexample is found, report only that bounded observation. "
             "For a necessary human business choice, return explained questions and keep blocking=true. "
+            "Review every diagrams_for_review relation against the actual claims and sources. "
+            "Return one diagram_reviews entry per diagram_id/edge_id, supported only when its "
+            "label, direction, existing/hypothesis/proposed meaning and generic nonpersonal "
+            "labels are faithful. Reject personal names, identities and raw DB records. "
+            "Do not confuse Mermaid syntax with business truth. Leave report.diagrams empty; "
+            "the service retains only independently reviewed proposals. "
             "Do not write the final ticket or explanation. " + VERIFICATION_INSTRUCTIONS,
             budget=60,
         )
@@ -270,6 +311,10 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
         from .permission_evidence import qualify_report
 
         report = qualify_report(report, self.run.orchestration.get("permission_limits", []))
+        report.diagrams, omitted_diagrams = reviewed_diagrams(
+            candidates(analyst, counter), verified.diagram_reviews, report.claims, self.request.language,
+        )
+        report.limitations = list(dict.fromkeys([*report.limitations, *omitted_diagrams]))
         self.run.orchestration["evidence"] = report.model_dump()
         self.persist_run(update_fields=["orchestration"])
         if verified.questions:
@@ -289,6 +334,8 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             "State checked conditions, exceptions and unresolved unknowns. Do not restate an "
             "unverified universal assertion as fact. Keep observed historical anomalies distinct "
             "from current permitted behavior. Use PARTIAL when verified_report.blocking=true. "
+            "Do not rewrite or invent Mermaid in narrative fields: verified diagram sources "
+            "are attached deterministically by the service. "
             "No numerical confidence, certification or additional exploration loop.",
             budget=45,
         )

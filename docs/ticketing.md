@@ -32,7 +32,7 @@ for verification boundaries and the other platforms' contract-test coverage.
 
 ## Review and create
 
-Open a result version and select **Publish ticket**. Choose a configured connector
+Open a result version and select **Prepare ticket**. Choose a configured connector
 belonging to that environment and an allowed project. Choose **Project template**
 or **Standard SpecHelper format**. Actual templates and issue types come from the
 connector; multiple templates require an explicit choice. A matching analysis intent
@@ -69,6 +69,13 @@ optional `goal.md` are distinct selections. No attachment is transferred while t
 option is unchecked. A publication accepts at most 20 files and 50 MB in total;
 each file must also satisfy its original safe-format inspection and 25 MB bound.
 Selected bytes are checked against the preview's size, MIME and SHA-256 metadata.
+
+Reviewed diagrams stay in the analysis report and `goal.md` by default. In standard
+format, destinations supporting file uploads can receive an optional `diagrams.md`
+annex. Enable **Include attachments**, then select that file explicitly. It contains
+the Mermaid sources, alternative explanations and reviewed claim identifiers from
+the chosen immutable version. Project templates and destinations without supported
+uploads do not expose an enabled annex selection. The ticket body stays concise.
 
 GitLab uses native project uploads and links them in a note on the created issue.
 Jira uses native issue attachments, checking enabled status, upload size and the
@@ -111,6 +118,8 @@ insufficient: completed Analyst, Counter-analyst and Verifier checks and non-blo
 verified claims are required. Missing checks and evidence limitations remain visible;
 export or presentation changes cannot promote a partial analysis to verified.
 Read-only reconciliation of an older publication remains available.
+An edited need also blocks publication of earlier results until a new analysis
+has reassessed it. Previously published external tickets are not rewritten.
 
 **Tickets** lists confirmed publications with platform/environment/search filters,
 their external identifier/link and the exact request/version that supplied the content.

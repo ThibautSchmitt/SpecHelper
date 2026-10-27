@@ -7,6 +7,9 @@ import { AnalysisEvidence } from "@/components/analysis-evidence";
 import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
 import { AnalysisRetryButton } from "@/components/analysis-retry-button";
 import { ScopeAssessmentPanel } from "@/components/scope-assessment";
+import { NeedEditor } from "@/components/need-editor";
+import { AnalysisTimeline } from "@/components/analysis-timeline";
+import { AnalysisDiagrams } from "@/components/analysis-diagrams";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels, warningMessage } from "@/lib/orchestration";
 import Link from "next/link";
@@ -27,6 +30,7 @@ import {
   api,
   send,
   statuses,
+  resultStates,
   scopeNeedsContext,
   type RequestDetail,
   type ResultVersion,
@@ -78,6 +82,7 @@ const conciseLabels: Record<string, string> = {
 export function WorkItemDetail(props: {
   params: Promise<{ id: string }>;
   workflow?: "request" | "question";
+  unified?: boolean;
 }) {
   return (
     <Suspense>
@@ -89,17 +94,20 @@ export function WorkItemDetail(props: {
 function RequestContent({
   params,
   workflow = "request",
+  unified = false,
 }: {
   params: Promise<{ id: string }>;
   workflow?: "request" | "question";
+  unified?: boolean;
 }) {
-  const isQuestion = workflow === "question";
-  const base = isQuestion ? "/questions" : "/requests";
   const { t, dateLocale } = useI18n();
   const { id } = use(params);
   const search = useSearchParams();
   const router = useRouter();
   const [value, setValue] = useState<RequestDetail | null>(null);
+  const isQuestion = (unified ? value?.workflow : workflow) === "question";
+  const base = isQuestion ? "/questions" : "/requests";
+  const detailBase = unified ? "/analyses" : base;
   const [selectedVersion, setSelectedVersion] = useState<ResultVersion | null>(
     null,
   );
@@ -129,7 +137,7 @@ function RequestContent({
   useEffect(() => {
     let alive = true;
     const load = () =>
-      api<RequestDetail>(`${base}/${id}`)
+      api<RequestDetail>(`${unified ? "/analyses" : base}/${id}`)
         .then((v) => {
           if (alive) {
             setValue(v);
@@ -145,8 +153,9 @@ function RequestContent({
       alive = false;
       clearInterval(timer);
     };
-  }, [id, base]);
+  }, [id, base, unified]);
   useEffect(() => {
+    if (unified && (!value || value.id !== id)) return;
     if (selectedNumber === null) {
       setSelectedVersion(null);
       return;
@@ -165,7 +174,7 @@ function RequestContent({
     return () => {
       alive = false;
     };
-  }, [id, selectedNumber, base]);
+  }, [id, selectedNumber, base, unified, value?.id, value?.workflow]);
   const loadingVersion =
     selectedNumber !== null && selectedVersion?.number !== selectedNumber;
   const result =
@@ -186,7 +195,7 @@ function RequestContent({
         setShowDiscussion(true);
         return;
       }
-      router.replace(`${base}/${id}`, { scroll: false });
+      router.replace(`${detailBase}/${id}`, { scroll: false });
       setMessage("");
       setShowDiscussion(false);
       setSelectedNumber(null);
@@ -221,38 +230,38 @@ function RequestContent({
       );
     }
   }
-  if (!value)
+  if (!value || value.id !== id)
     return (
       <div role={error ? "alert" : "status"}>
         {error
           ? t(error)
-          : t(isQuestion ? "Loading question…" : "Loading request…")}
+          : t(unified ? "Loading analysis…" : isQuestion ? "Loading question…" : "Loading request…")}
       </div>
     );
   return (
     <div className="space-y-6">
       <Link
-        href={isQuestion ? "/questions" : "/"}
+        href={unified ? "/analyses" : isQuestion ? "/questions" : "/"}
         className="inline-flex items-center gap-2 text-sm muted"
       >
         <ArrowLeft size={16} />{" "}
-        {t(isQuestion ? "All questions" : "All requests")}
+        {t(unified ? "All analyses" : isQuestion ? "All questions" : "All requests")}
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">
             {value.environment_name}{" "}
-            {t(isQuestion ? "· Question" : "· Request")} {value.id.slice(0, 8)}
+            {t(value.intent_mode === "auto" && !value.understanding && !value.latest_version ? "· Analysis" : isQuestion ? "· Question" : "· Request")} {value.id.slice(0, 8)}
           </p>
           <h1>
             {(isQuestion
               ? (!loadingVersion && result?.explanation?.title) || value.title
-              : ticket?.title) ||
+              : ticket?.title || value.title) ||
               t(isQuestion ? "Your question" : "Your request")}
           </h1>
         </div>
         <span role="status" className="badge" data-state={value.status}>
-          {t(statuses[value.status])}
+          {t(resultStates[value.result_state || ""] || statuses[value.status])}
         </span>
       </div>
       {(error || value.error) && (
@@ -277,11 +286,36 @@ function RequestContent({
           }
         }}
       />}
+      {value.status === "NEEDS_CLARIFICATION" && (
+        <BusinessClarification
+          key={JSON.stringify(value.questions)}
+          value={value}
+          base={base}
+          onUpdated={updated => {
+            setValue(updated);
+            setSelectedNumber(null);
+            setSelectedVersion(null);
+            router.replace(`${detailBase}/${id}`, { scroll: false });
+          }}
+        />
+      )}
+      {value.conclusions_stale && <section role="status" className="rounded-xl border border-amber-500/50 bg-card p-5">
+        <h2 className="text-base">{t("Previous conclusions need reassessment")}</h2>
+        <p className="mt-2 text-sm">{t("The need has changed. Previous results remain available as history and cannot be published as the current analysis.")}</p>
+      </section>}
+      {result && !loadingVersion && <Card aria-label={t("Business conclusion")}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2"><h2>{t("Business conclusion")}</h2><span className="text-xs muted">{t("Version")} {result.number}</span></div>
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{typeof result.explanation?.summary === "string" ? result.explanation.summary : typeof result.ticket?.proposed_solution === "string" ? result.ticket.proposed_solution : typeof result.ticket?.context === "string" ? result.ticket.context : ""}</p>
+        {!!result.evidence?.limitations?.length && <div className="mt-4 text-sm"><h3>{t("Important limits and pending checks")}</h3><ul className="mt-2 list-disc space-y-1 pl-5">{result.evidence.limitations.map((limit, index) => <li key={index}>{t(limit)}</li>)}</ul></div>}
+      </Card>}
+      {!loadingVersion && <BusinessOverview summary={selectedNumber !== null ? result?.business_summary : value.business_summary || result?.business_summary} />}
+      {!loadingVersion && <AnalysisDiagrams diagrams={(selectedNumber !== null ? result?.evidence : result?.evidence || value.evidence)?.diagrams} />}
       <Card>
         <h2>
           {t(isQuestion ? "Your original question" : "Your original need")}
         </h2>
         <p className="mt-3 whitespace-pre-wrap leading-7">{value.original_need || value.messages?.find((item) => item.kind === "need")?.content || value.need}</p>
+        <NeedEditor value={value} onUpdated={updated => { setValue(updated); setSelectedNumber(null); setSelectedVersion(null); }} />
         {value.original_need && value.original_need !== value.need && <div className="mt-4 rounded-lg bg-muted p-4">
           <h3 className="text-sm">{t("Current formulation")}</h3>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{value.need}</p>
@@ -436,9 +470,7 @@ function RequestContent({
       )}
       {value.confrontation && (
         <p className="text-sm muted">
-          {["READY", "PARTIAL"].includes(value.status)
-            ? t("This result combines two independent analyses.")
-            : t("Independent analyses are enabled for this analysis.")}
+          {t("Independent analyses are required for this analysis.")}
         </p>
       )}
       {value.status === "DRAFT" && !scopeNeedsContext(value.scope_assessment) && (
@@ -467,44 +499,8 @@ function RequestContent({
           </Button>
         </Card>
       )}
-      {value.messages?.length > 0 && (
-        <details className="rounded-xl border bg-card p-5">
-          <summary className="cursor-pointer font-medium">
-            {t("Discussion history")}
-          </summary>
-          <div className="mt-4 space-y-5">
-            {value.messages
-              .filter((m) => m.kind !== "need")
-              .map((m) => (
-                <div key={m.id}>
-                  <p className="text-xs font-semibold muted">
-                    {m.role === "user" ? t("You") : "SpecHelper"}
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm">
-                    {m.kind === "result" || m.kind === "error"
-                      ? t(m.content)
-                      : m.content}
-                  </p>
-                </div>
-              ))}
-          </div>
-        </details>
-      )}
-      {value.status === "NEEDS_CLARIFICATION" && (
-        <BusinessClarification
-          key={JSON.stringify(value.questions)}
-          value={value}
-          base={base}
-          onUpdated={updated => {
-            setValue(updated);
-            setSelectedNumber(null);
-            setSelectedVersion(null);
-            router.replace(`${base}/${id}`, { scroll: false });
-          }}
-        />
-      )}
-      {!loadingVersion && <BusinessOverview summary={selectedNumber !== null ? result?.business_summary : value.business_summary || result?.business_summary} />}
-      {!loadingVersion && <AnalysisEvidence report={selectedNumber !== null ? result?.evidence : value.evidence || result?.evidence} historical={selectedNumber !== null} />}
+      <AnalysisTimeline value={value} />
+      {!loadingVersion && (result?.evidence || value.evidence) && <details className="rounded-xl border bg-card p-5"><summary className="cursor-pointer font-medium">{t("Verification details")}</summary><div className="mt-4"><AnalysisEvidence report={selectedNumber !== null ? result?.evidence : value.evidence || result?.evidence} historical={selectedNumber !== null} /></div></details>}
       {!loadingVersion && <BusinessDecisions
         key={`${id}-${selectedNumber ?? "current"}`}
         value={value}
@@ -517,7 +513,7 @@ function RequestContent({
             setSelectedNumber(null);
             setSelectedVersion(null);
             setShowDiscussion(false);
-            router.replace(`${base}/${id}`, { scroll: false });
+            router.replace(`${detailBase}/${id}`, { scroll: false });
           }
         }}
       />}
@@ -527,7 +523,7 @@ function RequestContent({
       {result && !loadingVersion && (result.status === "PARTIAL" || result.status === "ERROR") && <section role="status" className="rounded-xl border border-amber-500/50 bg-card p-5 text-sm" aria-label={t("Result reliability")}>
         <h2 className="text-base">{t(result.status === "PARTIAL" ? "Partial result" : "No usable result")}</h2>
         <p className="mt-2">{t("Execution has ended, but the required independent checks are incomplete. This result is not a fully verified analysis.")}</p>
-        {!!result.evidence?.limitations.length && <ul className="mt-3 list-disc space-y-1 pl-5">{result.evidence.limitations.map((limit, index) => <li key={index}>{t(limit)}</li>)}</ul>}
+        {!!result.evidence?.limitations?.length && <ul className="mt-3 list-disc space-y-1 pl-5">{result.evidence.limitations.map((limit, index) => <li key={index}>{t(limit)}</li>)}</ul>}
         {!isQuestion && <p className="mt-3 font-medium">{t("Publication is blocked until the required checks are complete. You can still review the draft and download the artifacts.")}</p>}
       </section>}
       {isQuestion && result && !loadingVersion && (
@@ -542,7 +538,7 @@ function RequestContent({
           selectedNumber={selectedNumber}
           onSelect={(number) => {
             router.replace(
-              `${base}/${id}${number === null ? "" : `?version=${number}`}`,
+              `${detailBase}/${id}${number === null ? "" : `?version=${number}`}`,
               { scroll: false },
             );
             setSelectedVersion(null);
@@ -565,7 +561,7 @@ function RequestContent({
                     value={selectedNumber ?? "latest"}
                     onChange={(e) => {
                       router.replace(
-                        `${base}/${id}${e.target.value === "latest" ? "" : `?version=${e.target.value}`}`,
+                        `${detailBase}/${id}${e.target.value === "latest" ? "" : `?version=${e.target.value}`}`,
                         { scroll: false },
                       );
                       setSelectedVersion(null);
@@ -597,7 +593,7 @@ function RequestContent({
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {result && !loadingVersion && (
+              {result && !loadingVersion && !value.conclusions_stale && (
                 <PublishTicket requestId={id} version={result.number} />
               )}
               <Button variant="outline" onClick={copy}>

@@ -82,6 +82,7 @@ export type RequestItem = {
   title?: string;
   updated_at?: string;
   workflow?: "request" | "question";
+  intent_mode?: "auto" | "explicit";
   category?: string;
   confrontation: boolean;
   language: "en" | "fr";
@@ -90,6 +91,10 @@ export type RequestItem = {
   environment_name: string;
   created_at: string;
   original_need?: string;
+  result_state?: string;
+  need_revision?: number;
+  conclusions_stale?: boolean;
+  need_revisions?: { number: number; need: string; created_at: string; previous_version: number | null }[];
   scope_assessment?: ScopeAssessment | null;
   scope_clarification?: string;
   scope_pending_message?: string;
@@ -192,13 +197,22 @@ export type RequestDetail = RequestItem & {
   markdown: string | null;
   latest_version: ResultVersion | null;
   versions: { number: number; created_at: string; status: string }[];
+  publications?: { id: string; title: string; status: string; url: string; version_number: number; created_at: string }[];
   messages: {
     id: number;
     role: string;
     kind: string;
     content: string;
+    created_at: string;
+    data?: Record<string, unknown>;
     version_number: number | null;
   }[];
+};
+export const resultStates: Record<string, string> = {
+  processing: "In progress", clarification: "Needs clarification", needs_reassessment: "Needs reassessment",
+  cancelled: "Analysis cancelled", verification_unavailable: "Verification unavailable", interrupted: "Interrupted",
+  partial: "Partial result", published: "Ticket published", draft_ready: "Ticket draft ready",
+  completed: "Processing completed", saved: "Saved analysis",
 };
 export const statuses: Record<string, string> = {
   DONE: "Completed",
@@ -247,4 +261,6 @@ export type QuestionTransfer = {
   environment_id: number | null;
   baseline: RequestDetail["baseline"];
   language: "en" | "fr";
+  summary?: string;
+  result_status?: string;
 };

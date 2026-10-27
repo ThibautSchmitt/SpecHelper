@@ -113,6 +113,7 @@ for (const language of ["en", "fr"] as const) {
   test(`Web observations retain dated provenance and stay separate from deployment behavior in ${language}`, async ({ page }, info) => {
     await setup(page, language); const value = requestDetail(); await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: value }));
     await page.goto(`/requests/${id}`);
+    await page.getByText(t("Verification details"), { exact: true }).click();
     const official = page.getByRole("article", { name: "The official guidance describes retention for this jurisdiction.", exact: true });
     const deployed = page.getByRole("article", { name: "The deployed code retains audit entries behind the configured flag.", exact: true });
     await expect(official).toContainText(t("Official rule")); await expect(deployed).toContainText(t("Deployment observation"));
@@ -159,6 +160,7 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/requests/${id}/versions/1`, route => route.fulfill({ json: historical }));
     await page.goto(`/requests/${id}?version=1`);
     await expect(page.getByText(t("Environment context was not recorded for this historical analysis."), { exact: true })).toBeVisible();
+    await page.getByText(t("Verification details"), { exact: true }).click();
     const claim = page.getByRole("article", { name: "The undated reference does not establish a current obligation.", exact: true });
     await expect(claim).toContainText(t("Not verified"));
     await claim.getByText(t("Sources and verification details"), { exact: true }).click();

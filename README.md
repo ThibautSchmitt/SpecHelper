@@ -35,11 +35,16 @@ Open <http://localhost:3000>. In **Settings** at the bottom left:
 2. Connect ChatGPT / Codex or Claude / Claude Code using guided authorization,
    or sign in to [Antigravity](docs/antigravity.md) with your Google account.
 3. Create an environment with repositories and branches, then wait for synchronization.
-4. Create a Request or Question with the environment, free text and optional files.
+4. From **Home**, select an environment and describe a question, a change or both,
+   with optional files. Resume the work from **Analyses**.
 
 An eligible provider account/subscription and repository access are needed for real
 analyses. PostgreSQL and ticket publication are optional. The interface and generated
 files support English and French.
+
+Results retain their discussion and dated need revisions. A sourced answer can lead
+to a linked change. Useful explanatory diagrams retain reviewed relationships and
+exportable Mermaid sources; simple questions do not require a diagram.
 
 Startup was checked with fresh application volumes; see the
 [installation observation](docs/operations.md#installation-observation) for its scope

@@ -62,6 +62,7 @@ class PreviewIn(StrictSchema):
     include_attachments: bool = False
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)
     include_goal: bool = False
+    include_diagrams: bool = False
 
 
 class PublicationDraftIn(PreviewIn):

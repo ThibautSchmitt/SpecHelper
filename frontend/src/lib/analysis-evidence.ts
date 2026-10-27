@@ -1,6 +1,19 @@
 export type EvidenceStatus = "supported" | "partial" | "contradicted" | "unverified";
 export type EvidenceKind = "observed" | "interpretation" | "contradiction" | "unknown";
 
+export type ReviewedDiagram = {
+  proposal: {
+    id: string; title: string; audience: "business" | "technical";
+    kind: "process" | "decision" | "state" | "sequence" | "dependencies" | "tables";
+    purpose: string; alternative_text: string;
+    nodes: { id: string; label: string; kind: string }[];
+    edges: { id: string; source: string; target: string; label: string;
+      meaning: "existing" | "hypothesis" | "proposed"; claim_ids: string[] }[];
+  };
+  reviews: { diagram_id: string; edge_id: string; verdict: string; notes: string }[];
+  mermaid: string;
+};
+
 export type GitEvidenceSource = {
   kind: "git";
   repository: string;
@@ -55,5 +68,6 @@ export type ReliabilityReport = {
   };
   limitations: string[];
   blocking: boolean;
+  diagrams?: ReviewedDiagram[];
   web_references?: WebReceipt[];
 };

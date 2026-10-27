@@ -456,17 +456,22 @@ def committed_source(environment, storage):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("workflow", ["request", "question"])
+@pytest.mark.parametrize(("workflow", "inferred_intent"), [
+    ("request", "feature"), ("question", "question"), ("question", "mixed"),
+])
 @pytest.mark.parametrize("resolved", [True, False])
+@pytest.mark.parametrize("automatic", [False, True])
+@pytest.mark.parametrize("with_diagrams", [False, True])
 def test_independent_omission_is_carried_to_final_scoped_outputs(
-    environment, storage, committed_source, bundle, workflow, resolved
+    environment, storage, committed_source, bundle, workflow, resolved, automatic, inferred_intent, with_diagrams
 ):
     source = committed_source
     value = Request.objects.create(
         environment=environment,
         analysis_protocol="2.4",
-        workflow=workflow,
-        need="Explain whether ongoing benefits block cancellation.",
+        workflow="request" if automatic else workflow,
+        intent_mode="auto" if automatic else "explicit",
+        need="Explain cancellation and add manual review for migration cancellations." if with_diagrams else "Explain whether ongoing benefits block cancellation.",
         language="en",
     )
     enqueue_analysis(value.pk)
@@ -488,6 +493,7 @@ def test_independent_omission_is_carried_to_final_scoped_outputs(
             "questions": [],
             "ticket": None,
             "complexity": "simple",
+            "intent": inferred_intent,
         },
         {**report(source, workflow), "uncertainties": ["PRIVATE_INITIAL_ANALYST_FINDING"]},
         report(source, workflow, True),
@@ -500,6 +506,30 @@ def test_independent_omission_is_carried_to_final_scoped_outputs(
         verification(source, resolved),
         final,
     ]
+    if with_diagrams:
+        values[0]["complexity"] = "complex"
+        values[1]["diagrams"] = [{
+            "id": "ordinary", "title": "Ordinary cancellation", "audience": "business", "kind": "decision",
+            "purpose": "PRIVATE_DIAGRAM_FINDING", "alternative_text": "The ordinary cancellation path checks ongoing benefits.",
+            "nodes": [{"id": "request", "label": "Cancellation request"}, {"id": "guard", "label": "Ordinary guard", "kind": "decision"}, {"id": "result", "label": "Cancellation decision"}],
+            "edges": [{"id": "guard", "source": "request", "target": "guard", "label": "Ordinary path", "meaning": "existing", "claim_ids": ["ordinary"]},
+                      {"id": "result", "source": "guard", "target": "result", "label": "Benefit check", "meaning": "existing", "claim_ids": ["ordinary"]}],
+        }]
+        values[2]["diagrams"] = [{
+            "id": "exception", "title": "Migration path", "audience": "technical", "kind": "dependencies",
+            "purpose": "Explain the omitted migration branch and the requested future review.", "alternative_text": "Migration imports currently bypass the ordinary guard. The proposed future path requires manual review before cancellation.",
+            "nodes": [{"id": "request", "label": "Cancellation request"}, {"id": "migration", "label": "Migration path"}, {"id": "result", "label": "Cancellation allowed"}, {"id": "review", "label": "Manual review"}],
+            "edges": [{"id": "migration", "source": "request", "target": "migration", "label": "Migration exception", "meaning": "existing", "claim_ids": ["migration"]},
+                      {"id": "result", "source": "migration", "target": "result", "label": "Guard bypass", "meaning": "existing", "claim_ids": ["migration"]},
+                      {"id": "review", "source": "migration", "target": "review", "label": "Require requested manual review", "meaning": "proposed"},
+                      {"id": "reviewed", "source": "review", "target": "result", "label": "Continue after approval", "meaning": "proposed"}],
+        }]
+        values[4]["diagram_reviews"] = [
+            {"diagram_id": role + ":" + graph["id"], "edge_id": edge["id"], "verdict": "supported",
+             "notes": "This is the requested future change, not deployed behavior." if edge["meaning"] == "proposed" else "The relation follows the inspected branch at the frozen SHA."}
+            for role, output in (("analyst", values[1]), ("counter", values[2]))
+            for graph in output["diagrams"] for edge in graph["edges"]
+        ]
     calls = []
 
     def invoke(path, payload, **kwargs):
@@ -521,11 +551,13 @@ def test_independent_omission_is_carried_to_final_scoped_outputs(
                 break
     value.refresh_from_db()
     assert value.status == ("READY" if resolved else "PARTIAL"), value.error
+    assert value.workflow == workflow
     assert len(calls) == 6 and not values
     counter = next(call for call in calls if call["profile"] == "independent")
     assert "PRIVATE_REQUIREMENT_CODE_FINDING" in calls[1]["prompt"]
     assert "PRIVATE_INITIAL_ANALYST_FINDING" not in counter["prompt"]
     assert "PRIVATE_REQUIREMENT_CODE_FINDING" not in counter["prompt"]
+    assert "PRIVATE_DIAGRAM_FINDING" not in counter["prompt"]
     assert value.need in counter["prompt"]
     assert "OMISSION DISCOVERY POLICY" in counter["prompt"]
     assert counter["context_id"] != calls[1]["context_id"]
@@ -535,9 +567,13 @@ def test_independent_omission_is_carried_to_final_scoped_outputs(
     version = value.versions.get()
     assert any(row["id"] == "counter:migration" for row in version.evidence["claims"])
     assert version.evidence["blocking"] is not resolved
+    assert len(version.evidence["diagrams"]) == (2 if with_diagrams else 0)
     for artifact in version.artifacts.all():
         assert EXCEPTION in artifact.content
         assert source["commit"] in artifact.content
+        assert ("```mermaid" in artifact.content) == (with_diagrams and artifact.name != "ticket.md")
+        if with_diagrams and artifact.name != "ticket.md":
+            assert "Proposed change" in artifact.content and "Existing" in artifact.content
     assert value.analysis_runs.get().orchestration["coverage"]["concerns"][0]["kind"] == "omission"
 
 

@@ -33,7 +33,7 @@ Text = Annotated[str, Field(min_length=1, max_length=4000)]
 
 class RequirementAssessment(UnderstandingOutput):
     complexity: Literal["simple", "standard", "complex"]
-    intent: Literal["bug", "feature", "improvement", "documentation", "question", "unknown"] = (
+    intent: Literal["bug", "feature", "improvement", "documentation", "question", "mixed", "unknown"] = (
         "unknown"
     )
     findings: list[BusinessFinding] = Field(default_factory=list, max_length=15)
@@ -329,6 +329,8 @@ class Orchestrator:
         }.get(schema, schema)
 
     def instruction_for_intent(self, schema, instruction):
+        if schema is RequirementAssessment and getattr(self.request, "intent_mode", "explicit") == "auto":
+            return instruction
         if not self.is_question:
             return instruction
         purpose = (
@@ -840,8 +842,6 @@ class Orchestrator:
                 key = question.decision_key or question.id
                 if not question.conflicts_with and any(
                     item["key"] == key
-                    and isinstance(item.get("question"), dict)
-                    and item["question"].get("question") == question.question
                     for item in confirmed
                 ):
                     raise RepeatedBusinessQuestion("Reuse the already confirmed business answer.")

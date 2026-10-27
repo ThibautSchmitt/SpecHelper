@@ -35,7 +35,7 @@ for (const language of ["en", "fr"] as const) {
         value = { ...value, status: "QUEUED", error: "" }; return route.fulfill({ json: value });
       });
       await page.goto(`/${base}/${id}`);
-      await expect(page.getByText("ORIGINAL_PUBLISHED_EVIDENCE", { exact: true })).toBeVisible();
+      await expect(page.getByText("ORIGINAL_PUBLISHED_EVIDENCE", { exact: true }).last()).toBeVisible();
       await page.getByRole("button", { name: t("Resume analysis"), exact: true }).click();
       await expect.poll(() => attempts).toBe(1);
       if (accepted) {
@@ -47,7 +47,7 @@ for (const language of ["en", "fr"] as const) {
         await expect(page.getByRole("heading", { name: t(workflow === "question" ? "Your question is queued" : "Your request is queued"), exact: true })).toHaveCount(0);
       }
       expect(value.latest_version).toEqual(previous);
-      await expect(page.getByText("ORIGINAL_PUBLISHED_EVIDENCE", { exact: true })).toBeVisible();
+      await expect(page.getByText("ORIGINAL_PUBLISHED_EVIDENCE", { exact: true }).last()).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
     test(`queue retries only terminal ${workflow} jobs and exposes a rejected retry in ${language}`, async ({ page }, info) => {

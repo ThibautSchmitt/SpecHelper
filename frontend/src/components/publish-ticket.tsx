@@ -31,9 +31,10 @@ type Presentation = {
   include_attachments: boolean;
   attachment_ids: string[];
   include_goal: boolean;
+  include_diagrams: boolean;
 };
-type TransferFile = { id: string; name: string; size: number; mime: string; kind: "original" | "goal"; transferable: boolean; reason?: string; };
-const defaultPresentation: Presentation = { ticket_format: "", include_business_analysis: false, include_technical_analysis: false, include_attachments: false, attachment_ids: [], include_goal: false };
+type TransferFile = { id: string; name: string; size: number; mime: string; kind: "original" | "goal" | "diagrams"; transferable: boolean; reason?: string; };
+const defaultPresentation: Presentation = { ticket_format: "", include_business_analysis: false, include_technical_analysis: false, include_attachments: false, attachment_ids: [], include_goal: false, include_diagrams: false };
 type Preview = Partial<Presentation> & {
   draft_id?: string;
   draft_revision?: number;
@@ -475,7 +476,7 @@ export function PublishTicket({
           dialog.current?.showModal();
         }}
       >
-        {t("Publish ticket")}
+        {t("Prepare ticket")}
       </Button>
       <dialog
         ref={dialog}
@@ -638,7 +639,7 @@ export function PublishTicket({
               </div>
               {preview && <div className="field sm:col-span-2">
                 <label htmlFor="publish-format">{t("Ticket format")}</label>
-                <select id="publish-format" value={presentation.ticket_format || "standard"} onChange={event => change(() => { void recompose({ ticket_format: event.target.value as "project" | "standard" }); })}>
+                <select id="publish-format" value={presentation.ticket_format || "standard"} onChange={event => change(() => { void recompose({ ticket_format: event.target.value as "project" | "standard", ...(event.target.value === "project" ? { include_diagrams: false } : {}) }); })}>
                   <option value="project" disabled={!preview.templates.length}>{t("Project template")}</option>
                   <option value="standard">{t("Standard SpecHelper format")}</option>
                 </select>
@@ -882,12 +883,12 @@ export function PublishTicket({
                 )}
                 <fieldset className="mt-5 space-y-3 rounded-lg border p-4">
                   <legend className="px-1 text-sm font-semibold">{t("Files to transfer")}</legend>
-                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false }) }); })} />{t("Include attachments")}</label>
+                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false, include_diagrams: false }) }); })} />{t("Include attachments")}</label>
                   <p className="text-xs muted">{presentation.include_attachments ? t("Selected files will be sent to {destination}.", { destination: projects.find(item => item.id === project)?.name || project }) : t("No file will be sent to the external platform.")}</p>
                   {presentation.include_attachments && <div className="space-y-3">
                     <p className="text-xs muted">{t("Select each file to transfer. Original files and generated goal.md are separate choices.")}</p>
                     {(preview.available_attachments || []).map(file => <div key={file.id}>
-                      <label className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={!file.transferable} checked={file.kind === "goal" ? presentation.include_goal : presentation.attachment_ids.includes(file.id)} onChange={event => change(() => { void recompose(file.kind === "goal" ? { include_goal: event.target.checked } : { attachment_ids: event.target.checked ? [...presentation.attachment_ids, file.id] : presentation.attachment_ids.filter(id => id !== file.id) }); })} /><span className="min-w-0 break-words">{file.name}<span className="ml-2 text-xs muted">{t(file.kind === "goal" ? "Generated goal.md" : "Original attachment")} · {Math.ceil(file.size / 1024)} KB</span></span></label>
+                      <label className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={!file.transferable} checked={file.kind === "goal" ? presentation.include_goal : file.kind === "diagrams" ? presentation.include_diagrams : presentation.attachment_ids.includes(file.id)} onChange={event => change(() => { void recompose(file.kind === "goal" ? { include_goal: event.target.checked } : file.kind === "diagrams" ? { include_diagrams: event.target.checked } : { attachment_ids: event.target.checked ? [...presentation.attachment_ids, file.id] : presentation.attachment_ids.filter(id => id !== file.id) }); })} /><span className="min-w-0 break-words">{file.name}<span className="ml-2 text-xs muted">{t(file.kind === "goal" ? "Generated goal.md" : file.kind === "diagrams" ? "Diagram annex (Mermaid)" : "Original attachment")} · {Math.ceil(file.size / 1024)} KB</span></span></label>
                       {!file.transferable && <p className="ml-6 mt-1 text-xs muted">{t(file.reason || "This connector cannot transfer this file.")}</p>}
                     </div>)}
                     {!preview.available_attachments?.length && <p className="text-xs muted">{t("No transferable files are available.")}</p>}

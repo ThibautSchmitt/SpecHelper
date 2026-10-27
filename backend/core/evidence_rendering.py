@@ -10,7 +10,7 @@ STATUS = {
 }
 
 
-def render_evidence(report, language="en"):
+def render_evidence(report, language="en", *, include_diagrams=True):
     if not report:
         return ""
     lines = ["## " + translate("Checked conclusions and limits", language), ""]
@@ -100,4 +100,8 @@ def render_evidence(report, language="en"):
                     ]
     for item in [*database.get("limitations", []), *report.get("limitations", [])]:
         lines += ["- " + translate(item, language)]
+    if include_diagrams and report.get("diagrams"):
+        from .diagrams import diagram_markdown
+
+        lines += ["", diagram_markdown(report["diagrams"], language)]
     return "\n".join(lines).rstrip() + "\n"

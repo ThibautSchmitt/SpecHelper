@@ -130,9 +130,10 @@ def publish(request_id, run, output):
     if evidence and not is_question:
         from .evidence_rendering import render_evidence
 
-        appendix = "\n" + render_evidence(evidence, request.language)
         artifacts = {
-            name: content.rstrip() + "\n" + appendix for name, content in artifacts.items()
+            name: content.rstrip() + "\n\n" + render_evidence(
+                evidence, request.language, include_diagrams=name == "goal.md",
+            ) for name, content in artifacts.items()
         }
         markdown = artifacts["ticket.md"]
     version = ResultVersion.objects.create(

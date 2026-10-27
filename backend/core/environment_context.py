@@ -294,6 +294,7 @@ def freeze_context(request, run=None, reuse=None):
         "workflow": request.workflow,
         "category": request.category,
         "need": request.need,
+        "need_revision": request.messages.filter(kind="need_revision").count(),
         "project_relationship_clarification": request.scope_clarification,
         "scope_assessment": request.scope_assessment,
         "answers": request.conversation,

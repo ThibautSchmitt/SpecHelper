@@ -104,9 +104,24 @@ observations survive later calls and failures.
 
 ## Interface and source layout
 
-The shell keeps Requests, Questions and Tickets in the sidebar, Settings at the
+The shell keeps Home, Analyses and Tickets in the sidebar, Settings at the
 bottom left, central content and the task panel. Small screens use drawers.
 EN/FR catalogs supply fixed strings; frozen analysis language reaches every role.
+
+The unified read/creation API reuses existing Question/Request records and services.
+Historical routes remain valid. A small additive `intent_mode` field distinguishes
+automatic initial classification from historical explicit workflows; it does not
+rewrite existing histories. Need revisions and retry-safe linked transitions append
+business events under the dossier lock. Result, decision and need revisions fence
+edits; immutable results retain their own context, baseline and evidence.
+
+Explanatory diagrams are bounded structured node/relation proposals. The independent
+verifier reviews each relation, and the service accepts existing relations only with
+supported Git/SQL claims. The service generates Mermaid rather than accepting arbitrary
+rendering directives. Reviewed proposals, reviews and textual sources are stored in
+the immutable evidence JSON. The frontend loads Mermaid on demand, renders in strict
+mode and displays an image document with a textual fallback. External diagram annexes
+reuse the existing selected-byte hashing and once-only attachment delivery contract.
 
 | Directory | Responsibility |
 | --- | --- |

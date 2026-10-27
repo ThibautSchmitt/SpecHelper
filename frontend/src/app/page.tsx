@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { WorkItemForm } from "@/components/work-item-form";
+import { AnalysisHome } from "@/components/analysis-home";
 
 export default function Home() {
-  return <Suspense><WorkItemForm /></Suspense>;
+  return <Suspense><AnalysisHome /></Suspense>;
 }

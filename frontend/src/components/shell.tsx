@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   FileText,
-  CircleHelp,
+  House,
   Settings,
   Sparkles,
   Tickets,
@@ -89,18 +89,15 @@ function ShellContent({ children }: { children: React.ReactNode }) {
           {[
             {
               href: "/",
-              label: "Requests",
-              icon: FileText,
-              active:
-                !pathname.startsWith("/admin") &&
-                !pathname.startsWith("/tickets") &&
-                !pathname.startsWith("/questions"),
+              label: "Home",
+              icon: House,
+              active: pathname === "/",
             },
             {
-              href: "/questions",
-              label: "Questions",
-              icon: CircleHelp,
-              active: pathname.startsWith("/questions"),
+              href: "/analyses",
+              label: "Analyses",
+              icon: FileText,
+              active: ["/analyses", "/questions", "/requests"].some((path) => pathname.startsWith(path)),
             },
             {
               href: "/tickets",

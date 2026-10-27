@@ -1,7 +1,7 @@
 "use client";
 import { useI18n } from "@/lib/i18n";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
@@ -34,11 +34,15 @@ import {
 
 export function WorkItemForm({
   workflow = "request",
+  unified = false,
+  embedded = false,
 }: {
   workflow?: "request" | "question";
+  unified?: boolean;
+  embedded?: boolean;
 }) {
   const isQuestion = workflow === "question";
-  const base = isQuestion ? "/questions" : "/requests";
+  const base = unified ? "/analyses" : isQuestion ? "/questions" : "/requests";
   const search = useSearchParams();
   const sourceQuestion = !isQuestion ? search.get("from_question") : null;
   const sourceVersion = Number(search.get("version"));
@@ -64,15 +68,33 @@ export function WorkItemForm({
   const [uploaded, setUploaded] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const transitionSubmission = useRef<{ fingerprint: string; operation_id: string } | null>(null);
+  const transitionCompleted = useRef(false);
+  const transitionStorageKey = sourceQuestion ? `transition:${sourceQuestion}:${sourceVersion}` : "";
+  function retainedTransition() {
+    if (!transitionStorageKey) return null;
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(transitionStorageKey) || "null");
+      if (typeof stored?.fingerprint !== "string" || !/^[0-9a-f-]{36}$/.test(stored?.operation_id || "")) return null;
+      const input = JSON.parse(stored.fingerprint);
+      if (input.sourceQuestion !== sourceQuestion || input.sourceVersion !== sourceVersion || typeof input.need !== "string") return null;
+      return { stored: stored as { fingerprint: string; operation_id: string }, input };
+    } catch { return null; }
+  }
+  useEffect(() => () => {
+    if (transitionCompleted.current && transitionStorageKey) {
+      try { sessionStorage.removeItem(transitionStorageKey); } catch {}
+    }
+  }, [transitionStorageKey]);
   useEffect(() => {
-    Promise.all([api<Environment[]>("/environments"), api<RequestItem[]>(base)])
+    Promise.all([api<Environment[]>("/environments"), unified ? Promise.resolve([]) : api<RequestItem[]>(base)])
       .then(([e, r]) => {
         setEnvironments(e);
         setRequests(r);
         setLoaded(true);
       })
       .catch((e) => setError(e.message));
-  }, [base]);
+  }, [base, unified]);
   useEffect(() => {
     if (!sourceQuestion) {
       setTransfer(null);
@@ -91,7 +113,13 @@ export function WorkItemForm({
       .then((value) => {
         if (alive) {
           setTransfer(value);
-          setEnvironment(String(value.environment_id || ""));
+          const retained = retainedTransition();
+          if (retained) {
+            transitionSubmission.current = retained.stored;
+            setNeed(retained.input.need);
+            setEnvironment(typeof retained.input.environment === "string" ? retained.input.environment : String(value.environment_id || ""));
+            setIncludeContext(retained.input.includeContext !== false);
+          } else setEnvironment(String(value.environment_id || ""));
         }
       })
       .catch((e) => {
@@ -128,6 +156,13 @@ export function WorkItemForm({
       let id = draftId;
       let assessment = draftScope;
       if (!id) {
+        const fingerprint = JSON.stringify({ sourceQuestion, sourceVersion, environment, need: need.trim(), includeContext });
+        if (sourceQuestion && transitionSubmission.current?.fingerprint !== fingerprint) {
+          transitionSubmission.current = { fingerprint, operation_id: crypto.randomUUID() };
+        }
+        if (sourceQuestion && transitionStorageKey) {
+          try { sessionStorage.setItem(transitionStorageKey, JSON.stringify(transitionSubmission.current)); } catch {}
+        }
         const created = await send<RequestItem>(
           sourceQuestion ? `/questions/${sourceQuestion}/requests` : base,
           {
@@ -137,6 +172,7 @@ export function WorkItemForm({
               ? {
                   source_version: sourceVersion,
                   include_context: includeContext,
+                  operation_id: transitionSubmission.current!.operation_id,
                 }
               : {}),
           },
@@ -152,7 +188,11 @@ export function WorkItemForm({
         await api(`${base}/${id}/attachments`, { method: "POST", body });
         setUploaded(i + 1);
       }
-      if (!scopeNeedsContext(assessment)) await send(`${base}/${id}/analyze`);
+      if (!scopeNeedsContext(assessment)) {
+        const saved = await api<RequestDetail>(`${base}/${id}`);
+        if (saved.status === "DRAFT") await send(`${base}/${id}/analyze`);
+      }
+      transitionCompleted.current = true;
       router.push(`${base}/${id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -211,13 +251,13 @@ export function WorkItemForm({
   const PageIcon = isQuestion ? CircleHelp : FileText;
   return (
     <div className="space-y-6">
-      <header className="page-heading">
+      {!embedded && <header className="page-heading">
         <div className="page-title">
           <span className="page-icon">
             <PageIcon size={20} />
           </span>
           <div>
-            <h1>{t(isQuestion ? "Questions" : "Requests")}</h1>
+            <h1>{t(unified ? "Analyses" : isQuestion ? "Questions" : "Requests")}</h1>
             <p className="muted">
               {t(
                 isQuestion
@@ -241,7 +281,7 @@ export function WorkItemForm({
           <Plus size={16} />
           <span>{t(isQuestion ? "New question" : "New request")}</span>
         </Button>
-      </header>
+      </header>}
       {error && (
         <div
           role="alert"
@@ -254,7 +294,7 @@ export function WorkItemForm({
         <div className="section-heading">
           <h2>
             <PageIcon size={18} />
-            {t(isQuestion ? "New question" : "New request")}
+            {t(unified ? "Start an analysis" : isQuestion ? "New question" : "New request")}
           </h2>
           <Button
             type="button"
@@ -314,7 +354,7 @@ export function WorkItemForm({
           </div>
           <div className="field">
             <label htmlFor="need">
-              {t(isQuestion ? "Your question" : "Describe your need")}
+              {t(sourceQuestion ? "Your requested change" : unified ? "Your question or change" : isQuestion ? "Your question" : "Describe your need")}
             </label>
             <Textarea
               id="need"
@@ -326,7 +366,9 @@ export function WorkItemForm({
               disabled={busy || !!draftId}
               onChange={(e) => setNeed(e.target.value)}
               placeholder={t(
-                isQuestion
+                unified
+                  ? "What would you like to understand or improve in this project?"
+                  : isQuestion
                   ? "How does the application validate a contract?"
                   : "When a manager updates a contract, I would like…",
               )}
@@ -334,7 +376,11 @@ export function WorkItemForm({
             <div className="mt-2 flex justify-between gap-3 text-xs muted">
               <p>
                 {t(
-                  isQuestion
+                  sourceQuestion
+                    ? "Describe the change you want. The source answer remains reference material, including its uncertainties."
+                    : unified
+                    ? "Describe the current behavior you want to understand, the change you want, or both."
+                    : isQuestion
                     ? "Mention the behavior, rule or part of the project you want to understand."
                     : "Explain who is affected, the expected outcome and any special cases.",
                 )}
@@ -362,6 +408,11 @@ export function WorkItemForm({
                 </p>
               ) : (
                 <>
+                  {transfer.summary && <blockquote className="mt-3 whitespace-pre-wrap rounded-md border-l-2 border-primary bg-muted/30 p-3 text-sm">
+                    <p className="mb-2 font-medium">{t("Source answer summary")} · {t("Version")} {transfer.source_version}</p>
+                    {transfer.summary}
+                    {transfer.result_status === "PARTIAL" && <p className="mt-2 font-medium">{t("Partial source answer: its conclusions still have verification limits.")}</p>}
+                  </blockquote>}
                   <label className="mt-3 flex items-start gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -463,19 +514,21 @@ export function WorkItemForm({
               <Sparkles size={16} />
               {busy
                 ? t(
-                    isQuestion
+                    unified
+                      ? "Starting your analysis…"
+                      : isQuestion
                       ? "Sending your question…"
                       : "Sending your request…",
                   )
                 : draftId
                   ? t("Resume submission")
-                  : t(isQuestion ? "Analyze question" : "Analyze request")}
+                  : t(unified ? "Start analysis" : isQuestion ? "Analyze question" : "Analyze request")}
               <ArrowRight size={16} />
             </Button>
           </div>
         </form>
       </Card>
-      <section className="overflow-hidden rounded-xl border bg-card">
+      {!embedded && <section className="overflow-hidden rounded-xl border bg-card">
         <div className="work-list-header">
           <h2>
             <PageIcon size={17} />
@@ -626,7 +679,7 @@ export function WorkItemForm({
             )}
           </article>
         ))}
-      </section>
+      </section>}
     </div>
   );
 }

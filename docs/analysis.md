@@ -12,6 +12,62 @@ a concise `ticket.md` and detailed `goal.md`; Questions produce `answer.md`.
 Select a result version to copy or download immutable files. Continue the discussion
 for a new version; changing instance settings never rewrites old files.
 
+Start from **Home** without selecting a Question/Request type. The requirement
+stage infers whether to explain existing behavior, prepare a change or address
+both. Mixed intent keeps the existing behavior distinct from the desired change.
+**Analyses** provides one search/list with light type, status and environment
+filters, stable pagination and links ordered by actual discussion/result activity.
+Home's counts and resumable items come from the same persisted records.
+
+The detail page shows business conclusions, important limits and pending questions
+before optional evidence. The chronological history retains the original need,
+clarifications, answers, confirmed decisions, result versions and linked changes.
+Git/DB receipts and tool/agent execution details remain expandable.
+
+## Need revisions and linked changes
+
+**Edit the need** appends a dated business revision. It preserves the original,
+confirmed decisions, earlier answers and immutable results, then starts a fresh
+independent review cycle after scope admission. A blocked scope assessment remains
+recoverable without calling an assistant. A running or validated analysis requires
+the existing safe completion/reopening action before editing.
+
+The old result remains readable but is marked for reassessment and cannot approve
+or publish the updated need. A new result clears that stale-result warning. Edits
+check the expected need, decision and result revisions; repeated submission ids do
+not create another revision or job. Existing scope reformulations also enter the
+dated need history.
+
+**Evolve this behavior** opens a new objective linked to the selected answer version.
+Its attributed summary and optional context document retain source hypotheses and
+verification limits. The user writes the actual change. The new analysis freezes
+the chosen environment's current Git references and runs the same three roles in
+independent contexts. Creation retries, including a lost response followed by a page
+reload, reuse the operation id. A distinct explicit submission may create another
+legitimate child. Older answers and external tickets are never rewritten.
+
+## Explanatory diagrams
+
+The analyst and blind counter-analyst may propose useful structured business or
+technical diagrams. Simple questions use no diagram. The counter-analyst searches
+for omitted branches and dependencies independently before the proposals are compared.
+The verifier checks every relationship's label, direction, meaning and source claims.
+An unreviewed relationship omits the whole diagram with an explicit limitation;
+Mermaid syntax alone never establishes correctness.
+
+Existing relationships require supported Git/SQL claims with accepted provenance.
+Hypotheses and proposed changes retain distinct labels and dotted flowchart edges.
+Generic business/component labels exclude contact details, configured secrets,
+raw identifiers and executable Mermaid directives; the independent review also
+requires nonpersonal wording. No raw database rows belong in diagrams.
+
+Diagrams are collapsed initially. Open one to see a locally rendered image, its
+readable alternative explanation, zoom controls, relationship checks and a copyable
+Mermaid source. A rendering failure leaves the explanation and source accessible.
+The source is stored with the immutable evidence/report and `goal.md`; `ticket.md`
+excludes it by default. An optional external file annex follows the separate
+[ticket consent and destination restrictions](ticketing.md#attachments-require-explicit-consent).
+
 ## Execution contract
 
 Requests and Questions use one persistent queue. Scheduling operates at the next

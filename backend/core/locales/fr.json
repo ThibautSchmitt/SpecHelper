@@ -677,5 +677,18 @@
   "A necessary analysis tool was refused by the assistant's permission policy.": "Un outil nécessaire à l'analyse a été refusé par la politique d'autorisation de l'assistant.",
   "API-key authentication is available only for Antigravity.": "L'authentification par clé API est disponible uniquement pour Antigravity.",
   "Explicit API billing consent is required.": "Votre accord explicite pour la facturation de l'API est nécessaire.",
-  "Enter a supported API key without spaces or control characters.": "Saisissez une clé API compatible, sans espaces ni caractères de contrôle."
+  "Enter a supported API key without spaces or control characters.": "Saisissez une clé API compatible, sans espaces ni caractères de contrôle.",
+  "A diagram was omitted because its relationships were not independently verified.": "Un diagramme a été omis car ses relations n’ont pas été vérifiées indépendamment.",
+  "The need changed after this result. Reanalyze before publication.": "Le besoin a changé depuis ce résultat. Relancez l’analyse avant publication.",
+  "The need changed after this result. Reanalyze before validation.": "Le besoin a changé depuis ce résultat. Relancez l’analyse avant validation.",
+  "Your requested change": "Votre évolution souhaitée",
+  "Describe the change you want. The source answer remains reference material, including its uncertainties.": "Décrivez l’évolution souhaitée. La réponse source reste un élément de référence, avec ses incertitudes.",
+  "Source answer summary": "Résumé de la réponse source",
+  "Partial source answer: its conclusions still have verification limits.": "Réponse source partielle : ses conclusions comportent encore des limites de vérification.",
+  "Evolve this behavior": "Faire évoluer ce comportement",
+  "Linked change created": "Évolution liée créée",
+  "Open linked change": "Ouvrir l’évolution liée",
+  "This submission was already used for a different change.": "Cet envoi a déjà été utilisé pour une autre évolution.",
+  "Diagram annex (Mermaid)": "Annexe de diagrammes (Mermaid)",
+  "Diagram annexes require the standard format and a destination supporting file uploads.": "Les annexes de diagrammes nécessitent le format standard et une destination acceptant les fichiers joints."
 }

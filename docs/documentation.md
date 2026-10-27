@@ -8,7 +8,7 @@ runtime behavior take precedence over an old report or an unimplemented target.
 | Reference | Owns | Link instead of duplicating |
 | --- | --- | --- |
 | [README](../README.md) | Product value, shortest installation path, guide navigation | Fine settings and internal architecture |
-| [Overview](overview.md) | Request/Question/output orientation | Execution rules |
+| [Overview](overview.md) | Home, unified analysis entry and output orientation | Execution rules |
 | [Configuration](configuration.md) | Settings, connections, skills, models, context, appearance and language | Scheduling or publication recovery |
 | [Analysis](analysis.md) | Mandatory roles, scheduling, clarification, evidence and completeness | Administrative instructions or platform templates |
 | [Architecture](architecture.md) | Components, storage and technical trust-boundary implementation | Operations commands or policy |
@@ -21,7 +21,7 @@ runtime behavior take precedence over an old report or an unimplemented target.
 | [Known limitations](known-limitations.md) | Outstanding limits, implications and evidence still needed | Whole historical reports |
 | [CONTRIBUTING](../CONTRIBUTING.md) | Development, verification and translation maintenance | Product instructions |
 | [CHANGELOG](../CHANGELOG.md) | Delivered changes and links to original evidence | Another full specification |
-| [Roadmap](roadmap.md) | Explicitly unimplemented versioned target summaries | Delivered feature claims |
+| [Roadmap](roadmap.md) | Implemented/future status and qualification boundaries | Full feature instructions |
 
 ## Updating and archiving
 

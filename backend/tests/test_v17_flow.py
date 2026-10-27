@@ -118,7 +118,7 @@ def test_question_uses_existing_queue_without_ticket_goal_or_external_publicatio
     job = Job.objects.get(target=str(question.pk))
     assert job.kind == "analysis"
     queue = Client().get("/api/queue").json()
-    assert queue[0]["workflow"] == "question" and queue[0]["href"] == f"/questions/{question.pk}"
+    assert queue[0]["workflow"] == "question" and queue[0]["href"] == f"/analyses/{question.pk}"
     calls = execute(
         question, storage, [assessment(), {"analysis": report(), "result": explanation}]
     )

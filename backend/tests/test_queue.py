@@ -7,6 +7,16 @@ from core.models import AnalysisRun, Job, Request
 pytestmark = pytest.mark.django_db
 
 
+def test_activity_link_stays_valid_while_intent_is_inferred(client, environment):
+    value = Request.objects.create(environment=environment, need="Explain exports.", intent_mode="auto")
+    job = Job.objects.create(kind="analysis", target=str(value.pk))
+    before = next(item for item in client.get("/api/queue").json() if item["id"] == job.pk)
+    Request.objects.filter(pk=value.pk).update(workflow="question", understanding="Explain export selection.")
+    after = next(item for item in client.get("/api/queue").json() if item["id"] == job.pk)
+    assert before["href"] == after["href"] == f"/analyses/{value.pk}"
+    assert client.get(f"/api/analyses/{value.pk}").json()["workflow"] == "question"
+
+
 def test_queue_reflects_shared_fifo_and_updates_without_claiming_work(client, environment):
     first = Request.objects.create(environment=environment, need="First request", status="QUEUED")
     second = Request.objects.create(environment=environment, need="Second request", status="QUEUED")
@@ -56,7 +66,7 @@ def test_queue_caps_terminal_history_keeps_failed_tasks_and_real_provider(client
     assert all(value["kind"] == "analysis" for value in values)
     assert values[0]["agent"] == "codex"
     assert values[0]["error"] == "Analysis interrupted."
-    assert values[0]["href"] == f"/requests/{request.pk}"
+    assert values[0]["href"] == f"/analyses/{request.pk}"
 
 
 def test_deleted_queue_targets_and_tied_timestamps_are_safe(client):
@@ -122,7 +132,7 @@ def test_publication_activity_is_visible_without_entering_the_analysis_scheduler
     assert value["status"] == "RUNNING"
     assert value["kind"] == "publication"
     assert value["agent"] is None
-    assert value["href"] == f"/requests/{request.pk}?version=1"
+    assert value["href"] == f"/analyses/{request.pk}?version=1"
     assert not Job.objects.exists()
     PublishedTicket.objects.filter(pk=publication.pk).update(
         status="UNCERTAIN", error="Publication status is uncertain.", finished_at=timezone.now()

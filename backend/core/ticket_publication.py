@@ -343,7 +343,7 @@ def preview(
     existing = TicketPublicationDraft.objects.filter(
         version=version, connector=connector, project=project
     ).first()
-    if restore and existing and existing.presentation == selection:
+    if restore and existing and {"include_diagrams": False, **existing.presentation} == selection:
         # Only restore against the same destination metadata revision. A changed
         # template requires recomposition and another human review.
         if existing.content.get("options_revision") == options.get("revision"):
@@ -365,7 +365,9 @@ def preview(
         "values": content["fields"],
         **draft_metadata(draft, version),
         "fallback_reason": fallback,
-        "available_attachments": available_attachments(version, connector, policy),
+        "available_attachments": available_attachments(
+            version, connector, policy, allow_diagrams=selection.get("ticket_format") == "standard",
+        ),
         "selected_attachments": chosen,
         "attachment_destination": connector.base_url.rstrip("/") + " · " + project,
         "validation_errors": {},
@@ -531,7 +533,10 @@ def publish(version, connector, payload):
         from .ticket_attachments import selected_attachments
         from .ticket_presentation import PRESENTATION_KEYS
 
-        snapshot.update({key: payload.get(key) for key in PRESENTATION_KEYS})
+        # Keep historical publication digests stable when the optional annex is
+        # absent. Previously published snapshots must remain reconcilable.
+        snapshot.update({key: payload.get(key) for key in PRESENTATION_KEYS
+                         if key != "include_diagrams" or payload.get(key)})
         snapshot["selected_attachments"] = selected_attachments(
             version, connector, payload, project
         )
@@ -546,7 +551,8 @@ def publish(version, connector, payload):
             if (
                 draft is None
                 or any(draft.content.get(key) != payload[key] for key in content_keys)
-                or any(draft.presentation.get(key) != payload.get(key) for key in PRESENTATION_KEYS)
+                or any(draft.presentation.get(key, False if key == "include_diagrams" else None)
+                       != payload.get(key, False if key == "include_diagrams" else None) for key in PRESENTATION_KEYS)
                 or draft.content.get("selected_attachments", []) != snapshot["selected_attachments"]
             ):
                 raise HttpError(409, "Save and review the exact ticket draft before publication.")

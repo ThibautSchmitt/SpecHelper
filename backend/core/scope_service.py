@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import uuid
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -119,6 +120,11 @@ def revise(request_id, payload, *, workflow):
             raise HttpError(422, "Describe a need related to the project.")
         if not request.messages.filter(kind="need").exists():
             RequestMessage.objects.create(request=request, role="user", kind="need", content=request.need)
+        if payload.need.strip() != request.need:
+            from .need_revisions import append_revision
+
+            append_revision(request, payload.need.strip(), operation_id=uuid.uuid4(),
+                            previous_version=request.versions.order_by("-number").first())
         request.need = payload.need.strip()
     if "message" in fields:
         if not followup or not payload.message or not payload.message.strip():
