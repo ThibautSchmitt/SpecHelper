@@ -279,7 +279,17 @@ def test_headless_uses_fresh_single_turn_stdin_without_private_prompt_in_argv():
     assert private_request not in " ".join(command)
 
 
-@pytest.mark.parametrize("model,timeout", [("", 30), ("bad model", 30), ("-model", 30), ("good-model", 0), ("good-model", 601), ("good-model", True)])
+def test_native_default_and_explicit_effort_are_not_replaced_by_guessed_models():
+    command = headless_command("", timeout=30)
+    assert "--model" not in command and "--effort" not in command
+    explicit = headless_command("exact-model", timeout=30, effort="high")
+    assert explicit[explicit.index("--model")+1] == "exact-model"
+    assert explicit[explicit.index("--effort")+1] == "high"
+    with pytest.raises(ValueError):
+        headless_command("exact-model", effort="ultra")
+
+
+@pytest.mark.parametrize("model,timeout", [("bad model", 30), ("-model", 30), ("good-model", 0), ("good-model", 601), ("good-model", True)])
 def test_invalid_model_or_resource_bounds_are_rejected(model, timeout):
     with pytest.raises(ValueError):
         headless_command(model, timeout=timeout)

@@ -31,13 +31,15 @@ export function ConnectButton({
   onConnected,
   startPath = "/connections/start",
   identityLabel,
+  reconnect = false,
 }: {
   provider: Provider;
   onConnected: () => void;
   startPath?: string;
   identityLabel?: string;
+  reconnect?: boolean;
 }) {
-  const { t, dateLocale } = useI18n();
+  const { t } = useI18n();
   const elementId = useId();
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [busy, setBusy] = useState(false);
@@ -204,7 +206,7 @@ export function ConnectButton({
         {busy && !attempt && (
           <LoaderCircle size={16} className="animate-spin" />
         )}
-        {t("Connect with")} {names[provider]}
+        {t(reconnect ? "Reconnect with" : "Connect with")} {names[provider]}
       </Button>
       {!attempt && !authChoiceOpen && error && (
         <p role="alert" className="max-w-xs text-sm text-red-700">

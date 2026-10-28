@@ -92,6 +92,8 @@ export type RequestItem = {
   created_at: string;
   original_need?: string;
   result_state?: string;
+  result_limits?: string[];
+  stage?: string;
   need_revision?: number;
   conclusions_stale?: boolean;
   need_revisions?: { number: number; need: string; created_at: string; previous_version: number | null }[];
@@ -210,9 +212,9 @@ export type RequestDetail = RequestItem & {
 };
 export const resultStates: Record<string, string> = {
   processing: "In progress", clarification: "Needs clarification", needs_reassessment: "Needs reassessment",
-  cancelled: "Analysis cancelled", verification_unavailable: "Verification unavailable", interrupted: "Interrupted",
+  cancelled: "Analysis cancelled", verification_unavailable: "Partial result: verification unavailable", interrupted: "Technical failure",
   partial: "Partial result", published: "Ticket published", draft_ready: "Ticket draft ready",
-  completed: "Processing completed", saved: "Saved analysis",
+  completed: "Analysis complete", saved: "Saved analysis",
 };
 export const statuses: Record<string, string> = {
   DONE: "Completed",

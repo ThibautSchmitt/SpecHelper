@@ -48,7 +48,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto("/admin");
     await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
     const nav = page.getByRole("navigation", { name: t("AI settings"), exact: true });
-    await expect(nav.getByRole("button")).toHaveText(["Connections", "Models", "Roles and orchestration", "Agents", "Skills"].map(t));
+    await expect(nav.getByRole("button")).toHaveText(["Connections", "Roles and orchestration", "Agents", "Skills"].map(t));
     await nav.getByRole("button", { name: t("Skills"), exact: true }).click();
     await page.getByRole("button", { name: t("New skill"), exact: true }).click();
     await page.getByLabel(t("Identifier"), { exact: true }).fill("contract-review");
@@ -58,17 +58,17 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByRole("group", { name: t("Compatible assistants"), exact: true })).toHaveCount(0);
     await expect(page.getByRole("group", { name: t("Required capabilities"), exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Calculated skill metadata"), { exact: true })).toContainText("ChatGPT / Codex, Claude Code");
-    await page.getByRole("button", { name: t("Save definition"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
     await expect(page.getByRole("status")).toContainText(t("Library definition saved."));
     await expect(page.getByRole("button", { name: t("Delete {name}").replace("{name}", "Contract review"), exact: true })).toBeDisabled();
     await page.getByRole("button", { name: t("Edit {name}").replace("{name}", "Contract review"), exact: true }).click();
     await expect(page.getByLabel(t("Identifier"), { exact: true })).toBeDisabled();
     await page.getByLabel(t("Instructions"), { exact: true }).fill("Refined procedure, preserved historical revision.");
     conflict = true;
-    await page.getByRole("button", { name: t("Save definition"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
     await expect(page.getByRole("main").getByRole("alert")).toContainText(t("The definition has changed. Refresh before editing."));
     await expect(page.getByLabel(t("Instructions"), { exact: true })).toHaveValue("Refined procedure, preserved historical revision.");
-    await page.getByRole("button", { name: t("Save definition"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
     await expect(page.getByRole("heading", { name: /Contract review/ })).toContainText("v2");
     await page.getByRole("button", { name: t("Versions of {name}").replace("{name}", "Contract review"), exact: true }).click();
     await expect(page.getByRole("heading", { name: t("Versions of {name}").replace("{name}", "Contract review"), exact: true })).toBeVisible();
@@ -117,6 +117,7 @@ for (const language of ["en", "fr"] as const) {
       return route.fulfill({ json: { compatible, incompatibilities: compatible ? [] : [{ slug: skill.slug, kind: "skill", reason: "Provider incompatibility" }], instructions: "Portable procedure, no new permissions.", library: { agents, skills: [skill] }, provider: "codex" } });
     });
     await page.goto("/admin");
+    await page.getByRole("button", { name: t("Sources & environments"), exact: true }).click();
     await page.getByRole("button", { name: t("Environments"), exact: true }).click();
     await page.getByText(t("Agents and skills for this environment"), { exact: true }).click();
     const section = page.locator("details").filter({ has: page.locator("summary", { hasText: t("Agents and skills for this environment") }) });

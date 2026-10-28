@@ -345,6 +345,17 @@ export function PublishTicket({
   const renderedBody = reference && !referencePattern?.test(fieldBody)
     ? `${fieldBody}\n\n${reference}`.trim()
     : fieldBody.trim();
+  const publicationIssues = preview ? [
+    ...(preview.publication_allowed === false
+      ? (preview.publication_blockers?.length ? preview.publication_blockers : ["Required independent checks are incomplete. Publication is blocked."]).map(reason => t(reason))
+      : []),
+    ...(!title.trim() ? [t("Enter a ticket title before creating the ticket.")] : []),
+    ...(!fieldBody.trim() ? [t("Enter a ticket description before creating the ticket.")] : []),
+    ...preview.fields.filter(field => field.required && !field.read_only && (fields[field.id] === "" || fields[field.id] === undefined || fields[field.id] === null || fields[field.id] === false || (Array.isArray(fields[field.id]) && !(fields[field.id] as unknown[]).length)))
+      .map(field => t("Complete the required field: {field}.", { field: field.label })),
+    ...(preview.issue_types.length && !issueType ? [t("Select an issue type before creating the ticket.")] : []),
+    ...(presentation.ticket_format === "project" && preview.templates.length && !template ? [t("Select a ticket template before creating the ticket.")] : []),
+  ] : [];
   function change(action: () => void) {
     if (
       !dirty ||
@@ -709,11 +720,6 @@ export function PublishTicket({
                     {t(preview.notice)}
                   </p>
                 )}
-                {preview.publication_allowed === false && <div role="status" className="mt-4 rounded-lg border border-amber-500/50 p-4 text-sm">
-                  <p className="font-semibold">{t("Publication is blocked")}</p>
-                  <ul className="mt-2 list-disc pl-5">{(preview.publication_blockers?.length ? preview.publication_blockers : ["Required independent checks are incomplete. Publication is blocked."]).map((reason, index) => <li key={index}>{t(reason)}</li>)}</ul>
-                  <p className="mt-2 muted">{t("You can review and save this draft. Exporting it does not complete the missing checks.")}</p>
-                </div>}
                 <fieldset className="mt-5 space-y-3 rounded-lg border p-4">
                   <legend className="px-1 text-sm font-semibold">{t("Optional ticket content")}</legend>
                   {([["include_business_analysis", "Include detailed business analysis"], ["include_technical_analysis", "Include detailed technical analysis"]] as const).map(([key, label]) => <label key={key} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation[key]} onChange={event => change(() => { void recompose({ [key]: event.target.checked }); })} />{t(label)}</label>)}
@@ -914,13 +920,19 @@ export function PublishTicket({
                 <div className="mb-4 text-xs muted" aria-label={t("Attachment transfer preview")}>
                   <p>{t("Files to transfer")}: {presentation.include_attachments ? (preview.selected_attachments || []).map(file => file.name).join(", ") || t("None") : t("None")}</p>
                 </div>
+                {!!publicationIssues.length && <div id={`publication-issues-${version}`} role="status" className="mb-4 rounded-lg border border-amber-500/50 p-4 text-sm">
+                  <p className="font-semibold">{t("Publication is blocked")}</p>
+                  <ul className="mt-2 list-disc pl-5">{publicationIssues.map((reason, index) => <li key={index}>{reason}</li>)}</ul>
+                  {preview.publication_allowed === false && <p className="mt-2 muted">{t("You can review and save this draft. Exporting it does not complete the missing checks.")}</p>}
+                </div>}
                 <div className="flex flex-wrap items-center gap-3">
                   <Button type="button" variant="outline" disabled={busy} onClick={async () => { setBusy(true); setError(""); try { await saveDraft(); } catch (error) { setError((error as Error).message); } finally { setBusy(false); } }}>{t("Save publication draft")}</Button>
                   <Button type="button" variant="ghost" disabled={busy} onClick={() => change(() => { void reloadDraft(); })}>{t("Reload saved draft")}</Button>
                   {draftSaveFailed && <Button type="button" variant="ghost" disabled={busy} onClick={finishClose}>{t("Close without saving")}</Button>}
                   {saved && !dirty && <p role="status" className="text-xs muted">{t("Publication draft saved.")}</p>}
                 <Button
-                  disabled={busy || preview.publication_allowed === false || !title.trim() || !fieldBody.trim() || preview.fields.some(field => field.required && !field.read_only && (fields[field.id] === "" || fields[field.id] === undefined || fields[field.id] === null || fields[field.id] === false || (Array.isArray(fields[field.id]) && !(fields[field.id] as unknown[]).length))) || (!!preview.issue_types.length && !issueType) || (presentation.ticket_format === "project" && !!preview.templates.length && !template)}
+                  disabled={busy || publicationIssues.length > 0}
+                  aria-describedby={publicationIssues.length ? `publication-issues-${version}` : undefined}
                 >
                   {t("Create ticket")}
                 </Button>
@@ -929,6 +941,11 @@ export function PublishTicket({
             )}
           </form>
         )}
+        <div className="mt-4 flex justify-end border-t pt-4">
+          <Button type="button" variant="outline" disabled={busy} onClick={close}>
+            {t("Cancel")}
+          </Button>
+        </div>
       </dialog>
     </>
   );

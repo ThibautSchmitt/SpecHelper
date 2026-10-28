@@ -17,6 +17,7 @@ async function setup(page: Page, language: "en" | "fr") {
   await page.route("**/api/environments", route => route.fulfill({ json: [{ id: 1, name: "Production", status: "READY", repositories: [], revision: 1 }] }));
   await page.addInitScript(theme => localStorage.setItem("spechelper-theme", theme), language === "fr" ? "dark" : "light");
   await page.goto("/admin");
+  await page.getByRole("button", { name: translate(language, "Sources & environments"), exact: true }).click();
   await page.getByRole("button", { name: translate(language, "Environments"), exact: true }).click();
   return page.locator("details").filter({ has: page.locator("summary").filter({ hasText: new RegExp(`^${translate(language, "Synchronization history")}$`) }) });
 }
@@ -39,7 +40,7 @@ for (const language of ["en", "fr"] as const) {
     expect(methods).toEqual([]);
     await history.locator("summary").click();
     await expect(history.getByRole("status")).toHaveText(t("Loading synchronization history…"));
-    await expect(page.getByRole("button", { name: t("Environments"), exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: t("Sources & environments"), exact: true })).toBeEnabled();
     release();
     const rows = history.getByRole("list", { name: t("Recorded synchronizations"), exact: true }).getByRole("listitem");
     await expect(rows).toHaveCount(3);

@@ -35,7 +35,7 @@ Open <http://localhost:3000>. In **Settings** at the bottom left:
 2. Connect ChatGPT / Codex or Claude / Claude Code using guided authorization,
    or sign in to [Antigravity](docs/antigravity.md) with your Google account.
 3. Create an environment with repositories and branches, then wait for synchronization.
-4. From **Home**, select an environment and describe a question, a change or both,
+4. From **Analyses → New analysis**, select an environment and describe a question, a change or both,
    with optional files. Resume the work from **Analyses**.
 
 An eligible provider account/subscription and repository access are needed for real

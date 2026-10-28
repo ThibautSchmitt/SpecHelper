@@ -119,7 +119,7 @@ def test_runtime_rejects_api_key_mode_instead_of_billed_fallback(isolated_runtim
             json={**payload, "identity_id": identity},
             headers={"Authorization": "Bearer test-v14-control"},
         )
-    assert response.json() == {
+    assert {key: value for key, value in response.json().items() if key != "quota_status"} == {
         "failure": {"kind": "AUTH_ERROR"},
         "context_usage": [],
         "context_audit": "unavailable",

@@ -51,6 +51,7 @@ def update(attempt, state):
                         "antigravity": "Antigravity",
                     }.get(attempt.provider, attempt.provider),
                     "account_key": state.get("account_key", ""),
+                    **{key: state[key] for key in ("quota_windows", "quota_status", "ordinary_usage_allowed") if key in state},
                 },
             )
     return public(attempt)

@@ -80,9 +80,9 @@ export function GitSources() {
     });
   }
   return (
-    <Card className="min-w-0" aria-label={t("Sources Git")}>
+    <Card className="min-w-0" aria-label={t("Git sources")}>
       <div className="section-heading">
-        <h2>{t("Sources Git")}</h2>
+        <h2>{t("Git sources")}</h2>
         <Button
           type="button"
           size="sm"

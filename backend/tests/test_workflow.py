@@ -15,16 +15,16 @@ from core.worker import analyze, claim_job, perform_job, work_once
 pytestmark = pytest.mark.django_db
 
 
-def test_unavailable_assistants_keep_request_in_shared_queue(client, environment):
+def test_unauthenticated_role_configuration_blocks_new_analysis(client, environment):
     AIConnection.objects.filter(pk=1).update(status="DISCONNECTED", availability="UNKNOWN")
     request = Request.objects.create(environment=environment, need="Export contracts")
     response = client.post(f"/api/requests/{request.id}/analyze")
-    assert response.status_code == 200
+    assert response.status_code == 409
     request.refresh_from_db()
-    assert request.status == "QUEUED"
-    assert request.baseline[0]["sha"] == "a" * 40
+    assert request.status == "DRAFT"
+    assert request.baseline == []
     assert not AISession.objects.filter(request=request).exists()
-    assert Job.objects.get().status == "QUEUED"
+    assert not Job.objects.exists()
 
 
 def test_another_provider_login_does_not_block_available_assistant(environment):

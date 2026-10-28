@@ -1120,3 +1120,17 @@ summary:focus-visible {
 .queue-card[data-state="WAITING_AI"] { border-left-color: var(--waiting); }
 .queue-card[data-state="CANCELLED"] { border-left-color: var(--muted-foreground); }
 .queue-group-heading h3[data-state="WAITING_AI"] > svg, .queue-card[data-state="WAITING_AI"] .queue-card-status > svg { color: var(--waiting); }
+
+/* Keep the activity preference independent of page navigation and viewport size. */
+.queue-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 20px; }
+.queue-mobile-toggle { display: none; }
+.queue-card[data-state="DONE"][data-result-status="partial"] { border-left-color: var(--paused); background: color-mix(in srgb, var(--paused) 3%, var(--card)); }
+.queue-card .badge[data-state="PARTIAL"] { color: var(--paused); background: color-mix(in srgb, var(--paused) 12%, var(--card)); }
+.dashboard-queue[hidden] { display: none; }
+@media (min-width: 1280px) {
+  .dashboard[data-queue-collapsed="true"] { grid-template-columns: 204px minmax(0, 1fr); }
+}
+@media (max-width: 1279px) {
+  .queue-mobile-toggle { display: inline-flex; }
+  .queue-desktop-toggle { display: none; }
+}

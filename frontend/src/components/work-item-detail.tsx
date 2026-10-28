@@ -241,11 +241,11 @@ function RequestContent({
   return (
     <div className="space-y-6">
       <Link
-        href={unified ? "/analyses" : isQuestion ? "/questions" : "/"}
+        href="/analyses"
         className="inline-flex items-center gap-2 text-sm muted"
       >
         <ArrowLeft size={16} />{" "}
-        {t(unified ? "All analyses" : isQuestion ? "All questions" : "All requests")}
+        {t("All analyses")}
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -255,8 +255,8 @@ function RequestContent({
           </p>
           <h1>
             {(isQuestion
-              ? (!loadingVersion && result?.explanation?.title) || value.title
-              : ticket?.title || value.title) ||
+              ? (!loadingVersion && result?.explanation?.title) || value.need.split("\n")[0] || value.title
+              : ticket?.title || value.need.split("\n")[0] || value.title) ||
               t(isQuestion ? "Your question" : "Your request")}
           </h1>
         </div>
@@ -520,8 +520,8 @@ function RequestContent({
       {loadingVersion && (
         <p role="status">{t("Loading the selected version…")}</p>
       )}
-      {result && !loadingVersion && (result.status === "PARTIAL" || result.status === "ERROR") && <section role="status" className="rounded-xl border border-amber-500/50 bg-card p-5 text-sm" aria-label={t("Result reliability")}>
-        <h2 className="text-base">{t(result.status === "PARTIAL" ? "Partial result" : "No usable result")}</h2>
+      {result && !loadingVersion && (result.status === "PARTIAL" || result.status === "ERROR" || result.evidence?.blocking) && <section role="status" className="rounded-xl border border-amber-500/50 bg-card p-5 text-sm" aria-label={t("Result reliability")}>
+        <h2 className="text-base">{t(result.status === "ERROR" ? "No usable result" : "Partial result")}</h2>
         <p className="mt-2">{t("Execution has ended, but the required independent checks are incomplete. This result is not a fully verified analysis.")}</p>
         {!!result.evidence?.limitations?.length && <ul className="mt-3 list-disc space-y-1 pl-5">{result.evidence.limitations.map((limit, index) => <li key={index}>{t(limit)}</li>)}</ul>}
         {!isQuestion && <p className="mt-3 font-medium">{t("Publication is blocked until the required checks are complete. You can still review the draft and download the artifacts.")}</p>}

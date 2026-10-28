@@ -91,7 +91,7 @@ for (const language of ["en", "fr"] as const) {
     });
     await page.route(`**/api/${base}/${id}/analyze`, route => route.fulfill({ json: { status: "QUEUED" } }));
     await page.route(`**/api/${base}/${id}`, route => route.fulfill({ json: { ...detail(), workflow, status: "QUEUED", latest_version: null, ticket: null } }));
-    await page.goto(workflow === "request" ? "/" : "/questions");
+    await page.goto(workflow === "request" ? "/analyses?new=1" : "/questions");
     await expect(page.getByRole("group", { name: t(workflow === "question" ? "Question type" : "Request type"), exact: true })).toHaveCount(0);
     await page.getByLabel(t("Environment"), { exact: true }).selectOption("1");
     await page.getByLabel(t(workflow === "question" ? "Your question" : "Your question or change"), { exact: true }).fill("How does mobile validation work?");
@@ -149,6 +149,8 @@ for (const language of ["en", "fr"] as const) {
     await expect(dialog.getByLabel(t("Ticket description"), { exact: true })).not.toHaveValue(/## Detailed/);
     await expect(dialog.locator(".markdown-preview")).toContainText("spechelper:draft-1");
     await expect(dialog.getByRole("button", { name: t("Create ticket"), exact: true })).toBeDisabled();
+    await expect(dialog.getByText(t("Complete the required field: {field}.").replace("{field}", "Owning team"), { exact: true })).toBeVisible();
+    await expect(dialog.getByText(t("Complete the required field: {field}.").replace("{field}", "Delivery date"), { exact: true })).toBeVisible();
     await dialog.getByLabel("Owning team", { exact: false }).selectOption("billing");
     await dialog.getByLabel("Delivery date", { exact: false }).fill("2026-11-01");
     await expect(dialog.getByRole("button", { name: t("Create ticket"), exact: true })).toBeEnabled();
@@ -262,9 +264,13 @@ for (const language of ["en", "fr"] as const) {
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
     await expect(dialog.getByText(t("Publication is blocked"), { exact: true })).toBeVisible();
     await expect(dialog.getByRole("button", { name: t("Create ticket"), exact: true })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: t("Create ticket"), exact: true })).toHaveAccessibleDescription(/Verifier quota unavailable/);
     await dialog.getByLabel(t("Ticket title"), { exact: true }).fill("Consultable partial draft");
-    await dialog.getByRole("button", { name: t("Save publication draft"), exact: true }).click();
+    await dialog.getByRole("button", { name: t("Cancel"), exact: true }).click();
+    await expect(dialog).not.toBeVisible();
     await expect.poll(() => fixture.saves.length).toBe(1);
+    await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
+    await expect(dialog.getByLabel(t("Ticket title"), { exact: true })).toHaveValue("Consultable partial draft");
     expect(posts).toBe(0); expect(fixture.value.latest_version.status).toBe("PARTIAL");
   });
 }

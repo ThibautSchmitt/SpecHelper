@@ -47,7 +47,10 @@ class BoundaryResponseMiddleware:
                 response = replacement
             text = response.content.decode("utf-8")
             value = json.loads(text) if content_type == "application/json" else text
-            value = redact(value, secrets)
+            # Connector usernames are deliberately public/editable metadata. A short
+            # password equal to the username must not corrupt subsequent form saves.
+            identifiers = ("username",) if request.path.startswith("/api/ticket-connectors") else ()
+            value = redact(value, secrets, public_identifiers=identifiers)
             response.content = json.dumps(value, ensure_ascii=False).encode() if content_type == "application/json" else value.encode()
             response["Content-Length"] = str(len(response.content))
         except (ValueError, UnicodeError):

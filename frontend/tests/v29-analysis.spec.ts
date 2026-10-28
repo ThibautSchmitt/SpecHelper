@@ -96,7 +96,7 @@ for (const language of ["en", "fr"] as const) {
     expect(wrongWorkflow).toEqual([]);
   });
 
-  test(`home starts one untyped analysis with attachments in ${language}`, async ({ page }) => {
+  test(`home links to creation of one untyped analysis with attachments in ${language}`, async ({ page }) => {
     await setup(page, language);
     await page.route("**/api/environments", route => route.fulfill({ json: [{ id: 1, name: "Staging", status: "READY", repositories: [] }] }));
     await page.route("**/api/analyses/overview", route => route.fulfill({ json: { sections: {
@@ -111,6 +111,9 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/analyses/${id}/analyze`, route => { analyses++; saved = { ...saved, status: "QUEUED" }; return route.fulfill({ json: saved }); });
     await page.goto("/");
     await expect(page.getByRole("heading", { name: t("Home"), exact: true })).toBeVisible();
+    await expect(page.getByLabel(t("Your question or change"), { exact: true })).toHaveCount(0);
+    await page.getByRole("link", { name: t("New analysis"), exact: true }).click();
+    await expect(page).toHaveURL(/\/analyses\?new=1$/);
     await page.getByLabel(t("Environment"), { exact: true }).selectOption("1");
     await page.getByLabel(t("Your question or change"), { exact: true }).fill("Explain the export and how to improve it.");
     await page.locator('input[type="file"]').setInputFiles({ name: "context.md", mimeType: "text/markdown", buffer: Buffer.from("Export context") });

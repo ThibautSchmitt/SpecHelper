@@ -105,7 +105,6 @@ services:
       CONTROL_TOKEN_FILE: /control/runtime.token
       SPECHELPER_DATA_DIR: /data
       SESSION_DIR: /sessions
-      CODEX_MODEL: ${CODEX_MODEL:-gpt-6-luna}
     # Bubblewrap creates a mount/PID namespace and drops all caps for the agent.
     # The runtime has no Docker socket, application DB or GitHub credentials.
     cap_add: [SYS_ADMIN, NET_ADMIN]

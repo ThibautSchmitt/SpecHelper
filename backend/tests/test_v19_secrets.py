@@ -23,6 +23,96 @@ def test_exact_encoded_and_url_credentials_are_redacted():
     assert "password" not in redact("postgresql://reader:password@host/db", [])
 
 
+@pytest.mark.parametrize("secret,text", [
+    ("ee", "Keep weekly quota observations."),
+    ("test", "Test connection and retry the latest analysis."),
+    ("admin", "Open the administration panel."),
+])
+def test_short_credentials_do_not_replace_word_fragments(secret, text):
+    from core.sensitive_data import contains_credentials
+
+    assert redact(text, [secret]) == text
+    assert not contains_credentials(text, [secret])
+
+
+@pytest.mark.parametrize("secret", ["ee", "test", "admin", "fixture-long-private-token"])
+def test_actual_short_and_long_credentials_and_encodings_remain_hidden(secret):
+    from core.sensitive_data import contains_credentials
+
+    for value in (secret, quote(secret, safe=""), base64.b64encode(secret.encode()).decode()):
+        assert redact({"nested": [value, f"password={value};"]}, [secret]) == {
+            "nested": ["[REDACTED]", "password=[REDACTED];"]
+        }
+        assert contains_credentials(f"password={value};", [secret])
+    assert "reader" not in redact(f"postgresql://reader:{secret}@host/db", [secret])
+    assert redact("prefix" + secret + "suffix", [secret]) == (
+        "prefix" + secret + "suffix" if len(secret) < 8 else "prefix[REDACTED]suffix"
+    )
+
+
+def test_redaction_markers_are_stable_across_nested_and_repeated_redaction():
+    values = {"body": ["[REDACTED]", "RE", "fixture-long-private-token"]}
+    expected = {"body": ["[REDACTED]", "[REDACTED]", "[REDACTED]"]}
+    assert redact(values, ["fixture-long-private-token", "RE"]) == expected
+    assert redact(expected, ["RE"]) == expected
+    assert redact("pass-long-private", ["pass", "pass-long-private"]) == "[REDACTED]"
+
+
+def test_short_secret_does_not_corrupt_request_metadata_or_stored_text(client, environment):
+    GitConnection.objects.create(name="Source", provider="gitlab", base_url="https://git.invalid", secret=encrypt("ee"))
+    request = Request.objects.create(environment=environment, need="Keep weekly observations.")
+    response = client.get(f"/api/requests/{request.pk}")
+    assert response.status_code == 200
+    assert response.json()["need"] == "Keep weekly observations."
+    request.refresh_from_db()
+    assert request.need == "Keep weekly observations."
+
+
+def test_instruction_validation_ignores_word_fragments_but_rejects_real_credentials():
+    from unittest.mock import patch
+
+    from ninja.errors import HttpError
+
+    from core.environment_context import reject_credentials
+
+    with patch("core.sensitive_data.configured_secrets", return_value=["ee"]):
+        reject_credentials("Keep weekly observations.")
+        with pytest.raises(HttpError, match="credentials"):
+            reject_credentials("password=ee")
+
+
+def test_instruction_word_fragments_do_not_block_settings_or_execution(client, monkeypatch):
+    from core.models import InstanceSettings
+    from core.orchestration_settings import get_config
+
+    stored = "Keep weekly observations."
+    row, _ = InstanceSettings.objects.update_or_create(pk=1, defaults={"orchestration": {"global_instructions": stored}})
+    monkeypatch.setattr("core.sensitive_data.configured_secrets", lambda: ["ee"])
+    assert get_config("2.4")["global_instructions"] == stored
+    response = client.get("/api/orchestration-settings")
+    assert response.status_code == 200
+    assert response.json()["global_instructions"] == stored
+    assert not response.json().get("global_instructions_requires_review", False)
+    row.refresh_from_db()
+    assert row.orchestration["global_instructions"] == stored
+
+
+def test_public_connector_username_is_not_confused_with_its_short_password(client, environment):
+    connector = TicketConnector.objects.create(
+        name="Local GLPI", platform="glpi", environment=environment,
+        base_url="http://glpi.invalid/apirest.php", username="admin", secret=encrypt("admin"),
+    )
+    response = client.get("/api/ticket-connectors")
+    assert response.status_code == 200
+    row = next(item for item in response.json() if item["id"] == connector.pk)
+    assert row["username"] == "admin"
+    assert "secret" not in row
+    assert redact({"username": "admin", "body": "password=admin"}, ["admin"], public_identifiers=("username",)) == {
+        "username": "admin", "body": "password=[REDACTED]"
+    }
+    assert redact({"username": "fixture-long-private-token"}, ["fixture-long-private-token"], public_identifiers=("username",)) == {"username": "[REDACTED]"}
+
+
 def test_known_secret_cannot_escape_in_stored_request_api_or_export(client, environment, storage):
     token = "fixture-business-api-private-token"
     GitConnection.objects.create(name="Sources", provider="github", base_url="https://github.com", secret=encrypt(token))

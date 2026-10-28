@@ -31,11 +31,23 @@ from .providers import (
 router = Router(tags=["AI connections"])
 
 
+def apply_legacy_default(connection):
+    """Translate the deprecated default flag into the canonical numeric priority."""
+    rows = list(AIConnection.objects.select_for_update().order_by("id"))
+    rows.sort(key=lambda row: (row.pk != connection.pk, row.preference, row.pk))
+    for rank, row in enumerate(rows):
+        AIConnection.objects.filter(pk=row.pk).update(
+            preference=rank * 10, is_default=row.pk == connection.pk
+        )
+    connection.refresh_from_db()
+
+
 class ConfigurationIn(Schema):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=100)
     agent: Literal["codex", "claude", "antigravity"]
     model: str = Field(default="", max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$|^$")
+    reasoning_effort: str = Field(default="", max_length=20)
     enabled: bool = True
     is_default: bool = False
     preference: int = Field(default=100, ge=0, le=2147483647)
@@ -48,6 +60,7 @@ class ConfigurationIn(Schema):
 class ConfigurationPatch(Schema):
     model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=100)
+    reasoning_effort: str | None = Field(default=None, max_length=20)
     agent: Literal["codex", "claude", "antigravity"] | None = None
     model: str | None = Field(
         default=None, max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$|^$"
@@ -100,7 +113,10 @@ def list_connections(request):
 def create_connection(request, payload: ConfigurationIn):
     from .model_catalog import validate_model
 
-    validate_model(payload.agent, payload.model)
+    if payload.model and payload.share_identity_from is None:
+        raise HttpError(422, "Connect the identity before selecting a model.")
+    source = get_object_or_404(AIConnection, pk=payload.share_identity_from) if payload.share_identity_from else None
+    validate_model(payload.agent, payload.model, source)
     validate_connection_overrides(payload.roles, payload.skill_overrides)
     values = payload.model_dump(exclude={"share_identity_from"})
     values["name"] = values["name"].strip()
@@ -124,6 +140,11 @@ def create_connection(request, payload: ConfigurationIn):
         availability=identity.availability,
         checked_at=identity.checked_at,
     )
+    from .model_catalog import validate_effort
+
+    validate_effort(value, value.model, value.reasoning_effort)
+    if payload.is_default:
+        apply_legacy_default(value)
     return public(value)
 
 
@@ -139,7 +160,13 @@ def edit_connection(request, connection_id: int, payload: ConfigurationPatch):
     if "model" in values and values["model"] != value.model:
         from .model_catalog import validate_model
 
-        validate_model(value.agent, values["model"])
+        validate_model(value.agent, values["model"], value)
+    from .model_catalog import validate_effort
+
+    if "model" in values or "reasoning_effort" in values:
+        validate_effort(value, values.get("model", value.model), values.get("reasoning_effort", "" if values.get("model", value.model) != value.model else value.reasoning_effort))
+        if "model" in values and values["model"] != value.model and "reasoning_effort" not in values:
+            values["reasoning_effort"] = ""
     validate_connection_overrides(values.get("roles"), values.get("skill_overrides"))
     if any(item is None for item in values.values()):
         raise HttpError(422, "Configuration fields cannot be null")
@@ -165,6 +192,8 @@ def edit_connection(request, connection_id: int, payload: ConfigurationPatch):
     ):
         value.availability = "UNKNOWN"
     value.save()
+    if values.get("is_default"):
+        apply_legacy_default(value)
     return public(value)
 
 
@@ -234,7 +263,14 @@ def refresh_quota(request, connection_id: int):
             checked = None
         if checked and timezone.is_aware(checked):
             observations.append(checked)
-    if observations and (timezone.now() - max(observations)).total_seconds() < 120:
+    reset_due = any(
+        window.get("resets_at") and (reset := parse_datetime(window["resets_at"]))
+        and timezone.is_aware(reset) and reset <= timezone.now()
+        and (not observations or reset > max(observations))
+        for window in public(value).get("quota_windows", {}).values()
+        if isinstance(window, dict)
+    )
+    if not reset_due and observations and (timezone.now() - max(observations)).total_seconds() < 120:
         return {**public(value), "quota_refresh_state": "cached"}
     try:
         return {**test_configuration(value), "quota_refresh_state": "refreshed"}

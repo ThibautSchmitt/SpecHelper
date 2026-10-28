@@ -3,6 +3,7 @@
 import contextlib
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -82,6 +83,7 @@ class RunIn(BaseModel):
     agent: Literal["codex", "claude", "antigravity"] = "codex"
     identity_id: uuid.UUID | None = None
     model: str = Field(default="", max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$|^$")
+    reasoning_effort: Literal["", "none", "minimal", "low", "medium", "high", "xhigh", "max"] = ""
     phase: Literal["understanding", "analysis"] = "analysis"
     profile: Literal[
         "requirement",
@@ -393,10 +395,12 @@ def health(
 
 
 @app.get("/models", dependencies=[Depends(authorize)])
-def models(agent: Literal["codex", "claude", "antigravity"], identity_id: uuid.UUID | None = None):
+def models(agent: Literal["codex", "claude", "antigravity"], identity_id: uuid.UUID | None = None, model: str = ""):
     from .model_discovery import discover
 
-    return discover(identity_root(CREDENTIALS, identity_id), agent)
+    if model and (len(model)>100 or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._:/-]*", model)):
+        raise HTTPException(422, "Invalid model identifier")
+    return discover(identity_root(CREDENTIALS, identity_id), agent, model)
 
 
 class LoginIn(BaseModel):
@@ -449,7 +453,7 @@ def configure_api_key(payload: APIKeyIn):
     directory = credential_directory(root, "antigravity")
     with credential_lock(root, "antigravity"):
         write(directory / "auth.json", json.dumps({"auth_mode": MODE, "api_key": secret}).encode())
-    return status(directory, include_quota=True)
+    return status(directory, include_quota=True, root=root)
 
 
 @app.post("/auth/start", dependencies=[Depends(authorize)])
@@ -507,6 +511,31 @@ def cancel_run(payload: CancelRunIn):
 
 @app.post("/run", dependencies=[Depends(authorize)])
 def run(payload: RunIn):
+    result = None
+    try:
+        try:
+            result = execute_run(payload)
+        except HTTPException as error:
+            if error.status_code < 500:
+                raise
+            result = {"failure": {"kind": "ERROR"}}
+        return result
+    finally:
+        # The execution has stopped and released its credential broker first.
+        # Metadata failures must never replace the original analysis outcome.
+        if isinstance(result, dict):
+            try:
+                observation = connection_status(identity_root(CREDENTIALS, payload.identity_id), payload.agent, include_quota=True)
+                result["quota_status"] = observation.get("quota_status", {"state": "unavailable"})
+                if observation.get("quota_windows"):
+                    result["quota_windows"] = observation["quota_windows"]
+                    if isinstance(result.get("failure"), dict):
+                        result["failure"]["quota_windows"] = observation["quota_windows"]
+            except Exception:
+                result["quota_status"] = {"state": "error", "reason": "refresh_failed"}
+
+
+def execute_run(payload: RunIn):
     request_id = str(payload.request_id)
     expected = DATA / "analysis-workspaces" / request_id
     if Path(payload.workspace) != expected or not expected.is_dir():
@@ -590,7 +619,7 @@ def run(payload: RunIn):
                     **({"timed_out": True} if failure == "TIMEOUT" else {}),
                     **context_observation,
                 }
-            if not payload.model or payload.model not in {
+            if payload.model and payload.model not in {
                 item["identifier"] for item in catalogue["items"]
             }:
                 return {"failure": {"kind": "MODEL_UNAVAILABLE"}, **context_observation}
@@ -677,8 +706,6 @@ def run(payload: RunIn):
             "--ignore-rules",
             "--json",
             "--skip-git-repo-check",
-            "--model",
-            payload.model or os.environ.get("CODEX_MODEL", "gpt-6-luna"),
             "--output-schema",
             "/session/schema.json",
             "--output-last-message",
@@ -706,11 +733,11 @@ def run(payload: RunIn):
             # sandbox cannot create another UID namespace after capabilities
             # have been dropped; run its tools inside our existing isolation.
             'sandbox_mode="danger-full-access"',
-            "-c",
-            'model_reasoning_effort="low"'
-            if payload.phase == "understanding"
-            else 'model_reasoning_effort="medium"',
         ]
+        if payload.model:
+            cli += ["--model", payload.model]
+        if payload.reasoning_effort:
+            cli += ["-c", f'model_reasoning_effort="{payload.reasoning_effort}"']
         if payload.agent == "claude":
             cli = [
                 "claude",
@@ -737,6 +764,8 @@ def run(payload: RunIn):
                 "--disable-slash-commands",
                 "--no-chrome",
             ]
+            if payload.reasoning_effort:
+                cli += ["--effort", payload.reasoning_effort]
             if payload.session_id:
                 cli += ["--resume", str(payload.session_id)]
             else:
@@ -746,7 +775,7 @@ def run(payload: RunIn):
         elif payload.agent == "antigravity":
             from .antigravity import headless_command
 
-            cli = headless_command(payload.model, timeout=payload.timeout)
+            cli = headless_command(payload.model, timeout=payload.timeout, effort=payload.reasoning_effort)
         elif payload.session_id:
             cli += ["resume", str(payload.session_id), "-"]
         else:
@@ -925,7 +954,7 @@ def run(payload: RunIn):
             "session_id": session_id,
             "usage": usage,
             "elapsed": round(time.monotonic() - started, 2),
-            "model": payload.model or os.environ.get("CODEX_MODEL", "gpt-6-luna"),
+            "model": payload.model or "runtime-default",
             "quota_windows": quota_windows,
         }
     finally:

@@ -13,6 +13,7 @@ from runtime import server
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
     monkeypatch.setenv("RUNTIME_TOKEN", "test-control-secret")
+    monkeypatch.setattr(server, "connection_status", lambda *a, **kw: {"quota_status": {"state": "unavailable"}})
     monkeypatch.setattr(server, "DATA", tmp_path / "data")
     monkeypatch.setattr(server, "SESSIONS", tmp_path / "sessions")
     monkeypatch.setattr(server, "CREDENTIALS", tmp_path / "credentials")
@@ -86,11 +87,14 @@ def test_runtime_creates_and_resumes_explicit_session(runtime):
             headers={"Authorization": "Bearer test-control-secret"},
         )
         assert response.status_code == 200
+        response = client.post("/run", json={**payload, "model": "native-model", "reasoning_effort": "high"}, headers={"Authorization": "Bearer test-control-secret"})
+        assert response.status_code == 200
+    assert commands[2][commands[2].index("--model")+1] == "native-model"
+    assert 'model_reasoning_effort="high"' in commands[2]
     assert "resume" not in commands[0]
     assert commands[1][-3:] == ["resume", session_id, "-"]
-    assert 'model_reasoning_effort="low"' in commands[0]
-    assert 'model_reasoning_effort="medium"' in commands[1]
-    assert commands[0][commands[0].index("--model") + 1] == "gpt-6-luna"
+    assert not any("model_reasoning_effort=" in part for command in commands[:2] for part in command)
+    assert "--model" not in commands[0]
     assert 'sandbox_mode="danger-full-access"' in commands[0]
     assert "--ro-bind" in commands[0]
     assert commands[0][0] == "bwrap"

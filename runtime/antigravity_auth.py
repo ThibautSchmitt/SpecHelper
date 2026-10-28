@@ -5,6 +5,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -144,7 +145,7 @@ def inspect_cli():
         return cli_status(metadata_environment(temporary), expected_version=PINNED_VERSION)
 
 
-def status(directory, include_quota=False):
+def status(directory, include_quota=False, *, root=None):
     """Configuration and CLI readiness are separate from successful provider access."""
     readiness = inspect_cli()
     value = {
@@ -163,15 +164,38 @@ def status(directory, include_quota=False):
         value.update(status="CONNECTED", account_key=account_key(directory),
                      authentication_mode="google_oauth" if credential["auth_mode"] == OAUTH_MODE else "api_key")
     if include_quota:
-        from datetime import UTC, datetime
-
-        value["quota_status"] = {
-            "state": "unavailable",
-            "source": "antigravity_cli",
-            "reason": "unsupported_cli" if value["status"] == "CONNECTED" else "not_connected",
-            "checked_at": datetime.now(UTC).isoformat(),
-        }
+        value.update(quota_metadata(root or directory.parent, directory, value["status"] == "CONNECTED"))
     return value
+
+
+def quota_metadata(root, directory, connected=True):
+    """Read account usage in an isolated home under the normal credential lock."""
+    from .antigravity import read_quota
+    from .auth import credential_lock
+    from .vault import write as write_credential
+
+    metadata = {"state": "unavailable", "source": "antigravity_cli", "reason": "not_connected",
+                "checked_at": datetime.now(UTC).isoformat()}
+    if not connected:
+        return {"quota_status": metadata}
+    try:
+        with credential_lock(root, PROVIDER):
+            original = read_credential(directory / "auth.json")
+            credential = credentials(directory)
+            oauth = credential.get("credential") if credential["auth_mode"] == OAUTH_MODE else None
+            with tempfile.TemporaryDirectory(prefix="antigravity-usage-") as temporary:
+                environment = metadata_environment(temporary, credential.get("api_key"), oauth)
+                try:
+                    windows = read_quota(environment)
+                finally:
+                    if oauth is not None:
+                        rotated = validate_oauth_profile(json.loads(oauth_profile_path(temporary).read_text()))
+                        if rotated != oauth and read_credential(directory / "auth.json") == original:
+                            write_credential(directory / "auth.json", json.dumps({"auth_mode": OAUTH_MODE, "credential": rotated}).encode())
+        metadata.update(state="available" if windows else "unavailable", reason="" if windows else "not_reported")
+        return {"quota_status": metadata, "quota_windows": windows}
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        return {"quota_status": {**metadata, "state": "error", "reason": "refresh_failed"}}
 
 
 def account_key(directory):

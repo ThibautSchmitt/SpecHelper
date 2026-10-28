@@ -5,7 +5,7 @@ An explicit **Create ticket** confirmation is required for every publication.
 
 ## Set up a connector
 
-In **Settings → Environments**, find the relevant environment, add a named ticket
+In **Settings → Connectors**, find the relevant environment, add a named ticket
 connector and test its connection. Each connector belongs to exactly one environment;
 publication selects only destinations configured for the request's environment.
 Select the accessible destinations allowed for publication and an optional default.
@@ -29,6 +29,11 @@ that the account can create tickets in every destination; write refusals remain 
 The legacy API was exercised against a disposable GLPI 11.0.7 instance, including
 template-driven creation and reconciliation. See the [v1.3 acceptance report](archive/reports/acceptance-v1.3.md)
 for verification boundaries and the other platforms' contract-test coverage.
+
+See [OAuth deployment options](provider-metadata.md#publication-oauth-options) for the
+reviewed native browser flows and the current implementation boundary. Publication
+OAuth is not configured or implemented by the current adapters; manual methods above
+remain functional. Git source browser authorization is a separate read-only integration.
 
 ## Review and create
 

@@ -93,6 +93,7 @@ class AIConnection(models.Model):
     agent = models.CharField(max_length=20, default="codex")
     name = models.CharField(max_length=100, blank=True)
     model = models.CharField(max_length=100, blank=True)
+    reasoning_effort = models.CharField(max_length=20, blank=True)
     preference = models.PositiveIntegerField(default=100)
     is_default = models.BooleanField(default=False)
     roles = models.JSONField(default=default_ai_roles)
@@ -289,6 +290,7 @@ class AISession(models.Model):
     connection = models.ForeignKey(AIConnection, null=True, on_delete=models.SET_NULL)
     context_id = models.UUIDField(default=uuid.uuid4, unique=True)
     model_snapshot = models.CharField(max_length=100, blank=True)
+    reasoning_effort_snapshot = models.CharField(max_length=20, blank=True)
     connection_name_snapshot = models.CharField(max_length=100, blank=True)
     identity_snapshot = models.UUIDField(null=True)
     public_role = models.CharField(max_length=30, blank=True)
@@ -677,6 +679,7 @@ class AIModelObservation(models.Model):
     status = models.CharField(max_length=20, default="UNKNOWN")
     reason = models.CharField(max_length=40, blank=True)
     checked_at = models.DateTimeField(auto_now=True)
+    capabilities = models.JSONField(default=dict)
 
     class Meta:
         constraints = [

@@ -66,7 +66,8 @@ def test_named_connections_migrate_credentials_and_sessions_without_rewriting_hi
         migrated = current.get_model("core", "AIConnection").objects.get(pk=1)
         assert migrated.identity.credential_id is None
         assert migrated.identity.availability == "QUOTA_EXHAUSTED"
-        assert migrated.is_default and migrated.name == "ChatGPT"
+        assert not migrated.is_default and migrated.preference == 0
+        assert migrated.name == "ChatGPT"
         historical = current.get_model("core", "AISession").objects.get(pk=session.pk)
         assert historical.runtime_id == "fixture-session"
         assert historical.identity_snapshot == migrated.identity_id

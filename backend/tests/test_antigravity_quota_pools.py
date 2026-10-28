@@ -97,7 +97,9 @@ def test_editing_the_model_respects_the_target_pool_and_any_global_failure(clien
 
     rows = connections()
     for model in (rows[0].model, rows[2].model):
-        AIModel.objects.create(agent='antigravity', identifier=model, source='adapter')
+        item = AIModel.objects.create(agent='antigravity', identifier=model, source='adapter')
+        from core.models import AIModelObservation
+        AIModelObservation.objects.create(model=item, identity=rows[0].identity, status='SUPPORTED')
     mark_failure(rows[0].pk, 'QUOTA_EXHAUSTED')
     if exhaustion == 'both':
         mark_failure(rows[2].pk, 'QUOTA_EXHAUSTED')

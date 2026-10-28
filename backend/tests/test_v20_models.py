@@ -220,7 +220,7 @@ def test_codex_discovery_paginates_only_metadata_and_does_not_create_threads(mon
     )
     monkeypatch.setattr(model_discovery.subprocess, "Popen", lambda *args, **kwargs: process)
     result = model_discovery.read_codex_models(tmp_path, {"HOME": str(tmp_path)})
-    assert result == [
+    assert [{k: v for k, v in item.items() if k != "capabilities"} for item in result] == [
         {"identifier": "model-one", "name": "Model one"},
         {"identifier": "model-two", "name": "model-two"},
     ]
@@ -280,17 +280,13 @@ def test_discovery_materializes_private_credentials_without_billed_key_inheritan
     assert not materialized[0].exists()
 
 
-def test_claude_unsupported_discovery_is_explicit_and_never_invokes_an_inference(
-    monkeypatch, tmp_path
-):
-    monkeypatch.setattr(model_discovery, "subscription_credentials", lambda *args: True)
-
+def test_claude_without_credentials_never_invokes_a_metadata_or_inference_process(monkeypatch, tmp_path):
+    monkeypatch.setattr(model_discovery, "subscription_credentials", lambda *args: False)
     def forbidden(*args, **kwargs):
-        pytest.fail("No CLI inference or model guess is permitted")
-
-    monkeypatch.setattr(model_discovery.subprocess, "Popen", forbidden)
+        pytest.fail("No CLI call is permitted without credentials")
+    monkeypatch.setattr(model_discovery.subprocess, "run", forbidden)
     result = model_discovery.discover(tmp_path, "claude")
-    assert result["state"] == "unavailable" and result["reason"] == "unsupported_cli"
+    assert result["state"] == "unavailable" and result["reason"] == "not_connected"
     assert result["items"] == []
 
 

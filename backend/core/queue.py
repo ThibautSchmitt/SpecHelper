@@ -4,10 +4,48 @@ from uuid import UUID
 
 from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
-from .models import AIConnection, AnalysisRun, Environment, Job, PublishedTicket, Request
+from .models import (
+    AIConnection,
+    AnalysisRun,
+    Environment,
+    Job,
+    PublishedTicket,
+    Request,
+    RequestMessage,
+    ResultVersion,
+)
 
 RECENT_LIMIT = 15
+
+
+def analysis_timing(job, run, paused, now):
+    """Report recorded AI intervals; wall time includes user/resource waits."""
+    intervals = []
+    for step in (run.steps if run else []):
+        try:
+            start = parse_datetime(step.get("started_at") or "")
+            end = parse_datetime(step.get("finished_at") or "")
+        except (TypeError, ValueError):
+            continue
+        if not end and job.status == "RUNNING" and step.get("status") == "RUNNING":
+            end = now
+        if start and end and timezone.is_aware(start) and timezone.is_aware(end) and end >= start:
+            intervals.append((start, end))
+    # Merge overlaps so one recorded interval cannot be counted twice.
+    merged = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    return {
+        "active_analysis_seconds": int(sum((end-start).total_seconds() for start, end in merged)) if merged else None,
+        "clarification_since": ((run.finished_at if run else None) or job.finished_at) if paused else None,
+        # A resumed job has no reliable timestamp for its latest queue admission.
+        "queued_since": job.created_at if job.status == "QUEUED" and not job.started_at else None,
+    }
 
 
 def assignments_for(job, run):
@@ -175,13 +213,24 @@ def snapshot():
                 request_ids.append(UUID(job.target))
             except (ValueError, TypeError, AttributeError):
                 pass
+    revisions = RequestMessage.objects.filter(request_id=OuterRef("pk"), kind="need_revision").order_by("-created_at")
     requests = {
         str(item.pk): item
-        for item in Request.objects.filter(pk__in=request_ids).select_related("environment")
+        for item in Request.objects.filter(pk__in=request_ids).select_related("environment").annotate(
+            last_need_revision=Subquery(revisions.values("created_at")[:1]),
+        )
     }
     environment_ids = [int(j.target) for j in jobs if j.kind == "sync" and j.target.isdecimal()]
     environments = {str(e.pk): e for e in Environment.objects.filter(pk__in=environment_ids)}
-    runs = {r.job_id: r for r in AnalysisRun.objects.filter(job_id__in=[j.pk for j in jobs])}
+    runs = {r.job_id: r for r in AnalysisRun.objects.filter(job_id__in=[j.pk for j in jobs]).select_related("request")}
+    latest_versions = ResultVersion.objects.filter(request_id=OuterRef("request_id")).order_by("-number")
+    versions = {
+        str(version.request_id): version
+        for version in ResultVersion.objects.filter(
+            request_id__in=request_ids, pk=Subquery(latest_versions.values("pk")[:1]),
+        ).only("id", "request_id", "status", "evidence", "created_at")
+    }
+    published = set(PublishedTicket.objects.filter(status="PUBLISHED", version_id__in=[v.pk for v in versions.values()]).values_list("version_id", flat=True))
     agents = dict(AIConnection.objects.values_list("id", "agent"))
     values, position = [], 0
     for job in jobs:
@@ -242,6 +291,8 @@ def snapshot():
         values.append(
             {
                 **result_state(job, run),
+                **(analysis_timing(job, run, paused, timezone.now()) if job.kind == "analysis" else {}),
+                "analysis_state": None,
                 "id": job.pk,
                 "kind": job.kind,
                 "workflow": item.workflow if item else None,
@@ -331,6 +382,25 @@ def snapshot():
                 else "/admin",
             }
         )
+        if item:
+            from .analysis_states import result_state as business_state
+
+            version = versions.get(str(item.pk))
+            evidence = version.evidence if version else {}
+            values[-1]["analysis_state"] = business_state(
+                item.status, item.workflow, latest_status=version.status if version else None,
+                published=bool(version and version.pk in published),
+                incomplete=bool(evidence.get("blocking")),
+                stale=bool(version and item.last_need_revision and item.last_need_revision > version.created_at),
+                verification_unavailable=bool(evidence.get("blocking") and evidence.get("database", {}).get("status") == "unavailable"),
+                scope_clarification=item.scope_assessment.get("status") == "NEEDS_CLARIFICATION",
+            )
+            if values[-1]["result_status"] == "partial" and values[-1]["analysis_state"] in {"draft_ready", "completed", "saved"}:
+                values[-1]["analysis_state"] = "partial"
+            if values[-1]["analysis_state"] in {"partial", "verification_unavailable"}:
+                values[-1]["result_status"] = "partial"
+            if values[-1]["result_status"] == "partial" and not values[-1]["result_limits"]:
+                values[-1]["result_limits"] = evidence.get("limitations", [])[:30]
     publications = list(
         PublishedTicket.objects.filter(status="PUBLISHING").select_related(
             "version", "request", "connector"

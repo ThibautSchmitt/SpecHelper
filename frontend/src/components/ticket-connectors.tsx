@@ -108,6 +108,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
           {t(notice)}
         </p>
       )}
+      {showForm && <p className="mt-3 text-sm muted">{t("Browser sign-in for publication is not available yet. Use dedicated manual credentials.")}</p>}
       {showForm && (
         <form
           className="mt-4"

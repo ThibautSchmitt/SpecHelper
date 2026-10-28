@@ -174,7 +174,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
         <div>
           <h2 className="flex items-center gap-2">
             <Icon size={20} aria-hidden="true" />
-            {t(kind === "agent" ? "Agent library" : "Skill library")}
+            {t(kind === "agent" ? "Agent library" : "Skills")}
           </h2>
           <p className="mt-2 text-sm muted">
             {t(kind === "skill" ? "All active compatible skills are discoverable automatically. Each assistant loads only the skills useful for its current mission." : "One shared library, reusable across environments and supported assistants.")}
@@ -219,7 +219,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
             }}
           >
             <Upload size={16} aria-hidden="true" />
-            {t("Import definition")}
+            {t(kind === "skill" ? "Import skill" : "Import definition")}
           </Button>
         </div>
       </div>
@@ -256,9 +256,9 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
       {importText !== null && (
         <section
           className="rounded-lg border p-4 space-y-3"
-          aria-label={t("Import definition")}
+          aria-label={t(kind === "skill" ? "Import skill" : "Import definition")}
         >
-          <h3>{t("Import definition")}</h3>
+          <h3>{t(kind === "skill" ? "Import skill" : "Import definition")}</h3>
           <p className="text-sm muted">
             {t(
               "Paste a declarative JSON export. Imports are saved inactive and cannot install scripts or extensions.",
@@ -578,7 +578,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
           <h3>
             {t(
               editing
-                ? "Edit definition"
+                ? kind === "skill" ? "Edit skill" : "Edit definition"
                 : kind === "agent"
                   ? "New agent"
                   : "New skill",
@@ -780,7 +780,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
               </p>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button disabled={busy}>{t("Save definition")}</Button>
+              <Button disabled={busy}>{t(kind === "skill" ? "Save skill" : "Save definition")}</Button>
               <Button
                 type="button"
                 variant="outline"

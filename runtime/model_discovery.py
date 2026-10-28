@@ -17,6 +17,43 @@ from .vault import read as read_credential
 IDENTIFIER = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,99}")
 
 
+def read_claude_models(directory, env, timeout=12):
+    """SDK initialize control request only; no user message or inference turn."""
+    request = {"type": "control_request", "request_id": "spechelper-models",
+               "request": {"subtype": "initialize", "hooks": {}}}
+    response = subprocess.run(
+        ["claude", "--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+         "--setting-sources", "", "--settings", '{"disableAllHooks":true}', "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}'],
+        input=json.dumps(request)+"\n", cwd=directory, env=env, text=True, capture_output=True, timeout=timeout,
+    )
+    if len(response.stdout) > 1024*1024:
+        raise ValueError("Model metadata exceeds bounds")
+    for line in response.stdout.splitlines():
+        value = json.loads(line)
+        result = value.get("response", {}) if value.get("type") == "control_response" else {}
+        if result.get("request_id") != "spechelper-models" or result.get("subtype") != "success":
+            continue
+        items = result.get("response", {}).get("models", [])
+        if not isinstance(items, list) or len(items)>1000:
+            raise ValueError("Invalid model catalog")
+        models = []
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError("Invalid model entry")
+            identifier = item.get("value")
+            if not isinstance(identifier, str) or not IDENTIFIER.fullmatch(identifier):
+                continue
+            efforts = item.get("supportedEffortLevels", []) if item.get("supportsEffort") is not False else []
+            if not isinstance(efforts, list):
+                efforts = []
+            models.append({"identifier": identifier, "name": str(item.get("displayName") or identifier)[:100],
+                           "capabilities": {"reasoning_efforts": [e for e in efforts if isinstance(e, str) and e in {"low", "medium", "high", "xhigh", "max"}], "default_effort": "", "is_default": item.get("isDefault") is True}})
+        if not models:
+            raise ValueError("No models were returned")
+        return models
+    raise ValueError("The CLI did not expose structured model metadata")
+
+
 def read_codex_models(directory, env, timeout=10):
     """Only initialize/model-list RPCs are allowed; catalog presence is not entitlement."""
     process = subprocess.Popen(
@@ -105,7 +142,15 @@ def read_codex_models(directory, env, timeout=10):
                     continue
                 name = item.get("displayName")
                 name = name if isinstance(name, str) and 0 < len(name) <= 100 else model
-                models.append({"identifier": model, "name": name})
+                efforts = item.get("supportedReasoningEfforts", [])
+                if not isinstance(efforts, list):
+                    efforts = []
+                supported = [option.get("reasoningEffort") for option in efforts if isinstance(option, dict) and isinstance(option.get("reasoningEffort"), str) and option.get("reasoningEffort") in {"none", "minimal", "low", "medium", "high", "xhigh", "max"}]
+                models.append({"identifier": model, "name": name, "capabilities": {
+                    "reasoning_efforts": list(dict.fromkeys(supported)),
+                    "default_effort": item.get("defaultReasoningEffort") if item.get("defaultReasoningEffort") in supported else "",
+                    "is_default": item.get("isDefault") is True,
+                }})
             cursor = page.get("nextCursor")
             if cursor is None:
                 return list({item["identifier"]: item for item in models}.values())
@@ -126,7 +171,7 @@ def read_codex_models(directory, env, timeout=10):
         process.stdout.close()
 
 
-def discover(root, provider):
+def discover(root, provider, model=""):
     result = {
         "items": [],
         "state": "unavailable",
@@ -161,6 +206,13 @@ def discover(root, provider):
                     oauth = credential.get("credential") if credential["auth_mode"] == OAUTH_MODE else None
                     environment = metadata_environment(temporary, credential.get("api_key"), oauth)
                     value = discover_models(environment)
+                    if model and any(entry["identifier"] == model for entry in value.get("items", [])):
+                        from .antigravity import discover_effort
+
+                        caps = discover_effort(environment, model)
+                        for entry in value.get("items", []):
+                            if entry["identifier"] == model:
+                                entry["capabilities"] = caps
                     if oauth is not None:
                         rotated = validate_oauth_profile(json.loads(oauth_profile_path(temporary).read_text()))
                         if rotated != oauth and read_credential(directory / "auth.json") == original:
@@ -170,11 +222,22 @@ def discover(root, provider):
             return {**result, **value}
         except (OSError, ValueError, subprocess.SubprocessError):
             return {**result, "state": "error", "reason": "refresh_failed"}
-    if provider != "codex":
+    if provider not in {"codex", "claude"}:
         return result
     try:
         with tempfile.TemporaryDirectory(prefix="spechelper-models-") as temporary:
             home = Path(temporary)
+            if provider == "claude":
+                target = home/".claude"
+                target.mkdir(mode=0o700)
+                with credential_lock(root, provider):
+                    original = read_credential(directory/".credentials.json")
+                (target/".credentials.json").write_bytes(original)
+                (target/".credentials.json").chmod(0o600)
+                env = {"PATH":os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), "HOME":temporary, "CLAUDE_CONFIG_DIR":str(target), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1"}
+                items = read_claude_models(home, env)
+                publish_refresh(root, provider, original, (target/".credentials.json").read_bytes())
+                return {**result, "items": items, "state":"supported", "reason":"catalog_not_entitlement"}
             with credential_lock(root, provider):
                 original = read_credential(directory / "auth.json")
             (home / "auth.json").write_bytes(original)

@@ -12,6 +12,43 @@ from .providers import candidates, identity_for, quota_group, release_connection
 PUBLIC_ROLES = ("analyst", "counter_analyst", "verifier")
 
 
+def role_coverage():
+    """Separate configured role coverage from transient capacity and quota limits."""
+    from .models import AIModel
+    from .providers import ensure_connections
+
+    configured = {role: [] for role in PUBLIC_ROLES}
+    available = {role: [] for role in PUBLIC_ROLES}
+    ready_ids = {item.pk for item in candidates()}
+    disabled_models = set(AIModel.objects.filter(enabled=False).values_list("agent", "identifier"))
+    for item in ensure_connections():
+        identity = identity_for(item)
+        if not item.enabled or item.status != "CONNECTED" or identity.status != "CONNECTED":
+            continue
+        if (item.agent, item.model) in disabled_models:
+            continue
+        for role in PUBLIC_ROLES:
+            if role in item.roles:
+                configured[role].append(item.pk)
+                if item.pk in ready_ids:
+                    available[role].append(item.pk)
+    return {
+        "complete": all(configured.values()),
+        "roles": {role: {"configured": configured[role], "available": available[role]} for role in PUBLIC_ROLES},
+    }
+
+
+def require_role_coverage(protocol):
+    if protocol not in {"2.3", "2.4"}:
+        return
+    from ninja.errors import HttpError
+
+    coverage = role_coverage()
+    missing = [role for role, status in coverage["roles"].items() if not status["configured"]]
+    if missing:
+        raise HttpError(409, "AI role configuration is incomplete. Configure enabled, connected assistants for all three roles in Settings → AI & Agents.")
+
+
 class RoleUnavailable(Exception):
     """A configured role must wait without discarding validated checkpoints."""
 

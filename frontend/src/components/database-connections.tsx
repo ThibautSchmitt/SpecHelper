@@ -35,7 +35,7 @@ export function DatabaseConnections({
   values: DatabaseConnection[];
   onChanged: () => Promise<void>;
 }) {
-  const { t, dateLocale } = useI18n();
+  const { t } = useI18n();
   const [show, setShow] = useState(false);
   const [useURL, setUseURL] = useState(false);
   const [value, setValue] = useState(empty);

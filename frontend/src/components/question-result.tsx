@@ -253,7 +253,7 @@ export function QuestionResult({
           </Button>
           <Button asChild>
             <Link
-              href={`/?from_question=${questionId}&version=${result.number}`}
+              href={`/analyses?new=1&from_question=${questionId}&version=${result.number}`}
             >
               <Plus size={16} />
               {t("Evolve this behavior")}

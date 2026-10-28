@@ -31,8 +31,9 @@ Their licenses and the providers' account/service terms apply independently.
 SpecHelper does not grant rights to their brands, credentials, or services.
 Antigravity uses exact official Linux archives and SHA-512 values recorded in
 `runtime/antigravity-release.json`; no native binary is vendored in this repository.
-Its binary/service is not relicensed under MIT. Antigravity identification uses a
-neutral bundled Lucide icon alongside the provider name, without a vendor logo claim.
+Its binary/service is not relicensed under MIT. Antigravity identification uses the official full-color icon, bundled from its
+[press assets](https://www.antigravity.google/press). The mark belongs to Google,
+retains its brand terms, is not relicensed under MIT and does not imply endorsement.
 
 ## Adapted shadcn/ui components
 

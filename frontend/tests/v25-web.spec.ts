@@ -26,6 +26,7 @@ function configuration(revision = 1, references: { url: string; note: string }[]
 async function contextPanel(page: Page, language: "en" | "fr") {
   const t = (key: string) => dictionary(language, key);
   await page.goto("/admin");
+  await page.getByRole("button", { name: t("Sources & environments"), exact: true }).click();
   await page.getByRole("button", { name: t("Environments"), exact: true }).click();
   await page.getByText(t("Environment context"), { exact: true }).click();
   return page.locator("details").filter({ has: page.locator("summary").filter({ hasText: new RegExp(`^${t("Environment context")}$`) }) });

@@ -2,7 +2,7 @@
 import { useI18n } from "@/lib/i18n";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { GitBranch, Paintbrush, RefreshCw, Settings } from "lucide-react";
+import { GitBranch, Plug, Paintbrush, RefreshCw, Settings } from "lucide-react";
 import { ThemeControl } from "@/components/theme-control";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -50,6 +50,7 @@ function AdminPanel() {
   const libraryDraft = searchParams.get("library_draft");
   const libraryKind = searchParams.get("library_kind");
   const [tab, setTab] = useState("general");
+  const [sourceTab, setSourceTab] = useState("git");
   const [protocol, setProtocol] = useState("");
   const [connections, setConnections] = useState<Connections | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -126,7 +127,8 @@ function AdminPanel() {
   const tabs = [
     { id: "general", label: t("General"), icon: Paintbrush },
     { id: "ai-agents", label: t("AI & Agents"), icon: Settings },
-    { id: "environments", label: t("Environments"), icon: GitBranch },
+    { id: "environments", label: t("Sources & environments"), icon: GitBranch },
+    { id: "connectors", label: t("Connectors"), icon: Plug },
   ];
   return (
     <div className="space-y-6">
@@ -187,15 +189,13 @@ function AdminPanel() {
       )}
       {tab === "environments" && (
         <div className="space-y-6">
-          <GitSources />
-          <DatabaseConnections
-            values={connections?.databases || []}
-            onChanged={refresh}
-          />
-          <UnassignedTicketConnectors
-            environments={environments}
-            onAssigned={refresh}
-          />
+          <nav className="flex flex-wrap gap-2" aria-label={t("Sources & environments")}>
+            {[["git", "Git sources"], ["postgres", "PostgreSQL connections"], ["environments", "Environments"]].map(([id, label]) =>
+              <Button key={id} variant={sourceTab === id ? "default" : "outline"} aria-pressed={sourceTab === id} onClick={() => setSourceTab(id)}>{t(label)}</Button>)}
+          </nav>
+          {sourceTab === "git" && <GitSources />}
+          {sourceTab === "postgres" && <DatabaseConnections values={connections?.databases || []} onChanged={refresh} />}
+          {sourceTab === "environments" && <>
           {environments.map((e) => (
             <Card key={e.id}>
               <div className="flex flex-wrap justify-between gap-3">
@@ -275,7 +275,6 @@ function AdminPanel() {
               <EnvironmentContext environmentId={e.id} factualOnly={protocol === "2.4"} />
               <EnvironmentSyncHistory environmentId={e.id} />
               {protocol !== "2.4" && <EnvironmentLibrary environmentId={e.id} />}
-              <TicketConnectors environmentId={e.id} environmentName={e.name} />
             </Card>
           ))}
           <Card>
@@ -344,8 +343,17 @@ function AdminPanel() {
               </Button>
             </form>
           </Card>
+          </>}
         </div>
       )}
+      {tab === "connectors" && <div className="space-y-6">
+        <p className="text-sm muted">{t("Publication connectors remain assigned to their environment. Git source access is configured separately.")}</p>
+        <UnassignedTicketConnectors environments={environments} onAssigned={refresh} />
+        {environments.map(environment => <Card key={environment.id}>
+          <h2>{environment.name}</h2>
+          <TicketConnectors environmentId={environment.id} environmentName={environment.name} />
+        </Card>)}
+      </div>}
       {tab === "general" && (
         <div className="space-y-6">
         <Card className="max-w-2xl">

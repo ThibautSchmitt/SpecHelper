@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, Layers, Network, Plug } from "lucide-react";
+import { BookOpen, Bot, Network, Plug } from "lucide-react";
 import { AIConnections } from "@/components/ai-connections";
 import { AILibrary } from "@/components/ai-library";
-import { AIModels } from "@/components/ai-models";
 import { OrchestrationSettingsForm } from "@/components/orchestration-settings";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
@@ -19,7 +18,6 @@ export function AISettings({ onChanged, simplified = false }: { onChanged: () =>
   }, [simplified]);
   const tabs = [
     { id: "connections", label: "Connections", icon: Plug },
-    { id: "models", label: "Models", icon: Layers },
     { id: "roles", label: "Roles and orchestration", icon: Network },
     { id: "agents", label: "Agents", icon: Bot },
     { id: "skills", label: "Skills", icon: BookOpen },
@@ -40,7 +38,6 @@ export function AISettings({ onChanged, simplified = false }: { onChanged: () =>
         ))}
       </nav>
       {tab === "connections" && <AIConnections onChanged={onChanged} simplified={simplified} />}
-      {tab === "models" && <AIModels />}
       {tab === "roles" && <OrchestrationSettingsForm />}
       {!simplified && tab === "agents" && <AILibrary kind="agent" />}
       {tab === "skills" && <AILibrary kind="skill" />}

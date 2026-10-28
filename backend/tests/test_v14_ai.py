@@ -45,7 +45,7 @@ def test_n_configurations_share_identity_quota_and_default_order():
     second = configuration(
         "Same account, different model", model="other-model", identity=first.identity
     )
-    preferred = configuration("Preferred", agent="claude", is_default=True)
+    preferred = configuration("Preferred", agent="claude", preference=0)
     assert [item.pk for item in candidates()] == [preferred.pk, first.pk, second.pk]
     mark_failure(first.pk, "QUOTA_EXHAUSTED")
     assert [item.pk for item in candidates()] == [preferred.pk]
@@ -256,7 +256,7 @@ def test_config_crud_multiple_same_provider_and_shared_identity(client):
         response = client.post(
             "/api/ai-connections",
             data=json.dumps(
-                {"name": "My assistant", "agent": "codex", "model": "model-a", **values}
+                {"name": "My assistant", "agent": "codex", "model": "", **values}
             ),
             content_type="application/json",
         )
@@ -264,6 +264,8 @@ def test_config_crud_multiple_same_provider_and_shared_identity(client):
         return response.json()
 
     first = create(is_default=True)
+    from core.models import AIModelObservation
+    AIModelObservation.objects.create(model=AIModel.objects.get(agent="codex", identifier="model-b"), identity_id=first["identity_id"], status="SUPPORTED")
     second = create(share_identity_from=first["id"], model="model-b")
     third = create(agent="claude", is_default=True)
     assert first["identity_id"] == second["identity_id"] != third["identity_id"]
@@ -307,6 +309,8 @@ def test_history_protects_config_delete_and_preserves_model_snapshot(client, env
 
     AIModel.objects.create(agent="codex", identifier="new-model", name="New model")
     value = configuration("Audit")
+    from core.models import AIModelObservation
+    AIModelObservation.objects.create(model=AIModel.objects.get(agent="codex", identifier="new-model"), identity=value.identity, status="SUPPORTED")
     request = Request.objects.create(environment=environment, need="Analyze")
     session = bind_session(request, value)
     assert client.delete(f"/api/ai-connections/{value.pk}").status_code == 409
@@ -355,13 +359,12 @@ def test_observed_windows_are_normalized_and_shared_without_fabricated_values():
     )
     observed_windows = public(shared)["quota_windows"]
     assert all(window.get("observed_at") for window in observed_windows.values())
-    assert {
-        name: {key: value for key, value in window.items() if key != "observed_at"}
-        for name, window in observed_windows.items()
-    } == {
-        "session": {"used_percent": 25, "exhausted": False, "resets_at": reset},
-        "weekly": {"used_percent": 100, "exhausted": True},
-    }
+    assert set(observed_windows) == {"session", "weekly", "unknown_window"}
+    assert observed_windows["session"]["remaining_percent"] == 75
+    assert observed_windows["session"]["resets_at"] == reset
+    assert observed_windows["weekly"]["exhausted"] is True
+    assert observed_windows["unknown_window"]["remaining_percent"] == 50
+    assert "private_provider_field" not in observed_windows["session"]
     assert public(shared)["availability"] == "QUOTA_EXHAUSTED"
     assert not candidates()
     assert (

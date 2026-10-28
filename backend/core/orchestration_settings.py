@@ -104,12 +104,12 @@ def validate_lists(value):
         )
 
 
-def get_config(protocol="2.4"):
+def get_config(protocol="2.4", *, administration=False):
     base = defaults()
     settings, _ = InstanceSettings.objects.get_or_create(pk=1)
     saved = settings.orchestration or {}
     if protocol == "2.4":
-        current = GlobalOrchestrationIn.model_validate(
+        values = (
             {
                 key: value
                 for key, value in saved.items()
@@ -120,7 +120,16 @@ def get_config(protocol="2.4"):
                 "verifier_enabled": True,
                 "max_calls": max(6, saved.get("max_calls", 20)),
             }
-        ).model_dump()
+        )
+        try:
+            current = GlobalOrchestrationIn.model_validate(values).model_dump()
+        except HttpError as error:
+            if not administration or error.status_code != 422 or error.message != "Keep configured credentials in the secure connection settings.":
+                raise
+            # Administration remains usable, without exposing or rewriting rejected text.
+            # Analysis configuration still uses the strict validation path above.
+            current = GlobalOrchestrationIn.model_validate({**values, "global_instructions": ""}).model_dump()
+            current["global_instructions_requires_review"] = True
         current.update(
             reliability_protocol="2.4",
             global_instruction_version=saved.get("global_instruction_version", 1),
@@ -156,7 +165,10 @@ def get_config(protocol="2.4"):
 
 
 def public_config():
-    config = get_config()
+    config = get_config(administration=True)
+    from .orchestration import role_coverage
+
+    config["role_coverage"] = role_coverage()
     if config["reliability_protocol"] == "2.4":
         return {
             key: value

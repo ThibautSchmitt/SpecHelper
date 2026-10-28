@@ -53,13 +53,16 @@ def test_role_migration_keeps_existing_configuration_results_and_sessions():
             name: list(apps.get_model("core", name).objects.order_by("pk").values())
             for name in names
         }
+        priority_order = list(AI.objects.order_by("-is_default", "preference", "pk").values_list("pk", flat=True))
         executor = MigrationExecutor(connection)
         executor.migrate(latest)
         current = executor.loader.project_state(latest).apps
         for name, rows in snapshots.items():
+            expected = ([{**row, "preference": priority_order.index(row["id"]) * 10, "is_default": False} for row in rows]
+                        if name == "AIConnection" else rows)
             assert (
                 list(current.get_model("core", name).objects.order_by("pk").values(*rows[0]))
-                == rows
+                == expected
             )
         migrated = current.get_model("core", "AIConnection").objects.get(pk=ai.pk)
         assert migrated.roles == ["analyst", "counter_analyst", "verifier"]

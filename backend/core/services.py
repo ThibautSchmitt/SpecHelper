@@ -17,7 +17,10 @@ from .models import (
 
 
 def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_text=None, scope_operation="analyze"):
+    from .orchestration import require_role_coverage
     from .scope_service import assess
+
+    require_role_coverage(request.analysis_protocol)
 
     if not assess(request, text=scope_text, operation=scope_operation):
         return request
@@ -152,6 +155,9 @@ def enqueue_analysis(
         .get(pk=request_id)
     )
     changed_decision_keys = []
+    from .orchestration import require_role_coverage
+
+    require_role_coverage(analysis_protocol or request.analysis_protocol)
     if answers is None and choices is None:
         if request.status != Request.Status.DRAFT:
             raise HttpError(409, "This request has already been started")

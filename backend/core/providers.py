@@ -1,6 +1,7 @@
 """Identity-aware terminal configurations and shared capacity leases."""
 
 import math
+import re
 import uuid
 from datetime import datetime, timedelta
 
@@ -71,6 +72,8 @@ def ensure_connections():
 def quota_exhausted(identity):
     now = timezone.now()
     for window in normalize_quota_windows(identity.quota_windows).values():
+        if window.get("scope", "account") != "account":
+            continue
         if not isinstance(window, dict) or window.get("exhausted") is not True:
             continue
         reset = window.get("resets_at")
@@ -84,16 +87,20 @@ def quota_exhausted(identity):
 
 
 def normalize_quota_windows(value):
-    """Keep only observed, finite session/weekly fields with aware reset times."""
+    """Keep bounded observed windows with finite measurements and aware dates."""
     windows = {}
     if not isinstance(value, dict):
         return windows
-    for name in ("session", "weekly"):
-        item = value.get(name)
+    for name, item in list(value.items())[:128]:
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}", name):
+            continue
         if not isinstance(item, dict):
             continue
         window = {}
         used = item.get("used_percent")
+        remaining = item.get("remaining_percent")
+        if used is None and isinstance(remaining, (int, float)) and not isinstance(remaining, bool) and math.isfinite(remaining) and 0 <= remaining <= 100:
+            used = 100 - remaining
         if (
             isinstance(used, (int, float))
             and not isinstance(used, bool)
@@ -101,19 +108,36 @@ def normalize_quota_windows(value):
             and 0 <= used <= 100
         ):
             window["used_percent"] = used
+            window["remaining_percent"] = 100 - used
             window["exhausted"] = used >= 100
         if isinstance(item.get("exhausted"), bool):
             window["exhausted"] = item["exhausted"] or window.get("exhausted", False)
         for timestamp_name in ("resets_at", "observed_at"):
-            reset = item.get(timestamp_name)
+            reset = item.get(timestamp_name) or (item.get("reset_at") if timestamp_name == "resets_at" else None)
             if isinstance(reset, str):
                 try:
                     parsed = datetime.fromisoformat(reset.replace("Z", "+00:00"))
                     if not timezone.is_naive(parsed):
                         window[timestamp_name] = parsed.isoformat()
+                        if timestamp_name == "resets_at":
+                            window["reset_at"] = parsed.isoformat()
                 except ValueError:
                     pass
-        if "used_percent" in window or "exhausted" in window:
+        duration = item.get("window_minutes")
+        if isinstance(duration, int) and not isinstance(duration, bool) and duration > 0:
+            window["window_minutes"] = duration
+        for key in ("remaining_units", "total_units"):
+            amount = item.get(key)
+            if isinstance(amount, (int, float)) and not isinstance(amount, bool) and math.isfinite(amount) and amount >= 0:
+                window[key] = amount
+        for key in ("window_type", "source", "scope", "limit_id", "status", "unit", "model_pool", "group_name"):
+            text = item.get(key)
+            if isinstance(text, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.: /-]{0,95}", text):
+                window[key] = text
+        if "used_percent" in window or "exhausted" in window or "remaining_units" in window:
+            window.setdefault("window_type", name if name in {"session", "weekly", "daily", "credits"} else "other")
+            window.setdefault("scope", "account")
+            window.setdefault("status", "observed")
             windows[name] = window
     return windows
 
@@ -135,12 +159,25 @@ def record_quota(connection, windows):
         "quota_windows": {**merged, **({"_status": metadata} if metadata else {})},
         "checked_at": timezone.now(),
     }
-    if isinstance(model_pools, dict):
+    model_pools = dict(model_pools) if isinstance(model_pools, dict) else {}
+    refreshed_pools = set()
+    for window in observed.values():
+        pool = window.get("model_pool")
+        if connection.agent == "antigravity" and window.get("scope") == "model_pool" and pool in {"gemini", "claude_gpt"}:
+            model_pools[pool] = {"exhausted": window.get("exhausted", False), "observed_at": now,
+                                 **({"resets_at": window["resets_at"]} if window.get("resets_at") else {})}
+            refreshed_pools.add(pool)
+    if model_pools:
         changes["quota_windows"]["_model_pools"] = model_pools
     if quota_exhausted(identity):
         changes["availability"] = "QUOTA_EXHAUSTED"
     identities = list(quota_group(identity).values_list("pk", flat=True))
     AIIdentity.objects.filter(pk__in=identities).update(**changes)
+    if refreshed_pools and identity.availability != "QUOTA_EXHAUSTED":
+        for row in AIConnection.objects.filter(identity_id__in=identities, availability="QUOTA_EXHAUSTED"):
+            pool = model_quota_pool(row)
+            if pool in refreshed_pools and model_pools[pool]["exhausted"] is False:
+                AIConnection.objects.filter(pk=row.pk).update(availability="UNKNOWN")
     if "availability" in changes:
         AIConnection.objects.filter(identity_id__in=identities).exclude(
             availability="MODEL_UNAVAILABLE"
@@ -196,6 +233,9 @@ def model_pool_exhausted(connection, identity):
     if not pool:
         return False
     for member in quota_group(identity):
+        if any(window.get("scope") == "model_pool" and window.get("model_pool") == pool and window.get("exhausted") is True
+               for window in normalize_quota_windows(member.quota_windows).values()):
+            return True
         pools = member.quota_windows.get("_model_pools", {})
         if isinstance(pools, dict):
             observed = pools.get(pool, {})
@@ -228,7 +268,7 @@ def candidates(exclude=(), preferred=None):
             values.append(connection)
     return sorted(
         values,
-        key=lambda c: (c.pk != preferred if preferred else not c.is_default, c.preference, c.pk),
+        key=lambda c: (c.pk != preferred if preferred else False, c.preference, c.pk),
     )
 
 
@@ -263,6 +303,7 @@ def public(connection):
         "name": connection.name or connection.agent,
         "agent": connection.agent,
         "model": connection.model,
+        "reasoning_effort": connection.reasoning_effort,
         "preference": connection.preference,
         "is_default": connection.is_default,
         "identity_id": str(identity.pk),
@@ -381,7 +422,7 @@ def mark_failure(connection_id, kind, retry_seconds=None, quota_windows=None):
     pool = model_quota_pool(connection)
     if kind == "QUOTA_EXHAUSTED" and pool:
         # A model-pool failure cannot release an earlier unscoped account failure.
-        # Authentication and percentages do not clear these observations either.
+        # Authentication and unscoped percentages do not clear these observations.
         members = list(quota_group(identity))
         checked_at = timezone.now()
         for member in members:
@@ -480,7 +521,7 @@ def refresh_unknown_connections(caller):
             and not quota_exhausted(identity)
         ):
             AIIdentity.objects.filter(pk=identity.pk).update(
-                availability="UNKNOWN", quota_windows={}
+                availability="UNKNOWN"
             )
             AIConnection.objects.filter(identity=identity).exclude(
                 availability="MODEL_UNAVAILABLE"
@@ -495,7 +536,7 @@ def refresh_unknown_connections(caller):
             continue
         try:
             suffix = "&identity_id=" + str(identity.credential_id) if identity.credential_id else ""
-            observe(connection, caller("/health?agent=" + identity.agent + suffix))
+            observe(connection, caller("/health?agent=" + identity.agent + suffix + "&quota=true"))
         except ValueError:
             AIIdentity.objects.filter(pk=identity.pk).update(checked_at=now)
 
@@ -509,6 +550,7 @@ def bind_session(request, connection, role="primary"):
             connection=connection,
             agent=connection.agent,
             model_snapshot=connection.model,
+            reasoning_effort_snapshot=connection.reasoning_effort,
             identity_snapshot=identity.pk,
         )
         .order_by("-id")
@@ -521,6 +563,7 @@ def bind_session(request, connection, role="primary"):
             connection=connection,
             agent=connection.agent,
             model_snapshot=connection.model,
+            reasoning_effort_snapshot=connection.reasoning_effort,
             connection_name_snapshot=connection.name or connection.agent,
             identity_snapshot=identity.pk,
             context_id=request.pk

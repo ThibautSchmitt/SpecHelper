@@ -28,24 +28,24 @@ async function setup(page: Page) {
   await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, (route) => route.fulfill({ json: [] }));
 }
 
-test("settings have one bottom access point and exactly three nonduplicated sections", async ({ page }) => {
+test("settings have one bottom access point and exactly four nonduplicated sections", async ({ page }) => {
   await setup(page);
   await page.goto("/");
   const navigation = page.getByRole("navigation", { name: "Main navigation", exact: true });
-  await expect(navigation.getByRole("link")).toHaveText(["Requests", "Questions", "Tickets"]);
+  await expect(navigation.getByRole("link")).toHaveText(["Home", "Analyses", "Tickets"]);
   await expect(navigation.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
   const settings = page.locator(".sidebar-admin");
   await expect(settings).toHaveAccessibleName("Settings");
   await settings.focus();
   await settings.press("Enter");
   const tabs = page.getByRole("navigation", { name: "Administration", exact: true });
-  await expect(tabs.getByRole("button")).toHaveText(["General", "AI & Agents", "Environments"]);
+  await expect(tabs.getByRole("button")).toHaveText(["General", "AI & Agents", "Sources & environments", "Connectors"]);
   await expect(page.getByRole("group", { name: "Theme", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Instance name", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Request activity", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "AI connections", exact: true })).toHaveCount(0);
   await tabs.getByRole("button", { name: "AI & Agents", exact: true }).click();
-  await expect(page.getByRole("navigation", { name: "AI settings", exact: true }).getByRole("button")).toHaveText(["Connections", "Models", "Roles and orchestration", "Agents", "Skills"]);
+  await expect(page.getByRole("navigation", { name: "AI settings", exact: true }).getByRole("button")).toHaveText(["Connections", "Roles and orchestration", "Agents", "Skills"]);
   await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Roles and orchestration", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(1);
@@ -53,8 +53,8 @@ test("settings have one bottom access point and exactly three nonduplicated sect
   await expect(page.getByRole("button", { name: "Save analysis settings", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Instance name", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Theme", exact: true })).toHaveCount(0);
-  await tabs.getByRole("button", { name: "Environments", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Sources Git", exact: true })).toBeVisible();
+  await tabs.getByRole("button", { name: "Sources & environments", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Git sources", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Theme", exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -75,7 +75,7 @@ test("environment ticket editors fetch and save only their own connectors", asyn
     return route.fulfill({ json: environmentId === "1" ? [{ id: 11, name: "Production GitHub", platform: "github", status: "CONNECTED", environment_id: 1 }] : [] });
   });
   await page.goto("/admin");
-  await page.getByRole("button", { name: "Environments", exact: true }).click();
+  await page.getByRole("button", { name: "Connectors", exact: true }).click();
   const production = page.locator('.environment-connectors[aria-label="Ticket connectors for Production"]');
   const staging = page.locator('.environment-connectors[aria-label="Ticket connectors for Staging"]');
   await expect(production.getByRole("button", { name: /Production GitHub/ })).toBeVisible();
@@ -108,21 +108,21 @@ test("compact AI actions expose accessible names and preserve honest quota obser
   await page.goto("/admin");
   await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const primary = page.getByRole("region", { name: "Primary assistant", exact: true });
-  for (const name of ["Edit", "Delete", "Disable", "Refresh status and quotas"]) {
+  for (const name of ["Edit", "Delete", "Disable", "Check connection"]) {
     const button = primary.getByRole("button", { name, exact: true });
     await expect(button).toBeVisible();
     await expect(button).toHaveAttribute("title", name);
     await expect(button.locator("svg")).toHaveCount(1);
     await expect(button).toHaveText("");
   }
-  await expect(page.getByText("Session quota: 42% remaining", { exact: true })).toBeVisible();
-  await expect(page.getByText("Weekly quota: Unknown", { exact: true })).toHaveCount(2);
+  await expect(page.getByRole("region", { name: "AI connections", exact: true }).locator('[data-quota-window="session"]').getByText("42% remaining", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText("Not reported", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("This Claude Code version does not expose account quotas. Check your provider usage page.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Provider usage", exact: true })).toHaveAttribute("href", "https://claude.ai/settings/usage");
-  await primary.getByRole("button", { name: "Refresh status and quotas", exact: true }).click();
+  await primary.getByRole("button", { name: "Check connection", exact: true }).click();
   await expect.poll(() => checked).toBe(true);
   await expect(page.getByText("Quota refresh failed. Last known observations are preserved.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Session quota: 42% remaining", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "AI connections", exact: true }).locator('[data-quota-window="session"]').getByText("42% remaining", { exact: true })).toBeVisible();
   await expect(page.getByText("Last checked:", { exact: false })).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -137,7 +137,7 @@ test("legacy unassigned connectors require an environment without resubmitting c
     return route.fulfill({ json: { ...connector, ...payload } });
   });
   await page.goto("/admin");
-  await page.getByRole("button", { name: "Environments", exact: true }).click();
+  await page.getByRole("button", { name: "Connectors", exact: true }).click();
   const heading = page.getByRole("heading", { name: "Unassigned ticket connectors", exact: true });
   await expect(heading).toBeVisible();
   const section = heading.locator("..");

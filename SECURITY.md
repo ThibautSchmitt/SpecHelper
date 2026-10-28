@@ -76,5 +76,12 @@ controls as requests. Transferred context is an isolated, read-only attachment,
 not privileged agent instructions. It contains curated findings and provenance,
 not original documents or private agent reports. Review it before creating a
 request; exact configured-secret redaction cannot identify every sensitive fact.
+Configured credentials shorter than eight characters match complete tokens,
+avoiding replacements inside ordinary words. Exact credential values, encoded
+forms and URL user information remain masked; long credentials are also masked
+when embedded in other text. Response redaction does not rewrite stored history.
+Connector usernames remain intentionally public metadata when they coincide with
+a short password; secret fields are excluded from connector responses, and long
+credentials or credential-bearing URLs are still masked in identifier fields.
 Later source changes require verification against the new request's current
 baseline. Referenced question versions and generated documents are retained.

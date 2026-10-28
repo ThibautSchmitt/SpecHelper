@@ -698,7 +698,7 @@ for (const language of ["en", "fr"] as const) {
     ).toContainText("v3");
     expect(restores).toBe(1);
     await page
-      .getByRole("button", { name: t("Import definition"), exact: true })
+      .getByRole("button", { name: t("Import skill"), exact: true })
       .click();
     await page.getByLabel(t("Definition JSON"), { exact: true }).fill(
       JSON.stringify({
@@ -714,7 +714,7 @@ for (const language of ["en", "fr"] as const) {
       .getByRole("button", { name: t("Validate import"), exact: true })
       .click();
     const importer = page.getByRole("region", {
-      name: t("Import definition"),
+      name: t("Import skill"),
       exact: true,
     });
     await expect(importer.getByRole("status")).toContainText(

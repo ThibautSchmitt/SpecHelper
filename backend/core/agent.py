@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -163,6 +164,17 @@ class ProviderUnavailable(ValueError):
 def runtime_call(path, payload=None, timeout=15):
     if not settings.RUNTIME_TOKEN:
         raise ValueError("The runtime token must be configured")
+
+    def retain_metadata(result):
+        if path == "/run" and payload:
+            from .quota_refresh import record_invocation_metadata
+
+            try:
+                record_invocation_metadata(payload, result)
+            except Exception:
+                # A metadata persistence error cannot replace the analysis outcome.
+                logging.getLogger(__name__).warning("Post-invocation quota metadata could not be saved")
+
     try:
         with httpx.Client(timeout=timeout) as client:
             response = client.request(
@@ -172,8 +184,16 @@ def runtime_call(path, payload=None, timeout=15):
                 headers={"Authorization": "Bearer " + settings.RUNTIME_TOKEN},
             )
         if response.status_code != 200:
+            retain_metadata({"quota_status": {"state": "error"}})
             raise ValueError("The AI runtime is unavailable or rejected the request")
-        result = response.json()
+        try:
+            result = response.json()
+            if path == "/run" and not isinstance(result, dict):
+                raise ValueError("Invalid runtime response")
+        except ValueError as error:
+            retain_metadata({"quota_status": {"state": "error"}})
+            raise ValueError("The AI runtime returned an invalid response") from error
+        retain_metadata(result)
         if path == "/run" and result.get("failure") and not result.get("timed_out"):
             failure = result["failure"]
             kind = failure.get("kind")
@@ -206,4 +226,5 @@ def runtime_call(path, payload=None, timeout=15):
             )
         return result
     except httpx.HTTPError as exc:
+        retain_metadata({"quota_status": {"state": "error"}})
         raise ValueError("The AI runtime is not responding") from exc

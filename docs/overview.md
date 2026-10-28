@@ -4,19 +4,20 @@ SpecHelper prepares work for a trusted team using the sources of the application
 they operate. It combines business clarification with independent technical exploration
 and keeps the conditions and limits of the answer visible.
 
-## Start from Home
+## Start from Analyses
 
 | Need | Start with | Result |
 | --- | --- | --- |
-| Understand existing behavior, rules or dependencies | Home | Sourced explanation, answer.md and optional documentation |
-| Describe a change for implementation | Home | Concise ticket.md and detailed goal.md for a coding agent |
+| Understand existing behavior, rules or dependencies | Analyses → New analysis | Sourced explanation, answer.md and optional documentation |
+| Describe a change for implementation | Analyses → New analysis | Concise ticket.md and detailed goal.md for a coding agent |
 | Create an external issue from a reviewed result | Prepare ticket | Human-confirmed publication linked to the exact result version |
 
 Select an environment, write in free text and optionally attach documents or screenshots.
 There is no initial type or comparison selector. Clarification asks useful business
 questions when the outcome depends on a decision you must make.
 
-Home shows actual items to clarify, read or resume. **Analyses** brings questions
+Home shows **Needs attention**, **Results available** and **In progress** items.
+Partial results keep their explicit status and reported limits. **Analyses** brings questions
 and changes together with search, environment/status filters and pagination. The
 navigation also retains **Tickets** and the bottom-left **Settings** button.
 Historical Question and Request URLs continue to open their original records.

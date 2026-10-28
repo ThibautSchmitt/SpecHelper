@@ -6,13 +6,26 @@ clarification and evidence. [Configuration](configuration.md) owns setup and ski
 
 ## Start and read an analysis
 
+Home separates analyses needing an answer or recovery action, available results
+(including explicitly partial results), and active work. Analyses retains the
+shared search, type/status/environment filters and history.
+
+The activity panel can be collapsed manually and remembers the browser preference
+across pages and reloads. Its attention indicator remains visible; clarification
+waits never count as active AI work. Recorded step intervals provide active AI time;
+older runs without intervals retain an unknown measurement. Business-answer waits
+start at the saved clarification checkpoint. Queue waiting time is displayed only
+when the latest admission time is known, without estimating resumed-job waits.
+Only five recent completed cards are shown; full history remains in Analyses.
+These are read-only presentation fields and do not change execution or scheduling.
+
 Choose an environment, describe the need or question in free text, and optionally
 attach files. No initial type or comparison switch is required. Requests produce
 a concise `ticket.md` and detailed `goal.md`; Questions produce `answer.md`.
 Select a result version to copy or download immutable files. Continue the discussion
 for a new version; changing instance settings never rewrites old files.
 
-Start from **Home** without selecting a Question/Request type. The requirement
+Start from **Analyses → New analysis** without selecting a Question/Request type. The requirement
 stage infers whether to explain existing behavior, prepare a change or address
 both. Mixed intent keeps the existing behavior distinct from the desired change.
 **Analyses** provides one search/list with light type, status and environment
@@ -334,7 +347,7 @@ security enforcement belong to the backend/runtime.
 
 ### Environment hints
 
-Settings → Environments → Environment context accepts up to twelve public HTTPS URLs
+Settings → Sources & environments → Environments → Environment context accepts up to twelve public HTTPS URLs
 or domains, each with an optional applicability note. These are non-exclusive factual
 starting points, not role instructions or an allowlist. Saving a hint does not fetch
 it. Changes use the context revision and do not alter existing frozen analyses.
@@ -394,3 +407,7 @@ general live-model accuracy. File-read telemetry proves observed access, not
 understanding. The native exact-citation gate failed; optional production indexing
 remains disabled. See [known limitations](known-limitations.md) and the
 [evaluation method and observations](index-evaluation.md).
+
+The Home page is a compact resumption view. Create an analysis from **Analyses → New analysis**;
+Home offers only a link to this form. Previous `/?new=1` and question-to-change links
+redirect to the same analysis creation route while retaining their source version.

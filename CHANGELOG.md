@@ -5,6 +5,64 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 
 ## Unreleased
 
+### Clearer AI configuration and ticket actions (v2.9.1)
+
+- Stop short configured credentials from replacing fragments of ordinary interface
+  words or falsely rejecting instructions. Preserve exact-value, encoded-token and
+  URL credential redaction, and keep redaction markers stable across repeated passes.
+- Replace the default/preference combination with one numeric selection priority,
+  migrating existing ordering and retaining deprecated API compatibility.
+- Show global coverage of mandatory roles and reject new independent analyses
+  with missing configured roles before invoking an assistant. Keep quota and
+  capacity waits separate from configuration validity; incomplete settings remain savable.
+- Unify participation with connection activation, preserve disabled role choices,
+  and explain instruction precedence without changing security or role execution.
+- Add an explicit Cancel action to ticket preparation, preserving edited drafts.
+  Explain publication blockers and missing fields next to the disabled creation action.
+
+### Antigravity usage and settings recovery (v2.9.1)
+
+- Read native Antigravity `/usage` JSON without inference. Keep Gemini and Claude/GPT
+  quotas, reset timestamps and scheduler recovery separate by model pool.
+- Replace the neutral Antigravity icon with the official locally bundled color mark.
+- Keep administration readable when stored instructions trigger credential validation,
+  explain required roles and show a localized review warning. Preserve stored text
+  and strict execution validation; never silently clear rejected instructions.
+
+### Native provider metadata and focused settings (v2.9.1)
+
+- Keep arbitrary observed quota windows, credit units and provider/model limits
+  separate; refresh metadata after invocations, authentication and known resets
+  without inference probes or changes to active capacity leases.
+- Configure native identity-scoped model and reasoning choices on each AI
+  connection. Keep previous catalogues on failure and legacy configurations intact;
+  remove the global Models tab. Freeze explicit reasoning in session snapshots.
+- Move new analysis creation to Analyses, keep Home focused on resumption, and
+  preserve old creation/question-transfer links.
+- Separate General, AI & Agents, Sources & environments and Connectors; retain
+  per-environment publication permissions. Document native OAuth options without
+  claiming unimplemented browser publication flows.
+- Record native Codex and Antigravity metadata checks and Claude initialization
+  protocol evidence; account quotas for Claude remain Not reported. Native
+  Antigravity usage handling is described above.
+  See [provider metadata](docs/provider-metadata.md) for exact verification limits.
+
+### UX polish (v2.9.1)
+
+- Remember the collapsed activity panel across navigation and reloads; keep
+  clarification/action indicators visible and preserve live queue updates.
+- Keep one activity card per analysis and at most five recent completed cards,
+  with access to history. Separate recorded AI work from user and resource waits.
+- Clarify Home's attention, available-result and active sections, including partial
+  results and reported limits. Bound list titles and summaries to two lines while
+  retaining full keyboard link names, details, filters and historical URLs.
+- Retain quota thresholds and metadata-only refreshes; move secondary dates into
+  accessible disclosures and flag stale observations compactly.
+- Separate authentication, availability and quota. Move numeric preference and
+  the call-loop safeguard into collapsed advanced options; keep roles visible.
+- Harmonize French skill terminology and business-result labels. Provider
+  selection, independent roles and ticket publication behavior remain unchanged.
+
 ### Unified analysis experience and reviewed diagrams (v2.9)
 
 - Add Home and a searchable, filtered, paginated Analyses list while retaining

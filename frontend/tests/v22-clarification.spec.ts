@@ -213,7 +213,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByRole("region", { name: t("Business clarification") }).getByText(rule.question, { exact: true })).toHaveCount(0);
     await expect(page.getByRole("radio")).toHaveCount(0);
     await expect(page.getByRole("region", { name: t("Confirmed business decisions") })).toContainText(first.value);
-    await page.goto("/");
+    await page.goto("/analyses?new=1");
     if (info.project.name === "mobile") await page.getByRole("button", { name: t("Task queue"), exact: true }).click();
     const queue = page.getByRole(info.project.name === "mobile" ? "dialog" : "complementary", { name: t("Task queue"), exact: true });
     await queue.getByRole("link", { name: /Cancellation clarification/ }).click();

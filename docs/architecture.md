@@ -34,7 +34,7 @@ an inherited syscall filter. `init: true` reaps orphaned Bubblewrap children.
 Isolation or syscall-filter failure stops execution. See the
 [threat model](threat-model.md) for the supervisor's residual host privileges.
 
-Bubblewrap provides the effective sandbox. Codex's internal sandbox is disabled inside that isolation to avoid conflicting namespaces. Linux still mounts sources, cache and attachments read-only. The default Codex model is GPT-6-Luna, configurable through `CODEX_MODEL`. Understanding uses low reasoning effort and technical analysis medium effort. These settings remain internal; users simply connect their ChatGPT account.
+Bubblewrap provides the effective sandbox. Codex's internal sandbox is disabled inside that isolation to avoid conflicting namespaces. Linux still mounts sources, cache and attachments read-only. Model and reasoning choices are configured per connection from native metadata and frozen per session. Blank choices delegate to the provider CLI defaults; no reasoning effort is forced according to an internal analysis phase. The former `CODEX_MODEL` runtime environment override is obsolete; use an explicit connection model to retain a preferred model.
 
 Compose networks separate the runtime from the frontend, backend and application
 database. The worker reaches it through an internal control network; the backend

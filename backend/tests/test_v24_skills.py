@@ -366,6 +366,9 @@ def test_migration_preserves_business_context_connections_pending_jobs_and_legac
                 ("Job", job),
             )
         }
+        priority_order = list(apps.get_model("core", "AIConnection").objects.order_by(
+            "-is_default", "preference", "pk"
+        ).values_list("pk", flat=True))
         executor = MigrationExecutor(connection)
         executor.migrate(latest)
         apps = executor.loader.project_state(latest).apps
@@ -373,6 +376,9 @@ def test_migration_preserves_business_context_connections_pending_jobs_and_legac
             expected = copy.deepcopy(original)
             if name == "Job":
                 expected["payload"]["requires_step_upgrade"] = True
+            if name == "AIConnection":
+                expected["preference"] = priority_order.index(original["id"]) * 10
+                expected["is_default"] = False
             assert (
                 apps.get_model("core", name)
                 .objects.filter(pk=original[apps.get_model("core", name)._meta.pk.attname])

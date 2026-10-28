@@ -21,12 +21,18 @@ export function SidebarAssistants() {
   useEffect(() => {
     let alive = true;
     let reading = false;
+    let resetTimer: number | undefined;
     async function load() {
       if (reading) return;
       reading = true;
       try {
         const values = await api<AIConnection[]>("/ai-connections");
-        if (alive) { current.current = values; setConnections(values); setUnavailable(false); }
+        if (alive) {
+          current.current = values; setConnections(values); setUnavailable(false);
+          window.clearTimeout(resetTimer);
+          const resets = values.flatMap(connection => Object.values(connection.quota_windows || {}).map(window => Date.parse(window.reset_at || window.resets_at || ""))).filter(time => Number.isFinite(time) && time > Date.now());
+          if (resets.length) resetTimer = window.setTimeout(() => { if (alive && navigator.onLine) refresh(); }, Math.min(Math.min(...resets)-Date.now()+500, 2147483647));
+        }
       } catch { if (alive) setUnavailable(true); }
       finally { reading = false; }
     }
@@ -44,6 +50,7 @@ export function SidebarAssistants() {
         catch { failed = true; }
       }
       await load();
+      if (alive) window.dispatchEvent(new Event("quota-updated"));
       if (alive) { setRefreshing(false); if (failed) setUnavailable(true); }
       pending.current = false;
     }
@@ -52,7 +59,7 @@ export function SidebarAssistants() {
     const readTimer = window.setInterval(() => { if (document.visibilityState === "visible") load(); }, 15000);
     const refreshTimer = window.setInterval(() => { if (document.visibilityState === "visible" && navigator.onLine) refresh(); }, 120000);
     window.addEventListener("connections-updated", load);
-    return () => { alive = false; window.clearInterval(readTimer); window.clearInterval(refreshTimer); window.removeEventListener("connections-updated", load); };
+    return () => { alive = false; window.clearTimeout(resetTimer); window.clearInterval(readTimer); window.clearInterval(refreshTimer); window.removeEventListener("connections-updated", load); };
   }, []);
   return <div className="connection-indicators" aria-label={t("Connection status")}>
     <div className="flex items-center justify-between gap-2">
@@ -65,15 +72,20 @@ export function SidebarAssistants() {
       const quota = observedQuota(connection);
       const details = quota.windows.map(({ name, window, remaining }) => {
         const reset = window.reset_at || window.resets_at;
-        return `${t(name === "weekly" ? "Weekly quota" : "Session quota")}: ${remaining === null ? t("Quota unknown") : t("{percent}% remaining", { percent: Number(remaining.toFixed(1)) })}${reset && Number.isFinite(Date.parse(reset)) ? ` · ${t("Reset")}: ${new Date(reset).toLocaleString(dateLocale)}` : ""}`;
+        return `${window.group_name ? t(window.group_name) + " · " : ""}${t(name === "weekly" || window.window_type === "weekly" || ["gemini-weekly", "3p-weekly"].includes(name) ? "Weekly quota" : name === "session" ? "Session quota" : name === "daily" ? "Daily quota" : name === "credits" ? "Credits" : "Other quota window")}: ${remaining === null ? t("Quota unknown") : t("{percent}% remaining", { percent: Number(remaining.toFixed(1)) })}${reset && Number.isFinite(Date.parse(reset)) ? ` · ${t("Reset")}: ${new Date(reset).toLocaleString(dateLocale)}` : ""}`;
       }).join("\n");
       return <section key={connection.id} className="sidebar-assistant" data-connection={connection.id} data-quota-state={quota.state} aria-label={connection.name || assistantName(connection.agent)}>
-        <p><AssistantLogo agent={connection.agent} /><span className="min-w-0 break-words">{connection.name || assistantName(connection.agent)}<small>{t(connection.enabled ? statuses[connection.status === "CONNECTED" ? connection.availability : connection.status] || "Unknown" : "Disabled")}</small></span></p>
-        <div title={details} className="sidebar-quota" data-quota-color={quota.color} data-stale={quota.stale || unavailable}>
+        <p><AssistantLogo agent={connection.agent} /><span className="min-w-0 break-words">{connection.name || assistantName(connection.agent)}<small>{t(connection.enabled ? statuses[connection.status] || "Unknown" : "Disabled")}</small></span></p>
+        <div className="sidebar-quota" data-quota-color={quota.color} data-stale={quota.stale || unavailable}>
           <span className="text-xs">{quota.state === "Quota remaining" ? t("{percent}% remaining", { percent: Number(quota.remaining!.toFixed(1)) }) : t(quota.state)}</span>
           {quota.remaining !== null && <div className="quota-track" role="meter" aria-label={t("Quota remaining")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={quota.remaining} aria-valuetext={t("{percent}% remaining", { percent: Number(quota.remaining.toFixed(1)) })}><span style={{ width: `${quota.remaining}%` }} /></div>}
-          {quota.observed && <small className="block text-[10px] muted">{t("Observed: {time}", { time: new Date(quota.observed).toLocaleString(dateLocale) })}</small>}
-          {(quota.stale || unavailable) && (quota.observed || quota.remaining !== null) && <small className="block text-[10px] muted">{t("Previous observation; refresh needed")}</small>}
+          {(quota.stale || unavailable) && (quota.observed || quota.remaining !== null) && <small className="block text-[10px] muted">{t("Data needs refreshing")}</small>}
+          <details className="mt-1 text-[10px] muted">
+            <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-primary">{t("Quota details")}</summary>
+            {details && <p className="whitespace-pre-line">{details}</p>}
+            {quota.observed && <span className="block">{t("Observed: {time}", { time: new Date(quota.observed).toLocaleString(dateLocale) })}</span>}
+            {!quota.observed && <span>{t("No quota observation available")}</span>}
+          </details>
         </div>
       </section>;
     })}

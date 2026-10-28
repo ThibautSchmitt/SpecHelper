@@ -136,8 +136,8 @@ def test_unknown_model_selection_never_substitutes_a_catalog_entry(client):
         client, "/api/ai-connections",
         {"name": "Pinned", "agent": "antigravity", "model": "exact-observed"},
     )
-    assert accepted.status_code == 200
-    assert accepted.json()["model"] == "exact-observed"
+    assert accepted.status_code == 422
+    assert not AIConnection.objects.filter(name="Pinned").exists()
 
 
 def test_antigravity_auth_uses_only_the_selected_identity_and_retains_provider_label(

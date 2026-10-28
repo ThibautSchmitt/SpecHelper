@@ -349,11 +349,11 @@ def test_universal_statement_and_omitted_material_claim_cannot_be_certified(
     )
 
 
-def test_missing_verifier_role_waits_instead_of_publishing_self_approval(
+def test_verifier_disabled_after_queueing_waits_instead_of_self_approval(
     environment, storage, repository, bundle
 ):
-    AIConnection.objects.filter(pk=1).update(roles=["analyst", "counter_analyst"])
     request = start(environment)
+    AIConnection.objects.filter(pk=1).update(roles=["analyst", "counter_analyst"])
     calls, job = execute(request, storage, outputs(repository, bundle)[:4])
     assert len(calls) == 4
     assert job.status == "QUEUED" and request.status == "QUEUED"

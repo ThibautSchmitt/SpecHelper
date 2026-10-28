@@ -1,14 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pencil, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { api, send } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import type { AIConnection } from "@/components/ai-connections";
-import { assistantProviders } from "@/lib/assistant-providers";
 
 export type AIModel = {
   id: number;
@@ -20,6 +15,7 @@ export type AIModel = {
   status: string;
   checked_at: string | null;
   enabled: boolean;
+  capabilities?: { reasoning_efforts?: string[]; default_effort?: string; is_default?: boolean };
 };
 type Catalog = { items: AIModel[]; discovery: { state: string; reason: string; checked_at?: string } };
 const discoveryLabels: Record<string, string> = {
@@ -34,102 +30,69 @@ const discoveryLabels: Record<string, string> = {
   model_rejected: "Model rejected during analysis",
 };
 
-export function ModelSelect({ agent, value, onChange, disabled = false, connectionId }: {
+export function ModelSelect({ agent, value, onChange, disabled = false, connectionId, effort = "", onEffortChange }: {
   agent: string; value: string; onChange: (value: string) => void; disabled?: boolean; connectionId?: number;
+  effort?: string; onEffortChange?: (value: string) => void;
 }) {
   const { t } = useI18n();
-  const [items, setItems] = useState<AIModel[]>([]);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const generation = useRef(0);
+  const requested = useRef("");
   useEffect(() => {
-    let alive = true;
-    async function load() {
-      const current = ++generation.current;
-      setLoading(true);
-      try {
-        const catalog = await api<Catalog>(`/ai-models?agent=${encodeURIComponent(agent)}${connectionId ? `&connection_id=${connectionId}` : ""}`);
-        if (alive && current === generation.current) { setItems(catalog.items); setError(""); }
-      } catch (e) {
-        if (alive && current === generation.current) setError((e as Error).message);
-      } finally {
-        if (alive && current === generation.current) setLoading(false);
-      }
-    }
-    load();
-    window.addEventListener("models-updated", load);
-    return () => { alive = false; window.removeEventListener("models-updated", load); };
+    const version = ++generation.current;
+    setCatalog(null); setLoading(true); setError(""); requested.current = "";
+    const load = () => api<Catalog>(`/ai-models?agent=${encodeURIComponent(agent)}${connectionId ? `&connection_id=${connectionId}` : ""}`)
+      .then(result => { if (version === generation.current) { setCatalog(result); setError(""); } })
+      .catch(failure => { if (version === generation.current) setError(failure.message); })
+      .finally(() => { if (version === generation.current) setLoading(false); });
+    load(); window.addEventListener("models-updated", load);
+    return () => { generation.current++; window.removeEventListener("models-updated", load); };
   }, [agent, connectionId]);
-  const options = items.filter(item => item.enabled && item.status !== "UNAVAILABLE");
-  const unavailable = items.find(item => item.identifier === value && (!item.enabled || item.status === "UNAVAILABLE"));
+  async function refresh() {
+    if (!connectionId || refreshing) return;
+    const version = generation.current;
+    setRefreshing(true); setError("");
+    try {
+      const result = await send<Catalog>(`/ai-connections/${connectionId}/models/refresh${value ? `?model=${encodeURIComponent(value)}` : ""}`);
+      if (version === generation.current) setCatalog(result);
+    } catch (failure) { if (version === generation.current) setError((failure as Error).message); }
+    finally { setRefreshing(false); }
+  }
+  const options = (connectionId ? catalog?.items || [] : []).filter(item => item.agent === agent && item.enabled && ["SUPPORTED", "AVAILABLE"].includes(item.status));
+  const selected = value ? options.find(item => item.identifier === value) : options.find(item => item.capabilities?.is_default);
+  const efforts = selected?.capabilities?.reasoning_efforts || [];
+  useEffect(() => {
+    if (agent !== "antigravity" || !connectionId || !value || !selected || selected.capabilities?.reasoning_efforts || refreshing) return;
+    const key = `${connectionId}:${value}`;
+    if (requested.current === key) return;
+    requested.current = key;
+    refresh();
+  }, [agent, connectionId, value, selected, refreshing]);
+  const stale = !!catalog && (catalog.discovery.state === "error" || !catalog.discovery.checked_at || Date.now()-Date.parse(catalog.discovery.checked_at)>300000);
   return <>
-    <select id="ai-config-model" value={value} disabled={disabled || loading} onChange={e => onChange(e.target.value)}>
-      <option value="">{t("Provider default model")}</option>
-      {value && !options.some(item => item.identifier === value) && <option value={value} disabled={!!unavailable}>{value} · {t(unavailable ? "Unavailable" : "Unverified")}</option>}
-      {options.map(item => <option key={item.id} value={item.identifier}>{item.name || item.identifier} · {t(item.status === "SUPPORTED" ? "Supported" : item.status === "AVAILABLE" ? "Available" : "Unverified")}</option>)}
-    </select>
-    {loading && <p className="mt-2 text-xs muted" role="status">{t("Loading models…")}</p>}
-    {error && <p className="mt-2 text-sm" role="alert">{t(error)}</p>}
-    <p className="mt-2 text-xs muted">{t("Supported models do not guarantee access for every subscription.")}</p>
+    <div className="field min-w-0"><label htmlFor="ai-config-model">{t("Model")}</label>
+      <select id="ai-config-model" value={value} disabled={disabled || loading || refreshing} onChange={event => { onChange(event.target.value); onEffortChange?.(""); }}>
+        <option value="">{t("Provider default model")}</option>
+        {value && !options.some(item => item.identifier === value) && <option value={value}>{value} · {t("Unverified")}</option>}
+        {options.map(item => <option key={item.id} value={item.identifier}>{item.name || item.identifier} · {item.identifier} · {t(item.status === "AVAILABLE" ? "Access confirmed" : "Access unverified")}</option>)}
+      </select>
+    </div>
+    <div className="field min-w-0"><label htmlFor="ai-config-effort">{t("Reasoning")}</label>
+      <select id="ai-config-effort" value={effort} disabled={disabled || loading || refreshing || !onEffortChange} onChange={event => onEffortChange?.(event.target.value)}>
+        <option value="">{t("Default")}</option>
+        {effort && !efforts.includes(effort) && <option value={effort} disabled>{effort} · {t("Unverified")}</option>}
+        {efforts.map(level => <option key={level} value={level}>{level}</option>)}
+      </select>
+    </div>
+    <div className="md:col-span-3 flex flex-wrap items-center gap-3 text-xs muted">
+      <button type="button" className="inline-flex items-center gap-1 rounded border px-2 py-1" disabled={!connectionId || disabled || refreshing} onClick={refresh}><RefreshCw size={13} aria-hidden="true" />{t("Refresh models")}</button>
+      {loading || refreshing ? <span role="status">{t("Loading models…")}</span> : stale ? <span>{t("Previous catalog; refresh needed")}</span> : null}
+      {catalog && <span>{t(discoveryLabels[catalog.discovery.reason] || "Supported models do not guarantee access for every subscription.")}</span>}
+      {!efforts.length && <span>{t("No reasoning levels reported for this model")}</span>}
+    </div>
+    {error && <p className="md:col-span-3 text-sm" role="alert">{t(error)}</p>}
   </>;
-}
-
-export function AIModels() {
-  const { t, dateLocale } = useI18n();
-  const [connections, setConnections] = useState<AIConnection[]>([]);
-  const [connectionId, setConnectionId] = useState("");
-  const [agent, setAgent] = useState("codex");
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [form, setForm] = useState({ identifier: "", name: "", family: "" });
-  const [editing, setEditing] = useState<AIModel | null>(null);
-  const [manualOpen, setManualOpen] = useState(false);
-  const editor = useRef<HTMLFormElement>(null);
-  useEffect(() => { if (editing) editor.current?.querySelector<HTMLInputElement>("#model-name")?.focus(); }, [editing]);
-  const generation = useRef(0);
-  async function load() {
-    const current = ++generation.current;
-    const result = await api<Catalog>(`/ai-models?agent=${agent}${connectionId ? `&connection_id=${connectionId}` : ""}`);
-    if (current === generation.current) setCatalog(result);
-  }
-  useEffect(() => { api<AIConnection[]>("/ai-connections").then(setConnections).catch(e => setError(e.message)); }, []);
-  useEffect(() => { setCatalog(null); load().catch(e => setError(e.message)); return () => { generation.current += 1; }; }, [agent, connectionId]);
-  async function action(task: () => Promise<unknown>) {
-    setBusy(true); setError(""); setNotice("");
-    try { await task(); await load(); window.dispatchEvent(new Event("models-updated")); setNotice(t("Model catalog updated.")); }
-    catch (e) { setError((e as Error).message); }
-    finally { setBusy(false); }
-  }
-  return <Card>
-    <h2>{t("Models")}</h2>
-    <p className="mt-2 text-sm muted">{t("Refresh the provider catalog or add a documented model. Availability stays unknown until verified.")}</p>
-    <fieldset disabled={busy}>
-      <div className="field"><label htmlFor="model-provider">{t("Provider")}</label><select id="model-provider" value={agent} onChange={e => { setAgent(e.target.value); setConnectionId(""); setEditing(null); setForm({identifier:"",name:"",family:""}); }}>{assistantProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></div>
-      <div className="field"><label htmlFor="model-connection">{t("AI connection")}</label><select id="model-connection" value={connectionId} onChange={e => setConnectionId(e.target.value)}><option value="">{t("Select a connection")}</option>{connections.filter(c => c.agent === agent).map(c => <option key={c.id} value={c.id}>{c.name || c.agent}</option>)}</select></div>
-      <Button type="button" variant="outline" disabled={!connectionId || busy} onClick={() => action(() => send(`/ai-connections/${connectionId}/models/refresh`))}><RefreshCw size={15} aria-hidden="true" />{t("Refresh models")}</Button>
-    </fieldset>
-    {error && <p role="alert" className="mt-4 text-sm">{t(error)}</p>}
-    {notice && <p role="status" className="mt-4 text-sm">{notice}</p>}
-    {!catalog ? <p role="status" className="mt-4 muted">{t("Loading models…")}</p> : <>
-      <p className="mt-4 text-sm muted">{t("Discovery")}: {t(discoveryLabels[catalog.discovery.state] || "Unknown")}{catalog.discovery.reason && ` · ${t(discoveryLabels[catalog.discovery.reason] || "Unknown")}`}</p>
-      {!catalog.items.length && <p className="mt-4 muted">{t("No models in this catalog.")}</p>}
-      <ul className="mt-4 space-y-3">{catalog.items.map(item => <li key={item.id} className="rounded-lg border p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>{item.name || item.identifier}</strong><p className="text-xs muted">{item.identifier} · {item.family || t("Unknown")} · {t(item.status === "SUPPORTED" ? "Supported" : item.status === "AVAILABLE" ? "Available" : item.status === "UNAVAILABLE" ? "Unavailable" : "Unverified")}</p>{item.checked_at && <p className="text-xs muted">{new Date(item.checked_at).toLocaleString(dateLocale)}</p>}</div>
-        <div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" disabled={busy} aria-label={t("Edit {name}",{name:item.name})} onClick={() => {setEditing(item);setForm({identifier:item.identifier,name:item.name,family:item.family});}}><Pencil size={14} aria-hidden="true" /></Button><Button type="button" size="sm" variant="outline" disabled={busy || !connectionId} onClick={() => action(() => send(`/ai-connections/${connectionId}/models/${item.id}/test`))}>{t("Check model")}</Button><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => action(() => send(`/ai-models/${item.id}`, {enabled: !item.enabled}, "PUT"))}>{t(item.enabled ? "Disable" : "Enable")}</Button></div></div>
-      </li>)}</ul>
-    </>}
-    {!editing && <Button type="button" variant="outline" className="mt-6" aria-expanded={manualOpen} aria-controls="manual-model-form" onClick={() => setManualOpen(value => !value)}>{t("Add a documented model")}</Button>}
-    {(editing || manualOpen) && <form id="manual-model-form" ref={editor} className="mt-6 border-t pt-4" onSubmit={e => { e.preventDefault(); action(async () => { if(editing) await send(`/ai-models/${editing.id}`, {name:form.name,family:form.family}, "PUT"); else await send("/ai-models", {agent, ...form}); setEditing(null);setManualOpen(false);setForm({identifier:"",name:"",family:""}); }); }}>
-      <h3>{t(editing ? "Edit model" : "Add a documented model")}</h3>
-      <fieldset disabled={busy}>
-        <div className="field"><label htmlFor="model-identifier">{t("Model identifier")}</label><Input id="model-identifier" disabled={!!editing} required maxLength={100} value={form.identifier} onChange={e => setForm({...form,identifier:e.target.value})} /></div>
-        <div className="field"><label htmlFor="model-name">{t("Name")}</label><Input id="model-name" required maxLength={100} value={form.name} onChange={e => setForm({...form,name:e.target.value})} /></div>
-        <div className="field"><label htmlFor="model-family">{t("Model family")}</label><Input id="model-family" pattern="[a-zA-Z0-9._-]*" maxLength={100} value={form.family} onChange={e => setForm({...form,family:e.target.value})} /></div>
-        <div className="mt-4 flex flex-wrap gap-2"><Button disabled={busy}>{t(editing ? "Save model" : "Add model")}</Button><Button type="button" variant="outline" disabled={busy} onClick={() => {setEditing(null);setManualOpen(false);setForm({identifier:"",name:"",family:""});}}>{t("Cancel")}</Button></div>
-      </fieldset>
-    </form>}
-    <p className="mt-4 text-xs muted">{t("Model checks read metadata and do not consume an analysis. Copilot remains experimental and unavailable for production.")}</p>
-  </Card>;
 }

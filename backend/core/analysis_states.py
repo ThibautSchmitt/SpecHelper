@@ -2,7 +2,7 @@
 
 
 def result_state(status, workflow, *, latest_status=None, published=False, stale=False,
-                 verification_unavailable=False, scope_clarification=False):
+                 verification_unavailable=False, scope_clarification=False, incomplete=False):
     from .business_decisions import BUSY
 
     if status in BUSY:
@@ -17,7 +17,7 @@ def result_state(status, workflow, *, latest_status=None, published=False, stale
         return "verification_unavailable"
     if status == "ERROR":
         return "interrupted"
-    if latest_status == "PARTIAL":
+    if incomplete or status == "PARTIAL" or latest_status == "PARTIAL":
         return "partial"
     if latest_status == "READY":
         if published:

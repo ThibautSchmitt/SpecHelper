@@ -7,20 +7,21 @@ instructions, notes, attachments or documentation.
 | Tab | Owns |
 | --- | --- |
 | General | Browser appearance, instance name/short label/color/language and global instructions |
-| AI & Agents | Named assistants, models, eligible roles, connection instructions and global skills |
-| Environments | Git sources, read-only databases, repositories/branches/context and ticket connectors |
+| AI & Agents | Named assistants with native model/reasoning choices, eligible roles, connection instructions and global skills |
+| Sources & environments | Separate Git sources, PostgreSQL connections and Environments tabs |
+| Connectors | Publication connectors, still associated with their own environment |
 
 ## First setup
 
 Connect a Git source and an eligible AI account, create an environment with its
 repositories/branches, and wait for successful synchronization. Optionally add
 read-only PostgreSQL and factual reference documents. Configure ticket connectors
-within each environment; [ticketing](ticketing.md) owns their destinations,
+in the Connectors section for each environment; [ticketing](ticketing.md) owns their destinations,
 credentials, templates and recovery rules.
 
 ## Git sources
 
-Use **Settings → Environments → Git sources** to add named GitHub or GitLab connections. GitHub
+Use **Settings → Sources & environments → Git sources** to add named GitHub or GitLab connections. GitHub
 supports its official browser authorization flow. GitLab.com and self-hosted
 instances accept an appropriate read-only token; configure the server URL and
 grant only the repository/API read permissions required by the instance.
@@ -44,23 +45,27 @@ environment synchronization. Ticket publication retains its separate authorizati
 
 ## AI connections
 
-Add named Codex CLI, Claude Code or Antigravity configurations, set a model, and choose a
-default or numeric preference. A configuration can share an existing provider
+Add named Codex CLI, Claude Code or Antigravity configurations, set a model, and optionally
+choose a selection priority in advanced options. A configuration can share an existing provider
 identity. All three assistants use official browser authorization. Antigravity
 accepts a Google account, with service eligibility checked by Google; an explicitly
 configured Gemini API key with billing consent is an optional alternative. Credential
 namespaces and session contexts remain isolated between identities.
 
-Use **Settings → AI & Agents → Models** to refresh adapter metadata or register a
-documented model before selecting it. Model access is identity-scoped; a listed
-model does not prove subscription entitlement. See [model access](#models-and-access-evidence).
+Model configuration belongs to each connection: **Provider / Model / Reasoning**.
+Create and authenticate a connection using the provider default, then edit it and
+select **Refresh models**. Shared identities can reuse an existing native catalogue.
+Only the selected identity's native supported or successfully used models are
+selectable. A listed model does not prove subscription entitlement. See [model access](#models-and-access-evidence).
 
 The runtime passes the selected model to the CLI. Provider rejection makes that
 configuration unavailable with an explicit diagnostic; another eligible configuration
 can be tried through bounded fallback. No model is silently substituted within
-the rejected configuration. For Codex/Claude, a blank model delegates to the
-runtime/CLI default. Antigravity requires a selected discovered model. Historical
-model attribution remains unknown when it was not recorded.
+the rejected configuration. A blank model and reasoning choice delegate to the provider/CLI defaults. Explicit
+reasoning is passed only when supported by native metadata for that model and identity. Historical
+model attribution remains unknown when it was not recorded. The former runtime
+`CODEX_MODEL` override is retired; choose that exact model on each relevant
+connection to retain a preferred model instead of the provider default.
 
 Codex/Claude accept subscription OAuth only. Antigravity's explicit API mode is
 separate and never an implicit fallback from Google sign-in, another provider or the host environment.
@@ -68,12 +73,18 @@ See the [Antigravity contract](antigravity.md) for supported authentication and 
 
 ## Status and quota observations
 
-Select **Refresh status and quotas** on an idle AI connection. Authentication checks
-and quota reads do not submit a business request or send an inference probe.
+Select **Check connection** on an idle connection in Settings, or the sidebar's
+**Refresh status and quotas** button. Authentication checks and quota reads do
+not submit a business request or send an inference probe. Connection cards show
+authentication, availability and quota separately; an authenticated account can
+still be unavailable or have exhausted quota. **Reconnect with** renews an existing
+connection through the same official authorization flow.
 
 Codex uses the installed official app-server `account/rateLimits/read` method in
 a clean credential home. It does not create a thread or turn. Only observed
-session/weekly percentages and reset times are displayed. The selected identity
+windows, credit balances and reset times are displayed. Percentages are never
+calculated from token counts or credit balances; model/provider limit buckets
+remain separate from account-wide limits. The selected identity
 and safe credential rotation are checked. The refresh has a bounded timeout;
 provider response bodies are never shown as diagnostics.
 
@@ -90,17 +101,53 @@ observations and do not turn them into current data. Unknown quota never means
 unlimited capacity. Authentication success alone does not clear known quota
 exhaustion; provider permission or the normal scheduler's recovery remains required.
 Configurations sharing an authentication identity share quota observations.
-Antigravity's account quota remains unknown; an invocation's token counts cannot
-be converted into session/weekly percentages, reset times or cost.
+Antigravity reads its built-in standalone `/usage` command in JSON mode. Gemini
+and Claude/GPT share separate weekly pools; their percentages and reset times are
+shown independently. The sidebar summarizes only the selected model's pool.
+A fresh authoritative pool observation can clear that pool's earlier exhaustion,
+while an unscoped account failure remains protected. Invocation token counts are
+never converted into quota percentages or monetary cost.
 The sidebar shows the limiting observed remaining percentage: green at 60–100%,
 orange at 20–<60% and red below 20%. Unknown and authentication-required states have
-no invented bar. Last observations and stale states remain visible offline. Visible
-tabs refresh metadata every 120 seconds; a shared identity lock/throttle coordinates
-multiple browsers, and busy analyses are not probed.
+no invented bar. Stale observations show **Data needs refreshing**; observation
+dates and known reset times are in the keyboard-accessible **Quota details** disclosure.
+Last observations and stale states remain visible offline. Visible
+tabs refresh metadata every 120 seconds and at known reset deadlines; a shared
+identity lock/throttle coordinates multiple browsers, and busy analyses are not probed.
+Successful connection/reconnection and every completed invocation (including CLI
+failures, timeouts and malformed responses) read metadata without starting a new
+analysis. Post-invocation persistence does not release the existing capacity lease.
+A transport/runtime outage cannot produce a fresh observation: previous data stays
+visible and stale. Settings shows each reported window's observation, reset and source.
 
 ## Roles and instructions
 
 A connection can allow Analyst, Counter-analyst and Verifier simultaneously.
+**Participate in analyses** controls the connection's existing enabled state.
+Disabling it retains its role assignments and credentials; role checkboxes become
+read-only until it is enabled again.
+
+**Selection priority** is the single automatic ordering setting, under collapsed
+**Advanced options**. Lower values are preferred, with creation order breaking ties.
+Explicit per-request selection and model-family diversity constraints still apply.
+The migration converts the previous default/preference combination into numeric
+priorities while preserving its ordering, including disabled connections. The
+deprecated API `is_default` input remains compatible by translating a true value
+into the highest numeric priority; it is no longer an independent scheduler rule.
+
+**Role coverage** combines enabled, authenticated connections and their allowed
+roles, excluding explicitly disabled model definitions. All three roles must be
+covered before a new independent analysis can be queued. Incomplete settings can
+still be saved. Busy connections, exhausted quota and temporary resource failures
+affect immediate availability, not configured coverage: the scheduler waits using
+its existing checkpoint and recovery behavior. Coverage does not certify model
+diversity or override its policy. Configured models and provider defaults remain
+distinct from execution metadata; task details show the reported execution model
+when available rather than inventing a resolved default.
+
+The orchestration call budget also lives in advanced options. It protects against
+loops rather than limiting elapsed duration; an exhausted budget does not certify
+an incomplete result.
 Configure eligibility and family fallback in AI & Agents. The
 [execution contract](analysis.md#execution-contract) owns scheduling, independence
 and the mandatory role sequence. Labels and separate accounts do not establish diversity.
@@ -198,12 +245,22 @@ for historical audit. They no longer configure current system roles.
 
 ## Models and access evidence
 
-Choose a catalog model or the provider default. Refresh metadata for a specific
-connection where the adapter exposes it. Codex uses the installed app-server's
-bounded model-list protocol without starting inference. Claude currently has no
-validated non-inference discovery here: add documented identifiers explicitly;
-no model list is invented.
-The detected catalogue is shown first; manual additions remain behind a secondary action.
+Choose the provider default or refresh the selected connection's native catalogue.
+Codex uses `model/list` on the installed app-server. Claude Code uses the SDK
+`initialize` control exchange with **no user message**; this is CLI capability
+metadata, not proof of an authenticated subscription's entitlement. Antigravity
+uses `agy models` and the documented read-only headless `/effort` command for the
+selected model. No interactive terminal output is scraped. No hardcoded model or
+effort list is offered as account availability.
+
+The global Models settings tab has been removed. Existing API records and legacy
+configured identifiers remain intact. Unverified legacy selections stay visible;
+they cannot be offered as verified choices to another identity. Failed discovery
+retains the last catalogue with its age/error notice. Reasoning defaults to the
+provider choice, and only returned model-specific levels are selectable. Unsupported
+`ultra` is excluded; execution modes are not reasoning levels. Model and effort are
+frozen together for a session, so changing either starts a new session context.
+See [provider verification](provider-metadata.md) for native evidence and limits.
 
 | Status | Evidence for the selected identity |
 | --- | --- |
@@ -212,11 +269,11 @@ The detected catalogue is shown first; manual additions remain behind a secondar
 | Available | A real analysis successfully used that identity/model at the recorded time |
 | Unavailable | An actual model rejection was observed |
 
-**Check model** refreshes metadata without paid inference. It cannot prove
+**Refresh models** reads metadata without paid inference. It cannot prove
 entitlement when the provider exposes no such probe. Authentication, quota health,
 catalog support and actual access remain distinct. Refresh errors use fixed public
 diagnostics and retain prior observations. Legacy explicit identifiers remain
-unverified instead of being replaced. New selections must be enabled catalog entries.
+unverified instead of being replaced. New explicit selections must be enabled and supported by the selected identity’s native catalogue or actual successful execution.
 Disabled catalog models are excluded from new selections and scheduling.
 
 Observed session/five-hour and weekly quota windows, reset times and freshness
@@ -240,7 +297,7 @@ continue to use their own separate attachments. No stack is assumed; actual sour
 and installed dependencies determine the analysis. Environment text is untrusted
 documentary data, not a third editable instruction level.
 
-Open **Settings → Environments**, then expand **Environment context** for an
+Open **Settings → Sources & environments → Environments**, then expand **Environment context** for an
 existing environment. Factual context accepts up to 4,000 characters and can be disabled
 without clearing them. Keep Git and database credentials in secure connection
 settings. Known configured credentials are rejected in factual context and text uploads.
@@ -317,3 +374,10 @@ Source identifiers, schemas, repository paths and code examples keep their origi
 meaning and project conventions.
 
 Translation maintenance belongs in [CONTRIBUTING](../CONTRIBUTING.md#translations).
+
+If saved global instructions fail the existing credential-safety validation,
+administration remains readable and shows a review warning instead of the obsolete
+optional-verifier fallback. The rejected text is hidden and retained unchanged.
+Replace it explicitly in General settings; saving an untouched blank replacement
+is disabled. Analysis execution keeps its strict validation; this display recovery
+does not approve or silently apply rejected instructions.

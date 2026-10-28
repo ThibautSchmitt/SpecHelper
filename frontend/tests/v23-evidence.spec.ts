@@ -78,8 +78,12 @@ for (const language of ["en", "fr"] as const) {
   }
   test(`blocking evidence cannot be approved even with READY status in ${language}`, async ({ page }) => {
     const value = detail("request"); value.status = "READY";
+    value.latest_version!.status = "READY";
+    value.result_state = "partial";
     await setup(page, language, "request", value);
     await page.goto(`/requests/${id}`);
+    await expect(page.getByLabel(t("Result reliability"), { exact: true })).toContainText(t("Partial result"));
+    await expect(page.getByLabel(t("Result reliability"), { exact: true })).toContainText("Supervisor overrides require another focused check.");
       await page.getByText(t("Verification details"), { exact: true }).click();
     await expect(page.getByRole("region", { name: t("Analysis findings and limits"), exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: t("Validate business intent"), exact: true })).toHaveCount(0);
@@ -97,6 +101,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByText(t("Independent review is required"), { exact: true })).toBeVisible();
     await expect(page.getByLabel(t("Verify compared analyses"), { exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Allow comparison of multiple analyses"), { exact: true })).toHaveCount(0);
+    await page.locator("summary").filter({ hasText: t("Advanced options") }).click();
     const calls = page.getByLabel(t("Maximum AI calls per analysis")); await expect(calls).toHaveAttribute("min", "6"); await calls.fill("8");
     await page.getByRole("button", { name: t("Save analysis settings"), exact: true }).click();
     await expect.poll(() => body).toMatchObject({ allow_confrontation: true, verifier_enabled: true, max_calls: 8 });

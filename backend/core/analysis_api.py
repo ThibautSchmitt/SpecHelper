@@ -66,6 +66,7 @@ def analysis_rows():
         need_revised_at=Subquery(messages.filter(kind="need_revision").values("created_at")[:1]),
         result_database_status=Subquery(versions.values("evidence__database__status")[:1]),
         result_blocking=Subquery(versions.values("evidence__blocking")[:1]),
+        result_limits=Subquery(versions.values("evidence__limitations")[:1]),
         published_latest=Exists(PublishedTicket.objects.filter(
             request_id=OuterRef("pk"), version__number=OuterRef("result_number"), status="PUBLISHED",
         )),
@@ -85,6 +86,10 @@ def bucket_rows(rows, bucket):
         return rows.filter(
             Q(status="NEEDS_CLARIFICATION")
             | Q(status="DRAFT", scope_assessment__status="NEEDS_CLARIFICATION")
+            | Q(status__in=["PARTIAL", "ERROR", "CANCELLED"])
+            | Q(status="DRAFT", scope_assessment__status="OUT_OF_SCOPE")
+            | Q(status="READY", result_blocking=True)
+            | Q(status="READY", result_status="PARTIAL")
         )
     if bucket == "consult":
         return rows.filter(status__in=["READY", "PARTIAL"], has_result=True)
@@ -103,9 +108,12 @@ def analysis_summary(value):
         "latest_activity_at": value.latest_activity_at,
         "latest_version_number": value.result_number,
         "has_result": value.has_result,
+        "result_limits": value.result_limits or [],
+        "stage": (value.progress[-1].get("label", "") if value.progress else "") if value.status in ACTIVE_STATUSES else "",
         "intent_resolved": value.intent_mode != "auto" or bool(value.understanding) or bool(value.result_number),
         "result_state": result_state(value.status, value.workflow, latest_status=value.result_status,
                                      published=value.published_latest,
+                                     incomplete=bool(value.result_blocking),
                                      stale=bool(value.need_revised_at and value.result_created_at and value.need_revised_at > value.result_created_at),
                                      verification_unavailable=bool(value.result_blocking and value.result_database_status == "unavailable"),
                                      scope_clarification=value.scope_assessment.get("status") == "NEEDS_CLARIFICATION"),

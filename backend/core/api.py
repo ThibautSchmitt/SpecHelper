@@ -320,6 +320,7 @@ def request_dict(value, full=False):
         result["result_state"] = result_state(
             value.status, value.workflow,
             latest_status=latest_version.status if latest_version else None,
+            incomplete=bool(evidence.get("blocking")),
             published=bool(latest_version and PublishedTicket.objects.filter(version=latest_version, status="PUBLISHED").exists()),
             stale=result["conclusions_stale"],
             verification_unavailable=bool((latest_run and latest_run.orchestration.get("permission_limits"))

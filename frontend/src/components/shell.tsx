@@ -10,12 +10,13 @@ import {
   Sparkles,
   Tickets,
   PanelRightOpen,
+  PanelRightClose,
   X,
   ChevronRight,
 } from "lucide-react";
 import { AccessGate } from "@/components/access-gate";
 import { ThemeProvider, applyAccent } from "@/lib/theme";
-import { TaskQueue, TaskQueueProvider } from "@/components/task-queue";
+import { TaskQueue, TaskQueueProvider, useQueueAttention } from "@/components/task-queue";
 import { api } from "@/lib/api";
 import { SidebarAssistants } from "@/components/sidebar-assistants";
 
@@ -40,6 +41,17 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
   const settingsVersion = useRef(0);
+  const [queueCollapsed, setQueueCollapsed] = useState(false);
+  const attention = useQueueAttention();
+  useEffect(() => {
+    try { setQueueCollapsed(localStorage.getItem("spechelper-queue-collapsed") === "true"); } catch {}
+  }, []);
+  function toggleQueue() {
+    setQueueCollapsed(value => {
+      try { localStorage.setItem("spechelper-queue-collapsed", String(!value)); } catch {}
+      return !value;
+    });
+  }
   useEffect(() => {
     drawer.current?.close();
   }, [pathname]);
@@ -71,7 +83,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
     };
   }, []);
   return (
-    <div className="dashboard">
+    <div className="dashboard" data-queue-collapsed={queueCollapsed}>
       <aside
         className="dashboard-sidebar"
         aria-label={t("Instance navigation")}
@@ -138,20 +150,33 @@ function ShellContent({ children }: { children: React.ReactNode }) {
         <div className="queue-toolbar">
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm"
+            className="queue-mobile-toggle inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm"
             onClick={() => drawer.current?.showModal()}
+            aria-haspopup="dialog"
+            aria-label={t("Task queue")}
           >
             <PanelRightOpen size={18} />
             {t("Task queue")}
+            {!!attention.count && <span className="queue-total" aria-hidden="true">{attention.count}</span>}
           </button>
+          <button type="button" className="queue-desktop-toggle inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm"
+            aria-label={t(queueCollapsed ? "Show task queue" : "Collapse task queue")} aria-expanded={!queueCollapsed} aria-controls="desktop-task-queue" onClick={toggleQueue}>
+            {queueCollapsed ? <PanelRightOpen size={18} aria-hidden="true" /> : <PanelRightClose size={18} aria-hidden="true" />}
+            {t(queueCollapsed ? "Show task queue" : "Collapse task queue")}
+            {!!attention.count && <span className="queue-total" aria-hidden="true">{attention.count}</span>}
+          </button>
+          <span className="text-xs muted" aria-live="polite">
+            {attention.clarifications > 0 ? t("{count} analyses need your answer", { count: attention.clarifications }) : attention.count > 0 ? t("{count} tasks need attention", { count: attention.count }) : ""}
+            {attention.error && t("Task updates unavailable")}
+          </span>
         </div>
         <main className="min-w-0">{children}</main>
         <footer className="mt-10 text-xs muted">
           {t("SpecHelper · A clear need, a well-prepared change.")}
         </footer>
       </div>
-      <aside className="dashboard-queue" aria-label={t("Task queue")}>
-        <TaskQueue />
+      <aside id="desktop-task-queue" className="dashboard-queue" aria-label={t("Task queue")} hidden={queueCollapsed}>
+        {!queueCollapsed && <TaskQueue />}
       </aside>
       <dialog
         ref={drawer}

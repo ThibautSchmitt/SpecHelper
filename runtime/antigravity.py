@@ -5,11 +5,13 @@ The trusted supervisor owns credentials, isolation, cancellation and provider br
 """
 
 import json
+import math
 import os
 import re
 import shutil
 import subprocess
 import uuid
+from datetime import datetime
 
 PINNED_VERSION = "1.4.7"
 MAX_METADATA = 1024 * 1024
@@ -135,23 +137,99 @@ def discover_models(env, *, binary="agy", timeout=10):
         return {"state": "error", "reason": "refresh_failed", "items": []}
 
 
-def headless_command(model, *, schema_path="/session/schema.json", timeout=300, binary="agy"):
+def discover_effort(env, model, timeout=8):
+    """The documented headless /effort command must report zero inference turns."""
+    if not IDENTIFIER.fullmatch(model):
+        return {}
+    try:
+        result = subprocess.run(["agy", "-p", "/effort", "--output-format", "json", "--model", model], env=env, capture_output=True, timeout=timeout)
+        if result.returncode or len(result.stdout)>MAX_METADATA:
+            return {}
+        response = json.loads(result.stdout)
+        data = response.get("command", {}).get("data", {})
+        if response.get("num_turns") != 0 or response.get("command", {}).get("name") != "effort":
+            return {}
+        efforts = data.get("available", []) if data.get("adjustable") else []
+        if not isinstance(efforts, list):
+            return {}
+        return {"reasoning_efforts":[e for e in efforts if isinstance(e, str) and e in {"low", "medium", "high", "xhigh", "max"}], "default_effort":data.get("current", ""), "is_default":False}
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return {}
+
+
+def read_quota(env, *, timeout=10):
+    """Read the pinned CLI's built-in usage report without submitting an agent turn."""
+    result = subprocess.run(["agy", "-p", "/usage", "--output-format", "json"],
+                            env=env, cwd=env["HOME"], capture_output=True, timeout=timeout)
+    if result.returncode or len(result.stdout) > MAX_METADATA:
+        raise ValueError("Quota metadata unavailable")
+    value = json.loads(result.stdout)
+    if not isinstance(value, dict) or value.get("status") != "SUCCESS" or type(value.get("num_turns")) is not int or value["num_turns"] != 0:
+        raise ValueError("Invalid usage metadata")
+    command, usage = value.get("command"), value.get("usage")
+    if not isinstance(command, dict) or command.get("name") != "usage" or not isinstance(usage, dict):
+        raise ValueError("Unsupported usage envelope")
+    if any(usage.get(key) != 0 for key in USAGE_FIELDS):
+        raise ValueError("Usage metadata must not consume inference")
+    data = command.get("data")
+    groups = data.get("groups") if isinstance(data, dict) else None
+    if not isinstance(groups, list) or len(groups) > 32:
+        raise ValueError("Invalid quota groups")
+    windows = {}
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get("buckets"), list):
+            raise ValueError("Invalid quota group")
+        for bucket in group["buckets"]:
+            if not isinstance(bucket, dict) or len(windows) >= 128:
+                raise ValueError("Invalid quota bucket")
+            identifier, fraction = bucket.get("id"), bucket.get("remaining_fraction")
+            if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}", identifier):
+                raise ValueError("Invalid quota identifier")
+            if isinstance(fraction, bool) or not isinstance(fraction, (int, float)) or not math.isfinite(fraction) or not 0 <= fraction <= 1:
+                raise ValueError("Invalid quota fraction")
+            pool = {"gemini-weekly": "gemini", "3p-weekly": "claude_gpt"}.get(identifier)
+            window = {"remaining_percent": fraction * 100, "exhausted": fraction == 0,
+                      "window_type": bucket.get("window", "other"), "source": "antigravity_cli",
+                      "scope": "model_pool" if pool else "provider_limit", "limit_id": identifier,
+                      "status": "observed"}
+            if pool:
+                window["model_pool"] = pool
+            name = group.get("name")
+            if isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 /-]{0,95}", name):
+                window["group_name"] = name
+            reset = bucket.get("reset_time")
+            if reset is not None:
+                if not isinstance(reset, str):
+                    raise ValueError("Invalid quota reset")
+                parsed = datetime.fromisoformat(reset.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError("Quota reset must include a timezone")
+                window["resets_at"] = parsed.isoformat()
+            if identifier in windows:
+                raise ValueError("Duplicate quota identifier")
+            windows[identifier] = window
+    return windows
+
+
+def headless_command(model, *, schema_path="/session/schema.json", timeout=300, binary="agy", effort=""):
     """Use one stdin turn, avoiding prompts in argv and implicit session resumption.
 
     Streamed input and -p are mutually exclusive in the native CLI. Fresh stdin
     streaming preserves the request and avoids --continue/--conversation entirely.
     """
-    if not isinstance(model, str) or not IDENTIFIER.fullmatch(model):
+    if not isinstance(model, str) or (model and not IDENTIFIER.fullmatch(model)):
         raise ValueError("Select an actual discovered Antigravity model")
     if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 600:
         raise ValueError("Invalid Antigravity invocation timeout")
     if schema_path != "/session/schema.json":
         raise ValueError("Invalid schema path")
+    if effort not in {"", "low", "medium", "high", "xhigh", "max"}:
+        raise ValueError("Unsupported Antigravity effort")
     return [
         binary, "--input-format", "stream-json", "--output-format", "stream-json",
-        "--json-schema", schema_path, "--model", model, "--disable-slash-commands",
+        "--json-schema", schema_path, "--disable-slash-commands",
         "--print-timeout", f"{timeout}s",
-    ]
+    ] + (["--model", model] if model else []) + (["--effort", effort] if effort else [])
 
 
 def prompt_message(prompt):

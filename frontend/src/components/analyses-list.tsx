@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { WorkItemForm } from "@/components/work-item-form";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, CircleHelp, FileText, Plus, Search } from "lucide-react";
@@ -85,12 +86,20 @@ export function AnalysesList() {
     router.replace(`/analyses${next.size ? `?${next}` : ""}`, { scroll: false });
   }
 
+  if (parameters.get("new") === "1" || parameters.has("from_question")) return <section className="space-y-5">
+    <header className="flex flex-wrap items-center justify-between gap-3">
+      <h1 className="text-2xl font-semibold">{t("New analysis")}</h1>
+      <Button asChild variant="outline"><Link href="/analyses">{t("All analyses")}</Link></Button>
+    </header>
+    <WorkItemForm unified embedded />
+  </section>;
+
   return (
     <section className="space-y-6" aria-labelledby="analyses-heading">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div><h1 id="analyses-heading" className="text-2xl font-semibold">{t("Analyses")}</h1>
           <p className="mt-1 text-sm muted">{t("Understand your project and prepare its next changes.")}</p></div>
-        <Button asChild><Link href="/?new=1"><Plus size={16} aria-hidden="true" />{t("New analysis")}</Link></Button>
+        <Button asChild><Link href="/analyses?new=1"><Plus size={16} aria-hidden="true" />{t("New analysis")}</Link></Button>
       </header>
       <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); navigate({ q: text }); }}>
         <label className="min-w-48 flex-1 text-sm">{t("Search analyses")}
@@ -124,10 +133,11 @@ export function AnalysesList() {
         {!loading && !error && !data?.items.length && <p className="rounded-lg border p-6 muted">{t("No analyses match these filters.")}</p>}
         {!loading && !error && data?.items.map((item) => {
           const Icon = item.workflow === "question" ? CircleHelp : FileText;
+          const title = item.title && !item.need.startsWith(item.title) ? item.title : item.need.split("\n")[0];
           return <Link key={item.id} href={item.href} className="block rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
             <div className="flex items-start gap-3"><Icon size={19} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
-              <div className="min-w-0 flex-1"><h2 className="truncate font-semibold" title={item.title || item.need}>{item.title || item.need}</h2>
-                <p className="mt-1 line-clamp-2 text-sm muted">{item.need}</p>
+              <div className="min-w-0 flex-1"><h2 className="line-clamp-2 break-words font-semibold" title={title}>{title}</h2>
+                <p className="mt-1 line-clamp-2 break-words text-sm muted">{item.need}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted">
                   <span className="rounded-full border px-2 py-0.5">{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
                   <span>{t(!item.intent_resolved ? "Analysis" : item.workflow === "question" ? "Question" : "Change")}</span>
@@ -135,6 +145,7 @@ export function AnalysesList() {
                   <time dateTime={item.latest_activity_at}>{new Date(item.latest_activity_at).toLocaleString(dateLocale)}</time>
                   {item.latest_version_number !== null && <span>{t("Version")} {item.latest_version_number}</span>}
                 </div>
+                {!!item.result_limits?.length && <p className="mt-2 line-clamp-2 text-xs text-amber-800 dark:text-amber-200">{t(item.result_limits[0])}</p>}
               </div><ArrowRight size={16} className="shrink-0" aria-hidden="true" />
             </div>
           </Link>;

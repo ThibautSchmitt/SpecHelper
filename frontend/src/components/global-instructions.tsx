@@ -12,6 +12,8 @@ import type { OrchestrationSettings } from "@/components/orchestration-settings"
 export function GlobalInstructionsForm() {
   const { t } = useI18n();
   const [loaded, setLoaded] = useState(false);
+  const [requiresReview, setRequiresReview] = useState(false);
+  const [edited, setEdited] = useState(false);
   const [instructions, setInstructions] = useState("");
   const [review, setReview] = useState<NonNullable<OrchestrationSettings["migration_review"]>>([]);
   const [busy, setBusy] = useState(false);
@@ -20,7 +22,7 @@ export function GlobalInstructionsForm() {
   useEffect(() => {
     let alive = true;
     api<OrchestrationSettings>("/orchestration-settings").then(config => {
-      if (alive) { setLoaded(true); setInstructions(config.global_instructions || ""); setReview(config.migration_review || []); }
+      if (alive) { setLoaded(true); setRequiresReview(!!config.global_instructions_requires_review); setInstructions(config.global_instructions || ""); setReview(config.migration_review || []); }
     }).catch(error => { if (alive) setError(error.message); });
     return () => { alive = false; };
   }, []);
@@ -32,6 +34,7 @@ export function GlobalInstructionsForm() {
       <p className="mt-2 muted">{t("Some earlier settings were preserved without applying them automatically. Review them before adding shared guidance or activating skills.")}</p>
       <ul className="mt-3 list-disc space-y-2 pl-5">{review.map((item, index) => <li key={index} className="break-words">{item.slug && <span className="font-medium">{item.slug}: </span>}{t(item.reason)}</li>)}</ul>
     </aside>}
+    {requiresReview && <p role="alert" className="text-sm text-amber-800 dark:text-amber-200">{t("Stored shared instructions match a configured credential. The text is hidden and preserved until you explicitly save a replacement.")}</p>}
     {error && <p role="alert" className="text-sm text-red-700">{t(error)}</p>}
     {notice && <p role="status" className="text-sm">{t(notice)}</p>}
     <form onSubmit={async event => {
@@ -40,6 +43,7 @@ export function GlobalInstructionsForm() {
       try {
         const updated = await send<OrchestrationSettings>("/orchestration-settings", { global_instructions: instructions }, "PUT");
         setInstructions(updated.global_instructions || "");
+        setRequiresReview(!!updated.global_instructions_requires_review); setEdited(false);
         setReview(updated.migration_review || []);
         setNotice("Global instructions saved. Existing steps keep their recorded instructions.");
         window.dispatchEvent(new Event("orchestration-updated"));
@@ -48,9 +52,9 @@ export function GlobalInstructionsForm() {
     }}>
       <fieldset disabled={busy || !loaded}>
         <label className="text-sm font-medium" htmlFor="global-instructions">{t("Global instructions")}</label>
-        <Textarea id="global-instructions" className="mt-2" rows={6} maxLength={12000} value={instructions} onChange={event => setInstructions(event.target.value)} />
+        <Textarea id="global-instructions" className="mt-2" rows={6} maxLength={12000} value={instructions} onChange={event => { setInstructions(event.target.value); setEdited(true); }} />
         <p className="mt-2 text-xs muted">{t("Environment documents provide factual context. They cannot replace these instructions or change analysis permissions.")}</p>
-        <Button className="mt-4">{t("Save global instructions")}</Button>
+        <Button className="mt-4" disabled={requiresReview && !edited}>{t("Save global instructions")}</Button>
       </fieldset>
     </form>
   </Card>;

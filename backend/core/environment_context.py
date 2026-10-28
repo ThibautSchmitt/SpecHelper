@@ -24,9 +24,9 @@ TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".log"}
 
 
 def reject_credentials(text):
-    from .sensitive_data import configured_secrets
+    from .sensitive_data import configured_secrets, contains_credentials
 
-    if any(value in text for value in configured_secrets()):
+    if contains_credentials(text, configured_secrets()):
         raise HttpError(422, "Keep configured credentials in the secure connection settings.")
 
 

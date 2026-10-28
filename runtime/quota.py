@@ -16,8 +16,8 @@ def app_server_windows(value):
         return {}
     snapshot = value.get("rateLimits", {})
     if not isinstance(snapshot, dict):
-        return {}
-    return codex_windows(
+        snapshot = {}
+    windows = codex_windows(
         {
             name: {
                 "window_minutes": item.get("windowDurationMins"),
@@ -28,6 +28,29 @@ def app_server_windows(value):
             if isinstance(item := snapshot.get(name), dict)
         }
     )
+    limits = value.get("rateLimitsByLimitId")
+    for limit_id, bucket in (limits if isinstance(limits, dict) else {}).items():
+        if not isinstance(limit_id, str) or not isinstance(bucket, dict):
+            continue
+        if limit_id == snapshot.get("limitId"):
+            continue
+        extra = app_server_windows({"rateLimits": bucket})
+        for key, window in extra.items():
+            safe_id = "".join(c for c in limit_id[:60] if c.isalnum() or c in "_.-")
+            if safe_id:
+                windows[f"limit:{safe_id}:{key}"] = {**window, "scope": "provider_limit", "limit_id": safe_id}
+    credits = snapshot.get("credits")
+    balance = credits.get("balance") if isinstance(credits, dict) else None
+    # The installed protocol declares a nullable decimal string, not a percentage.
+    if isinstance(balance, str) and len(balance) <= 64:
+        try:
+            balance = float(balance)
+        except ValueError:
+            balance = None
+    if isinstance(balance, (int, float)) and not isinstance(balance, bool) and math.isfinite(balance) and balance >= 0:
+        windows["credits"] = {"remaining_units": balance, "window_type": "credits", "unit": "credits", "scope": "account", "source": "codex_app_server", "status": "observed"}
+
+    return windows
 
 
 def read_codex_quota(directory, env, timeout=8):
@@ -122,7 +145,7 @@ def codex_windows(snapshot):
         minutes, used = item.get("window_minutes"), item.get("used_percent")
         if not isinstance(minutes, int) or isinstance(minutes, bool):
             continue
-        name = "weekly" if minutes == 10080 else "session" if 0 < minutes < 1440 else None
+        name = "weekly" if minutes == 10080 else "daily" if minutes == 1440 else "session" if 0 < minutes < 1440 else f"window_{minutes}m" if minutes > 0 else None
         if (
             name is None
             or not isinstance(used, (int, float))
@@ -131,7 +154,11 @@ def codex_windows(snapshot):
             or not 0 <= used <= 100
         ):
             continue
-        window = {"used_percent": used, "exhausted": used >= 100}
+        if name in windows:
+            name = f"{name}_{key}"
+        window = {"window_minutes": minutes, "used_percent": used, "remaining_percent": 100-used, "exhausted": used >= 100,
+                  "window_type": "weekly" if minutes == 10080 else "daily" if minutes == 1440 else "short" if minutes < 1440 else "other",
+                  "source": "codex_app_server", "scope": "account", "status": "observed"}
         reset = item.get("resets_at")
         if isinstance(reset, int) and not isinstance(reset, bool) and reset > 0:
             try:

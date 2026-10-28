@@ -434,6 +434,7 @@ class Orchestrator:
             "connection_id": self.session.connection_id,
             "connection_name": self.session.connection_name_snapshot,
             "model": self.session.model_snapshot or "runtime-default",
+            "reasoning_effort": self.session.reasoning_effort_snapshot,
             "identity_id": str(self.session.identity_snapshot)
             if self.session.identity_snapshot
             else None,
@@ -484,6 +485,7 @@ class Orchestrator:
                     "skill_overrides": connection.skill_overrides,
                     "agent": self.session.agent,
                     "model": self.session.model_snapshot,
+                    "reasoning_effort": self.session.reasoning_effort_snapshot,
                 }
                 self.persist_run(update_fields=["orchestration"])
             connection = copy.copy(connection)
@@ -611,6 +613,7 @@ class Orchestrator:
                         "context_id": str(self.session.context_id),
                         "agent": self.session.agent,
                         "model": self.session.model_snapshot,
+                        "reasoning_effort": self.session.reasoning_effort_snapshot,
                         "identity_id": str(self.session.connection.identity.credential_id)
                         if self.session.connection
                         and self.session.connection.identity_id

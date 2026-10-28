@@ -49,6 +49,7 @@ def public(model, identity=None):
         "status": observation.status if observation else "UNKNOWN",
         "reason": observation.reason if observation else "not_verified",
         "checked_at": observation.checked_at if observation else None,
+        "capabilities": observation.capabilities if observation else {},
     }
 
 
@@ -82,7 +83,7 @@ def list_catalog(agent=None, connection=None):
     }
 
 
-def validate_model(agent, model):
+def validate_model(agent, model, connection=None):
     if not model:
         return
     option = AIModel.objects.filter(agent=agent, identifier=model, enabled=True).first()
@@ -91,6 +92,10 @@ def validate_model(agent, model):
             422,
             "Select an enabled model from the provider catalog or add an administered model first.",
         )
+    if connection is not None and not AIModelObservation.objects.filter(
+        model=option, identity=identity_for(connection), status__in=["SUPPORTED", "AVAILABLE"],
+    ).exists():
+        raise HttpError(422, "Refresh this connection's catalog before selecting that model.")
 
 
 @router.get("/ai-models")
@@ -140,7 +145,7 @@ def update_model(request, model_id: int, payload: ModelPatch):
     return public(item)
 
 
-def refresh(connection):
+def refresh(connection, model=None):
     from .ai_api import not_processing
 
     not_processing(connection)
@@ -151,8 +156,15 @@ def refresh(connection):
         + connection.agent
         + ("&identity_id=" + credential_id if credential_id else "")
     )
+    from urllib.parse import quote
+
+    selected = model if model is not None else connection.model
+    if selected:
+        if selected != connection.model and not AIModel.objects.filter(agent=connection.agent, identifier=selected).exists():
+            raise HttpError(422, "Select a model from this connection's catalog.")
+        path += "&model=" + quote(selected, safe="")
     try:
-        data = runtime_call(path, timeout=15)
+        data = runtime_call(path, timeout=30)
         if data.get("state") not in {"supported", "unavailable", "error"}:
             raise ValueError("Invalid model discovery response")
         reason = data.get("reason")
@@ -166,7 +178,8 @@ def refresh(connection):
         items = data.get("items", [])
         if not isinstance(items, list) or len(items) > 1000:
             raise ValueError("Invalid model discovery catalog")
-        parsed = [ModelIn.model_validate({**item, "agent": connection.agent}) for item in items]
+        parsed = [ModelIn.model_validate({**{k: v for k, v in item.items() if k != "capabilities"}, "agent": connection.agent}) for item in items]
+        capabilities = {item.identifier: safe_capabilities(raw["capabilities"]) for item, raw in zip(parsed, items) if isinstance(raw.get("capabilities"), dict)}
         with transaction.atomic():
             AIModelDiscovery.objects.update_or_create(
                 identity=identity, defaults={"state": data["state"], "reason": reason}
@@ -193,8 +206,11 @@ def refresh(connection):
                         AIModelObservation.objects.update_or_create(
                             model=model,
                             identity=identity,
-                            defaults={"status": "SUPPORTED", "reason": "catalog_not_entitlement"},
+                            defaults={"status": "SUPPORTED", "reason": "catalog_not_entitlement", "capabilities": capabilities.get(item.identifier, previous.capabilities if previous else {})},
                         )
+                    elif previous and item.identifier in capabilities:
+                        previous.capabilities = capabilities[item.identifier]
+                        previous.save(update_fields=["capabilities"])
                 AIModelObservation.objects.filter(identity=identity).exclude(
                     model_id__in=present
                 ).update(
@@ -208,8 +224,8 @@ def refresh(connection):
 
 
 @router.post("/ai-connections/{connection_id}/models/refresh")
-def refresh_models(request, connection_id: int):
-    return refresh(get_object_or_404(AIConnection, pk=connection_id))
+def refresh_models(request, connection_id: int, model: str | None = None):
+    return refresh(get_object_or_404(AIConnection, pk=connection_id), model)
 
 
 @router.post("/ai-connections/{connection_id}/models/{model_id}/test")
@@ -241,3 +257,23 @@ def record_execution(connection, identifier, available):
             "reason": "successful_analysis" if available else "model_rejected",
         },
     )
+
+
+def safe_capabilities(raw):
+    if not isinstance(raw, dict):
+        return {}
+    efforts = raw.get("reasoning_efforts", [])
+    if not isinstance(efforts, list):
+        efforts = []
+    efforts = list(dict.fromkeys(e for e in efforts if isinstance(e, str) and e in {"none", "minimal", "low", "medium", "high", "xhigh", "max"}))
+    return {"reasoning_efforts": efforts, "default_effort": raw.get("default_effort") if raw.get("default_effort") in efforts else "", "is_default": raw.get("is_default") is True}
+
+
+def validate_effort(connection, model, effort):
+    if not effort:
+        return
+    rows = AIModelObservation.objects.filter(identity=identity_for(connection), model__agent=connection.agent,
+                                            status__in=["SUPPORTED", "AVAILABLE"])
+    row = (rows.filter(model__identifier=model) if model else rows.filter(capabilities__is_default=True)).first()
+    if not row or effort not in safe_capabilities(row.capabilities).get("reasoning_efforts", []):
+        raise HttpError(422, "Select a reasoning level reported for this model and connection.")

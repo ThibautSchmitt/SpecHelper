@@ -11,10 +11,22 @@ import { publicRoles, roleLabels, type PublicRole } from "@/lib/orchestration";
 import { Card } from "@/components/ui/card";
 import { ConnectButton } from "@/components/connect-button";
 import { ModelSelect } from "@/components/ai-models";
-import { api, send, statuses } from "@/lib/api";
+import { api, send } from "@/lib/api";
 import { assistantName, assistantProviders, type AssistantProvider } from "@/lib/assistant-providers";
+import { observedQuota } from "@/lib/quota";
 
 export type QuotaWindow = {
+  window_type?: string;
+  source?: string;
+  scope?: string;
+  limit_id?: string;
+  status?: string;
+  model_pool?: string;
+  group_name?: string;
+  window_minutes?: number;
+  remaining_units?: number;
+  total_units?: number;
+  unit?: string;
   remaining_percent?: number;
   used_percent?: number;
   reset_at?: string;
@@ -27,6 +39,7 @@ export type AIConnection = {
   name?: string;
   agent: AssistantProvider;
   model?: string;
+  reasoning_effort?: string;
   status: string;
   availability: string;
   error?: string;
@@ -38,7 +51,7 @@ export type AIConnection = {
   is_default?: boolean;
   preference?: number;
   quota_status?: { state: string; source?: string; checked_at?: string; reason?: string };
-  quota_windows?: { session?: QuotaWindow; weekly?: QuotaWindow };
+  quota_windows?: Record<string, QuotaWindow>;
   roles?: PublicRole[];
   additional_instructions?: string;
   skill_overrides?: Record<string, boolean>;
@@ -47,8 +60,8 @@ const emptyForm = {
   name: "",
   agent: "codex",
   model: "",
+  reasoning_effort: "",
   enabled: true,
-  is_default: false,
   preference: 100,
   share_identity_from: "",
   roles: [...publicRoles] as PublicRole[],
@@ -83,6 +96,10 @@ export function AIConnections({
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
     let alive = true;
+    const readQuotas = () => api<AIConnection[]>("/ai-connections")
+      .then(result => { if (alive) setValues(result); }).catch(() => {});
+    const quotaTimer = window.setInterval(() => { if (document.visibilityState === "visible") readQuotas(); }, 15000);
+    window.addEventListener("quota-updated", readQuotas);
     const load = () =>
       api<OrchestrationSettings>("/orchestration-settings")
         .then((data) => {
@@ -93,6 +110,8 @@ export function AIConnections({
     window.addEventListener("orchestration-updated", load);
     return () => {
       alive = false;
+      window.clearInterval(quotaTimer);
+      window.removeEventListener("quota-updated", readQuotas);
       window.removeEventListener("orchestration-updated", load);
     };
   }, []);
@@ -126,14 +145,14 @@ export function AIConnections({
     identities.set(key, [...(identities.get(key) || []), value]);
   }
   function quota(window?: QuotaWindow) {
-    if (!window) return t("Unknown");
+    if (!window) return t("Not reported");
     const percent =
       window.remaining_percent ??
       (window.used_percent !== undefined
         ? 100 - window.used_percent
         : undefined);
     const reset = window.reset_at || window.resets_at;
-    return `${window.exhausted ? t("Quota exhausted") : percent === undefined ? t("Unknown") : t("{percent}% remaining", { percent: Math.max(0, Math.min(100, percent)) })}${reset && !Number.isNaN(Date.parse(reset)) ? ` · ${t("Reset")}: ${new Date(reset).toLocaleString(dateLocale)}` : ""}`;
+    return `${window.exhausted ? t("Quota exhausted") : percent === undefined ? (typeof window.remaining_units === "number" ? `${window.remaining_units} ${window.unit || t("Credits")}` : t("Not reported")) : t("{percent}% remaining", { percent: Math.max(0, Math.min(100, Number(percent.toPrecision(3)))) })}${reset && !Number.isNaN(Date.parse(reset)) ? ` · ${t("Reset")}: ${new Date(reset).toLocaleString(dateLocale)}` : ""}`;
   }
   useEffect(() => {
     if (showForm)
@@ -173,20 +192,15 @@ export function AIConnections({
               <h3 className="flex items-center gap-2">
                 <ProviderLogo provider={value.agent} />
                 {value.name || assistantName(value.agent)}
-                {value.is_default && (
-                  <span className="ml-2 text-xs muted">{t("Default")}</span>
-                )}
               </h3>
-              <span className="badge" data-state={!value.enabled ? "DISABLED" : value.status !== "CONNECTED" ? value.status : value.availability}>
-                {t(
-                  !value.enabled
-                    ? "Disabled"
-                    : value.status !== "CONNECTED"
-                      ? statuses[value.status] || value.status
-                      : statuses[value.availability] || value.availability,
-                )}
-              </span>
+              <span className="badge" data-state={value.enabled ? "AVAILABLE" : "DISABLED"}>{t(value.enabled ? "Enabled" : "Disabled")}</span>
             </div>
+            <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+              <div><dt className="muted">{t("Authentication")}</dt><dd>{t(value.status === "CONNECTED" ? "Connected" : "Not connected")}</dd></div>
+              <div><dt className="muted">{t("Availability")}</dt><dd>{t(value.status !== "CONNECTED" || !value.enabled ? "Unavailable" : value.availability === "AVAILABLE" ? "Available" : value.availability === "BUSY" ? "Busy" : value.availability === "UNKNOWN" ? "Availability unknown" : "Unavailable")}</dd></div>
+              <div><dt className="muted">{t("Quota")}</dt><dd>{t(observedQuota(value).state === "Quota remaining" ? "Quota available" : observedQuota(value).state === "Quota exhausted" ? "Quota exhausted" : "Quota unknown")}</dd></div>
+              <div><dt className="muted">{t("Selection priority")}</dt><dd>{value.preference ?? 100}</dd></div>
+            </dl>
             <p className="mt-2 break-words text-sm muted">
               {assistantName(value.agent)} ·{" "}
               {value.account ||
@@ -218,6 +232,7 @@ export function AIConnections({
                 provider={value.agent}
                 startPath={`/ai-connections/${value.id}/auth/start`}
                 identityLabel={value.name}
+                reconnect={value.status === "CONNECTED" || value.status === "AUTH_ERROR"}
                 onConnected={() => {
                   action(async () => {}, "Connection successful.");
                 }}
@@ -227,8 +242,8 @@ export function AIConnections({
                 size="sm"
                 variant="outline"
                 className="icon-action"
-                aria-label={t("Refresh status and quotas")}
-                title={t("Refresh status and quotas")}
+                aria-label={t("Check connection")}
+                title={t("Check connection")}
                 disabled={busy || value.availability === "BUSY"}
                 onClick={() =>
                   action(
@@ -254,8 +269,8 @@ export function AIConnections({
                     name: value.name || "",
                     agent: value.agent,
                     model: value.model || "",
+                    reasoning_effort: value.reasoning_effort || "",
                     enabled: value.enabled,
-                    is_default: !!value.is_default,
                     preference: value.preference ?? 100,
                     share_identity_from: "",
                     roles: [...(value.roles ?? publicRoles)],
@@ -283,8 +298,8 @@ export function AIConnections({
                         name: value.name,
                         agent: value.agent,
                         model: value.model || "",
+                    reasoning_effort: value.reasoning_effort || "",
                         enabled: !value.enabled,
-                        is_default: value.is_default,
                         preference: value.preference ?? 100,
                         roles: value.roles ?? [...publicRoles],
                         additional_instructions:
@@ -322,32 +337,27 @@ export function AIConnections({
               {group[0].account || group[0].name} ·{" "}
               {group.map((v) => v.name).join(", ")}
             </p>
-            <p className="mt-2">
-              {t("Session quota")}:{" "}
-              {quota(
-                [...group]
-                  .sort(
-                    (a, b) =>
-                      (Date.parse(b.checked_at || "") || 0) -
-                      (Date.parse(a.checked_at || "") || 0),
-                  )
-                  .find((value) => value.quota_windows?.session)?.quota_windows
-                  ?.session,
-              )}
-            </p>
-            <p className="mt-1">
-              {t("Weekly quota")}:{" "}
-              {quota(
-                [...group]
-                  .sort(
-                    (a, b) =>
-                      (Date.parse(b.checked_at || "") || 0) -
-                      (Date.parse(a.checked_at || "") || 0),
-                  )
-                  .find((value) => value.quota_windows?.weekly)?.quota_windows
-                  ?.weekly,
-              )}
-            </p>
+            <dl className="mt-3 grid gap-3 sm:grid-cols-2" aria-label={t("All quota windows")}>
+              {(() => {
+                const windows = new Map<string, QuotaWindow>();
+                for (const connection of group) for (const [name, window] of Object.entries(connection.quota_windows || {})) {
+                  const old = windows.get(name);
+                  if (!old || (Date.parse(window.observed_at || "") || 0) > (Date.parse(old.observed_at || "") || 0)) windows.set(name, window);
+                }
+                if (!windows.size) return <div><dt>{t("Quota")}</dt><dd>{t("Not reported")}</dd></div>;
+                return Array.from(windows).map(([name, window]) => {
+                  const label = name === "session" ? "Session quota" : name === "weekly" || window.window_type === "weekly" || ["gemini-weekly", "3p-weekly"].includes(name) ? "Weekly quota" : name === "daily" ? "Daily quota" : name === "credits" ? "Credits" : "Other quota window";
+                  const observed = window.observed_at && Number.isFinite(Date.parse(window.observed_at)) ? window.observed_at : null;
+                  return <div key={name} className="min-w-0 rounded border p-3" data-quota-window={name}>
+                    <dt className="font-medium">{window.group_name && <span className="block">{t(window.group_name)}</span>}{t(label)}{window.window_minutes && <span className="ml-1 text-xs muted">· {t("{minutes} min window", { minutes: window.window_minutes })}</span>}{window.scope && window.scope !== "account" && <span className="mt-1 block text-xs muted">{t("Provider limit")} · {window.limit_id || name}</span>}</dt>
+                    <dd className="mt-1 break-words">{quota(window)}</dd>
+                    <dd className="mt-1 text-xs muted">{t("Last observed")}: {observed ? new Date(observed).toLocaleString(dateLocale) : t("Not reported")}</dd>
+                    {(!observed || Date.now()-Date.parse(observed)>300000 || (!!(window.reset_at || window.resets_at) && Date.parse(window.reset_at || window.resets_at || "") <= Date.now() && Date.parse(observed) < Date.parse(window.reset_at || window.resets_at || "")) || group.some(connection => ["error","unavailable"].includes(connection.quota_status?.state || ""))) && <dd className="text-xs muted">{t("Old data")}</dd>}
+                    {window.source && <dd className="mt-1 text-xs muted">{t("Source")}: {window.source}</dd>}
+                  </div>;
+                });
+              })()}
+            </dl>
             <p className="mt-2 text-xs muted">
               {t("Last observed")}: {(() => {
                 const timestamps = group.flatMap((value) => Object.values(value.quota_windows || {}).map((window) => window?.observed_at)).filter((value): value is string => !!value && !Number.isNaN(Date.parse(value)));
@@ -418,6 +428,7 @@ export function AIConnections({
               }
             />
           </div>
+          <div className="grid min-w-0 gap-4 md:grid-cols-3" aria-label={t("Model configuration")}>
           <div className="field">
             <label htmlFor="ai-config-provider">
               {t("Assistant provider")}
@@ -431,7 +442,7 @@ export function AIConnections({
                   ...form,
                   agent: e.target.value,
                   share_identity_from: "",
-                  model: "",
+                  model: "", reasoning_effort: "",
                 })
               }
             >
@@ -439,6 +450,11 @@ export function AIConnections({
                 <option key={provider.id} value={provider.id}>{provider.name}</option>
               ))}
             </select>
+          </div>
+            <ModelSelect agent={form.agent} connectionId={editing?.id || (form.share_identity_from ? Number(form.share_identity_from) : undefined)}
+              value={form.model} effort={form.reasoning_effort}
+              onChange={model => setForm(previous => ({ ...previous, model, reasoning_effort: "" }))}
+              onEffortChange={reasoning_effort => setForm(previous => ({ ...previous, reasoning_effort }))} />
           </div>
           {!editing && (
             <div className="field">
@@ -452,6 +468,7 @@ export function AIConnections({
                   setForm((previous) => ({
                     ...previous,
                     share_identity_from: e.target.value,
+                    model: "", reasoning_effort: "",
                   }))
                 }
               >
@@ -466,25 +483,11 @@ export function AIConnections({
               </select>
             </div>
           )}
-          <div className="field">
-            <label htmlFor="ai-config-model">{t("Model")}</label>
-            <ModelSelect
-              agent={form.agent}
-              connectionId={editing?.id || (form.share_identity_from ? Number(form.share_identity_from) : undefined)}
-              value={form.model}
-              onChange={(model) =>
-                setForm((previous) => ({ ...previous, model }))
-              }
-            />
-            <p className="mt-2 text-xs muted">
-              {t(
-                "Leave empty to use the provider default. Unsupported models produce an explicit runtime error.",
-              )}
-            </p>
-          </div>
+          <details className="mt-5 rounded-lg border p-4">
+            <summary className="cursor-pointer text-sm font-medium">{t("Advanced options")}</summary>
           <div className="field">
             <label htmlFor="ai-config-preference">
-              {t("Availability preference")}
+              {t("Selection priority")}
             </label>
             <Input
               id="ai-config-preference"
@@ -502,17 +505,22 @@ export function AIConnections({
             />
             <p className="mt-2 text-xs muted">
               {t(
-                "Lower values are preferred when automatic selection is used.",
+                "Lower priorities are selected first among eligible assistants. Equal priorities use connection creation order; model diversity rules still apply.",
               )}
             </p>
           </div>
-          <fieldset className="mt-5 space-y-3">
+          </details>
+          <label className="mt-4 flex gap-2 text-sm">
+            <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />
+            {t("Participate in analyses")}
+          </label>
+          <fieldset disabled={!form.enabled} className="mt-5 space-y-3 disabled:opacity-60">
             <legend className="text-sm font-medium">
               {t("Analysis roles")}
             </legend>
             <p className="text-xs muted">
               {t(
-                "A connection can perform several roles, each in an independent session.",
+                "These are the roles this assistant may perform. All three roles must be covered across enabled, connected assistants.",
               )}
             </p>
             {publicRoles.map((role) => (
@@ -612,32 +620,6 @@ export function AIConnections({
               )}
             </p>
           </details>
-          <label className="mt-4 flex gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.is_default}
-              onChange={(e) =>
-                setForm((previous) => ({
-                  ...previous,
-                  is_default: e.target.checked,
-                }))
-              }
-            />
-            {t("Default connection when available")}
-          </label>
-          <label className="mt-3 flex gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) =>
-                setForm((previous) => ({
-                  ...previous,
-                  enabled: e.target.checked,
-                }))
-              }
-            />
-            {t("Use this assistant for requests")}
-          </label>
           <div className="mt-4 flex gap-2">
             <Button disabled={busy}>
               {t(editing ? "Save connection" : "Add AI connection")}

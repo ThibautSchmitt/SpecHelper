@@ -27,21 +27,40 @@ def configured_secrets():
     return sorted(filter(None, values), key=len, reverse=True)
 
 
-def redact(value, secrets):
-    """Redact exact configured credentials recursively, without logging their values."""
-    if isinstance(value, str):
-        for secret in secrets:
-            for encoded in {secret, quote(secret, safe=""), base64.b64encode(secret.encode()).decode()}:
-                value = value.replace(encoded, "[REDACTED]")
-        value = re.sub(r"(?i)(https?://|postgres(?:ql)?://)([^/\s:@]+):([^/@\s]+)@", r"\1[REDACTED]@", value)
-        value = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,})", "[REDACTED]", value)
-        value = re.sub(r"\bAIza[0-9A-Za-z_-]{35}\b", "[REDACTED]", value)
-        return value
-    if isinstance(value, list):
-        return [redact(item, secrets) for item in value]
-    if isinstance(value, dict):
-        return {key: redact(item, secrets) for key, item in value.items()}
-    return value
+def credential_pattern(secrets):
+    """Match short credentials as whole tokens, never as fragments of ordinary words."""
+    patterns = set()
+    for secret in filter(None, secrets):
+        for encoded in {secret, quote(secret, safe=""), base64.b64encode(secret.encode()).decode()}:
+            literal = re.escape(encoded)
+            pattern = r"(?<!\w)" + literal + r"(?!\w)" if len(secret) < 8 else literal
+            patterns.add((len(encoded), len(secret) >= 8, pattern))
+    # A single substitution also prevents one secret from damaging an existing marker.
+    return re.compile(r"\[REDACTED\]" + ("|" + "|".join(item[2] for item in sorted(patterns, reverse=True)) if patterns else ""))
+
+
+def contains_credentials(text, secrets):
+    return any(match.group() != "[REDACTED]" for match in credential_pattern(secrets).finditer(text))
+
+
+def redact(value, secrets, *, public_identifiers=()):
+    """Redact credentials recursively while preserving unrelated labels and identifiers."""
+    pattern = credential_pattern(secrets)
+    identifier_pattern = credential_pattern([secret for secret in secrets if len(secret) >= 8])
+
+    def visit(item, public_identifier=False):
+        if isinstance(item, str):
+            item = (identifier_pattern if public_identifier else pattern).sub("[REDACTED]", item)
+            item = re.sub(r"(?i)(https?://|postgres(?:ql)?://)([^/\s:@]+):([^/@\s]+)@", r"\1[REDACTED]@", item)
+            item = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,})", "[REDACTED]", item)
+            return re.sub(r"\bAIza[0-9A-Za-z_-]{35}\b", "[REDACTED]", item)
+        if isinstance(item, list):
+            return [visit(child) for child in item]
+        if isinstance(item, dict):
+            return {key: visit(child, key in public_identifiers and isinstance(child, str)) for key, child in item.items()}
+        return item
+
+    return visit(value)
 
 
 def git_credentials():

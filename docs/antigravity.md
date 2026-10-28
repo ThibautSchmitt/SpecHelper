@@ -35,7 +35,9 @@ capacity. Different keys can belong to the same Google project/account; they do 
 prove independent upstream quota. Native OAuth profiles do not expose a guaranteed
 stable account identifier: separate Google sign-ins are not proof of separate quota.
 Connections sharing one SpecHelper identity retain a shared local capacity lease. Session/weekly percentages and reset times remain
-unknown when no supported observation exists. CLI-reported invocation usage is
+unknown when no supported observation exists. The pinned CLI now exposes native
+weekly group observations through `agy -p /usage --output-format json`, with zero
+inference turns. Gemini and Claude/GPT limits remain separate. CLI-reported invocation usage is
 retained only when present; it is not an account quota or monetary-cost estimate.
 The native CLI may make auxiliary title-generation calls in addition to the selected
 analysis model, so its final usage must not be assumed to cover every billed request.

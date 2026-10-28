@@ -181,6 +181,7 @@ def connection_snapshot(connection, operation):
         "connection_name": connection.name or connection.agent,
         "agent": connection.agent,
         "model": connection.model,
+        "reasoning_effort": connection.reasoning_effort,
         "identity_id": str(identity.pk),
         "credential_id": str(identity.credential_id) if identity.credential_id else None,
         "public_role": "library_test" if operation == "test" else "library_generator",
@@ -379,6 +380,7 @@ def reserve_job(job):
     if connection and (
         connection.agent != assignment["agent"]
         or connection.model != assignment["model"]
+        or connection.reasoning_effort != assignment.get("reasoning_effort", "")
         or str(identity_for(connection).pk) != assignment["identity_id"]
         or "analyst" not in connection.roles
     ):
@@ -529,6 +531,7 @@ def run_job(job, caller=None):
                 "session_id": None,
                 "agent": assignment["agent"],
                 "model": assignment["model"],
+                "reasoning_effort": assignment.get("reasoning_effort", ""),
                 "identity_id": assignment["credential_id"],
                 "phase": "analysis",
                 "profile": "writer",

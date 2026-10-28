@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, BookOpen, CircleHelp, Clock3 } from "lucide-react";
-import { WorkItemForm } from "@/components/work-item-form";
+import { BookOpen, CircleHelp, Clock3 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { api, statuses, resultStates, type RequestItem } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
@@ -14,7 +15,17 @@ type Overview = {
 };
 
 export function AnalysisHome() {
-  const { t, dateLocale } = useI18n();
+  const { t } = useI18n();
+  const router = useRouter();
+  const parameters = useSearchParams();
+  const legacyCreation = parameters.has("new") || parameters.has("from_question");
+  useEffect(() => {
+    if (legacyCreation) {
+      const next = new URLSearchParams(parameters.toString());
+      next.set("new", "1");
+      router.replace(`/analyses?${next}`);
+    }
+  }, [legacyCreation, parameters, router]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -30,13 +41,13 @@ export function AnalysisHome() {
   return <div className="space-y-7">
     <header><h1 className="text-2xl font-semibold">{t("Home")}</h1>
       <p className="mt-2 muted">{t("Ask a question, explore current behavior, or prepare a change.")}</p></header>
-    <WorkItemForm unified embedded />
+    <Button asChild><Link href="/analyses?new=1">{t("New analysis")}</Link></Button>
     {error && <p role="alert">{t(error)}</p>}
     {!overview && !error && <p role="status" className="text-sm muted">{t("Loading analyses…")}</p>}
     <section className="grid gap-4 md:grid-cols-3" aria-label={t("Analyses to resume")}>
       {([
-        ["clarify", "To clarify", CircleHelp],
-        ["consult", "Ready to read", BookOpen],
+        ["clarify", "Needs attention", CircleHelp],
+        ["consult", "Results available", BookOpen],
         ["active", "In progress", Clock3],
       ] as const).map(([bucket, label, Icon]) => {
         const section = overview?.sections[bucket];
@@ -46,23 +57,18 @@ export function AnalysisHome() {
             {section && <span className="ml-auto text-sm">{section.count}</span>}
           </Link>
           {section && <ul className="mt-3 space-y-3">{section.items.map((item) => <li key={item.id}>
-            <Link href={item.href} className="block truncate text-sm underline-offset-4 hover:underline" title={item.title || item.need}>
-              {item.title || item.need}</Link>
-            <p className="truncate text-xs muted">{item.environment_name} · {t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</p>
+            <Link href={item.href} className="block min-w-0 rounded text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-primary">
+              <span className="line-clamp-2 break-words" title={item.title || item.need}>{item.title || item.need}</span>
+              <span className="mt-1 block text-xs muted">{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
+              {item.stage && <span className="mt-1 block line-clamp-2 text-xs muted">{t(item.stage)}</span>}
+              {!!item.result_limits?.length && <span className="mt-1 block line-clamp-2 text-xs muted">{t(item.result_limits[0])}</span>}
+              <span className="mt-1 block truncate text-xs muted">{item.environment_name}</span>
+            </Link>
           </li>)}</ul>}
           {section?.count === 0 && <p className="mt-3 text-sm muted">{t("Nothing here for now.")}</p>}
         </div>;
       })}
     </section>
-    {overview && <section aria-labelledby="recent-analyses-heading" className="rounded-lg border bg-card p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="recent-analyses-heading" className="font-semibold">{t("Recent analyses")}</h2>
-        <Link href="/analyses" className="inline-flex items-center gap-2 text-sm text-primary">{t("All analyses")}<ArrowRight size={14} aria-hidden="true" /></Link></div>
-      {overview.recent.length ? <ul className="mt-4 divide-y">{overview.recent.map((item) => <li key={item.id}>
-        <Link href={item.href} className="flex min-w-0 flex-wrap items-center gap-3 py-3">
-          <div className="min-w-0 flex-1"><h3 className="truncate font-medium" title={item.title || item.need}>{item.title || item.need}</h3>
-            <p className="mt-1 text-xs muted">{item.environment_name} · <time dateTime={item.latest_activity_at}>{new Date(item.latest_activity_at).toLocaleString(dateLocale)}</time></p></div>
-          <span className="text-xs muted">{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span><ArrowRight size={15} aria-hidden="true" /></Link>
-      </li>)}</ul> : <p className="mt-4 text-sm muted">{t("Your analyses will appear here.")}</p>}
-    </section>}
+
   </div>;
 }

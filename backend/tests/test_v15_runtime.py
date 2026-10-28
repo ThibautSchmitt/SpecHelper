@@ -117,9 +117,9 @@ def test_independent_default_context_and_legacy_context_remain_distinct(tmp_path
     }
     # Missing credentials stop execution after directory selection, without a CLI call.
     for independent in (False, True):
-        assert server.run(
-            server.RunIn.model_validate({**payload, "independent_context": independent})
-        ) == {
+        result = server.run(server.RunIn.model_validate({**payload, "independent_context": independent}))
+        assert result.pop("quota_status")["state"] == "unavailable"
+        assert result == {
             "failure": {"kind": "AUTH_ERROR"},
             "context_usage": [],
             "context_audit": "unavailable",

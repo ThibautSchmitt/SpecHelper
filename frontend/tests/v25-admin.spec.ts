@@ -85,7 +85,7 @@ for (const language of ["en", "fr"] as const) {
     await page.getByLabel(t("Name"), { exact: true }).fill("Rare counts");
     await page.getByLabel(t("Objective"), { exact: true }).fill("Find population exceptions.");
     await page.getByLabel(t("Instructions"), { exact: true }).fill("Inspect PostgreSQL populations with bounded read-only counts.");
-    await page.getByRole("button", { name: t("Save definition"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
     await expect.poll(() => saved).toMatchObject({ compatibility: [], required_capabilities: [], enabled: true });
   });
 
@@ -104,17 +104,17 @@ for (const language of ["en", "fr"] as const) {
     expect(refreshed[0]).toMatch(/\/ai-connections\/1\/quota\/refresh$/);
   });
 
-  test(`model catalog precedes secondary manual authoring in ${language}`, async ({ page }) => {
+  test(`model configuration belongs to connections without global manual authoring in ${language}`, async ({ page }) => {
     await setup(page, language);
     await page.route("**/api/ai-connections", route => route.fulfill({ json: [] }));
     await page.goto("/admin");
     await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
-    await page.getByRole("button", { name: t("Models"), exact: true }).click();
+    await expect(page.getByRole("button", { name: t("Models"), exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Model identifier"), { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: t("Refresh models"), exact: true })).toBeVisible();
-    await page.getByRole("button", { name: t("Add a documented model"), exact: true }).click();
-    await expect(page.getByLabel(t("Model identifier"), { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: t("Cancel"), exact: true }).click();
-    await expect(page.getByLabel(t("Model identifier"), { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: t("New AI connection"), exact: true }).click();
+    await expect(page.getByLabel(t("Model"), { exact: true })).toBeVisible();
+    await expect(page.getByLabel(t("Reasoning"), { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: t("Refresh models"), exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: t("Add a documented model"), exact: true })).toHaveCount(0);
   });
 }

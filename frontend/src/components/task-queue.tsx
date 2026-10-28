@@ -13,7 +13,7 @@ import { ChevronDown, Activity, Bot, CheckCircle2, Clock3, GitBranch, LoaderCirc
 import { AssistantLogo } from "@/components/assistant-logo";
 import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
 import { AnalysisRetryButton } from "@/components/analysis-retry-button";
-import { api, statuses } from "@/lib/api";
+import { api, resultStates } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { assistantName } from "@/lib/assistant-providers";
 import {
@@ -32,6 +32,10 @@ export type QueueJob = {
   stage_number?: number;
   stage_count?: number;
   elapsed_seconds?: number;
+  active_analysis_seconds?: number | null;
+  clarification_since?: string | null;
+  queued_since?: string | null;
+  analysis_state?: string;
   request_id?: string | null;
   can_cancel?: boolean;
   can_retry?: boolean;
@@ -73,6 +77,33 @@ const QueueContext = createContext<{
   now: number;
   loading: boolean;
 }>({ jobs: [], error: "", now: 0, loading: true });
+
+function stateOf(job: QueueJob) {
+  return job.queue_state || (job.request_status === "NEEDS_CLARIFICATION" && job.status === "DONE" ? "PAUSED" : job.status);
+}
+
+function queueCards(jobs: QueueJob[]) {
+  const latest = new Map<string, QueueJob>();
+  for (const job of jobs) {
+    const key = job.kind === "analysis" && job.request_id ? `analysis:${job.request_id}` : `${job.kind}:${job.id}`;
+    const previous = latest.get(key);
+    if (!previous || Date.parse(job.created_at) > Date.parse(previous.created_at) || (job.created_at === previous.created_at && Number(job.id) > Number(previous.id))) latest.set(key, job);
+  }
+  return Array.from(latest.values()).filter(job => !(job.kind === "sync" && stateOf(job) === "DONE"));
+}
+
+export function useQueueAttention() {
+  const { jobs, error } = useContext(QueueContext);
+  const cards = queueCards(jobs);
+  return { count: cards.filter(job => ["PAUSED", "ERROR"].includes(stateOf(job)) || job.result_status === "partial").length,
+    clarifications: cards.filter(job => stateOf(job) === "PAUSED").length, error: !!error };
+}
+
+function waitingDuration(since: string | null | undefined, now: number) {
+  const seconds = since ? Math.max(0, Math.floor((now - Date.parse(since)) / 1000)) : NaN;
+  if (!Number.isFinite(seconds)) return null;
+  return seconds >= 3600 ? `${Math.floor(seconds / 3600)} h` : seconds >= 60 ? `${Math.floor(seconds / 60)} min` : `${seconds} s`;
+}
 export function TaskQueueProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [error, setError] = useState("");
@@ -142,11 +173,6 @@ export function TaskQueue() {
     }
     positions.current = next;
   }, [jobs]);
-  const stateOf = (job: QueueJob) =>
-    job.queue_state ||
-    (job.request_status === "NEEDS_CLARIFICATION" && job.status === "DONE"
-      ? "PAUSED"
-      : job.status);
   const groups = [
     { state: "RUNNING", label: "In progress", icon: LoaderCircle },
     { state: "QUEUED", label: "Waiting", icon: Clock3 },
@@ -158,21 +184,16 @@ export function TaskQueue() {
   ];
   // Retained jobs are history, not additional live cards for the same request.
   // The newest analysis owns the card even if an older attempt had a higher state.
-  const latest = new Map<string, QueueJob>();
-  for (const job of jobs) {
-    const key = job.kind === "analysis" && job.request_id ? `${job.workflow || "request"}:${job.request_id}` : `${job.kind}:${job.id}`;
-    const previous = latest.get(key);
-    if (!previous || Date.parse(job.created_at) > Date.parse(previous.created_at) || (job.created_at === previous.created_at && Number(job.id) > Number(previous.id))) latest.set(key, job);
-  }
-  const cards = Array.from(latest.values()).filter(job => !(job.kind === "sync" && stateOf(job) === "DONE"));
+  const cards = queueCards(jobs);
   const recent = cards
     .filter((j) => ["DONE", "ERROR", "CANCELLED"].includes(stateOf(j)))
-    .slice(0, 8);
+    .sort((a, b) => Date.parse(b.finished_at || b.created_at) - Date.parse(a.finished_at || a.created_at))
+    .slice(0, 5);
   const visible = groups.flatMap((group) =>
     cards.filter(
       (job) =>
         stateOf(job) === group.state &&
-        (!["DONE", "ERROR", "CANCELLED"].includes(group.state) || recent.includes(job)),
+        (!["DONE", "CANCELLED"].includes(group.state) || recent.includes(job)),
     ),
   );
 
@@ -218,7 +239,7 @@ export function TaskQueue() {
           const resultLabel = resultState === "partial" ? "Partial result" : resultState === "complete" ? "Complete result" : resultState === "unusable" ? "No usable result" : "";
           const limits = job.result_limits?.map(reason => t(reason)).join(" · ") || (resultState === "partial" ? t("Required independent checks are incomplete. Publication is blocked.") : "");
           const identifier = `#${String(job.id).replace(/^publication:/, "").slice(0, typeof job.id === "number" ? undefined : 8)}`;
-          const elapsed = typeof job.elapsed_seconds === "number" ? Math.max(0, Math.floor(job.elapsed_seconds)) : job.started_at
+          const elapsed = job.kind === "analysis" ? job.active_analysis_seconds ?? null : job.started_at
             ? Math.max(
                 0,
                 Math.floor(
@@ -228,6 +249,10 @@ export function TaskQueue() {
                 ),
               )
             : null;
+          const waiting = clarification ? waitingDuration(job.clarification_since || job.finished_at, now)
+            : ["QUEUED", "WAITING_AI"].includes(state) ? waitingDuration(job.queued_since || (!job.started_at ? job.created_at : null), now) : null;
+          const timing = clarification ? (waiting ? t("Waiting for your answer for {duration}", { duration: waiting }) : t("Your answer is needed"))
+            : ["QUEUED", "WAITING_AI"].includes(state) ? (waiting ? t("In queue for {duration}", { duration: waiting }) : t("Waiting for a resource")) : "";
           return (
             <Fragment key={job.id}>
               {firstInGroup && (
@@ -239,6 +264,7 @@ export function TaskQueue() {
                 data-job={String(job.id)}
                 className="queue-card"
                 data-state={state}
+                data-result-status={resultState}
               >
                 <Link href={job.href || "/"} className="queue-card-content">
                   <div className="queue-card-title">
@@ -247,11 +273,11 @@ export function TaskQueue() {
                   </div>
                   <div className="queue-card-status">
                     <group.icon className={state === "RUNNING" ? "queue-running-icon" : ""} size={17} aria-hidden="true" />
-                    <span className="badge" data-state={state}>
+                    <span className="badge" data-state={state === "DONE" && resultState === "partial" ? "PARTIAL" : state}>
                       <group.icon size={11} aria-hidden="true" />
-                      {t(job.publication_status === "UNCERTAIN" ? statuses.UNCERTAIN : state === "PAUSED" ? "Paused" : state === "ERROR" ? "Error" : group.label)}
+                      {t(job.publication_status === "UNCERTAIN" ? "Publication uncertain" : job.kind === "publication" && state === "DONE" ? "Ticket published" : job.analysis_state && job.analysis_state !== "processing" && resultStates[job.analysis_state] ? resultStates[job.analysis_state] : state === "PAUSED" ? "Needs clarification" : state === "ERROR" ? "Technical failure" : state === "DONE" && job.kind === "analysis" ? resultLabel || "Processing completed" : group.label)}
                     </span>
-                    <span className="queue-context" title={[job.environment_name, job.stage, elapsed !== null ? t("Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(elapsed / 60), seconds: elapsed % 60 }) : ""].filter(Boolean).join(" · ")}>
+                    <span className="queue-context" title={[job.environment_name, job.stage].filter(Boolean).join(" · ")}>
                       {job.status === "QUEUED" && job.queue_position != null
                         ? t("Queue position: {position}", { position: job.queue_position })
                         : clarification ? t("Your answer is needed") : job.environment_name || t(job.operation || job.kind)}
@@ -283,12 +309,13 @@ export function TaskQueue() {
                     )}
                   </div>
                   <p className="queue-description" data-error={!!job.error} title={[description, warning].filter(Boolean).join(" · ")}>{warning && !job.error ? `${warning} · ${description}` : description}</p>
-                  {(job.stage_number || elapsed !== null) && <p className="mt-2 flex flex-wrap justify-between gap-2 text-[10px] muted">
+                  {(job.stage_number || elapsed !== null || timing) && <p className="mt-2 flex flex-wrap justify-between gap-2 text-xs muted">
                     {job.stage_number && job.stage_count === 3 ? <span>{t("Step {step} of {total}", { step: job.stage_number, total: job.stage_count })}</span> : <span />}
-                    {elapsed !== null && <span>{t("Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(elapsed / 60), seconds: elapsed % 60 })}</span>}
+                    {timing && <span>{timing}</span>}
+                    {elapsed !== null && <span>{t(job.kind === "analysis" ? "Active AI: {minutes}m {seconds}s" : "Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(elapsed / 60), seconds: elapsed % 60 })}</span>}
                   </p>}
                   {job.kind === "analysis" && resultLabel && <div className="mt-2 text-xs" data-result-status={resultState}>
-                    <p className={resultState === "partial" ? "font-medium text-amber-700 dark:text-amber-300" : "muted"}>{t(resultLabel)}</p>
+                    {!job.analysis_state && <p className={resultState === "partial" ? "font-medium text-amber-700 dark:text-amber-300" : "muted"}>{t(resultLabel)}</p>}
                     {limits && <p className="mt-1 line-clamp-2 muted" title={limits}>{limits}</p>}
                   </div>}
                 </Link>
@@ -301,9 +328,10 @@ export function TaskQueue() {
       </ol>
       <p className="mt-5 text-xs muted">
         {t(
-          "Recent completed tasks are shown here. Open Requests, Questions or Tickets for full history.",
+          "Only recent completed tasks are shown here. Open Analyses or Tickets for full history.",
         )}
       </p>
+      <Link href="/analyses" className="mt-2 inline-block text-xs text-primary underline">{t("Analysis history")}</Link>
     </div>
   );
 }

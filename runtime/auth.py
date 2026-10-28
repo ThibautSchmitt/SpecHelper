@@ -108,7 +108,7 @@ class Logins:
                         write_credential(destination / "auth.json", json.dumps({
                             "auth_mode": OAUTH_MODE, "credential": profile,
                         }).encode())
-                    return {"account": PROVIDERS[provider], "account_key": ""}
+                    return {"account": PROVIDERS[provider], "account_key": "", **quota_status(target_root, destination, provider, "CONNECTED")}
                 source = home / provider
                 files = (
                     ["auth.json"] if provider == "codex" else [".credentials.json", ".claude.json"]
@@ -125,6 +125,7 @@ class Logins:
                 return {
                     "account": PROVIDERS[provider],
                     "account_key": account_key(destination, provider),
+                    **quota_status(target_root, destination, provider, "CONNECTED"),
                 }
 
             def ready(home):
@@ -187,7 +188,7 @@ def connection_status(root, provider, include_quota=False):
     if provider == "antigravity":
         from .antigravity_auth import status
 
-        return status(directory, include_quota)
+        return status(directory, include_quota, root=root)
     if not subscription_credentials(directory, provider):
         value = {
             "status": "DISCONNECTED",
@@ -235,9 +236,13 @@ def connection_status(root, provider, include_quota=False):
 
 def quota_status(root, directory, provider, status):
     """Only supported non-inference account reads; never scrape private OAuth APIs."""
+    if provider == "antigravity":
+        from .antigravity_auth import quota_metadata
+
+        return quota_metadata(root, directory, status == "CONNECTED")
     metadata = {
         "state": "unavailable",
-        "source": "codex_app_server" if provider == "codex" else "claude_cli",
+        "source": "codex_app_server" if provider == "codex" else f"{provider}_cli",
         "checked_at": datetime.now(UTC).isoformat(),
         "reason": "not_connected" if status != "CONNECTED" else "unsupported_cli",
     }

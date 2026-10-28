@@ -31,6 +31,28 @@ async function queuePanel(page: Page, language: "en" | "fr", mobile: boolean) {
 }
 for (const language of ["en", "fr"] as const) {
   const t = (key: string) => translation(language, key);
+  test(`role coverage distinguishes missing assignments from quota waits in ${language}`, async ({ page }) => {
+    await setup(page, language);
+    let coverage = { complete: false, roles: { analyst: { configured: [1], available: [1] }, counter_analyst: { configured: [] as number[], available: [] as number[] }, verifier: { configured: [] as number[], available: [] as number[] } } };
+    await page.route("**/api/orchestration-settings", route => route.fulfill({ json: { ...config, role_coverage: coverage } }));
+    await page.goto("/admin");
+    await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
+    await page.getByRole("button", { name: t("Edit"), exact: true }).click();
+    await expect(page.getByLabel(t("Default connection when available"), { exact: true })).toHaveCount(0);
+    const roles = page.getByRole("group", { name: t("Analysis roles"), exact: true });
+    await page.getByLabel(t("Participate in analyses"), { exact: true }).uncheck();
+    for (const input of await roles.getByRole("checkbox").all()) await expect(input).toBeDisabled();
+    await page.getByLabel(t("Participate in analyses"), { exact: true }).check();
+    for (const input of await roles.getByRole("checkbox").all()) await expect(input).toBeChecked();
+    await page.getByRole("navigation", { name: t("AI settings"), exact: true }).getByRole("button", { name: t("Roles and orchestration"), exact: true }).click();
+    const panel = page.getByRole("region", { name: t("Role coverage"), exact: true });
+    await expect(panel).toContainText(t("Configuration incomplete"));
+    await expect(panel.getByText(t("Not covered"), { exact: true })).toHaveCount(2);
+    coverage = { complete: true, roles: { analyst: { configured: [1], available: [] }, counter_analyst: { configured: [1], available: [] }, verifier: { configured: [1], available: [] } } };
+    await page.evaluate(() => window.dispatchEvent(new Event("connections-updated")));
+    await expect(panel).toContainText(t("Configuration complete"));
+    await expect(panel.getByText(t("Covered · waiting for availability"), { exact: true })).toHaveCount(3);
+  });
   test(`two instruction levels and factual environment settings in ${language}`, async ({ page }, info) => {
     await setup(page, language);
     let instructions = config.global_instructions;
@@ -63,9 +85,11 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByLabel(t("Analysis time limit (seconds)"), { exact: true })).toHaveCount(0);
     await expect(page.locator("[id^=role-instructions-]")).toHaveCount(0);
     await expect(page.getByText(t("Default skills"), { exact: true })).toHaveCount(0);
+    await page.locator("summary").filter({ hasText: t("Advanced options") }).click();
     await page.getByLabel(t("Maximum AI calls per analysis"), { exact: true }).fill("14");
     await page.getByRole("button", { name: t("Save analysis settings"), exact: true }).click();
     await expect.poll(() => writes[1]).toEqual({ allow_same_family_fallback: true, max_calls: 14 });
+    await page.getByRole("button", { name: t("Sources & environments"), exact: true }).click();
     await page.getByRole("button", { name: t("Environments"), exact: true }).click();
     await expect(page.getByText(t("Agents and skills for this environment"), { exact: true })).toHaveCount(0);
     await page.getByText(t("Environment context"), { exact: true }).click();
@@ -98,7 +122,7 @@ for (const language of ["en", "fr"] as const) {
     await page.getByRole("button", { name: t("Edit {name}").replace("{name}", "Billing review"), exact: true }).click();
     await expect(page.getByRole("group", { name: t("Required skills"), exact: true })).toHaveCount(0);
     await page.getByLabel(t("Instructions"), { exact: true }).fill("Inspect billing boundaries and rare states.");
-    await page.getByRole("button", { name: t("Save definition"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
     await expect(page.getByRole("heading", { name: /Billing review/ })).toContainText("v2");
     await page.getByRole("button", { name: t("Versions of {name}").replace("{name}", "Billing review"), exact: true }).click();
     await page.locator("summary").filter({ hasText: /^v1/ }).click();
@@ -114,7 +138,7 @@ for (const language of ["en", "fr"] as const) {
 
   test(`parallel jobs keep roles, genuine time, waiting and cancellation in ${language}`, async ({ page }, info) => {
     await setup(page, language);
-    const job = (number: number, state: string, role = "analyst", agent = "codex"): QueueJob => ({ id: number, kind: "analysis", workflow: "request", title: `Export boundaries ${number}`, request_id: number === 1 ? id : id.slice(0, -12) + String(number).padStart(12, "0"), status: state === "PAUSED" ? "DONE" : state === "WAITING_AI" ? "QUEUED" : state, queue_state: state, request_status: state === "PAUSED" ? "NEEDS_CLARIFICATION" : state, environment_name: `Environment ${number}`, operation: "Source analysis", public_role: role, stage_number: role === "verifier" ? 3 : role === "counter_analyst" ? 2 : 1, stage_count: 3, elapsed_seconds: state === "RUNNING" ? 367 : 0, agent, assignments: [{ connection_id: number, connection_name: agent === "codex" ? "ChatGPT team" : "Claude team", agent, model: "recorded-model", public_role: role }], assignment_state: state === "RUNNING" ? "current" : "previous", created_at: stamp, started_at: stamp, finished_at: null, queue_position: null, error: "", can_cancel: number === 1, href: `/requests/${id}`, waiting_reason: state === "WAITING_AI" ? "Waiting for an eligible connection from a different model family." : "", pause_reason: state === "PAUSED" ? "A business answer is needed." : "" });
+    const job = (number: number, state: string, role = "analyst", agent = "codex"): QueueJob => ({ id: number, kind: "analysis", workflow: "request", title: `Export boundaries ${number}`, request_id: number === 1 ? id : id.slice(0, -12) + String(number).padStart(12, "0"), status: state === "PAUSED" ? "DONE" : state === "WAITING_AI" ? "QUEUED" : state, queue_state: state, request_status: state === "PAUSED" ? "NEEDS_CLARIFICATION" : state, environment_name: `Environment ${number}`, operation: "Source analysis", public_role: role, stage_number: role === "verifier" ? 3 : role === "counter_analyst" ? 2 : 1, stage_count: 3, active_analysis_seconds: state === "RUNNING" ? 367 : 0, agent, assignments: [{ connection_id: number, connection_name: agent === "codex" ? "ChatGPT team" : "Claude team", agent, model: "recorded-model", public_role: role }], assignment_state: state === "RUNNING" ? "current" : "previous", created_at: stamp, started_at: stamp, finished_at: null, queue_position: null, error: "", can_cancel: number === 1, href: `/requests/${id}`, waiting_reason: state === "WAITING_AI" ? "Waiting for an eligible connection from a different model family." : "", pause_reason: state === "PAUSED" ? "A business answer is needed." : "" });
     let values = [job(1, "RUNNING"), job(2, "RUNNING", "counter_analyst", "claude"), job(3, "WAITING_AI", "verifier"), job(4, "PAUSED"), job(5, "CANCELLED")];
     await page.route("**/api/queue", route => route.fulfill({ json: values }));
     let cancellations = 0;
@@ -122,7 +146,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto("/questions");
     const panel = await queuePanel(page, language, info.project.name === "mobile");
     await expect(panel.locator('[data-state="RUNNING"][data-job]')).toHaveCount(2);
-    await expect(panel.locator('[data-job="1"]')).toContainText(t("Elapsed: {minutes}m {seconds}s").replace("{minutes}", "6").replace("{seconds}", "7"));
+    await expect(panel.locator('[data-job="1"]')).toContainText(t("Active AI: {minutes}m {seconds}s").replace("{minutes}", "6").replace("{seconds}", "7"));
     await expect(panel.locator('[data-job="1"]')).toContainText(t("Step {step} of {total}").replace("{step}", "1").replace("{total}", "3"));
     await expect(panel.locator('[data-job="2"]')).toContainText(t("Counter-analyst"));
     await expect(panel.locator('[data-job="2"] [data-provider="claude"]')).toBeVisible();

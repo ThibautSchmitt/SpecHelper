@@ -23,11 +23,12 @@ def test_app_server_quota_uses_observed_durations_only():
         }
     ) == {
         "session": {
+            "window_minutes": 300, "remaining_percent": 73, "window_type": "short", "source": "codex_app_server", "scope": "account", "status": "observed",
             "used_percent": 27,
             "exhausted": False,
             "resets_at": "2033-05-18T03:33:20+00:00",
         },
-        "weekly": {"used_percent": 100, "exhausted": True},
+        "weekly": {"window_minutes": 10080, "used_percent": 100, "exhausted": True, "remaining_percent": 0, "window_type": "weekly", "source": "codex_app_server", "scope": "account", "status": "observed"},
     }
     assert app_server_windows({"rateLimits": {"primary": {"usedPercent": 10}}}) == {}
 
