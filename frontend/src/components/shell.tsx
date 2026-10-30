@@ -41,6 +41,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   const [shortLabel, setShortLabel] = useState("");
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
+  const center = useRef<HTMLDivElement>(null);
   const settingsVersion = useRef(0);
   const [queueCollapsed, setQueueCollapsed] = useState(true);
   const attention = useQueueAttention();
@@ -54,6 +55,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
     });
   }
   useEffect(() => {
+    center.current?.scrollTo({ top: 0, behavior: "instant" });
     if (drawer.current?.open) {
       drawer.current.close();
       setQueueCollapsed(true);
@@ -167,7 +169,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
           <ChevronRight size={14} />
         </Link>
       </aside>
-      <div className="dashboard-center">
+      <div className="dashboard-center" ref={center} tabIndex={0}>
         <div className="queue-toolbar">
           <button type="button" className="activity-toggle inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-primary"
             aria-label={t("Activity")} aria-expanded={!queueCollapsed} aria-controls="desktop-task-queue activity-drawer" aria-describedby="activity-attention" onClick={toggleQueue}>

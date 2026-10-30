@@ -44,7 +44,6 @@ export function AnalysesList() {
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const workflow = parameters.get("workflow") || "all";
 
   useEffect(() => {
     // Merge rapid filter changes while a previous URL update is still pending.
@@ -121,12 +120,6 @@ export function AnalysesList() {
         </label>
         <Button type="submit" variant="outline" aria-label={t("Search")} title={t("Search")} className="analysis-search-submit"><Search size={16} aria-hidden="true" /></Button>
       </form>
-      <div className="flex flex-wrap gap-2" role="group" aria-label={t("Analysis type")}>
-        {([ ["all", "All analyses"], ["question", "Questions"], ["request", "Changes"] ] as const).map(([value, label]) => (
-          <Button key={value} variant={workflow === value ? "default" : "outline"} size="sm" aria-label={t(label)}
-            aria-pressed={workflow === value} onClick={() => navigate({ workflow: value, q: text })}>{t(label)}{workflow === "all" && data && data.pages <= 1 && <span className="filter-count">({value === "all" ? data.total : data.items.filter(item => item.workflow === value).length})</span>}</Button>
-        ))}
-      </div>
       {error && <div role="alert"><p>{t("Analyses are unavailable. Try refreshing the page.")}</p><details className="mt-2 text-sm"><summary>{t("Diagnostics")}</summary><pre className="whitespace-pre-wrap break-words">{error}</pre></details></div>}
       <div aria-busy={loading} className="space-y-3">
         {loading && <p role="status" className="text-sm muted">{t("Loading analyses…")}</p>}

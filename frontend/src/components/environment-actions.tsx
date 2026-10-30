@@ -1,7 +1,7 @@
 "use client";
 import { useI18n } from "@/lib/i18n";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,9 @@ export function EnvironmentActions({
   databases,
   disabled,
   onChanged,
+  children,
 }: {
+  children: (actions: ReactNode) => ReactNode;
   value: Environment;
   databases: Database[];
   disabled: boolean;
@@ -29,7 +31,7 @@ export function EnvironmentActions({
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [mode, setMode] = useState<"edit" | "review" | "delete" | null>(null);
+  const [mode, setMode] = useState<"edit" | "delete" | null>(null);
   const [original, setOriginal] = useState(value);
   const [name, setName] = useState("");
   const [database, setDatabase] = useState("");
@@ -39,8 +41,8 @@ export function EnvironmentActions({
   const [error, setError] = useState("");
   const [publicationConnections, setPublicationConnections] = useState<number[]>([]);
   useEffect(() => {
-    if (mode && !dialog.current?.open) dialog.current?.showModal();
-    if (!mode && dialog.current?.open) dialog.current.close();
+    if (mode === "delete" && !dialog.current?.open) dialog.current?.showModal();
+    if (mode !== "delete" && dialog.current?.open) dialog.current.close();
   }, [mode]);
   function open(next: "edit" | "delete") {
     setOriginal(structuredClone(value));
@@ -72,55 +74,6 @@ export function EnvironmentActions({
       setBusy(false);
     }
   }
-  const changes: string[] = [];
-  if (name !== original.name)
-    changes.push(
-      t("Name: {before} → {after}", { before: original.name, after: name }),
-    );
-  for (const previous of original.repositories) {
-    const next = selection.find(
-      (r) =>
-        (r.git_connection_id || null) ===
-          (previous.git_connection_id || null) &&
-        (r.remote_id || r.repository) ===
-          (previous.remote_id || previous.repository),
-    );
-    changes.push(
-      !next
-        ? t("{repository}: removed", {
-            repository: previous.path || previous.repository,
-          })
-        : next.branch === previous.branch
-          ? t("{repository}: unchanged ({branch})", {
-              repository: previous.path || previous.repository,
-              branch: previous.branch,
-            })
-          : `${previous.path || previous.repository} : ${previous.branch} → ${next.branch}`,
-    );
-  }
-  for (const next of selection.filter(
-    (r) =>
-      !original.repositories.some(
-        (old) =>
-          (old.git_connection_id || null) === (r.git_connection_id || null) &&
-          (old.remote_id || old.repository) === (r.remote_id || r.repository),
-      ),
-  ))
-    changes.push(
-      t("{repository}: added ({branch})", {
-        repository: next.repository,
-        branch: next.branch,
-      }),
-    );
-  if (database !== String(original.database_id || ""))
-    changes.push(
-      t("Database: {before} → {after}", {
-        before: original.database_name || t("None"),
-        after:
-          databases.find((d) => String(d.id) === database)?.name || t("None"),
-      }),
-    );
-  if (JSON.stringify([...publicationConnections].sort()) !== JSON.stringify([...(original.publication_connection_ids || [])].sort())) changes.push(t("Publication destinations updated."));
   async function save() {
     const saved = await send<Environment>(
       `/environments/${original.id}`,
@@ -147,44 +100,9 @@ export function EnvironmentActions({
       t("Environment deleted. Requests and results remain available."),
     );
   }
-  return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={disabled}
-        onClick={() => open("edit")}
-        aria-label={t("Edit {name}", { name: value.name })}
-      >
-        <Pencil size={14} />
-        {t("Edit")}
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={disabled}
-        onClick={() => open("delete")}
-        aria-label={t("Delete {name}", { name: value.name })}
-      >
-        <Trash2 size={14} />
-        {t("Delete")}
-      </Button>
-      <dialog
-        ref={dialog}
-        style={{ width: "calc(100% - 2rem)" }}
-        aria-labelledby={`environment-dialog-${value.id}`}
-        onCancel={(e) => {
-          e.preventDefault();
-          if (!busy) setMode(null);
-        }}
-        className="fixed inset-0 m-auto max-h-[90dvh] max-w-2xl overflow-y-auto rounded-xl border bg-card p-6 text-foreground shadow-xl backdrop:bg-black/40"
-      >
+  const panel = (<>
         <h2 id={`environment-dialog-${value.id}`}>
-          {mode === "delete"
-            ? t("Delete environment")
-            : mode === "review"
-              ? t("Review changes")
-              : t("Edit environment")}
+          {t(mode === "delete" ? "Delete environment" : "Edit environment")}
         </h2>
         {error && (
           <p role="alert" className="mt-4 text-sm text-red-700">
@@ -230,31 +148,6 @@ export function EnvironmentActions({
               </Button>
             </div>
           </form>
-        ) : mode === "review" ? (
-          <div>
-            <ul className="mt-5 list-disc space-y-3 pl-5 text-sm leading-6">
-              {changes.map((change, i) => (
-                <li className="break-words" key={i}>
-                  {change}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-5 text-sm muted">
-              {t("Existing requests will retain their references and results.")}
-            </p>
-            <div className="mt-6 flex flex-wrap justify-end gap-3">
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => setMode("edit")}
-              >
-                {t("Back to form")}
-              </Button>
-              <Button disabled={busy} onClick={() => task(save)}>
-                {t("Confirm changes")}
-              </Button>
-            </div>
-          </div>
         ) : (
           mode === "edit" && (
             <form
@@ -268,8 +161,7 @@ export function EnvironmentActions({
                   );
                   return;
                 }
-                setError("");
-                setMode("review");
+                void task(save);
               }}
             >
               <div className="field">
@@ -278,6 +170,7 @@ export function EnvironmentActions({
                 </label>
                 <Input
                   id={`edit-name-${value.id}`}
+                  autoFocus
                   required
                   maxLength={100}
                   value={name}
@@ -308,7 +201,7 @@ export function EnvironmentActions({
               </div>
               <a className="text-xs text-primary underline" href="/admin?tab=environments&sources=postgres" target="_blank" rel="noopener noreferrer">{t("Manage PostgreSQL connections")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
               <PublicationConnectionPicker selected={publicationConnections} onChange={setPublicationConnections} disabled={busy} />
-              <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <div className="mt-4 flex flex-wrap justify-end gap-2" data-editor-actions>
                 <Button
                   type="button"
                   variant="outline"
@@ -317,11 +210,57 @@ export function EnvironmentActions({
                 >
                   {t("Cancel")}
                 </Button>
-                <Button disabled={busy}>{t("Review changes")}</Button>
+                <Button disabled={busy || disabled}>{t("Save")}</Button>
               </div>
             </form>
           )
         )}
+  </>);
+  return (
+    <>
+      {children(<>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={disabled || busy}
+        aria-expanded={mode === "edit"}
+        aria-controls={`environment-editor-${value.id}`}
+        onClick={() => {
+          if (mode === "edit") { setMode(null); setError(""); }
+          else open("edit");
+        }}
+        aria-label={t("Edit {name}", { name: value.name })}
+      >
+        <Pencil size={14} />
+        {t("Edit")}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={disabled || busy}
+        onClick={() => open("delete")}
+        aria-label={t("Delete {name}", { name: value.name })}
+      >
+        <Trash2 size={14} />
+        {t("Delete")}
+      </Button>
+      </>)}
+      {mode === "edit" && <section
+        id={`environment-editor-${value.id}`}
+        aria-labelledby={`environment-dialog-${value.id}`}
+        className="mt-4 min-w-0 border-t pt-4"
+      >{panel}</section>}
+      <dialog
+        ref={dialog}
+        style={{ width: "calc(100% - 2rem)" }}
+        aria-labelledby={`environment-dialog-${value.id}`}
+        onCancel={(e) => {
+          e.preventDefault();
+          if (!busy) setMode(null);
+        }}
+        className="fixed inset-0 m-auto max-h-[90dvh] max-w-2xl overflow-y-auto rounded-xl border bg-card p-6 text-foreground shadow-xl backdrop:bg-black/40"
+      >
+        {mode === "delete" && panel}
       </dialog>
     </>
   );

@@ -1,4 +1,5 @@
 "use client";
+import { Database, Plus } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -70,24 +71,25 @@ export function DatabaseConnections({
     }
   }
   return (
-    <Card aria-label={t("PostgreSQL connections")}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2>
-          {t("PostgreSQL connections")}{" "}
-          <span className="text-sm font-normal muted">{t("optional")}</span>
-        </h2>
+    <Card className="settings-section min-w-0" aria-label={t("PostgreSQL connections")}>
+      <div className="section-heading">
+        <h2><Database size={18} aria-hidden="true" />{t("PostgreSQL connections")}</h2>
         <Button
+          type="button"
+          size="sm"
           variant="outline"
+          aria-expanded={show}
+          aria-controls="database-create-form"
           onClick={() => {
             setShow(!show);
             setError("");
             setChecks(null);
           }}
         >
-          {show ? t("Close") : t("Add connection")}
+          <Plus size={15} aria-hidden="true" />{t("Add connection")}
         </Button>
       </div>
-      <p className="mt-3 text-sm muted">
+      <p className="mt-2 text-sm muted">
         {t(
           "Associate a database with an environment only if the analysis needs it. Use read-only access.",
         )}
@@ -117,6 +119,8 @@ export function DatabaseConnections({
       ))}
       {show && (
         <form
+          id="database-create-form"
+          className="mt-4 border-t pt-4"
           onSubmit={(e) => {
             e.preventDefault();
             probe();

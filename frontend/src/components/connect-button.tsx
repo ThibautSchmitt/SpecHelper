@@ -2,7 +2,7 @@
 import { useI18n } from "@/lib/i18n";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CheckCircle, Copy, ExternalLink, LoaderCircle } from "lucide-react";
+import { CheckCircle, Copy, ExternalLink, LoaderCircle, LogIn, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, send } from "@/lib/api";
@@ -210,6 +210,7 @@ export function ConnectButton({
         {busy && !attempt && (
           <LoaderCircle size={16} className="animate-spin" />
         )}
+        {!busy && (reconnect ? <UserRound size={16} aria-hidden="true" /> : <LogIn size={16} aria-hidden="true" />)}
         {label || `${t(reconnect ? "Reconnect with" : "Connect with")} ${names[provider]}`}
       </Button>
       {!attempt && !authChoiceOpen && error && (

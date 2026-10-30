@@ -5,6 +5,13 @@ The main sections are **AI & Agents**,
 **Environments**, **Ticket publication** and **Appearance**. They are not separate sidebar
 menus. This guide uses the English interface labels; the application also supports French.
 
+Use the add button at the right of a section heading to create a connection,
+environment or skill. **Edit** opens the form inside the selected item's card;
+select **Edit** again or **Cancel** to discard unsaved changes and collapse it.
+Editors use **Cancel** and **Save**. Saving an environment applies its changes
+directly; synchronization is scheduled only when its resources change.
+Orchestration has its own configuration card and no add button.
+
 ## Git sources and environments
 
 Under **Environments → Manage Git connections**, connect GitHub or GitLab using the authorization
@@ -99,6 +106,13 @@ Do not change an account's configuration while its invocations are still active.
 The application detects installed/latest CLI versions and offers **Update** when
 appropriate. Updates are explicit, drain active invocations and retain rollback/
 uncertain states. Model refresh and version checks do not themselves run an analysis.
+
+Antigravity's official rolling release manifest is checked again when an update
+starts, so an outdated catalogue entry cannot pin the operation to an obsolete
+download. The runtime checks the selected installed release and its required
+capabilities, including after an update; it does not require the original image's
+version forever. Failed installation and service unavailability are reported
+separately, and unsuccessful activation checks restore the previous executable.
 
 ### Availability and quotas
 

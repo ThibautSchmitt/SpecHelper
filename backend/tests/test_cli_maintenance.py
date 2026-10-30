@@ -103,6 +103,93 @@ def test_failed_inventory_keeps_last_known_version(isolated_service, monkeypatch
     assert codex["latest_version"] == "2.0.0" and codex["state"] == "unavailable"
 
 
+def test_antigravity_release_metadata_is_fresh_and_authenticated(isolated_service, monkeypatch):
+    client, headers, _ = isolated_service
+    read = Mock(return_value={"version": "1.4.11"})
+    monkeypatch.setattr(service, "release", read)
+    assert client.get("/release/antigravity").status_code == 401
+    assert client.get("/release/antigravity", headers=headers).json() == {
+        "agent": "antigravity", "latest_version": "1.4.11",
+    }
+    read.assert_called_once_with("antigravity")
+    read.side_effect = ValueError("sensitive registry response")
+    response = client.get("/release/antigravity", headers=headers)
+    assert response.status_code == 502 and "sensitive" not in response.text
+
+
+@pytest.mark.parametrize("activated", [False, True])
+def test_antigravity_inspection_checks_selected_release_not_old_image_pin(monkeypatch, tmp_path, activated):
+    from runtime import antigravity_auth
+
+    monkeypatch.setattr(cli_tools, "TOOLS", tmp_path)
+    monkeypatch.setattr(cli_tools, "base_versions", lambda: {"antigravity": "1.4.7"})
+    executable = tmp_path / "antigravity/releases/1.4.11/bin/agy" if activated else tmp_path / "agy-base"
+    monkeypatch.setattr(cli_tools, "tool_path", lambda provider: executable)
+    inspect = Mock(return_value={"state": "supported"})
+    monkeypatch.setattr(antigravity_auth, "cli_status", inspect)
+    assert antigravity_auth.inspect_cli()["state"] == "supported"
+    assert inspect.call_args.kwargs == {
+        "binary": str(executable), "expected_version": "1.4.11" if activated else "1.4.7",
+    }
+
+
+@pytest.mark.django_db
+def test_antigravity_update_refreshes_rolling_manifest_and_records_requested_version(monkeypatch):
+    InstanceSettings.objects.get_or_create(pk=1)
+    tool = CLITool.objects.create(agent="antigravity", installed_version="1.4.7", latest_version="1.4.10")
+    job = Job.objects.create(kind="cli_update", target="antigravity", status="RUNNING", payload={"version": "1.4.10", "operation_id": str(uuid.uuid4())})
+    calls = []
+    def call(path, payload=None, **kwargs):
+        calls.append((path, payload))
+        if path == "/release/antigravity":
+            return {"agent": "antigravity", "latest_version": "1.4.11"}
+        if path == "/install":
+            assert payload["version"] == "1.4.11"
+            return {"status": "STAGED"}
+        return {"status": "DONE" if path.startswith("/confirm/") else "ACTIVE"}
+    monkeypatch.setattr(maintenance, "service_call", call)
+    monkeypatch.setattr(maintenance, "runtime_call", lambda *args, **kwargs: {"versions": {"antigravity": "1.4.11"}})
+    maintenance.perform_update(job)
+    job.refresh_from_db()
+    tool.refresh_from_db()
+    assert job.status == "DONE" and job.payload["requested_version"] == "1.4.10"
+    assert job.payload["version"] == tool.installed_version == tool.latest_version == "1.4.11"
+    assert calls[0][0] == "/release/antigravity"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("candidate", ["1.4.9", "invalid"])
+def test_antigravity_update_never_installs_a_downgraded_or_invalid_release(monkeypatch, candidate):
+    job = Job.objects.create(kind="cli_update", target="antigravity", status="RUNNING", payload={"version": "1.4.10", "operation_id": str(uuid.uuid4())})
+    call = Mock(return_value={"agent": "antigravity", "latest_version": candidate})
+    monkeypatch.setattr(maintenance, "service_call", call)
+    with pytest.raises(ValueError):
+        maintenance.perform_update(job)
+    assert call.call_count == 1 and call.call_args.args[0] == "/release/antigravity"
+    job.refresh_from_db()
+    assert job.payload["version"] == "1.4.10"
+
+
+def test_install_failure_is_distinct_from_unreachable_service(monkeypatch, settings, tmp_path):
+    import httpx
+
+    settings.CLI_MAINTENANCE_URL = "http://maintenance"
+    token = tmp_path / "maintenance-token"
+    token.write_text("test-only-private-token")
+    settings.CLI_MAINTENANCE_TOKEN_FILE = str(token)
+    response = httpx.Response(502, request=httpx.Request("POST", "http://maintenance/install"))
+    transport = Mock()
+    transport.__enter__ = Mock(return_value=transport)
+    transport.__exit__ = Mock(return_value=False)
+    transport.request.return_value = response
+    monkeypatch.setattr(maintenance.httpx, "Client", Mock(return_value=transport))
+    with pytest.raises(ValueError, match="installation failed"):
+        maintenance.service_call("/install", {})
+    transport.request.side_effect = httpx.ConnectError("private network details")
+    with pytest.raises(ValueError, match="maintenance is unavailable"):
+        maintenance.service_call("/install", {})
+
+
 @pytest.mark.django_db
 @pytest.mark.parametrize("agent", maintenance.AGENTS)
 def test_update_is_explicit_idempotent_and_absent_from_activity(client, settings, agent):

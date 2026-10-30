@@ -141,8 +141,20 @@ def metadata_environment(home, api_key=None, oauth_profile=None):
 
 
 def inspect_cli():
+    from .cli_tools import TOOLS, base_versions, tool_path, version_key
+
+    executable = tool_path(PROVIDER)
+    expected = base_versions().get(PROVIDER, PINNED_VERSION)
+    try:
+        selected = executable.relative_to(TOOLS / PROVIDER / "releases").parts[0]
+        version_key(selected)
+        expected = selected
+    except ValueError:
+        pass
     with tempfile.TemporaryDirectory(prefix="antigravity-metadata-") as temporary:
-        return cli_status(metadata_environment(temporary), expected_version=PINNED_VERSION)
+        return cli_status(
+            metadata_environment(temporary), binary=str(executable), expected_version=expected,
+        )
 
 
 def status(directory, include_quota=False, *, root=None):

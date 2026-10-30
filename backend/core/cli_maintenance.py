@@ -51,6 +51,12 @@ def service_call(path, payload=None, timeout=75):
         if not isinstance(data, dict):
             raise ValueError("Invalid maintenance response")
         return data
+    except httpx.HTTPStatusError as error:
+        if path == "/install" and error.response.status_code == 502:
+            raise ValueError("CLI installation failed. The previous executable is preserved.") from error
+        if path == "/release/antigravity" and error.response.status_code == 502:
+            raise ValueError("Official CLI release information is unavailable. Try again later.") from error
+        raise ValueError("CLI maintenance is unavailable. Try again later.") from error
     except (OSError, ValueError, httpx.HTTPError) as error:
         raise ValueError("CLI maintenance is unavailable. Try again later.") from error
 
@@ -161,6 +167,21 @@ def perform_update(job):
     version_key(job.payload.get("version"))
     if job.target not in AGENTS:
         raise ValueError("Invalid CLI provider")
+    if job.target == "antigravity":
+        candidate = service_call("/release/antigravity", timeout=30)
+        latest = candidate.get("latest_version")
+        if candidate.get("agent") != "antigravity":
+            raise ValueError("Invalid official CLI release metadata.")
+        if version_key(latest) < version_key(job.payload["version"]):
+            raise ValueError("The official CLI release changed. Refresh tool versions and retry.")
+        if latest != job.payload["version"]:
+            payload = {**job.payload, "requested_version": job.payload["version"], "version": latest}
+            if not Job.objects.filter(pk=job.pk, status="RUNNING").update(payload=payload):
+                raise ValueError("CLI maintenance ownership expired")
+            job.payload = payload
+        CLITool.objects.filter(agent=job.target).update(
+            latest_version=latest, checked_at=timezone.now(), check_error=False,
+        )
     probes = []
     for connection in AIConnection.objects.filter(agent=job.target, enabled=True, status="CONNECTED"):
         identity = identity_for(connection)

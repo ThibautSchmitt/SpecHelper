@@ -83,7 +83,7 @@ test("environment ticket editors fetch and save only their own connectors", asyn
   await staging.getByRole("button", { name: "New connector", exact: true }).click();
   await staging.getByLabel("Connector name", { exact: true }).fill("Staging GitHub");
   await staging.getByLabel("Dedicated issue publication token", { exact: true }).fill("synthetic-publication-only-token");
-  await staging.getByRole("button", { name: "Save connector", exact: true }).click();
+  await staging.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(() => saved).toMatchObject({ environment_id: 2, name: "Staging GitHub", platform: "github" });
   expect(reads).toContain("1");
   expect(reads).toContain("2");

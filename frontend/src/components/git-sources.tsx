@@ -1,4 +1,5 @@
 "use client";
+import { GitBranch, Pencil, Plus, RefreshCw, Power, Trash2 } from "lucide-react";
 import { ProviderLogo } from "@/components/provider-logo";
 import { useEffect, useRef, useState } from "react";
 import { api, send, statuses } from "@/lib/api";
@@ -79,139 +80,9 @@ export function GitSources() {
       enabled: true,
     });
   }
-  return (
-    <Card className="min-w-0" aria-label={t("Git sources")}>
-      <div className="section-heading">
-        <h2>{t("Git sources")}</h2>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          aria-label={t("New Git connection")}
-          onClick={() => {
-            reset();
-            setShowForm(true);
-          }}
-        >
-          {t("Add connection")}
-        </Button>
-      </div>
-      <p className="mt-2 text-sm muted">
-        {t(
-          "Connect source accounts for read access. Ticket publication permissions are configured separately.",
-        )}
-      </p>
-      <div className="mt-5 space-y-4">
-        {values.map((value) => (
-          <section
-            className="rounded-lg border p-4"
-            key={value.id}
-            aria-label={value.account || value.name}
-          >
-            <div className="title-tags">
-              <h3 className="flex items-center gap-2"><ProviderLogo provider={value.provider} />{value.provider === "github" ? "GitHub" : "GitLab"}{value.account ? ` - ${value.account}` : value.name.toLowerCase() !== value.provider ? ` - ${value.name}` : ""}</h3>
-              <span
-                className="badge"
-                data-state={value.enabled ? value.status : "DISCONNECTED"}
-              >
-                {t(
-                  value.enabled
-                    ? statuses[value.status] || value.status
-                    : "Disabled",
-                )}
-              </span>
-            </div>
-            <p className="mt-2 break-all text-sm muted">
-              {value.base_url}
-            </p>
-            {value.error && (
-              <p className="mt-2 text-sm text-red-700">{t(value.error)}</p>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              {value.provider === "github" && value.status !== "CONNECTED" && <ConnectButton provider="github" startPath={`/git-connections/${value.id}/auth/start`} identityLabel={value.name} onConnected={() => { action(async () => {}); }} />}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  setShowForm(true);
-                  setEditing(value);
-                  setForm({
-                    name: value.name,
-                    provider: value.provider,
-                    base_url: value.base_url,
-                    secret: "",
-                    enabled: value.enabled,
-                  });
-                }}
-              >
-                {t("Edit")}
-              </Button>
-              <details className="action-menu" onKeyDown={event => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("dialog"))) { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
-                <summary aria-label={t("More actions for {name}", { name: value.name })}>⋯</summary>
-                <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button") && !event.target.closest("[data-connection-auth]")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
-                  {value.provider === "github" && value.status === "CONNECTED" && <ConnectButton provider="github" startPath={`/git-connections/${value.id}/auth/start`} identityLabel={value.name} reconnect onConnected={() => { action(async () => {}); }} />}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  action(() => send(`/git-connections/${value.id}/test`))
-                }
-              >
-                {t("Test connection")}
-              </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                onClick={() =>
-                  action(() =>
-                    send(
-                      `/git-connections/${value.id}`,
-                      {
-                        name: value.name,
-                        provider: value.provider,
-                        base_url: value.base_url,
-                        enabled: !value.enabled,
-                      },
-                      "PUT",
-                    ),
-                  )
-                }
-              >
-                {t(value.enabled ? "Disable" : "Enable")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => {
-                  setRemoving(value);
-                  setConfirmation("");
-                }}
-              >
-                {t("Delete")}
-              </Button>
-
-                </div>
-              </details>
-            </div>
-          </section>
-        ))}
-      </div>
-      {!values.length && (
-        <p className="mt-4 text-sm muted">
-          {t("No Git source connections yet.")}
-        </p>
-      )}
-      {showForm && (
+  const connectionForm = showForm ? (
         <form
+          id="git-source-editor"
           ref={editor}
           className="mt-6 border-t pt-5"
           onSubmit={(event) => {
@@ -226,6 +97,7 @@ export function GitSources() {
             });
           }}
         >
+          {error && <p role="alert" className="mb-3 text-sm text-red-700">{t(error)}</p>}
           <h3>{t(editing ? "Edit Git connection" : "New Git connection")}</h3>
           <div className="field">
             <label htmlFor="git-source-name">{t("Connection name")}</label>
@@ -302,19 +174,155 @@ export function GitSources() {
               )}
             </p>
           )}
-          <div className="mt-4 flex gap-2">
-            <Button disabled={busy}>
-              {t(editing ? "Save connection" : "Add Git connection")}
-            </Button>
-            {showForm && (
-              <Button type="button" variant="outline" onClick={reset}>
-                {t("Cancel")}
-              </Button>
-            )}
+          <div className="mt-4 flex flex-wrap justify-end gap-2" data-editor-actions>
+            <Button type="button" variant="outline" disabled={busy} onClick={reset}>{t("Cancel")}</Button>
+            <Button disabled={busy}>{t(editing ? "Save" : "Add Git connection")}</Button>
           </div>
         </form>
+  ) : null;
+  return (
+    <Card className="settings-section min-w-0" aria-label={t("Git sources")}>
+      <div className="section-heading">
+        <h2><GitBranch size={18} aria-hidden="true" />{t("Git sources")}</h2>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={t("New Git connection")}
+          onClick={() => {
+            reset();
+            setShowForm(true);
+          }}
+        >
+          <Plus size={15} aria-hidden="true" />{t("Add connection")}
+        </Button>
+      </div>
+      <p className="mt-2 text-sm muted">
+        {t(
+          "Connect source accounts for read access. Ticket publication permissions are configured separately.",
+        )}
+      </p>
+      <div className="mt-5 space-y-4">
+        {values.map((value) => (
+          <section
+            className="git-connection-card rounded-lg border bg-card p-4"
+            key={value.id}
+            aria-label={value.account || value.name}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="title-tags min-w-0 flex-1">
+              <h3 className="flex items-center gap-2"><ProviderLogo provider={value.provider} />{value.provider === "github" ? "GitHub" : "GitLab"}{value.account ? ` - ${value.account}` : value.name.toLowerCase() !== value.provider ? ` - ${value.name}` : ""}</h3>
+              <span
+                className="badge"
+                data-state={value.enabled ? value.status : "DISCONNECTED"}
+              >
+                {t(
+                  value.enabled
+                    ? statuses[value.status] || value.status
+                    : "Disabled",
+                )}
+              </span>
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-2" data-git-actions>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                aria-expanded={showForm && editing?.id === value.id}
+                aria-controls="git-source-editor"
+                onClick={() => {
+                  setError("");
+                  setNotice("");
+                  if (showForm && editing?.id === value.id) { reset(); return; }
+                  setShowForm(true);
+                  setEditing(value);
+                  setForm({
+                    name: value.name,
+                    provider: value.provider,
+                    base_url: value.base_url,
+                    secret: "",
+                    enabled: value.enabled,
+                  });
+                }}
+              >
+                <Pencil size={16} aria-hidden="true" />{t("Edit")}
+              </Button>
+              <details className="action-menu" onKeyDown={event => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("dialog"))) { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+                <summary aria-label={t("More actions for {name}", { name: value.name })}>⋯</summary>
+                <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button") && !event.target.closest("[data-connection-auth]")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
+                  {value.provider === "github" && value.status === "CONNECTED" && <ConnectButton provider="github" startPath={`/git-connections/${value.id}/auth/start`} identityLabel={value.name} reconnect onConnected={() => { action(async () => {}); }} />}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  action(() => send(`/git-connections/${value.id}/test`))
+                }
+              >
+                <RefreshCw size={16} aria-hidden="true" />{t("Test connection")}
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() =>
+                  action(() =>
+                    send(
+                      `/git-connections/${value.id}`,
+                      {
+                        name: value.name,
+                        provider: value.provider,
+                        base_url: value.base_url,
+                        enabled: !value.enabled,
+                      },
+                      "PUT",
+                    ),
+                  )
+                }
+              >
+                <Power size={16} aria-hidden="true" />{t(value.enabled ? "Disable" : "Enable")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  setRemoving(value);
+                  setConfirmation("");
+                }}
+              >
+                <Trash2 size={16} aria-hidden="true" />{t("Delete")}
+              </Button>
+
+                </div>
+              </details>
+            </div>
+            </div>
+            <p className="mt-2 break-all text-sm muted">
+              {value.base_url}
+            </p>
+            {value.error && (
+              <p className="mt-2 text-sm text-red-700">{t(value.error)}</p>
+            )}
+            <div className="mt-3 empty:hidden">
+              {value.provider === "github" && value.status !== "CONNECTED" && <ConnectButton provider="github" startPath={`/git-connections/${value.id}/auth/start`} identityLabel={value.name} onConnected={() => { action(async () => {}); }} />}
+            </div>
+            {editing?.id === value.id && connectionForm}
+          </section>
+        ))}
+      </div>
+      {!values.length && (
+        <p className="mt-4 text-sm muted">
+          {t("No Git source connections yet.")}
+        </p>
       )}
-      {error && (
+      {!editing && connectionForm}
+      {error && !showForm && (
         <p role="alert" className="mt-4 text-sm text-red-700">
           {t(error)}
         </p>

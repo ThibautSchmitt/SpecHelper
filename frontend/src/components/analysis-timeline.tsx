@@ -37,12 +37,15 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   const list=useRef<HTMLOListElement>(null);
   const nearBottom=useRef(true);
   useEffect(()=>{
-    function measure(){const root=document.scrollingElement;if(root)nearBottom.current=root.scrollHeight-root.clientHeight-root.scrollTop<160;}
+    const root=list.current?.closest<HTMLElement>(".dashboard-center") || document.scrollingElement;
+    if(!root)return;
+    nearBottom.current=true;
+    function measure(){if(root)nearBottom.current=root.scrollHeight-root.clientHeight-root.scrollTop<160;}
     function disclosure(event:PointerEvent){if((event.target as Element)?.closest("summary"))nearBottom.current=false;}
-    const observer=new ResizeObserver(()=>{if(nearBottom.current)window.scrollTo({top:document.documentElement.scrollHeight,behavior:"instant"});});
+    const observer=new ResizeObserver(()=>{if(nearBottom.current)root!.scrollTo({top:root!.scrollHeight,behavior:"instant"});});
     if(list.current)observer.observe(list.current);
-    window.addEventListener("scroll",measure,{passive:true});list.current?.addEventListener("pointerdown",disclosure);
-    const node=list.current;return()=>{observer.disconnect();window.removeEventListener("scroll",measure);node?.removeEventListener("pointerdown",disclosure);};
+    root.addEventListener("scroll",measure,{passive:true});list.current?.addEventListener("pointerdown",disclosure);
+    const node=list.current;return()=>{observer.disconnect();root.removeEventListener("scroll",measure);node?.removeEventListener("pointerdown",disclosure);};
   },[value.id]);
   const lastClarification = messages.filter(message => ["questions", "clarification"].includes(message.kind)).at(-1);
   const pendingMessage = pending && lastClarification?.content === value.questions.map(question=>question.question).join("\n") ? lastClarification : undefined;

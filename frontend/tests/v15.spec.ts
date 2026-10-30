@@ -139,7 +139,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
     .getByRole("combobox", { name: "Evidence references", exact: true })
     .selectOption("disabled");
   await page
-    .getByRole("button", { name: "Save connection", exact: true })
+    .getByRole("button", { name: "Save", exact: true })
     .click();
   await expect
     .poll(() => connectionBody)

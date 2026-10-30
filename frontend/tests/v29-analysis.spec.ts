@@ -59,7 +59,7 @@ for (const language of ["en", "fr"] as const) {
       saved = true;
       return route.fulfill({ json: { ...dossier(), status: "QUEUED", need_revision: 1, conclusions_stale: true, need: "Explain the archived export exception." } });
     });
-    await page.getByRole("button", { name: t("Save and reanalyze"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => saved).toBe(true);
     await expect(page.getByText(t("Previous conclusions need reassessment"), { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Only active contracts are exported.", { exact: true }).first()).toBeVisible();
@@ -144,12 +144,12 @@ for (const language of ["en", "fr"] as const) {
     await page.goto("/analyses");
     await page.getByLabel(t("Search analyses"), { exact: true }).fill("export");
     await page.getByRole("button", { name: t("Search"), exact: true }).click();
-    await page.getByRole("button", { name: t("Questions"), exact: true }).click();
+    await expect(page.getByRole("group", { name: t("Analysis type"), exact: true })).toHaveCount(0);
     await page.getByLabel(t("Environment"), { exact: true }).selectOption("1");
     await page.getByLabel(t("Status"), { exact: true }).selectOption("READY");
     await page.getByRole("button", { name: t("Next"), exact: true }).click();
     await expect(page.getByRole("heading", { name: "Second result", exact: true })).toBeVisible();
-    expect(Object.fromEntries(requests.at(-1)!)).toMatchObject({ q: "export", workflow: "question", environment_id: "1", status: "READY", page: "2" });
+    expect(Object.fromEntries(requests.at(-1)!)).toMatchObject({ q: "export", environment_id: "1", status: "READY", page: "2" });
     await page.getByRole("button", { name: t("Previous"), exact: true }).click();
     await expect(page.getByRole("heading", { name: "Historical question", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

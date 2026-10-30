@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { api, send, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
-import { Ticket, Trash2 } from "lucide-react";
+import { Ticket, Trash2, Plus, Pencil, RefreshCw, Power } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 export type TicketConnector = {
@@ -52,14 +53,21 @@ export function TicketConnectors() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [removing, setRemoving] = useState<TicketConnector | null>(null);
   const refresh = () =>
     api<TicketConnector[]>("/ticket-connectors").then(setItems);
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
   }, []);
+  useEffect(() => {
+    if (showForm) document.getElementById(`${prefix}-name`)?.focus();
+  }, [showForm, selected]);
   function edit(item?: TicketConnector) {
-    setConfirmDelete(false);
+    setRemoving(null);
+    if (item && showForm && selected === item.id) {
+      setShowForm(false); setSelected(null); setForm({ ...empty });
+      setDestinations([]); setError(""); setNotice(""); return;
+    }
     setShowForm(true);
     setSelected(item?.id ?? null);
     setDestinations([]);
@@ -89,40 +97,21 @@ export function TicketConnectors() {
     if (tested.status !== "CONNECTED") { setError("Connector check failed"); return; }
     setNotice("Connection verified.");
   }
-  return (
-    <div className="publication-connection-catalog" aria-label={t("Publication connections")}>
-      <h2 className="flex items-center gap-2"><Ticket size={18} aria-hidden="true" />{t("Publication connections")}</h2>
-      <p className="mt-2 text-sm muted">{t("Reusable publication accounts. Associate them with environments, then choose the account and destination when publishing.")}</p>
-      <div className="mt-5 flex flex-wrap gap-2">
-        {items.map((item) => <section key={item.id} className="min-w-0 w-full rounded-lg border p-3" aria-label={item.name}>
-          <div className="title-tags"><h4 className="flex items-center gap-2 text-sm font-medium"><ProviderLogo provider={item.platform} />{item.name}</h4>
-            <span className="badge">{publicationPlatforms[item.platform] || item.platform}</span>
-            <span className="badge" data-state={!item.enabled ? "DISABLED" : item.status}>{t(!item.enabled ? "Disabled" : item.status === "UNKNOWN" ? item.checked_at ? "Connection needs verification" : "Not tested" : item.status === "UNAVAILABLE" ? "Verification unavailable" : item.status === "ERROR" ? "Failed" : statuses[item.status] || item.status)}</span></div>
-          {item.checked_at && <p className="mt-1 text-xs muted">{t("Last checked")}: {new Date(item.checked_at).toLocaleString(dateLocale)}</p>}
-          <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => edit(item)} aria-label={t("Edit {name}", { name: item.name })}>{t("Edit")}</Button>
-            <Button type="button" size="sm" variant="ghost" disabled={busy || item.enabled === false} onClick={() => action(() => testConnection(item.id))} aria-label={t("Test {name}", { name: item.name })}>{t("Test connection")}</Button>
-            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => action(() => {
-              const {name, platform, base_url, username, api_version, projects, default_project} = item;
-              return send(`/ticket-connectors/${item.id}`, {name, platform, base_url, username, api_version, projects, default_project, enabled: !item.enabled}, "PUT");
-            })}>{t(item.enabled ? "Disable" : "Enable")}</Button></div>
-          {item.error && <details className="mt-2 text-xs"><summary className="cursor-pointer">{t("Diagnostics")}</summary><p className="mt-2 whitespace-pre-wrap break-words">{item.error}</p></details>}
-        </section>)}
-        <Button variant="outline" onClick={() => edit()}>
-          {t("New connector")}
-        </Button>
-      </div>
-      {error && (
-        <p role="alert" className="mt-4 text-red-700">
-          {t(error)}
-        </p>
-      )}
-      {notice && (
-        <p role="status" className="mt-4 text-green-800">
-          {t(notice)}
-        </p>
-      )}
-      {showForm && <p className="mt-3 text-sm muted">{t("Browser sign-in for publication is not available yet. Use dedicated manual credentials.")}</p>}
-      {showForm && (
+  const deletion = removing && <div role="alertdialog" aria-label={t("Delete connector")} className="mt-3 rounded-lg border p-4">
+    <p className="text-sm">{t("Delete this connection? Associated environments and publication history prevent deletion.")}</p>
+    <div className="mt-3 flex flex-wrap justify-end gap-2">
+      <Button type="button" variant="outline" disabled={busy} onClick={() => setRemoving(null)}>{t("Cancel")}</Button>
+      <Button type="button" disabled={busy} onClick={() => action(async () => {
+        await send(`/ticket-connectors/${removing.id}`, undefined, "DELETE");
+        if (selected === removing.id) { setSelected(null); setShowForm(false); setForm({ ...empty }); }
+        setRemoving(null); setNotice("Connector deleted.");
+      })}>{t("Confirm deletion")}</Button>
+    </div>
+  </div>;
+  const connectionForm = showForm ? (
+    <div id="publication-connection-editor" className="mt-4 border-t pt-4">
+      {error && <p role="alert" className="mb-3 text-sm text-red-700">{t(error)}</p>}
+      <p className="mt-3 text-sm muted">{t("Browser sign-in for publication is not available yet. Use dedicated manual credentials.")}</p>
         <form
           className="mt-4"
           onSubmit={(event) => {
@@ -144,15 +133,15 @@ export function TicketConnectors() {
               };
               if (!form.secret) delete payload.secret;
               if (!form.app_token) delete payload.app_token;
-              const saved = await send<TicketConnector>(
+              await send<TicketConnector>(
                 selected
                   ? `/ticket-connectors/${selected}`
                   : "/ticket-connectors",
                 payload,
                 selected ? "PUT" : "POST",
               );
-              setSelected(saved.id);
-              setForm({ ...empty, ...saved, secret: "", app_token: "" });
+              setSelected(null); setShowForm(false);
+              setForm({ ...empty });
               setNotice("Connector saved.");
             });
           }}
@@ -290,18 +279,9 @@ export function TicketConnectors() {
             <p className="mt-2 text-xs muted">{t("Use a separate fine-grained credential with issue permissions. Git source credentials cannot publish tickets.")}</p>
           </div>}
           <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={event => setForm({...form, enabled: event.target.checked})} />{t("Enabled")}</label>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button disabled={busy}>{t("Save connector")}</Button>
-            {selected !== null && (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                    onClick={() => action(() => testConnection(selected))}
-                >
-                  {t("Test connection")}
-                </Button>
+          {selected !== null && <details className="mt-4">
+            <summary className="cursor-pointer text-sm muted">{t("Allowed publication destinations")}</summary>
+            <div className="mt-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -318,22 +298,7 @@ export function TicketConnectors() {
                 >
                   {t("Load accessible projects")}
                 </Button>
-              </>
-            )}
-          </div>
-          {selected !== null && <div className="mt-3">
-            <Button type="button" variant="ghost" className="icon-action text-red-700" disabled={busy} aria-label={t("Delete connector")} title={t("Delete connector")} onClick={() => setConfirmDelete(true)}><Trash2 size={16} aria-hidden="true" /></Button>
-            {confirmDelete && <div role="alertdialog" aria-label={t("Delete connector")} className="mt-2 rounded-lg border p-4">
-              <p className="text-sm">{t("Delete this connection? Associated environments and publication history prevent deletion.")}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmDelete(false)}>{t("Cancel")}</Button>
-                <Button type="button" disabled={busy} onClick={() => action(async () => {
-                  await send(`/ticket-connectors/${selected}`, undefined, "DELETE");
-                  setSelected(null); setShowForm(false); setConfirmDelete(false); setNotice("Connector deleted.");
-                })}>{t("Confirm deletion")}</Button>
-              </div>
-            </div>}
-          </div>}
+            </div>
           {!!destinations.length && (
             <fieldset className="mt-5 rounded-lg border p-4"><p className="mb-3 text-xs muted">{t("Optional restrictions: leave all projects unchecked to allow any destination accessible to this account.")}</p>
               <legend className="px-2 text-sm font-semibold">
@@ -387,19 +352,58 @@ export function TicketConnectors() {
               </p>
             </div>
           )}
-          <Button
-            type="button"
-            variant="ghost"
-            className="mt-4"
-            onClick={() => {
-              setShowForm(false);
-              setSelected(null);
-            }}
-          >
-            {t("Close")}
-          </Button>
+          </details>}
+          <div className="mt-4 flex flex-wrap justify-end gap-2" data-editor-actions>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => { setShowForm(false); setSelected(null); setForm({ ...empty }); setError(""); }}>{t("Cancel")}</Button>
+            <Button disabled={busy}>{t("Save")}</Button>
+          </div>
         </form>
-      )}
     </div>
+  ) : null;
+  return (
+    <Card className="settings-section publication-connection-catalog min-w-0" aria-label={t("Publication connections")}>
+      <div className="section-heading">
+        <h2><Ticket size={18} aria-hidden="true" />{t("Publication connections")}</h2>
+        <Button type="button" size="sm" variant="outline" disabled={busy} aria-label={t("New connector")} onClick={() => edit()}><Plus size={15} aria-hidden="true" />{t("Add connection")}</Button>
+      </div>
+      <p className="mt-2 text-sm muted">{t("Reusable publication accounts. Associate them with environments, then choose the account and destination when publishing.")}</p>
+      <div className="mt-5 flex flex-wrap gap-2">
+        {items.map((item) => <section key={item.id} className="publication-connection-card min-w-0 w-full rounded-lg border bg-card p-4" aria-label={item.name}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="title-tags min-w-0 flex-1"><h4 className="flex items-center gap-2 text-sm font-medium"><ProviderLogo provider={item.platform} />{item.name}</h4>
+            <span className="badge">{publicationPlatforms[item.platform] || item.platform}</span>
+            <span className="badge" data-state={!item.enabled ? "DISABLED" : item.status}>{t(!item.enabled ? "Disabled" : item.status === "UNKNOWN" ? item.checked_at ? "Connection needs verification" : "Not tested" : item.status === "UNAVAILABLE" ? "Verification unavailable" : item.status === "ERROR" ? "Failed" : statuses[item.status] || item.status)}</span></div>
+          <div className="ml-auto flex shrink-0 items-center gap-2" data-publication-actions><Button type="button" size="sm" variant="outline" disabled={busy} aria-expanded={showForm && selected === item.id} aria-controls="publication-connection-editor" onClick={() => edit(item)} aria-label={t("Edit {name}", { name: item.name })}><Pencil size={16} aria-hidden="true" />{t("Edit")}</Button>
+            <details className="action-menu" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+              <summary aria-label={t("More actions for {name}", { name: item.name })}>⋯</summary>
+              <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
+            <Button type="button" size="sm" variant="ghost" disabled={busy || item.enabled === false} onClick={() => action(() => testConnection(item.id))} aria-label={t("Test {name}", { name: item.name })}><RefreshCw size={16} aria-hidden="true" />{t("Test connection")}</Button>
+            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => action(() => {
+              const {name, platform, base_url, username, api_version, projects, default_project} = item;
+              return send(`/ticket-connectors/${item.id}`, {name, platform, base_url, username, api_version, projects, default_project, enabled: !item.enabled}, "PUT");
+            })}><Power size={16} aria-hidden="true" />{t(item.enabled ? "Disable" : "Enable")}</Button>
+                <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); setRemoving(item); }}><Trash2 size={16} aria-hidden="true" />{t("Delete connector")}</Button>
+              </div>
+            </details>
+          </div>
+          </div>
+          {item.checked_at && <p className="mt-1 text-xs muted">{t("Last checked")}: {new Date(item.checked_at).toLocaleString(dateLocale)}</p>}
+          {item.error && <details className="mt-2 text-xs"><summary className="cursor-pointer">{t("Diagnostics")}</summary><p className="mt-2 whitespace-pre-wrap break-words">{item.error}</p></details>}
+          {removing?.id === item.id && deletion}
+          {selected === item.id && connectionForm}
+        </section>)}
+      </div>
+      {error && !showForm && (
+        <p role="alert" className="mt-4 text-red-700">
+          {t(error)}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="mt-4 text-green-800">
+          {t(notice)}
+        </p>
+      )}
+      {selected === null && connectionForm}
+    </Card>
   );
 }

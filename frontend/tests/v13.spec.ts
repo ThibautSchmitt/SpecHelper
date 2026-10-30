@@ -521,7 +521,7 @@ test("connector settings keep saved secrets private and expose explicit GLPI com
     page.getByLabel("Secret / API token", { exact: true }),
   ).toHaveValue("");
   await page
-    .getByRole("button", { name: "Save connector", exact: true })
+    .getByRole("button", { name: "Save", exact: true })
     .click();
   await expect.poll(() => payload).not.toBeNull();
   expect(payload).toMatchObject({ environment_id: 1 });

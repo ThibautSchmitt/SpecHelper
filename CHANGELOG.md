@@ -7,6 +7,25 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Antigravity tool updates
+
+- Validate the selected installed Antigravity release instead of requiring the
+  original image version after an update; retain protocol and capability checks.
+- Recheck the official rolling manifest at execution time, record refreshed update
+  targets and distinguish installation failure from maintenance unavailability.
+
+### Consistent settings editors
+
+- Open Git, publication, environment and custom library editors in their own cards;
+  a second click on Edit collapses the form without saving.
+- Use Cancel and Save as editor actions; save environment changes directly,
+  with Synchronize, Edit and Delete restored to the top right of each card.
+- Align section titles, muted descriptions and add actions; keep orchestration's
+  configuration separate and place the exhausted-quota badge just before Edit.
+- Remove the redundant analysis-type filter buttons from the analyses list.
+- Keep navigation stationary while the main area and activity panel scroll
+  independently; conversation following uses the main area's scroll position.
+
 ### Git server editing and provider identification
 
 - Allow editing an unused GitLab connection's server URL with a new read token,

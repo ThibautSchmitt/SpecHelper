@@ -163,6 +163,16 @@ def read_inventory():
         return inventory()
 
 
+@app.get("/release/antigravity", dependencies=[Depends(authorize)])
+def current_antigravity_release():
+    # The rolling official manifest cannot resolve an older cached version.
+    try:
+        candidate = release("antigravity")
+    except (OSError, ValueError, httpx.HTTPError):
+        raise HTTPException(502, "Official CLI release information is unavailable.") from None
+    return {"agent": "antigravity", "latest_version": candidate["version"]}
+
+
 @app.get("/operations/{operation_id}", dependencies=[Depends(authorize)])
 def operation(operation_id: uuid.UUID):
     return operation_state(str(operation_id))

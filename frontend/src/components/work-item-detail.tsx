@@ -374,8 +374,8 @@ function RequestContent({
             finally { setBusy(false); }
           }}>
             <label className="min-w-0 flex-1 text-sm" htmlFor="analysis-title">{t("Analysis title")}<Input id="analysis-title" autoFocus className="mt-1" maxLength={160} required value={titleDraft} onChange={event => setTitleDraft(event.target.value)} /></label>
-            <Button size="sm" disabled={titleLocked}>{t("Save title")}</Button>
             <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setEditingTitle(false); requestAnimationFrame(() => document.getElementById("edit-analysis-title")?.focus()); }}>{t("Cancel")}</Button>
+            <Button size="sm" disabled={titleLocked}>{t("Save")}</Button>
           </form>}
         </div>
       </div>

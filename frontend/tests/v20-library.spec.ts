@@ -65,10 +65,10 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByLabel(t("Identifier"), { exact: true })).toBeDisabled();
     await page.getByLabel(t("Instructions"), { exact: true }).fill("Refined procedure, preserved historical revision.");
     conflict = true;
-    await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect(page.getByRole("main").getByRole("alert")).toContainText(t("The definition has changed. Refresh before editing."));
     await expect(page.getByLabel(t("Instructions"), { exact: true })).toHaveValue("Refined procedure, preserved historical revision.");
-    await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect(page.getByRole("heading", { name: /Contract review/ })).toContainText("v2");
     await page.getByRole("button", { name: t("Versions of {name}").replace("{name}", "Contract review"), exact: true }).click();
     await expect(page.getByRole("heading", { name: t("Versions of {name}").replace("{name}", "Contract review"), exact: true })).toBeVisible();

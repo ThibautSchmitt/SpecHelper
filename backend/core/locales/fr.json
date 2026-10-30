@@ -757,5 +757,9 @@
   "This Git server is now referenced. Create a new connection.": "Ce serveur Git est maintenant utilisé. Créez une nouvelle connexion.",
   "This destination already has a publication using another connection. Use the original connection to verify that publication.": "Une publication existe déjà pour cette destination avec une autre connexion. Utilisez la connexion d’origine pour la vérifier.",
   "This publication connection is disabled.": "Cette connexion de publication est désactivée.",
-  "Ticket publication": "Publication des tickets"
+  "Ticket publication": "Publication des tickets",
+  "CLI installation failed. The previous executable is preserved.": "L’installation de l’outil a échoué. La version précédente est conservée.",
+  "Official CLI release information is unavailable. Try again later.": "Les informations officielles de version de l’outil sont indisponibles. Réessayez plus tard.",
+  "Invalid official CLI release metadata.": "Les informations officielles de version de l’outil sont invalides.",
+  "The official CLI release changed. Refresh tool versions and retry.": "La version officielle de l’outil a changé. Actualisez les versions et réessayez."
 }

@@ -2047,5 +2047,14 @@
   "This Git server is now referenced. Create a new connection.": "This Git server is now referenced. Create a new connection.",
   "The Git connection changed. Refresh and retry.": "The Git connection changed. Refresh and retry.",
   "GitHub connections currently support github.com only. Self-hosted GitLab servers can be configured by selecting GitLab.": "GitHub connections currently support github.com only. Self-hosted GitLab servers can be configured by selecting GitLab.",
-  "Enter your GitLab server URL. Changing servers requires a new token; connections linked to environments or analysis history must be replaced by a new connection.": "Enter your GitLab server URL. Changing servers requires a new token; connections linked to environments or analysis history must be replaced by a new connection."
+  "Enter your GitLab server URL. Changing servers requires a new token; connections linked to environments or analysis history must be replaced by a new connection.": "Enter your GitLab server URL. Changing servers requires a new token; connections linked to environments or analysis history must be replaced by a new connection.",
+  "Add environment": "Add environment",
+  "Add skill": "Add skill",
+  "Add agent": "Add agent",
+  "Prepare the repositories, branches and optional resources used by your analyses.": "Prepare the repositories, branches and optional resources used by your analyses.",
+  "Save": "Save",
+  "CLI installation failed. The previous executable is preserved.": "CLI installation failed. The previous executable is preserved.",
+  "Official CLI release information is unavailable. Try again later.": "Official CLI release information is unavailable. Try again later.",
+  "Invalid official CLI release metadata.": "Invalid official CLI release metadata.",
+  "The official CLI release changed. Refresh tool versions and retry.": "The official CLI release changed. Refresh tool versions and retry."
 }

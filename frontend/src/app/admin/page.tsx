@@ -152,7 +152,6 @@ function AdminPanel() {
             </p>
           </div>
         </div>
-        {tab === "environments" && sourceTab === "environments" && <Button onClick={() => { setShowEnvironmentForm(true); requestAnimationFrame(() => document.getElementById("env-name")?.focus()); }}><Plus size={16} aria-hidden="true" />{t("New environment")}</Button>}
       </header>
       <nav
         className="admin-route-nav flex flex-wrap gap-1 border-b pb-3"
@@ -204,9 +203,25 @@ function AdminPanel() {
           </nav>
           {sourceTab === "git" && <GitSources />}
           {sourceTab === "postgres" && <DatabaseConnections values={connections?.databases || []} onChanged={refresh} />}
-          {sourceTab === "environments" && <>
+          {sourceTab === "environments" && <Card className="settings-section min-w-0" aria-label={t("Environments")}>
+            <div className="section-heading">
+              <h2><GitBranch size={18} aria-hidden="true" />{t("Environments")}</h2>
+              <Button type="button" size="sm" variant="outline" disabled={busy} aria-label={t("New environment")} aria-expanded={showEnvironmentForm} aria-controls="environment-create-form" onClick={() => { setShowEnvironmentForm(!showEnvironmentForm); if (!showEnvironmentForm) requestAnimationFrame(() => document.getElementById("env-name")?.focus()); }}><Plus size={15} aria-hidden="true" />{t("Add environment")}</Button>
+            </div>
+            <p className="mt-2 text-sm muted">{t("Prepare the repositories, branches and optional resources used by your analyses.")}</p>
+            <div className="mt-5 space-y-4">
           {environments.map((e) => (
             <Card key={e.id} className="environment-card">
+                  <EnvironmentActions
+                    value={e}
+                    databases={connections?.databases || []}
+                    disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
+                    onChanged={async (message) => {
+                      await refresh();
+                      setNotice(message);
+                    }}
+                  >
+                    {actions => <>
               <div className="flex flex-wrap justify-between gap-3">
                 <div className="title-tags">
                   <h2 className="flex items-center gap-2"><Database size={22} className="environment-logo" aria-hidden="true" />{e.name}</h2>
@@ -214,7 +229,7 @@ function AdminPanel() {
                     {t(({ READY: "Synchronized", PENDING: "Synchronization queued", SYNCING: "Synchronizing", ERROR: "Synchronization failed" } as Record<string, string>)[e.status] || statuses[e.status] || e.status)}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-2" data-environment-actions>
                   <Button
                     variant="outline"
                     size="sm"
@@ -229,15 +244,7 @@ function AdminPanel() {
                     <RefreshCw size={14} />
                     {t("Synchronize")}
                   </Button>
-                  <EnvironmentActions
-                    value={e}
-                    databases={connections?.databases || []}
-                    disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
-                    onChanged={async (message) => {
-                      await refresh();
-                      setNotice(message);
-                    }}
-                  />
+                  {actions}
                 </div>
               </div>
               {e.synced_at && <p className="mt-2 text-xs muted">{t("Last synchronization")}: {new Date(e.synced_at).toLocaleString(dateLocale)}</p>}
@@ -288,9 +295,11 @@ function AdminPanel() {
               <EnvironmentContext environmentId={e.id} factualOnly={protocol === "2.4"} />
               <EnvironmentSyncHistory environmentId={e.id} />
               {protocol !== "2.4" && <EnvironmentLibrary environmentId={e.id} />}
+                    </>}
+                  </EnvironmentActions>
             </Card>
           ))}
-          {showEnvironmentForm && <Card>
+          {showEnvironmentForm && <Card id="environment-create-form">
             <h2 className="flex items-center gap-2">
               <GitBranch size={20} /> {t("New environment")}
             </h2>
@@ -360,7 +369,8 @@ function AdminPanel() {
               <Button className="mt-5 ml-3" type="button" variant="ghost" onClick={() => setShowEnvironmentForm(false)}>{t("Cancel")}</Button>
             </form>
           </Card>}
-          </>}
+            </div>
+          </Card>}
         </div>
       )}
       {tab === "connectors" && <div className="space-y-6">

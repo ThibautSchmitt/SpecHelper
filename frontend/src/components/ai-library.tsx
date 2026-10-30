@@ -169,406 +169,10 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
     }
   }
   const Icon = kind === "agent" ? Bot : BookOpen;
-  return (
-    <Card className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2">
-            <Icon size={20} aria-hidden="true" />
-            {t(kind === "agent" ? "Agent library" : "Skills")}
-          </h2>
-          <p className="mt-2 text-sm muted">
-            {t(kind === "skill" ? "All active compatible skills are discoverable automatically. Each assistant loads only the skills useful for its current mission." : "One shared library, reusable across environments and supported assistants.")}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            disabled={busy || loading}
-            onClick={() => {
-              setAssistant(true);
-              setDraft(null);
-              setHistory(null);
-              setRemove(null);
-              setImportText(null);
-            }}
-          >
-            <Sparkles size={16} aria-hidden="true" />
-            {t(kind === "agent" ? "Generate an agent" : "Generate a skill")}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy || loading}
-            onClick={() => {
-              setDraft({ ...blank });
-              setEditing(null);
-              setHistory(null);
-              setRemove(null);
-              setAssistant(false);
-            }}
-          >
-            <Plus size={16} aria-hidden="true" />
-            {t(kind === "agent" ? "New agent" : "New skill")}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy || loading}
-            onClick={() => {
-              setImportText("");
-              setImportPreview(null);
-              setAssistant(false);
-              setDraft(null);
-            }}
-          >
-            <Upload size={16} aria-hidden="true" />
-            {t(kind === "skill" ? "Import skill" : "Import definition")}
-          </Button>
-        </div>
-      </div>
-      <p className="text-sm muted">
-        {t(
-          kind === "skill" ? "Skills contain instructions only. They cannot change sandbox permissions or access credentials." : "Definitions contain instructions only. They cannot change sandbox permissions or access credentials.",
-        )}
-      </p>
-      {error && (
-        <div role="alert" className="rounded-md border p-3 text-sm">
-          {t(error)}{" "}
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => action(refresh)}
-          >
-            {t("Retry")}
-          </Button>
-        </div>
-      )}
-      {notice && (
-        <p role="status" className="text-sm">
-          {t(notice)}
-        </p>
-      )}
-      {assistant && (
-        <LibraryAssistant
-          kind={kind}
-          onClose={() => setAssistant(false)}
-          onSaved={refresh}
-        />
-      )}
-      {importText !== null && (
-        <section
-          className="rounded-lg border p-4 space-y-3"
-          aria-label={t(kind === "skill" ? "Import skill" : "Import definition")}
-        >
-          <h3>{t(kind === "skill" ? "Import skill" : "Import definition")}</h3>
-          <p className="text-sm muted">
-            {t(
-              "Paste a declarative JSON export. Imports are saved inactive and cannot install scripts or extensions.",
-            )}
-          </p>
-          <label className="text-sm" htmlFor={`${prefix}-import`}>
-            {t("Definition JSON")}
-          </label>
-          <textarea
-            id={`${prefix}-import`}
-            className="w-full rounded-md border bg-background p-3 font-mono text-xs"
-            rows={8}
-            maxLength={50000}
-            value={importText}
-            onChange={(event) => {
-              setImportText(event.target.value);
-              setImportPreview(null);
-            }}
-          />
-          {importPreview && (
-            <div role="status" className="rounded-md border p-3 text-sm">
-              <p>
-                {t(
-                  importPreview.valid
-                    ? "Configuration checks passed."
-                    : "Configuration needs changes.",
-                )}
-              </p>
-              {importPreview.errors?.map((value) => (
-                <p key={value}>{libraryValidationMessage(value, t)}</p>
-              ))}
-              {importPreview.definition && (
-                <p>
-                  {importPreview.definition.name} ·{" "}
-                  {importPreview.definition.slug} · {t("Inactive")}
-                </p>
-              )}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={busy || !importText.trim()}
-              onClick={() =>
-                action(async () => {
-                  let envelope;
-                  try {
-                    envelope = JSON.parse(importText);
-                  } catch {
-                    throw new Error("Enter a valid JSON definition.");
-                  }
-                  if (envelope.kind !== kind)
-                    throw new Error(
-                      "Choose the matching agent or skill library before importing.",
-                    );
-                  const current = items.find(
-                    (item) => item.slug === envelope.definition?.slug,
-                  );
-                  const value = await send<{
-                    valid: boolean;
-                    errors?: string[];
-                    definition?: LibraryDraft;
-                  }>("/library/import/preview", {
-                    ...envelope,
-                    definition: {
-                      ...envelope.definition,
-                      expected_version: current?.version,
-                    },
-                  });
-                  setImportPreview({ ...value, kind: envelope.kind });
-                })
-              }
-            >
-              {t("Validate import")}
-            </Button>
-            <Button
-              disabled={
-                busy || !importPreview?.valid || importPreview.kind !== kind
-              }
-              onClick={() =>
-                action(async () => {
-                  const envelope = JSON.parse(importText);
-                  const current = items.find(
-                    (item) => item.slug === envelope.definition?.slug,
-                  );
-                  await send("/library/import", {
-                    ...envelope,
-                    definition: {
-                      ...envelope.definition,
-                      expected_version: current?.version,
-                    },
-                  });
-                  setImportText(null);
-                  setImportPreview(null);
-                }, "Definition imported as an inactive draft.")
-              }
-            >
-              {t("Import as draft")}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setImportText(null)}
-            >
-              {t("Cancel")}
-            </Button>
-          </div>
-        </section>
-      )}
-      {loading && (
-        <p role="status" className="text-sm muted">
-          {t("Loading library…")}
-        </p>
-      )}
-      {!loading && !items.length && !error && (
-        <p className="text-sm muted">
-          {t(
-            kind === "agent"
-              ? "No agents yet. Create an agent to describe a reusable mission."
-              : "No skills yet. Create a skill to describe a reusable procedure.",
-          )}
-        </p>
-      )}
-      <div className="field"><label htmlFor={`${prefix}-search`}>{t(kind === "skill" ? "Search skills" : "Search agents")}</label><Input id={`${prefix}-search`} type="search" value={search} onChange={event => setSearch(event.target.value)} /></div>
-      {items.filter(item => `${item.name} ${item.objective} ${item.slug}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).sort((a, b) => Number(!!b.built_in) - Number(!!a.built_in)).map((item, index, filtered) => (
-        <Fragment key={item.slug}>
-        {kind === "skill" && (index === 0 || !!item.built_in !== !!filtered[index - 1].built_in) && <h3 className="pt-3 text-sm font-semibold">{t(item.built_in ? "Built-in skills" : "Custom skills")}</h3>}
-        <article className="rounded-lg border p-4" aria-label={item.built_in ? t(item.name) : item.name}>
-          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
-            <div className="min-w-0 flex-1">
-              <div className="title-tags"><h3 className="break-words">
-                {item.built_in ? t(item.name) : item.name}{" "}
-                <span className="text-xs muted">v{item.version}</span>
-              </h3>
-                {kind === "skill" && <span className="badge">{t(item.built_in ? "Built-in" : "Custom")}</span>}
-              </div>
-              <p className="mt-1 text-sm muted break-words">
-                {item.built_in ? t(item.objective || item.name) : item.objective || item.name}
-              </p>
-              <p className="mt-2 text-xs muted">
-                {t(item.enabled ? "Active" : "Inactive")} ·{" "}
-                {kind === "agent" && item.compatibility.length
-                  ? item.compatibility
-                      .map(assistantName)
-                      .join(", ")
-                  : t("All supported assistants")}
-              </p>
-            </div>
-            <div className="connection-actions">
-              {!item.built_in && <Button
-                variant="ghost"
-                size="sm"
-
-                title={t("Edit {name}", { name: item.name })}
-                aria-label={t("Edit {name}", { name: item.name })}
-                disabled={busy}
-                onClick={() => {
-                  setEditing(item.slug);
-                  setDraft(libraryPayload(item));
-                  setHistory(null);
-                  setRemove(null);
-                }}
-              >
-                <Pencil size={16} aria-hidden="true" />{t("Edit")}
-              </Button>}
-              <details className="action-menu" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
-                <summary aria-label={t("More actions for {name}", { name: item.name })}>⋯</summary>
-                <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="icon-action"
-                title={t("Versions of {name}", { name: item.name })}
-                aria-label={t("Versions of {name}", { name: item.name })}
-                disabled={busy}
-                onClick={() =>
-                  action(async () => {
-                    const rows = await api<Revision[]>(
-                      `/library/${kind}/${item.slug}/versions`,
-                    );
-                    setHistory({ name: item.name, slug: item.slug, rows });
-                    setDraft(null);
-                    setRemove(null);
-                    setRestore(null);
-                  })
-                }
-              >
-                <History size={16} aria-hidden="true" />{t("Versions")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="icon-action"
-                title={t("Export {name}", { name: item.name })}
-                aria-label={t("Export {name}", { name: item.name })}
-                disabled={busy}
-                onClick={() =>
-                  action(async () => {
-                    const envelope = await api(
-                      `/library/${kind}/${item.slug}/export`,
-                    );
-                    const url = URL.createObjectURL(
-                      new Blob([JSON.stringify(envelope, null, 2)], {
-                        type: "application/json",
-                      }),
-                    );
-                    const link = document.createElement("a");
-                    link.href = url;
-                    link.download = `${item.slug}.json`;
-                    link.click();
-                    URL.revokeObjectURL(url);
-                  })
-                }
-              >
-                <Download size={16} aria-hidden="true" />{t("Export")}
-              </Button>
-              {!item.built_in && <Button
-                variant="ghost"
-                size="sm"
-                className="icon-action"
-                title={t(
-                  item.enabled ? "Deactivate {name}" : "Activate {name}",
-                  { name: item.name },
-                )}
-                aria-label={t(
-                  item.enabled ? "Deactivate {name}" : "Activate {name}",
-                  { name: item.name },
-                )}
-                disabled={busy}
-                onClick={() =>
-                  action(
-                    () =>
-                      send(
-                        `/library/${kind}/${item.slug}`,
-                        { ...libraryPayload(item), enabled: !item.enabled },
-                        "PUT",
-                      ),
-                    "Library updated.",
-                  )
-                }
-              >
-                <Power size={16} aria-hidden="true" />{t(item.enabled ? "Deactivate" : "Activate")}
-              </Button>}
-              {!item.built_in && <Button
-                variant="ghost"
-                size="sm"
-                className="icon-action"
-                title={t(
-                  item.enabled ? "Disable before deleting" : "Delete {name}",
-                  { name: item.name },
-                )}
-                aria-label={t("Delete {name}", { name: item.name })}
-                disabled={busy || item.enabled}
-                onClick={() => {
-                  setRemove(item);
-                  setHistory(null);
-                  setDraft(null);
-                }}
-              >
-                <Trash2 size={16} aria-hidden="true" />{t("Delete")}
-              </Button>}
-
-                </div>
-              </details>
-            </div>
-          </div>
-          {item.built_in && <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium">{t("View instructions")}</summary><p className="mt-3 text-xs muted">{t("Maintained by SpecHelper and available automatically when the required tools are authorized.")}</p><pre className="mt-3 whitespace-pre-wrap break-words font-sans text-xs muted">{item.instructions}</pre></details>}
-        </article>
-        </Fragment>
-      ))}
-      {remove && (
-        <div
-          className="rounded-lg border p-4 space-y-3"
-          role="group"
-          aria-label={t("Confirm deletion")}
-        >
-          <p className="text-sm">
-            {t("Delete {name}? Historical versions will remain available.", {
-              name: remove.name,
-            })}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={busy}
-              onClick={() =>
-                action(async () => {
-                  await send(
-                    `/library/${kind}/${remove.slug}?expected_version=${remove.version}`,
-                    undefined,
-                    "DELETE",
-                  );
-                  setRemove(null);
-                }, "Definition deleted. Historical versions retained.")
-              }
-            >
-              {t("Confirm deletion")}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setRemove(null)}
-            >
-              {t("Cancel")}
-            </Button>
-          </div>
-        </div>
-      )}
-      {draft && (
+  const definitionForm = draft ? (
         <form
-          className="rounded-lg border p-4"
+          id={draft.slug ? `${prefix}-editor-${draft.slug}` : `${prefix}-editor-new`}
+          className="mt-4 min-w-0 border-t pt-4"
           onSubmit={(event) => {
             event.preventDefault();
             const submitted = {
@@ -792,8 +396,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                 )}
               </p>
             )}
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button disabled={busy}>{t(kind === "skill" ? "Save skill" : "Save definition")}</Button>
+            <div className="mt-5 flex flex-wrap justify-end gap-2" data-editor-actions>
               <Button
                 type="button"
                 variant="outline"
@@ -805,10 +408,417 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
               >
                 {t("Cancel")}
               </Button>
+              <Button disabled={busy}>{t(editing ? "Save" : kind === "skill" ? "Save skill" : "Save definition")}</Button>
             </div>
           </fieldset>
         </form>
+  ) : null;
+  return (
+    <Card className="settings-section min-w-0 space-y-4" aria-label={t(kind === "agent" ? "Agent library" : "Skills")}>
+      <header>
+        <div className="section-heading">
+          <h2><Icon size={18} aria-hidden="true" />{t(kind === "agent" ? "Agent library" : "Skills")}</h2>
+          <Button
+            type="button"
+            size="sm"
+            aria-label={t(kind === "agent" ? "Add agent" : "Add skill")}
+            variant="outline"
+            disabled={busy || loading}
+            onClick={() => {
+              setDraft({ ...blank });
+              setEditing(null);
+              setHistory(null);
+              setRemove(null);
+              setAssistant(false);
+            }}
+          >
+            <Plus size={16} aria-hidden="true" />
+            {t(kind === "agent" ? "Add agent" : "Add skill")}
+          </Button>
+        </div>
+        <p className="mt-2 text-sm muted">{t(kind === "skill" ? "All active compatible skills are discoverable automatically. Each assistant loads only the skills useful for its current mission." : "One shared library, reusable across environments and supported assistants.")}</p>
+      </header>
+      <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={busy || loading}
+            onClick={() => {
+              setAssistant(true);
+              setDraft(null);
+              setHistory(null);
+              setRemove(null);
+              setImportText(null);
+            }}
+          >
+            <Sparkles size={16} aria-hidden="true" />
+            {t(kind === "agent" ? "Generate an agent" : "Generate a skill")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={busy || loading}
+            onClick={() => {
+              setImportText("");
+              setImportPreview(null);
+              setAssistant(false);
+              setDraft(null);
+            }}
+          >
+            <Upload size={16} aria-hidden="true" />
+            {t(kind === "skill" ? "Import skill" : "Import definition")}
+          </Button>
+      </div>
+      <p className="text-sm muted">
+        {t(
+          kind === "skill" ? "Skills contain instructions only. They cannot change sandbox permissions or access credentials." : "Definitions contain instructions only. They cannot change sandbox permissions or access credentials.",
+        )}
+      </p>
+      {error && (
+        <div role="alert" className="rounded-md border p-3 text-sm">
+          {t(error)}{" "}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => action(refresh)}
+          >
+            {t("Retry")}
+          </Button>
+        </div>
       )}
+      {notice && (
+        <p role="status" className="text-sm">
+          {t(notice)}
+        </p>
+      )}
+      {assistant && (
+        <LibraryAssistant
+          kind={kind}
+          onClose={() => setAssistant(false)}
+          onSaved={refresh}
+        />
+      )}
+      {importText !== null && (
+        <section
+          className="rounded-lg border p-4 space-y-3"
+          aria-label={t(kind === "skill" ? "Import skill" : "Import definition")}
+        >
+          <h3>{t(kind === "skill" ? "Import skill" : "Import definition")}</h3>
+          <p className="text-sm muted">
+            {t(
+              "Paste a declarative JSON export. Imports are saved inactive and cannot install scripts or extensions.",
+            )}
+          </p>
+          <label className="text-sm" htmlFor={`${prefix}-import`}>
+            {t("Definition JSON")}
+          </label>
+          <textarea
+            id={`${prefix}-import`}
+            className="w-full rounded-md border bg-background p-3 font-mono text-xs"
+            rows={8}
+            maxLength={50000}
+            value={importText}
+            onChange={(event) => {
+              setImportText(event.target.value);
+              setImportPreview(null);
+            }}
+          />
+          {importPreview && (
+            <div role="status" className="rounded-md border p-3 text-sm">
+              <p>
+                {t(
+                  importPreview.valid
+                    ? "Configuration checks passed."
+                    : "Configuration needs changes.",
+                )}
+              </p>
+              {importPreview.errors?.map((value) => (
+                <p key={value}>{libraryValidationMessage(value, t)}</p>
+              ))}
+              {importPreview.definition && (
+                <p>
+                  {importPreview.definition.name} ·{" "}
+                  {importPreview.definition.slug} · {t("Inactive")}
+                </p>
+              )}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={busy || !importText.trim()}
+              onClick={() =>
+                action(async () => {
+                  let envelope;
+                  try {
+                    envelope = JSON.parse(importText);
+                  } catch {
+                    throw new Error("Enter a valid JSON definition.");
+                  }
+                  if (envelope.kind !== kind)
+                    throw new Error(
+                      "Choose the matching agent or skill library before importing.",
+                    );
+                  const current = items.find(
+                    (item) => item.slug === envelope.definition?.slug,
+                  );
+                  const value = await send<{
+                    valid: boolean;
+                    errors?: string[];
+                    definition?: LibraryDraft;
+                  }>("/library/import/preview", {
+                    ...envelope,
+                    definition: {
+                      ...envelope.definition,
+                      expected_version: current?.version,
+                    },
+                  });
+                  setImportPreview({ ...value, kind: envelope.kind });
+                })
+              }
+            >
+              {t("Validate import")}
+            </Button>
+            <Button
+              disabled={
+                busy || !importPreview?.valid || importPreview.kind !== kind
+              }
+              onClick={() =>
+                action(async () => {
+                  const envelope = JSON.parse(importText);
+                  const current = items.find(
+                    (item) => item.slug === envelope.definition?.slug,
+                  );
+                  await send("/library/import", {
+                    ...envelope,
+                    definition: {
+                      ...envelope.definition,
+                      expected_version: current?.version,
+                    },
+                  });
+                  setImportText(null);
+                  setImportPreview(null);
+                }, "Definition imported as an inactive draft.")
+              }
+            >
+              {t("Import as draft")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setImportText(null)}
+            >
+              {t("Cancel")}
+            </Button>
+          </div>
+        </section>
+      )}
+      {loading && (
+        <p role="status" className="text-sm muted">
+          {t("Loading library…")}
+        </p>
+      )}
+      {!loading && !items.length && !error && (
+        <p className="text-sm muted">
+          {t(
+            kind === "agent"
+              ? "No agents yet. Create an agent to describe a reusable mission."
+              : "No skills yet. Create a skill to describe a reusable procedure.",
+          )}
+        </p>
+      )}
+      <div className="field"><label htmlFor={`${prefix}-search`}>{t(kind === "skill" ? "Search skills" : "Search agents")}</label><Input id={`${prefix}-search`} type="search" value={search} onChange={event => setSearch(event.target.value)} /></div>
+      {items.filter(item => `${item.name} ${item.objective} ${item.slug}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).sort((a, b) => Number(!!b.built_in) - Number(!!a.built_in)).map((item, index, filtered) => (
+        <Fragment key={item.slug}>
+        {kind === "skill" && (index === 0 || !!item.built_in !== !!filtered[index - 1].built_in) && <h3 className="pt-3 text-sm font-semibold">{t(item.built_in ? "Built-in skills" : "Custom skills")}</h3>}
+        <article className="rounded-lg border p-4" aria-label={item.built_in ? t(item.name) : item.name}>
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+            <div className="min-w-0 flex-1">
+              <div className="title-tags"><h3 className="break-words">
+                {item.built_in ? t(item.name) : item.name}{" "}
+                <span className="text-xs muted">v{item.version}</span>
+              </h3>
+                {kind === "skill" && <span className="badge">{t(item.built_in ? "Built-in" : "Custom")}</span>}
+              </div>
+              <p className="mt-1 text-sm muted break-words">
+                {item.built_in ? t(item.objective || item.name) : item.objective || item.name}
+              </p>
+              <p className="mt-2 text-xs muted">
+                {t(item.enabled ? "Active" : "Inactive")} ·{" "}
+                {kind === "agent" && item.compatibility.length
+                  ? item.compatibility
+                      .map(assistantName)
+                      .join(", ")
+                  : t("All supported assistants")}
+              </p>
+            </div>
+            <div className="connection-actions">
+              {!item.built_in && <Button
+                variant="ghost"
+                size="sm"
+
+                title={t("Edit {name}", { name: item.name })}
+                aria-label={t("Edit {name}", { name: item.name })}
+                disabled={busy}
+                aria-expanded={!!draft && editing === item.slug}
+                aria-controls={`${prefix}-editor-${item.slug}`}
+                onClick={() => {
+                  setError("");
+                  if (draft && editing === item.slug) { setDraft(null); setEditing(null); return; }
+                  setEditing(item.slug);
+                  setDraft(libraryPayload(item));
+                  setHistory(null);
+                  setRemove(null);
+                }}
+              >
+                <Pencil size={16} aria-hidden="true" />{t("Edit")}
+              </Button>}
+              <details className="action-menu" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+                <summary aria-label={t("More actions for {name}", { name: item.name })}>⋯</summary>
+                <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="icon-action"
+                title={t("Versions of {name}", { name: item.name })}
+                aria-label={t("Versions of {name}", { name: item.name })}
+                disabled={busy}
+                onClick={() =>
+                  action(async () => {
+                    const rows = await api<Revision[]>(
+                      `/library/${kind}/${item.slug}/versions`,
+                    );
+                    setHistory({ name: item.name, slug: item.slug, rows });
+                    setDraft(null);
+                    setRemove(null);
+                    setRestore(null);
+                  })
+                }
+              >
+                <History size={16} aria-hidden="true" />{t("Versions")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="icon-action"
+                title={t("Export {name}", { name: item.name })}
+                aria-label={t("Export {name}", { name: item.name })}
+                disabled={busy}
+                onClick={() =>
+                  action(async () => {
+                    const envelope = await api(
+                      `/library/${kind}/${item.slug}/export`,
+                    );
+                    const url = URL.createObjectURL(
+                      new Blob([JSON.stringify(envelope, null, 2)], {
+                        type: "application/json",
+                      }),
+                    );
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = `${item.slug}.json`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                  })
+                }
+              >
+                <Download size={16} aria-hidden="true" />{t("Export")}
+              </Button>
+              {!item.built_in && <Button
+                variant="ghost"
+                size="sm"
+                className="icon-action"
+                title={t(
+                  item.enabled ? "Deactivate {name}" : "Activate {name}",
+                  { name: item.name },
+                )}
+                aria-label={t(
+                  item.enabled ? "Deactivate {name}" : "Activate {name}",
+                  { name: item.name },
+                )}
+                disabled={busy}
+                onClick={() =>
+                  action(
+                    () =>
+                      send(
+                        `/library/${kind}/${item.slug}`,
+                        { ...libraryPayload(item), enabled: !item.enabled },
+                        "PUT",
+                      ),
+                    "Library updated.",
+                  )
+                }
+              >
+                <Power size={16} aria-hidden="true" />{t(item.enabled ? "Deactivate" : "Activate")}
+              </Button>}
+              {!item.built_in && <Button
+                variant="ghost"
+                size="sm"
+                className="icon-action"
+                title={t(
+                  item.enabled ? "Disable before deleting" : "Delete {name}",
+                  { name: item.name },
+                )}
+                aria-label={t("Delete {name}", { name: item.name })}
+                disabled={busy || item.enabled}
+                onClick={() => {
+                  setRemove(item);
+                  setHistory(null);
+                  setDraft(null);
+                }}
+              >
+                <Trash2 size={16} aria-hidden="true" />{t("Delete")}
+              </Button>}
+
+                </div>
+              </details>
+            </div>
+          </div>
+          {item.built_in && <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium">{t("View instructions")}</summary><p className="mt-3 text-xs muted">{t("Maintained by SpecHelper and available automatically when the required tools are authorized.")}</p><pre className="mt-3 whitespace-pre-wrap break-words font-sans text-xs muted">{item.instructions}</pre></details>}
+          {editing === item.slug && definitionForm}
+        </article>
+        </Fragment>
+      ))}
+      {remove && (
+        <div
+          className="rounded-lg border p-4 space-y-3"
+          role="group"
+          aria-label={t("Confirm deletion")}
+        >
+          <p className="text-sm">
+            {t("Delete {name}? Historical versions will remain available.", {
+              name: remove.name,
+            })}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={busy}
+              onClick={() =>
+                action(async () => {
+                  await send(
+                    `/library/${kind}/${remove.slug}?expected_version=${remove.version}`,
+                    undefined,
+                    "DELETE",
+                  );
+                  setRemove(null);
+                }, "Definition deleted. Historical versions retained.")
+              }
+            >
+              {t("Confirm deletion")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setRemove(null)}
+            >
+              {t("Cancel")}
+            </Button>
+          </div>
+        </div>
+      )}
+      {!editing && definitionForm}
       {history && (
         <div className="rounded-lg border p-4 space-y-4">
           <h3>{t("Versions of {name}", { name: history.name })}</h3>

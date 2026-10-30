@@ -53,7 +53,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(card.locator("#ai-config-provider")).toHaveCount(0);
     await expect(page.getByLabel(t("Reasoning"), { exact: true })).toHaveCount(0);
     await card.getByLabel(t("Connection name"), { exact: true }).fill("Existing Gemini");
-    await page.getByRole("button", { name: t("Save connection"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => edited).toMatchObject({ model: model.identifier, reasoning_effort: "" });
     await expect(page.getByRole("navigation", { name: t("Administration"), exact: true }).getByRole("button")).toHaveCount(4);
     await page.getByRole("button", { name: t("New AI connection"), exact: true }).click();

@@ -88,7 +88,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByText(t("One model family · limited diversity"), { exact: true })).toBeVisible();
     await page.getByRole("button", { name: t("Edit title"), exact: true }).click();
     await page.getByLabel(t("Analysis title"), { exact: true }).fill("Renamed analysis");
-    await page.getByRole("button", { name: t("Save title"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect(page.getByRole("heading", { name: "Renamed analysis", exact: true })).toBeVisible();
     expect(bodies).toEqual([{ title: "Renamed analysis" }]);
     expect(calls).toEqual([]);

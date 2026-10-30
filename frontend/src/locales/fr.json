@@ -2047,5 +2047,14 @@
   "This Git server is now referenced. Create a new connection.": "Ce serveur Git est maintenant utilisé. Créez une nouvelle connexion.",
   "The Git connection changed. Refresh and retry.": "La connexion Git a changé. Actualisez la page et réessayez.",
   "GitHub connections currently support github.com only. Self-hosted GitLab servers can be configured by selecting GitLab.": "Les connexions GitHub prennent actuellement en charge github.com uniquement. Pour un serveur GitLab auto-hébergé, sélectionnez GitLab.",
-  "Enter your GitLab server URL. Changing servers requires a new token; connections linked to environments or analysis history must be replaced by a new connection.": "Saisissez l’URL de votre serveur GitLab. Un changement de serveur nécessite un nouveau jeton. Si la connexion est liée à des environnements ou à un historique d’analyse, créez une nouvelle connexion."
+  "Enter your GitLab server URL. Changing servers requires a new token; connections linked to environments or analysis history must be replaced by a new connection.": "Saisissez l’URL de votre serveur GitLab. Un changement de serveur nécessite un nouveau jeton. Si la connexion est liée à des environnements ou à un historique d’analyse, créez une nouvelle connexion.",
+  "Add environment": "Ajouter un environnement",
+  "Add skill": "Ajouter une compétence",
+  "Add agent": "Ajouter un agent",
+  "Prepare the repositories, branches and optional resources used by your analyses.": "Configurez les dépôts, les branches et les ressources facultatives utilisés par vos analyses.",
+  "Save": "Enregistrer",
+  "CLI installation failed. The previous executable is preserved.": "L’installation de l’outil a échoué. La version précédente est conservée.",
+  "Official CLI release information is unavailable. Try again later.": "Les informations officielles de version de l’outil sont indisponibles. Réessayez plus tard.",
+  "Invalid official CLI release metadata.": "Les informations officielles de version de l’outil sont invalides.",
+  "The official CLI release changed. Refresh tool versions and retry.": "La version officielle de l’outil a changé. Actualisez les versions et réessayez."
 }

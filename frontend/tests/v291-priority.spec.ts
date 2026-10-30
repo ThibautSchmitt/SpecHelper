@@ -188,7 +188,7 @@ for (const language of ["en", "fr"] as const) {
       expect(Math.max(...positions)-Math.min(...positions)).toBeLessThan(3);
     }
     await page.screenshot({ path: `../.local/v291-ui/native-model-${language}-${info.project.name}.png`, fullPage: true, animations: "disabled" });
-    await page.getByRole("button", { name: t("Save connection"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => saved).toMatchObject({ model: "native-model", reasoning_effort: "high" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });

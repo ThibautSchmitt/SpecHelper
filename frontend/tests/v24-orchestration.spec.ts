@@ -120,7 +120,7 @@ for (const language of ["en", "fr"] as const) {
     await page.getByText(t("Specific instructions"), { exact: true }).first().click();
     await page.getByLabel(t("Specific instructions"), { exact: true }).fill("Check callers before generalizing.");
     await expect(page.locator("[id^=ai-skill-]")).toHaveCount(0);
-    await page.getByRole("button", { name: t("Save connection"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => connectionWrite).toMatchObject({ additional_instructions: "Check callers before generalizing.", roles: ["analyst", "counter_analyst", "verifier"] });
     expect(connectionWrite).not.toHaveProperty("skill_overrides");
     await nav.getByRole("button", { name: t("Orchestration"), exact: true }).click();

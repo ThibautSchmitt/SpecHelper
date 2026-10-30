@@ -37,9 +37,9 @@ export function NeedEditor({ value, onUpdated }: { value: RequestDetail; onUpdat
       <Textarea id="revised-need" value={text} onChange={event => setText(event.target.value)} required maxLength={30000} disabled={busy} rows={5} />
       <p className="text-sm muted">{t(value.discussion?.enabled ? "Saving continues the discussion. Previous results keep their original scope until another deep analysis." : "Saving keeps the original need, decisions and previous results, then restarts the independent analysis. Previous conclusions remain out of date until reassessed.")}</p>
       {error && <p role="alert" className="text-sm text-destructive">{t(error)}</p>}
-      <div className="flex flex-wrap gap-2">
-        <Button disabled={busy || (!canEdit && !submission.current) || !text.trim() || (text.trim() === value.need && !submission.current)}>{t(busy ? "Saving…" : value.discussion?.enabled ? "Save and discuss" : "Save and reanalyze")}</Button>
+      <div className="flex flex-wrap justify-end gap-2" data-editor-actions>
         <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditing(false); submission.current = null; setError(""); }}>{t("Cancel")}</Button>
+        <Button disabled={busy || (!canEdit && !submission.current) || !text.trim() || (text.trim() === value.need && !submission.current)}>{t(busy ? "Saving…" : "Save")}</Button>
       </div>
     </form>}
   </div>;

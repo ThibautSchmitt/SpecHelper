@@ -64,10 +64,11 @@ export function OrchestrationSettingsForm() {
       ? value[key].filter((item) => item !== slug) : [...value[key], slug] });
   }
   const simplified = value?.reliability_protocol === "2.4";
-  return <Card>
-    <h2 className="flex items-center gap-2"><SlidersHorizontal size={18} />{t("Analysis configuration")}</h2>
+  return <section className="min-w-0" aria-label={t("Orchestration")}>
+    <div className="section-heading"><h2><SlidersHorizontal size={18} aria-hidden="true" />{t("Orchestration")}</h2></div>
     {value && <p className="mt-2 text-sm muted">{t(["2.3", "2.4"].includes(value.reliability_protocol || "") ? "Questions and requests use an Analyst, an independent Counter-analyst and a Verifier. Each role works in a separate session; no role can approve its own analysis." : "Compared requests use one analyst and one independent counter-analyst. An optional verifier consolidates the evidence.")}</p>}
-    <p className="mt-2 text-sm muted">{t("AI verification does not replace human approval of the ticket and goal.md.")}</p>
+    <Card className="mt-5 min-w-0">
+    <p className="text-sm muted">{t("AI verification does not replace human approval of the ticket and goal.md.")}</p>
     {value?.role_coverage && <section className="mt-5" aria-label={t("Role coverage")}>
       <h3 className="text-sm font-medium">{t("Role coverage")} · {t(value.role_coverage.complete ? "Configuration complete" : "Configuration incomplete")}</h3>
       {connectionsError && <p role="status" className="mt-3 text-sm muted">{t("AI connection details are unavailable. Role coverage is retained.")}</p>}
@@ -143,5 +144,6 @@ export function OrchestrationSettingsForm() {
       </fieldset>
     </form>}
     {notice && <p role="status" className="mt-4 text-sm text-green-800">{notice}</p>}
-  </Card>;
+    </Card>
+  </section>;
 }

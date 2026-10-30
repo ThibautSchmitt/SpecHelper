@@ -25,16 +25,17 @@ for(const language of ['en','fr'] as const){
   await page.route(`**/api/analyses/${id}/progress?*`,route=>route.fulfill({json:{progress_token:value.progress_token,progress_cursor:value.progress_cursor,work_progress:value.work_progress}}));
   await page.goto(`/analyses/${id}`);
   await expect(page.getByLabel(t('Draft response'),{exact:true})).toContainText('Initial draft.');
-  await page.evaluate(()=>window.scrollTo(0,0));
-  await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);
+  const scroller=page.locator(".dashboard-center");
+  await scroller.evaluate(node=>node.scrollTo(0,0));
+  await expect.poll(()=>scroller.evaluate(node=>node.scrollTop)).toBe(0);
   value={...value,progress_cursor:'cursor-2',work_progress:[{...value.work_progress[0],phases:[{...phase(),preview:'First growth.\n\n'+'A visible paragraph.\n\n'.repeat(20)}]}]};
   await expect(page.getByLabel(t('Draft response'),{exact:true})).toContainText('First growth.');
-  expect(await page.evaluate(()=>scrollY)).toBeLessThan(50);
-  await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
-  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollHeight-innerHeight-scrollY)).toBeLessThan(10);
+  expect(await scroller.evaluate(node=>node.scrollTop)).toBeLessThan(50);
+  await scroller.evaluate(node=>node.scrollTo(0,node.scrollHeight));
+  await expect.poll(()=>scroller.evaluate(node=>node.scrollHeight-node.clientHeight-node.scrollTop)).toBeLessThan(10);
   value={...value,progress_cursor:'cursor-3',work_progress:[{...value.work_progress[0],phases:[{...phase(),preview:'Further growth.\n\n'+'A visible paragraph.\n\n'.repeat(40)}]}]};
   await expect(page.getByLabel(t('Draft response'),{exact:true})).toContainText('Further growth.');
-  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollHeight-innerHeight-scrollY)).toBeLessThan(10);
+  await expect.poll(()=>scroller.evaluate(node=>node.scrollHeight-node.clientHeight-node.scrollTop)).toBeLessThan(10);
  });
  test(`observed discussion work is immediate, compact, reloadable and uses narrow polling in ${language}`,async({page})=>{
   let value:any=dossier(),fullReads=0,progressReads=0,disconnect=false;

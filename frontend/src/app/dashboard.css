@@ -122,13 +122,12 @@ body { background: radial-gradient(ellipse at 30% 0%, var(--dashboard-glow), tra
 .environment-card table tbody td { padding-top: 5px; padding-bottom: 5px; }
 .environment-card > div:first-child > h2 { display: flex; align-items: center; gap: 10px; }
 .environment-card .environment-logo { width: 40px; height: 40px; padding: 9px; border: 1px solid var(--border); background: var(--dashboard-glow); border-radius: 8px; color: var(--primary-ink); }
-.dashboard .ai-connections { padding: 0; background: transparent; border: 0; box-shadow: none; }
+.dashboard :is(.ai-connections, .settings-section) { padding: 0; background: transparent; border: 0; box-shadow: none; }
 .dashboard .ai-connection-card { position: relative; padding: 18px 16px; background: var(--dashboard-surface); border-radius: 11px; }
 .ai-connection-card h3 { font-size: 19px; }
 .ai-connection-card > div:first-child { justify-content: flex-start; padding-right: 145px; gap: 12px; align-items: center; }
 .ai-connection-card h3 img, .ai-connection-card h3 svg { width: 30px; height: 30px; }
 .ai-connection-card .connection-actions { position: absolute; top: 18px; right: 15px; margin: 0; }
-.connection-quota-exhausted { margin-left: auto; }
 @media (min-width: 768px) { .ai-connection-card:has(.connection-quota-exhausted) > div:first-child { padding-right: 255px; } }
 .ai-connection-card .connection-metadata { font-size: 11px; margin-top: 12px; }
 .connection-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }

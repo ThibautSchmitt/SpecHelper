@@ -131,7 +131,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByRole("group", { name: t("Analysis roles"), exact: true })).toBeVisible();
     await page.getByRole("group", { name: t("Analysis roles"), exact: true }).getByRole("checkbox", { name: t("Counter-analyst"), exact: true }).uncheck();
     await page.getByRole("group", { name: t("Analysis roles"), exact: true }).getByRole("checkbox", { name: t("Counter-analyst"), exact: true }).check();
-    await page.getByRole("button", { name: t("Save connection"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => saved).toMatchObject({ preference: 37, enabled: true, roles: connection.roles });
     await expect(card.locator(".connection-role-tag")).toHaveText([t("Analyst"), t("Counter-analyst"), t("Verifier")]);
     await card.getByLabel(t("More actions for {name}").replace("{name}", "Team assistant"), { exact: true }).click();
@@ -139,7 +139,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(card.getByText(t("Disabled"), { exact: true })).toBeVisible();
     await card.getByRole("button", { name: t("Edit"), exact: true }).click();
     await expect(page.getByRole("group", { name: t("Analysis roles"), exact: true }).getByRole("checkbox").first()).toBeEnabled();
-    await page.getByRole("button", { name: t("Save connection"), exact: true }).click();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => saved).toMatchObject({ preference: 37, enabled: false, roles: connection.roles });
     await page.getByRole("button", { name: t("Orchestration"), exact: true }).click();
     await expect(page.getByLabel(t("Maximum AI calls per analysis"), { exact: true })).toHaveCount(0);

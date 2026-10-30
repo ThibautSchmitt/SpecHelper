@@ -438,23 +438,9 @@ export function AIConnections({
             </p>
           </details>
           {error && <p role="alert" className="mt-4 text-sm text-red-700">{t(error)}</p>}
-          <div className="mt-4 flex gap-2">
-            <Button disabled={busy}>
-              {t(editing ? "Save connection" : "Add AI connection")}
-            </Button>
-            {showForm && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditing(null);
-                  setShowForm(false);
-                  setForm(emptyForm);
-                }}
-              >
-                {t("Cancel")}
-              </Button>
-            )}
+          <div className="mt-4 flex flex-wrap justify-end gap-2" data-editor-actions>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditing(null); setShowForm(false); setForm(emptyForm); setError(""); }}>{t("Cancel")}</Button>
+            <Button disabled={busy}>{t(editing ? "Save" : "Add AI connection")}</Button>
           </div>
         </form>
   ) : null;
@@ -531,6 +517,8 @@ export function AIConnections({
                   action(async () => {}, "Connection successful.");
                 }}
               />)}
+              <div className="flex shrink-0 items-center gap-2">
+              {weeklyQuotaExhausted(value) && <span className="badge connection-quota-exhausted" data-state="ERROR">{t("Quota exhausted")}</span>}
               <Button
                 type="button"
                 size="sm"
@@ -567,6 +555,7 @@ export function AIConnections({
               >
                 <Pencil size={16} aria-hidden="true" />{t("Edit")}
               </Button>
+              </div>
               <details className="action-menu" onKeyDown={event => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("dialog"))) { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
                 <summary aria-label={t("More actions for {name}", { name: value.name || assistantName(value.agent) })}>⋯</summary>
                 <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button") && !event.target.closest("[data-connection-auth]")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
@@ -645,7 +634,6 @@ export function AIConnections({
 
                 </div>
               </details>
-              {weeklyQuotaExhausted(value) && <span className="badge connection-quota-exhausted" data-state="ERROR">{t("Quota exhausted")}</span>}
             </div>
             {editing?.id === value.id && connectionForm}
           </section>
