@@ -1,106 +1,53 @@
 # Contributing to SpecHelper
 
-Contributions to SpecHelper-owned code are offered under the repository's MIT license. Preserve third-party notices and do not add code with unknown provenance or licensing.
+Contributions to SpecHelper-owned code are offered under the [MIT License](LICENSE).
+Preserve [third-party notices](THIRD_PARTY_NOTICES.md) and do not add material with
+unknown provenance or licensing. Report vulnerabilities through [SECURITY.md](SECURITY.md).
 
-## Setup
+## Make a focused change
 
-The [README](README.md) describes Docker Compose installation and product usage.
-The runtime requires Linux, Bubblewrap and namespaces. Use Docker Desktop on
-macOS/Windows or Docker Engine on Linux. Native development assumes Unix, Python
-3.12+, Node.js 22+ and `uv`. Deterministic tests require no AI account.
+Describe the problem, resulting behavior and checks performed. Keep documentation
+cleanup separate from functional changes. Preserve existing migrations, immutable
+results, frozen references, independent role sessions, read-only resources and
+explicit publication approval. Do not commit credentials, private corpora, generated
+results, provider sessions, backups or screenshots containing team data.
 
-Run each command block below from the repository root unless stated otherwise.
-Start the local API in one terminal:
+See [Development](docs/development.md) for setup and executable checks. Use
+disposable data for tests; controlled provider responses are not live quality evidence.
 
-```sh
-uv sync --project backend --python 3.12 --frozen
-uv run --project backend python backend/manage.py migrate
-uv run --project backend python backend/manage.py runserver 127.0.0.1:8018
-```
+## Language and translations
 
-Set `BACKEND_URL=http://127.0.0.1:8018` in `frontend/.env.local`, then start the
-frontend in another terminal:
+Write code identifiers, comments, docstrings and documentation in English. Keep
+fixed interface strings in `frontend/src/locales/en.json` and `fr.json`, with matching
+keys and interpolation placeholders. Use `useI18n().t()` and `dateLocale`; do not
+translate user input or generated business content in the browser.
 
-```sh
-cd frontend
-npm ci
-npm run dev
-```
+Backend artifact labels use `core.i18n.translate` and the language frozen for the
+analysis. Preserve exact source quotations, filenames and identifiers. Changing
+instance language must not rewrite earlier artifacts or historical migrations.
 
-A local worker needs `RUNTIME_URL`, `RUNTIME_TOKEN` and a `SPECHELPER_DATA_DIR`
-consistent with the runtime. Compose is recommended for exercising actual
-isolation. See [operations and runtime checks](docs/operations.md).
+## Maintain the documentation
 
-## Checks
+Update the guide that owns a behavior: installation, configuration, usage,
+architecture or development. Link to that guide instead of copying its full rules.
+The README remains a short entry point describing implemented behavior.
 
-```sh
-uv sync --project backend --python 3.12 --frozen
-cd backend
-uv run pytest -q
-uv run ruff check --config pyproject.toml . ../runtime
-uv run python manage.py makemigrations --check --dry-run
-```
+Describe the current application without referring to past product generations
+or announcing unimplemented roadmap items. Dependency versions, protocol identifiers
+and other necessary technical references remain valid. Keep release history in Git
+and [CHANGELOG.md](CHANGELOG.md), outside the getting-started path.
 
-Full PostgreSQL integration tests require `SPECHELPER_TEST_POSTGRES_DSN` on a disposable database: they create and remove objects and roles. Never target a production instance or business database.
+Do not create a permanent acceptance report for every delivery. Preserve a dated
+record only for meaningful security, licensing or non-repeatable evaluation evidence;
+label its date, scope, failures and limits. Never promote an old report into current
+approval. The small [evidence collection](docs/development.md#optional-evaluations)
+serves that purpose; superseded guides remain retrievable from Git.
 
-```sh
-cd frontend
-npm ci
-npm run build
-npm run typecheck
-npx playwright install chromium
-```
-
-For browser tests, start the local API and frontend described above, then run
-`npm run test:e2e` from `frontend`. Playwright Chromium is the default;
-`PLAYWRIGHT_CHANNEL=chrome` selects installed Chrome. The default frontend URL
-is `http://localhost:3000`; use `E2E_BASE_URL` for another address and add its
-origin to the API's `TRUSTED_ORIGINS` when using a different port.
-
-Tests create and remove `[E2E]` fixtures in the default local development database
-and use controlled AI results. Never run them against the Docker deployment
-connected to team accounts. For Linux isolation, provider adapters, database
-capabilities and process-reaping checks, use the commands under
-[runtime checks](docs/operations.md#runtime-checks).
-
-## Proposed changes
-
-- Explain the problem, resulting behavior and validation performed.
-- Keep changes focused and preserve historical migrations.
-- Preserve frozen baselines, immutable versions and read-only boundaries.
-- Write code identifiers, comments, docstrings and documentation in English. Put interface text in the English/French translation catalogs and keep both languages complete.
-- Respect the instance language for the interface and freeze analysis language at request creation. Never rewrite earlier artifacts when changing the setting.
-- Never attach credentials, real results, private files, backups, AI sessions or screenshots containing team data.
-
-For security issues, follow [SECURITY.md](SECURITY.md).
-
-## Documentation
-
-Update the current thematic guide whenever behavior changes, and update
-[CHANGELOG.md](CHANGELOG.md) for each major delivery. Follow the ownership and
-archiving rules in [documentation maintenance](docs/documentation.md).
-Do not create a permanent acceptance report per version without a reason.
-
-From the repository root, check relative links, Markdown anchors and shell syntax:
+From the repository root, check documentation links and examples:
 
 ```sh
 python3 scripts/check_documentation.py
 ```
 
-The checker is offline: it does not certify external URLs, command behavior or
-application correctness. Execute relevant commands on disposable data and record
-their scope. Never describe controlled provider responses as live AI quality.
-
-## Translations
-
-Code, comments, docstrings, internal instructions and documentation use English.
-Frontend catalogs `frontend/src/locales/en.json` and `fr.json` must have matching
-keys and interpolation placeholders. Use `useI18n().t()` for fixed text and
-`dateLocale` for dates. Do not translate user text or generated business content
-in the browser.
-
-Backend fixed artifact labels use `core.i18n.translate` with the frozen request
-language. Pass that language to each role and write generated narrative in it;
-preserve exact quotations, filenames, paths, commands and code identifiers.
-Keep historical French seed/migration catalogs unchanged: they are historical
-data, not current instructions. Test both languages and immutable old artifacts.
+This offline check validates local targets, anchors, shell syntax and named scripts.
+It does not verify external URLs, execute deployments or certify application behavior.

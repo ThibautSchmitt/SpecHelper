@@ -1,87 +1,140 @@
 # Security
 
-SpecHelper is designed for a trusted team. An instance shares requests and connections
-and provides no individual accounts or private spaces. Remote instances require
-application access authentication; protect the deployment with HTTPS and trusted
-team infrastructure as well.
+SpecHelper is intended for a trusted team and trusted deployment administrators.
+New conversations are isolated by a signed browser-owner cookie. Historical shared
+records remain shared. This is not individual-user authentication, organization tenancy
+or a role-based administrative boundary. Instance settings and AI connections are shared.
 
-## Deployment
+## Deployment and access
 
-The default deployment publishes only the frontend on `127.0.0.1:3000`. Neither
-the API nor the agent runtime exposes a host port. For remote access, protect the
-entire instance, including Settings, with your team's VPN, reverse proxy or SSO,
-serve it over HTTPS, and configure `BIND_ADDRESS`, `TRUSTED_ORIGINS` and
-`ALLOWED_HOSTS` for the deployment.
+The default deployment publishes only the frontend on `127.0.0.1:3000`. The API,
+application database, worker, agent runtime and CLI maintenance service have no host
+ports. For remote access, protect the whole instance, including Administration, with
+trusted infrastructure and HTTPS. Configure `BIND_ADDRESS`, `TRUSTED_ORIGINS` and
+`ALLOWED_HOSTS` consistently. Do not expose a development server directly.
 
-Set `SPECHELPER_ACCESS_PASSWORD_HASH` to a Django password hash, or mount a protected
-password file and set `SPECHELPER_ACCESS_PASSWORD_FILE` to its container path. A
-password file must be a private regular file with mode 0400/0600 and contain 16–4096
-characters. Do not commit it. Both frontend and backend/worker must use the same
-deployment settings. A non-loopback instance without valid access configuration
-fails closed. Local access without a password requires verified loopback settings.
+Set `SPECHELPER_ACCESS_PASSWORD_HASH` to a Django password hash, or mount a private
+password file and set `SPECHELPER_ACCESS_PASSWORD_FILE` in frontend and backend/worker.
+The file must be a regular file with mode 0400/0600 and contain 16–4096 characters.
+Do not commit it. Non-loopback access without valid authentication fails closed;
+passwordless local operation requires verified loopback settings.
 
 For HTTPS, set `SPECHELPER_REQUIRE_HTTPS=1`. Enable `SPECHELPER_TRUST_PROXY=1` only
-behind an isolated, trusted proxy that replaces forwarded headers and prevents
-direct backend access. Session cookies are HttpOnly and SameSite Strict, Secure
-under HTTPS. Password changes invalidate existing sessions. The default session
-duration is eight hours; `SPECHELPER_SESSION_SECONDS` accepts 300–86400 seconds.
-CSRF protection remains required for changes even in localhost mode.
+behind an isolated proxy that replaces forwarded headers and prevents direct backend
+access. Sessions use HttpOnly, SameSite Strict cookies and Secure under HTTPS. Host,
+Origin and CSRF checks remain required, including local operation. Password changes
+invalidate access sessions. `SPECHELPER_SESSION_SECONDS` accepts 300–86400 seconds;
+the default is eight hours. These access sessions differ from browser conversation
+ownership and native AI sessions.
 
-The [threat model](docs/threat-model.md) documents data transfers, encryption keys,
-CLI credential handling, retention, trusted components and residual host privileges.
-The [security campaign](docs/security-testing.md) documents scanner and pentest scope.
+New conversation ownership uses a separate signed HttpOnly cookie. Clearing it or
+changing browser does not establish the same owner; there is no human-account recovery.
+Do not rely on it to protect shared administration from an untrusted team member.
+Consult [Installation](docs/installation.md) before changing the reference network or
+storage layout.
 
-Source workspaces and attachments are mounted read-only in the agent sandbox.
-Analyzed PostgreSQL databases require dedicated read-only roles. GitHub and
-database credentials are not added to AI prompts. Attachments remain untrusted
-data and must never be executed as instructions.
+## Data sent to AI providers
 
-Ticket connector credentials are encrypted on the server and are excluded from
-analysis prompts and API responses. Publication is a separate backend operation
-that requires explicit human confirmation and an allowed destination. Review
-the target and content before creating a ticket. After an uncertain response,
-verify the recorded operation rather than creating another ticket manually.
+Authorized source excerpts, uploaded files, environment reference material, bounded
+query results and conversation text may be processed by the configured provider.
+Authorize only resources you may disclose under your organization's and provider's
+policies. Read-only access prevents mutation; it does not prevent disclosure to an
+approved external model. An official sign-in does not establish a retention agreement.
 
-Antigravity supports official Google account sign-in and a separate optional Gemini
-API mode requiring explicit billing consent. The trusted runtime encrypts the OAuth
-profile or API key and injects credentials only at the fixed provider relay for that
-mode; the analysis child receives a synthetic expiring capability.
-No host API key or browser/keyring account is imported as an implicit fallback.
-Configuration does not prove model access. See the [provider contract](docs/antigravity.md).
+Original documents and source files are untrusted data, never tool permissions or
+higher-priority instructions. They must not be executed. The sandbox can access only
+captured, authorized copies. File-read telemetry proves access, not comprehension,
+complete provenance or freedom from prompt injection.
 
-The Linux sandbox requires specific namespace capabilities and network boundaries.
-Preserve those boundaries when adapting deployment; see
-[architecture](docs/architecture.md#services-and-runtime).
-See [operations](docs/operations.md#daily-operations) for coordinated backups and
-persistent volumes.
+Public Web access uses a constrained HTTPS reader with destination validation,
+DNS pinning and redirect checks. Private destinations and credential forwarding are
+blocked. This is not semantic data-loss prevention: private terms included in an
+external URL or query can still disclose information. Review the need and resources.
 
-## Reporting a vulnerability
+Structured progress excludes private reasoning, raw commands and unrestricted tool
+output. Configured-secret and common-pattern redaction reduces accidental exposure
+but cannot identify every confidential fact. Short configured credentials use complete
+token matching; long credentials and credential-bearing URLs are masked more broadly.
+Redaction does not rewrite already stored history. Review exports and transferred
+context before sharing them.
 
-Do not disclose vulnerabilities containing secrets or real data in a public issue.
-Use GitHub's **Report a vulnerability** if private reporting is enabled. Otherwise,
-ask the maintainer for a private channel without disclosing exploit details.
+## Credentials and encryption
 
-A useful report includes the version, minimal reproduction, impact and prerequisites, using fictional data. Never send AI, GitHub or database credentials or private team attachments.
+Keep `.env`, access files, database dumps, native sessions and private reports out of Git.
+Application credentials are encrypted with the key named by `ENCRYPTION_KEY_FILE`.
+The reference deployment persists that key under application data. Runtime AI profiles
+use a separate, domain-separated key derived from its control secret. Preserve these
+keys and secrets alongside consistent backups; replacing them can make retained
+credentials or sessions unusable. Encryption does not protect against a trusted
+administrator controlling the running service and its keys.
 
-Environment reference documents are untrusted input. Original versions are retained
-for historical analyses; removal from an environment does not erase those versions.
-The runtime sees only verified frozen copies through a dedicated read-only volume
-and per-file sandbox bindings. Include original context resources in backups and
-apply the same access controls as source workspaces and attachments. File-read
-telemetry reports access, not semantic understanding or complete data provenance.
+Git and business database credentials stay outside model prompts and child filesystems.
+The trusted brokers authenticate authorized operations. Provider profiles/tokens remain
+in the runtime vault; analysis children receive scoped synthetic capabilities rather
+than reusable provider secrets. Account metadata can remain public instance configuration.
 
+Antigravity supports official Google account sign-in and a separate optional Gemini API
+mode with explicit billing consent. Credentials are injected only at the fixed upstream
+relay for the selected mode. Host API keys, browser accounts and keyrings are not implicit
+fallbacks. Session recovery does not silently change provider, account or model.
 
-Question explanations and documentation inherit the same shared-instance access
-controls as requests. Transferred context is an isolated, read-only attachment,
-not privileged agent instructions. It contains curated findings and provenance,
-not original documents or private agent reports. Review it before creating a
-request; exact configured-secret redaction cannot identify every sensitive fact.
-Configured credentials shorter than eight characters match complete tokens,
-avoiding replacements inside ordinary words. Exact credential values, encoded
-forms and URL user information remain masked; long credentials are also masked
-when embedded in other text. Response redaction does not rewrite stored history.
-Connector usernames remain intentionally public metadata when they coincide with
-a short password; secret fields are excluded from connector responses, and long
-credentials or credential-bearing URLs are still masked in identifier fields.
-Later source changes require verification against the new request's current
-baseline. Referenced question versions and generated documents are retained.
+## Runtime boundary
+
+The trusted Linux namespace supervisor requires root plus `SYS_ADMIN`/`NET_ADMIN`
+and relaxed container-level seccomp/AppArmor settings in the reference deployment.
+This is an explicit residual privilege, not an ordinary unprivileged container.
+It has no Docker socket, application database or Git-source credentials. The host,
+kernel and deployment administrators are trusted.
+
+Analysis children run as a distinct non-root UID/GID with capabilities dropped,
+no-new-privileges and child seccomp restrictions. Authorized sources, attachments and
+documents are read-only. Each execution has scoped writable session/temp space and
+brokered network access. Namespace/control failures fail closed. Retain these controls
+when changing Compose, building images or increasing concurrency; shared resource
+limits bound aggregate work, not provider quota.
+
+## Business data, files and publication
+
+Business PostgreSQL requires a dedicated reader: no superuser, ownership, write or
+CREATE privileges. Runtime queries use read-only transactions, SQL validation, a
+five-second statement bound and limited results. No database snapshot is implied by
+capturing a connection. Do not grant writes to bypass a failed connection test.
+
+Uploads are bounded by type, signature and size, including DOCX container inspection.
+Supported originals are limited to 25 MB each; environment context accepts at most
+20 documents. Executables and arbitrary archives are not accepted. A valid document
+can still contain sensitive data or malicious instructions.
+
+Ticket publication uses encrypted, separate connector credentials and explicit human
+confirmation of an allowed destination. GitHub publication must not reuse Git-source
+credentials. Agents cannot publish through their analysis tools. Verify the preview,
+required fields and optional files; a successful connection test does not prove write
+permission. Uncertain external writes must be reconciled before another creation
+attempt. See [Usage](docs/usage.md#prepare-and-publish-a-ticket).
+
+## Retention and backups
+
+Captured Git baselines, original reference-document versions, messages, decisions,
+results, native sessions and publication audit records may contain private material.
+Disabling/removing a reference or deleting an analysis from active views does not
+securely erase retained versions, linked history or published tickets. There is no
+automatic business-content purge. Access-event retention is separately configurable
+with `SPECHELPER_AUDIT_RETENTION_DAYS` (1–365, default 30).
+
+Back up application PostgreSQL, persistent resource/session volumes and keys together.
+Protect and test restore procedures outside production. Source workspaces and frozen
+context deserve the same access controls as uploads. External providers and ticket
+systems retain their own copies according to their policies.
+
+## Validation and reporting
+
+[Security testing](docs/security-testing.md) describes scanner gates and disposable
+probes. The [dated security review](docs/evidence/security-review.md) is bounded evidence,
+not certification of the current host, reverse proxy, provider service or every answer.
+Independent human deployment review remains necessary before broad exposure.
+
+Do not disclose secrets or real data in a public issue. Use GitHub's **Report a
+vulnerability** when private reporting is enabled. Otherwise ask the maintainer for
+a private channel without publishing exploit details. Include the source revision,
+minimal synthetic reproduction, impact and prerequisites. Never send AI, Git or
+database credentials, private attachments or production dumps.

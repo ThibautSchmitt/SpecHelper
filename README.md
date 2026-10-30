@@ -1,84 +1,89 @@
 # SpecHelper
 
-SpecHelper helps a trusted team understand an existing application and turn a
-business need into an actionable ticket and a detailed `goal.md` for a coding agent.
+SpecHelper is a self-hosted application for exploring software projects with AI
+and turning a reviewed business need into a ticket and a `goal.md` for a coding
+agent. It is intended for business users, analysts and developers working with a
+trusted team, across different applications and technology stacks.
 
-One conversation starts with a single persistent assistant. **Launch deep analysis**
-explicitly runs independent analysis, counter-analysis and validation of actual sources.
-Optional read-only PostgreSQL investigations
-and official external references add evidence where relevant. Questions explain existing
-behavior with sources; Requests describe a desired change.
+Start in **Analyses** with one conversational assistant. Ask about the existing
+code, add documents and clarify the need. When you choose **Launch deep analysis**,
+SpecHelper runs an Analyst, an independent Counter-analyst and a Verifier in
+separate sessions. Results retain sources, frozen Git references and unresolved
+limits. The French interface calls the final role **Validateur**.
 
-Results keep their Git baseline, evidence and unresolved limits. People review
-business decisions and explicitly confirm publication to a ticket platform.
-SpecHelper does not implement source changes or write to analyzed business databases.
+## What you can do
+
+- Continue discussions through native Codex, Claude Code or Antigravity sessions
+  when the provider can resume them; recover explicitly when a session is lost.
+- Read authorized Git repositories, attachments and environment reference documents.
+- Optionally inspect a business PostgreSQL database through restricted read-only access.
+- Follow observed work, answer clarifications and inspect a concise result or detailed report.
+- Prepare and edit tickets for GitHub Issues, GitLab Issues, Jira Cloud or GLPI,
+  then explicitly confirm publication. Reports, original files and `goal.md` are optional deliverables.
+
+SpecHelper does not modify source code or business databases. Independent checks
+help expose uncertainty; they do not guarantee that every AI conclusion is correct.
 
 ## Quick start
 
-Requirements: Docker Engine on Linux or Docker Desktop on macOS/Windows, a current
-Docker Compose supporting `!reset`, and working Linux namespaces for the agent runtime.
+You need Docker Engine on Linux or Docker Desktop, Docker Compose supporting
+`!reset`, and working Linux namespaces for the isolated agent runtime.
 
-From the repository root:
+From a checkout of this repository:
 
 ```sh
 cp .env.example .env
 ```
 
-Set `POSTGRES_PASSWORD` in `.env` to a password of your choice, then start:
+Choose a private `POSTGRES_PASSWORD` in `.env`, then run:
 
 ```sh
 docker compose up --build -d
+docker compose ps
 ```
 
-Open <http://localhost:3000>. In **Settings** at the bottom left:
+Open <http://localhost:3000>. Select **Administration** at the bottom left:
 
-1. Connect GitHub or GitLab.
-2. Connect ChatGPT / Codex or Claude / Claude Code using guided authorization,
-   or sign in to [Antigravity](docs/antigravity.md) with your Google account.
-3. Create an environment with repositories and branches, then wait for synchronization.
-4. From **Analyses → New analysis**, select an environment and describe a question, a change or both,
-   with optional files. Resume the work from **Analyses**.
-5. Discuss freely, then choose **Launch deep analysis** when independent verification
-   is needed. Reports and reviewed ticket preparation follow its result.
+1. Under **Environments → Manage Git connections**, connect GitHub or GitLab.
+2. Under **AI & Agents → Connections**, connect an eligible AI account and select
+   its model. Use **Orchestration** to check coverage of all three analysis roles.
+3. Under **Environments**, select repositories and branches/tags, optionally add a
+   read-only PostgreSQL connection and reference documents, then synchronize.
+4. Open **Analyses → New analysis**, select the environment and describe your need.
+   Start the discussion; launch deep analysis when you want independent verification.
 
-See the [conversation workflow](docs/analysis.md#one-conversation-two-phases) and
-[provider validation and limits](docs/conversation-validation.md).
+An eligible provider account and authorized source access are required for real
+AI work. Ticket publication and business PostgreSQL access are optional. The
+interface and generated deliverables support English and French.
 
-An eligible provider account/subscription and repository access are needed for real
-analyses. PostgreSQL and ticket publication are optional. The interface and generated
-files support English and French.
+## Team access and practical limits
 
-Results retain their discussion and dated need revisions. A sourced answer can lead
-to a linked change. Useful explanatory diagrams retain reviewed relationships and
-exportable Mermaid sources; simple questions do not require a diagram.
+Remote deployment requires shared instance authentication and HTTPS. New
+conversations are isolated by a signed browser-owner cookie; older shared analyses
+remain shared. There are no individual human accounts or organization tenants.
+Keep the original browser profile to reopen its private conversations. Read
+[SECURITY.md](SECURITY.md) before exposing an instance or sending sensitive data.
 
-Startup was checked with fresh application volumes; see the
-[installation observation](docs/operations.md#installation-observation) for its scope
-and [operations](docs/operations.md#installation-settings) if port 3000 is occupied.
+Several conversations can use one account simultaneously: the default ceilings
+are four active AI invocations per detected account and eight across the instance.
+Each conversation keeps one active operation. Provider quotas, account restrictions
+and host resources still apply; aliases of an account share its budget.
 
-## Use with your team
-
-One self-hosted instance shares requests, results and connections with a trusted team.
-There are no individual user accounts or private spaces. The default bind is localhost;
-remote access requires configured shared authentication and HTTPS.
-Read [SECURITY.md](SECURITY.md) before exposing an instance. Project excerpts,
-documents and permitted database observations may reach your configured AI provider.
-
-Independent review and source checks help expose uncertainty; they do not certify every
-AI conclusion. Read the [known limitations](docs/known-limitations.md).
+Partial results remain visibly qualified and cannot publish a new external ticket.
+Configuration or a model catalogue does not prove subscription access. Live model
+accuracy, cost and throughput are not certified by application tests.
 
 ## Documentation
 
-- [Product overview](docs/overview.md): outputs and the Request/Question workflow
-- [Configuration](docs/configuration.md): connections, environments and settings
-- [Analysis](docs/analysis.md): clarification, independent review, evidence and results
-- [Ticket publication](docs/ticketing.md): reviewed drafts, templates and delivery
-- [Architecture](docs/architecture.md) and [operations](docs/operations.md)
-- [Contributing](CONTRIBUTING.md): development, checks and documentation maintenance
-- [Changelog](CHANGELOG.md), [historical evidence](docs/archive/README.md) and [future scope](docs/roadmap.md)
+- [Installation](docs/installation.md): deployment, verification, upgrades and backups
+- [Configuration](docs/configuration.md): AI accounts, environments, skills and connectors
+- [Usage](docs/usage.md): conversations, deep analysis, results and ticket publication
+- [Architecture](docs/architecture.md): services, isolation, sessions and concurrency
+- [Development](docs/development.md): local setup, tests and evaluation tools
+- [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
 
 ## License
 
-SpecHelper-owned code is released under the [MIT License](LICENSE). Dependencies
-retain their licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
-Built images are not exclusively MIT-licensed.
+SpecHelper-owned code and documentation use the [MIT License](LICENSE).
+Dependencies, bundled tools and provider services retain their own terms; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Built containers are not exclusively MIT-licensed.

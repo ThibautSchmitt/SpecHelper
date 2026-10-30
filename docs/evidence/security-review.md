@@ -1,8 +1,13 @@
-> Historical snapshot, archived on 2026-10-24. Statements and test counts below describe
-> their original review, not the current product or deployment. Start with the
-> [active documentation](../../overview.md) and [current limitations](../../known-limitations.md).
+# Security review — 23 October 2026
 
-# v1.9 targeted security review
+This retained record describes its original source/deployment review only. It is
+not a statement that the current application or another host passed the same tests.
+In particular, its shared-access observations predate browser ownership for new
+conversations. Use [SECURITY](../../SECURITY.md) for current boundaries and
+[Security testing](../security-testing.md) for maintained checks.
+
+The original report and revisions remain in Git history. The preserved test outcomes
+and conditional findings below are historical evidence, not deployment instructions.
 
 Date: 2026-10-23. Scope: repository implementation and disposable reference Compose
 deployment. Method: agent-assisted source review, explicit attack attempts, real TLS,
@@ -16,7 +21,7 @@ of Git. No active scan targeted the team's running instance or business database
 | Area | ASVS / WSTG reference | Attempt and expected boundary | Observed result |
 | --- | --- | --- | --- |
 | Anonymous access and resource IDs | V2/V4; ATHN/ATHZ | Read existing/missing requests, attachments, result exports, Settings and API documentation before login | Identical 401 responses before resource lookup; no business content. All authenticated sessions retain equal shared-team permissions. |
-| Sessions and transport | V3/V9; SESS/CRYP | Use actual certificate-verified TLS; login, retain the old session, logout and replay it; try cleartext authentication | Secure/HttpOnly/SameSite Strict cookies; CSRF rotation at login, old session rejected after logout, cleartext refused. `scripts/security/dast.sh https` produces the evidence. |
+| Sessions and transport | V3/V9; SESS/CRYP | Use actual certificate-verified TLS; login, retain the old session, logout and replay it; try cleartext authentication | Secure/HttpOnly/SameSite Strict cookies; CSRF rotation at login, old session rejected after logout, cleartext refused. `bash scripts/security/dast.sh https` produces the evidence. |
 | CSRF and origins | V4/V5; SESS/INPV | Omit CSRF on login/logout/updates, send a hostile Origin, change Host, try malformed origins | Rejected; hostile update leaves Settings unchanged. Unit tests also cover malformed forwarded/local-host and origin syntax. |
 | Rate/concurrency and audit | V7/V14; CONF/SESS | Exceed login/read budgets, hold a concurrency lease, inject content into errors/log paths, expire security records | Shared database budgets reject excess requests; logs/audit omit supplied content and secrets; cleanup leaves business rows unchanged. |
 | Hostile files and downloads | V5/V8; INPV | Upload disguised executables, conflicting signatures, ZIP traversal/macros/high compression, false sizes; request another attachment path or a symlink target | Rejected before ingestion or confined to the owning request storage. PDF text extraction executes inside the non-root read-only analysis namespace. |
@@ -25,7 +30,7 @@ of Git. No active scan targeted the team's running instance or business database
 | Git read/write separation | V4/V14; ATHZ/CONF | Fetch a changed branch through the Git service; retain the old request SHA/worktree; attempt writes from analysis | Real Git mirror/worktree regression preserves the old baseline. Linux analysis cannot write source files and has no Git credentials or arbitrary remote connection. |
 | PostgreSQL source privileges | V4/V5; ATHZ/INPV | Disable client READ ONLY and attempt DELETE/CREATE using the reader; grant table/column write or CREATE; test an owner/superuser; read over 200 rows | PostgreSQL permissions reject writes even without client protection; adapter rejects privileged roles; response truncates to 200. Tests use only a disposable PostgreSQL fixture. |
 | Runtime containment and indirect injection | V14; CONF | Attempt source/other-session/credential writes and reads, arbitrary TCP, unauthorized broker endpoints, unshare/ptrace, and injected instructions carried by README/PDF/ticket/DB | UID/GID 10001, zero capabilities, no-new-privileges and seccomp enforced; all forbidden attempts denied. The harness measures material permissions, not an LLM injection-resistance percentage. |
-| Provider interoperability | V9/V14; CONF | Run installed native Codex/Claude with synthetic credentials against a controlled upstream rejection | Only selected provider endpoints reached, real synthetic upstream token injected outside the child; unauthorized endpoint denied. Current Claude's structured 401 is classified as an authentication error. No paid inference performed. |
+| Provider interoperability | V9/V14; CONF | Run installed native Codex/Claude with synthetic credentials against a controlled upstream rejection | Only selected provider endpoints reached, real synthetic upstream token injected outside the child; unauthorized endpoint denied. The tested Claude CLI's structured 401 is classified as an authentication error. No paid inference performed. |
 | Automated external-style probes | V5/V14; INPV/CONF | Authenticated ZAP baseline and bounded active scan against disposable services | Baseline: 57 checks, zero warnings/failures. Active: 106 checks, zero warnings/failures. Findings apply only to the crawled/seeded target and configured duration. |
 
 ## Corrected findings
@@ -56,7 +61,7 @@ of Git. No active scan targeted the team's running instance or business database
 ## Conditional OS findings and residual risk
 
 The distribution scanner still flags OS source packages. Each review in
-[`image-applicability.json`](../../../security/image-applicability.json) lists the exact
+[`image-applicability.json`](../../security/image-applicability.json) lists the exact
 package URL, component, source advisory, reason, required checks and expiry. Examples
 are unused infocmp/Archive::Tar code, absent homed/TPM/X11/tiffcrop services, and
 privileged mount paths prevented by removed SUID bits and the analysis boundary.
