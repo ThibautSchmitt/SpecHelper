@@ -32,12 +32,16 @@ export function ConnectButton({
   startPath = "/connections/start",
   identityLabel,
   reconnect = false,
+  secondary = reconnect,
+  label,
 }: {
   provider: Provider;
   onConnected: () => void;
   startPath?: string;
   identityLabel?: string;
   reconnect?: boolean;
+  secondary?: boolean;
+  label?: string;
 }) {
   const { t } = useI18n();
   const elementId = useId();
@@ -190,11 +194,11 @@ export function ConnectButton({
     }
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-connection-auth>
       <Button
         disabled={busy || !!attempt || authChoiceOpen}
         type="button"
-        variant={provider === "claude" ? "outline" : "default"}
+        variant={secondary ? "outline" : "default"}
         onClick={() => {
           if (provider === "antigravity") {
             closing.current = false;
@@ -206,7 +210,7 @@ export function ConnectButton({
         {busy && !attempt && (
           <LoaderCircle size={16} className="animate-spin" />
         )}
-        {t(reconnect ? "Reconnect with" : "Connect with")} {names[provider]}
+        {label || `${t(reconnect ? "Reconnect with" : "Connect with")} ${names[provider]}`}
       </Button>
       {!attempt && !authChoiceOpen && error && (
         <p role="alert" className="max-w-xs text-sm text-red-700">

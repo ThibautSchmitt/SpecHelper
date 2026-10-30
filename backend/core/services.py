@@ -91,6 +91,7 @@ def resume_clarification(request, run, changed_keys):
             "context_snapshot": copy.deepcopy(run.context_snapshot),
             "checkpoint": checkpoint,
             "output": copy.deepcopy(state.get("outputs", {}).get(checkpoint, {})),
+            "outputs": copy.deepcopy(state.get("outputs", {})),
         }
     )
     replaced = request.business_decisions.filter(
@@ -98,8 +99,15 @@ def resume_clarification(request, run, changed_keys):
     ).exists()
     if replaced:
         state["outputs"], checkpoint, role = {}, "requirement", "analyst"
+        for field in ("business_summary", "business_findings", "evidence", "coverage"):
+            state.pop(field, None)
     else:
         state.get("outputs", {}).pop(checkpoint, None)
+    from .step_execution import invalidate_superseded_steps
+
+    invalidate_superseded_steps(job, state.get("outputs", {}))
+    job.payload.update(decision_revision=request.decision_revision, changed_decision_keys=changed_keys)
+    run.job = job
     freeze_context(request, run, reuse=run.context_snapshot)
     state["waiting_role"], state["waiting_reason"] = role, ""
     run.orchestration, run.status, run.finished_at = state, "QUEUED", None
@@ -245,7 +253,10 @@ def continue_conversation(request_id, message, expected_version, analysis_protoc
 def add_attachment(request_id, upload):
     with transaction.atomic():
         request = Request.objects.select_for_update().get(pk=request_id)
-        if request.status != Request.Status.DRAFT:
+        if request.status != Request.Status.DRAFT and not (
+            request.discussion_state.get("enabled") and request.status in {"DISCUSSING", "READY", "PARTIAL", "ERROR", "CANCELLED"}
+            and not Job.objects.filter(target=str(request.pk), status__in=["QUEUED", "RUNNING"]).exists()
+        ):
             raise HttpError(409, "Attachments are frozen after launch")
         name = Path(upload.name.replace("\\", "/")).name
         if not name or len(name) > 255 or any(ord(char) < 32 for char in name):

@@ -215,7 +215,7 @@ test("administration: no internal agent or skill settings", async ({
     return r.fulfill({ json: { agents: [], skills: [] } });
   });
   await page.goto("/admin");
-  await page.getByRole("button", { name: "General", exact: true }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
   await expect(page.getByLabel("Instance name")).toBeVisible();
   await expect(
     page.getByText("Advanced analysis options", { exact: true }),

@@ -247,9 +247,10 @@ test("named AI configs share quota windows and targeted authentication never cha
       "These configurations share one authentication identity and the same quota.",
     ),
   ).toBeVisible();
+  await page.getByRole("region", { name: "Careful review", exact: true }).locator(".action-menu > summary").click();
   await page
     .getByRole("region", { name: "Careful review", exact: true })
-    .getByRole("button", { name: "Reconnect with ChatGPT", exact: true })
+    .getByRole("button", { name: "Change account", exact: true })
     .click();
   await expect(
     page.getByRole("dialog", { name: "Sign in with ChatGPT" }),
@@ -282,8 +283,7 @@ test("named AI configs share quota windows and targeted authentication never cha
   await page.route("**/api/ai-models?*", r => r.fulfill({json:{items:[{id:1,agent:"codex",identifier:"gpt-review",name:"Review fixture",family:"openai",source:"native",status:"SUPPORTED",enabled:true}],discovery:{state:"supported",reason:"catalog_not_entitlement"}}}));
   await page.evaluate(() => window.dispatchEvent(new Event("models-updated")));
   await page.getByLabel("Model", { exact: true }).selectOption("gpt-review");
-  await page.locator("summary").filter({ hasText: "Advanced options" }).click();
-  await page.getByLabel("Selection priority", { exact: true }).fill("0");
+  await expect(page.getByLabel("Selection priority", { exact: true })).toHaveCount(0);
   await expect(page.locator("#ai-config-name")).toHaveValue("Second review");
   await page
     .getByRole("button", { name: "Add AI connection", exact: true })
@@ -293,7 +293,7 @@ test("named AI configs share quota windows and targeted authentication never cha
     name: "Second review",
     share_identity_from: 11,
     model: "gpt-review",
-    preference: 0,
+    preference: 100,
   });
 });
 

@@ -1,7 +1,9 @@
 """Validated inherited configuration; instructions never grant technical capabilities."""
 
+from pathlib import Path
 from typing import Literal
 
+from django.conf import settings as django_settings
 from django.db import transaction
 from ninja import Router, Schema
 from ninja.errors import HttpError
@@ -66,8 +68,9 @@ class GlobalOrchestrationIn(Schema):
     """Current settings support partial edits and no assignment or role-text layer."""
 
     model_config = ConfigDict(extra="forbid")
-    global_instructions: str = Field(default=WEB_POLICY, max_length=24000)
+    global_instructions: str = Field(default="", max_length=24000)
     allow_same_family_fallback: bool = True
+    # Retained for older clients and snapshots; execution no longer caps total calls.
     max_calls: int = Field(default=20, ge=6, le=100)
     tool_timeout_seconds: int = Field(default=300, ge=30, le=600)
     allow_confrontation: bool = True
@@ -131,6 +134,7 @@ def get_config(protocol="2.4", *, administration=False):
             current = GlobalOrchestrationIn.model_validate({**values, "global_instructions": ""}).model_dump()
             current["global_instructions_requires_review"] = True
         current.update(
+            native_analysis_policy=WEB_POLICY,
             reliability_protocol="2.4",
             global_instruction_version=saved.get("global_instruction_version", 1),
             migration_review=saved.get("v24_migration_review", []),
@@ -140,6 +144,16 @@ def get_config(protocol="2.4", *, administration=False):
             role_instructions={role: "" for role in PUBLIC_ROLES},
             timeout_seconds=current["tool_timeout_seconds"],
         )
+        policy_file = django_settings.ANALYSIS_POLICY_FILE
+        if policy_file:
+            try:
+                with Path(policy_file).open() as source:
+                    policy = source.read(24001)
+                if len(policy) > 24000:
+                    raise ValueError("Policy too large")
+                current["global_instructions"] = GlobalOrchestrationIn.safe_global_instructions(policy)
+            except (OSError, ValueError) as error:
+                raise HttpError(503, "The deployment analysis policy is unavailable or invalid.") from error
         return current
     # A newer administrative save must not invalidate an older persisted job's
     # budget schema. Migration retains the exact earlier configurable layer.
@@ -169,6 +183,11 @@ def public_config():
     from .orchestration import role_coverage
 
     config["role_coverage"] = role_coverage()
+    review = InstanceSettings.objects.get(pk=1).orchestration.get("preserved_guidance_review")
+    config["preserved_guidance_review"] = bool(review) and (
+        not isinstance(review, dict) or not review.get("skill")
+        or SkillDefinition.objects.filter(pk=review["skill"], enabled=False, deleted=False).exists()
+    )
     if config["reliability_protocol"] == "2.4":
         return {
             key: value

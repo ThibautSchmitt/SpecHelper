@@ -11,6 +11,8 @@ class Command(BaseCommand):
     help = "Process persistent SpecHelper jobs"
 
     def handle(self, **options):
+        from core.cli_maintenance import start_inventory_refresh
+        start_inventory_refresh()
         if os.environ.get("WORKER_GATEWAY") == "1":
             from core.gateway import start_gateway
 

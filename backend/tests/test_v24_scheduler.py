@@ -279,11 +279,13 @@ def test_same_account_aliases_do_not_multiply_parallel_capacity(prepared):
 
 def test_role_limits_and_oldest_compatible_order_bypass_a_blocked_head(prepared):
     environment, _, _ = prepared
-    AIConnection.objects.filter(pk=1).update(roles=["counter_analyst"])
     _, blocked = start(environment, "The older verifier job")
     blocked.payload.update(current_role="verifier", next_checkpoint="verifier")
     blocked.save(update_fields=["payload"])
     _, younger = start(environment, "The younger analyst job")
+    # Enqueue under a valid configuration, then simulate an administrator
+    # removing capacity while existing work remains queued.
+    AIConnection.objects.filter(pk=1).update(roles=["counter_analyst"])
     assert claim_job() is None  # Counter-analyst-only capacity cannot execute either role.
     analyst = assistant("claude", roles=["analyst"])
     selected = claim_job()

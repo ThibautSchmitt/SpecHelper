@@ -229,7 +229,11 @@ def accept_answers(request, answers, choices=None, expected_revision=None, confi
             proposed = proposed_answer(question, text=answers[key])
         proposals.append(proposed)
         rendered[key] = proposed["value"]
-    changed = record_answers(request, proposals, expected_revision, confirm_changes)
+    if request.discussion_state.get("enabled"):
+        # A factual answer remains conversation context, never an inferred normative rule.
+        proposals = [p for p in proposals if p["question"].get("purpose") == "business_decision"
+                     and p["question"].get("kind") == "choice"]
+    changed = record_answers(request, proposals, expected_revision, confirm_changes) if proposals else []
     return rendered, changed
 
 

@@ -26,32 +26,75 @@ function skill(slug: string, name: string): LibraryDefinition {
 }
 async function queuePanel(page: Page, language: "en" | "fr", mobile: boolean) {
   const t = (key: string) => translation(language, key);
-  if (mobile) await page.getByRole("button", { name: t("Task queue"), exact: true }).click();
-  return page.getByRole(mobile ? "dialog" : "complementary", { name: t("Task queue"), exact: true });
+  await page.getByRole("button", { name: t("Activity"), exact: true }).click();
+  return page.getByRole(mobile ? "dialog" : "complementary", { name: t("Activity"), exact: true });
 }
 for (const language of ["en", "fr"] as const) {
   const t = (key: string) => translation(language, key);
-  test(`role coverage distinguishes missing assignments from quota waits in ${language}`, async ({ page }) => {
+  test(`role coverage distinguishes missing assignments from quota waits in ${language}`, async ({ page }, info) => {
     await setup(page, language);
-    let coverage = { complete: false, roles: { analyst: { configured: [1], available: [1] }, counter_analyst: { configured: [] as number[], available: [] as number[] }, verifier: { configured: [] as number[], available: [] as number[] } } };
+    await page.route("**/api/ai-connections", route => route.fulfill({ json: [
+      { id: 1, name: "ChatGPT team", agent: "codex", model: "gpt-native", status: "CONNECTED", availability: "AVAILABLE", enabled: true, roles: ["analyst", "counter_analyst", "verifier"] },
+      { id: 2, name: "Antigravity team", agent: "antigravity", model: "gemini-native-high", status: "CONNECTED", availability: "QUOTA_EXHAUSTED", enabled: true, roles: ["analyst"] },
+      { id: 3, name: "Disabled Claude", agent: "claude", enabled: false, status: "CONNECTED", roles: ["analyst"] },
+    ] }));
+    let coverage = { complete: false, roles: { analyst: { configured: [1, 2], available: [1] }, counter_analyst: { configured: [] as number[], available: [] as number[] }, verifier: { configured: [] as number[], available: [] as number[] } } };
     await page.route("**/api/orchestration-settings", route => route.fulfill({ json: { ...config, role_coverage: coverage } }));
     await page.goto("/admin");
     await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
-    await page.getByRole("button", { name: t("Edit"), exact: true }).click();
+    await page.locator("#ai-connection-1").getByRole("button", { name: t("Edit"), exact: true }).click();
     await expect(page.getByLabel(t("Default connection when available"), { exact: true })).toHaveCount(0);
     const roles = page.getByRole("group", { name: t("Analysis roles"), exact: true });
-    await page.getByLabel(t("Participate in analyses"), { exact: true }).uncheck();
-    for (const input of await roles.getByRole("checkbox").all()) await expect(input).toBeDisabled();
-    await page.getByLabel(t("Participate in analyses"), { exact: true }).check();
-    for (const input of await roles.getByRole("checkbox").all()) await expect(input).toBeChecked();
-    await page.getByRole("navigation", { name: t("AI settings"), exact: true }).getByRole("button", { name: t("Roles and orchestration"), exact: true }).click();
+    await expect(page.getByLabel(t("Participate in analyses"), { exact: true })).toHaveCount(0);
+    for (const input of await roles.getByRole("checkbox").all()) {
+      await expect(input).toBeEnabled();
+      await expect(input).toBeChecked();
+    }
+    await page.getByRole("navigation", { name: t("AI settings"), exact: true }).getByRole("button", { name: t("Orchestration"), exact: true }).click();
     const panel = page.getByRole("region", { name: t("Role coverage"), exact: true });
     await expect(panel).toContainText(t("Configuration incomplete"));
     await expect(panel.getByText(t("Not covered"), { exact: true })).toHaveCount(2);
+    const cards = panel.locator(".orchestration-role-card");
+    await expect(cards).toHaveCount(3);
+    await expect(cards.locator("h4")).toHaveText([t("Analyst"), t("Counter-analyst"), t("Verifier")]);
+    const analyst = cards.first();
+    await expect(analyst.locator("li")).toHaveCount(2);
+    await expect(analyst).toContainText("ChatGPT team");
+    await expect(analyst).toContainText("Antigravity team");
+    await expect(panel).not.toContainText("Disabled Claude");
+    await expect(analyst.locator('[data-connection-id="1"]')).toContainText(t("Available"));
+    await expect(analyst.locator('[data-connection-id="2"]')).toContainText(t("Waiting"));
+    for (const card of [cards.nth(1), cards.nth(2)]) await expect(card).toContainText(t("No AI connection covers this role."));
+    const bounds = await Promise.all((await cards.all()).map(card => card.boundingBox()));
+    if (info.project.name === "desktop") {
+      expect(bounds[0]!.y).toBe(bounds[1]!.y);
+      expect(bounds[1]!.y).toBe(bounds[2]!.y);
+      expect(bounds[0]!.x).toBeLessThan(bounds[1]!.x);
+      expect(bounds[1]!.x).toBeLessThan(bounds[2]!.x);
+    } else {
+      expect(bounds[0]!.y).toBeLessThan(bounds[1]!.y);
+      expect(bounds[1]!.y).toBeLessThan(bounds[2]!.y);
+    }
     coverage = { complete: true, roles: { analyst: { configured: [1], available: [] }, counter_analyst: { configured: [1], available: [] }, verifier: { configured: [1], available: [] } } };
     await page.evaluate(() => window.dispatchEvent(new Event("connections-updated")));
     await expect(panel).toContainText(t("Configuration complete"));
-    await expect(panel.getByText(t("Covered · waiting for availability"), { exact: true })).toHaveCount(3);
+    await expect(cards.locator("header .badge")).toHaveText([t("Covered"), t("Covered"), t("Covered")]);
+    await expect(panel.getByText(t("Waiting"), { exact: true })).toHaveCount(3);
+    await expect(panel).not.toContainText("Antigravity team");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+  test(`missing connection details never invalidate observed role coverage in ${language}`, async ({ page }) => {
+    await setup(page, language);
+    const coverage = { complete: true, roles: Object.fromEntries(["analyst", "counter_analyst", "verifier"].map(role => [role, { configured: [1], available: [] }])) };
+    await page.route("**/api/orchestration-settings", route => route.fulfill({ json: { ...config, role_coverage: coverage } }));
+    await page.route("**/api/ai-connections", route => route.fulfill({ status: 503, json: { detail: "Unavailable" } }));
+    await page.goto("/admin");
+    await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
+    await page.getByRole("navigation", { name: t("AI settings"), exact: true }).getByRole("button", { name: t("Orchestration"), exact: true }).click();
+    const panel = page.getByRole("region", { name: t("Role coverage"), exact: true });
+    await expect(panel).toContainText(t("AI connection details are unavailable. Role coverage is retained."));
+    await expect(panel.locator(".orchestration-role-card header .badge")).toHaveText([t("Covered"), t("Covered"), t("Covered")]);
+    await expect(panel.getByText(t("Not covered"), { exact: true })).toHaveCount(0);
   });
   test(`two instruction levels and factual environment settings in ${language}`, async ({ page }, info) => {
     await setup(page, language);
@@ -65,9 +108,9 @@ for (const language of ["en", "fr"] as const) {
     await page.route("**/api/ai-connections/1", route => { connectionWrite = route.request().postDataJSON(); return route.fulfill({ json: { id: 1, ...connectionWrite } }); });
     const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
     await page.goto("/admin");
-    await page.getByLabel(t("Global instructions"), { exact: true }).fill("Record facts, exceptions and unanswered decisions.");
-    await page.getByRole("button", { name: t("Save global instructions"), exact: true }).click();
-    await expect.poll(() => writes[0]).toEqual({ global_instructions: "Record facts, exceptions and unanswered decisions." });
+    await expect(page.getByLabel(t("Global instructions"), { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: t("Save global instructions"), exact: true })).toHaveCount(0);
+    expect(writes).toEqual([]);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `../.local/v24-ui/global-${language}-${info.project.name}.png`, fullPage: true, animations: "disabled" });
     await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
@@ -80,17 +123,16 @@ for (const language of ["en", "fr"] as const) {
     await page.getByRole("button", { name: t("Save connection"), exact: true }).click();
     await expect.poll(() => connectionWrite).toMatchObject({ additional_instructions: "Check callers before generalizing.", roles: ["analyst", "counter_analyst", "verifier"] });
     expect(connectionWrite).not.toHaveProperty("skill_overrides");
-    await nav.getByRole("button", { name: t("Roles and orchestration"), exact: true }).click();
+    await nav.getByRole("button", { name: t("Orchestration"), exact: true }).click();
     await expect(page.getByText(t("Independent review is required"), { exact: true })).toBeVisible();
     await expect(page.getByLabel(t("Analysis time limit (seconds)"), { exact: true })).toHaveCount(0);
     await expect(page.locator("[id^=role-instructions-]")).toHaveCount(0);
     await expect(page.getByText(t("Default skills"), { exact: true })).toHaveCount(0);
-    await page.locator("summary").filter({ hasText: t("Advanced options") }).click();
-    await page.getByLabel(t("Maximum AI calls per analysis"), { exact: true }).fill("14");
+    await expect(page.getByLabel(t("Maximum AI calls per analysis"), { exact: true })).toHaveCount(0);
+    await expect(page.getByText(t("Instruction hierarchy"), { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: t("Save analysis settings"), exact: true }).click();
-    await expect.poll(() => writes[1]).toEqual({ allow_same_family_fallback: true, max_calls: 14 });
-    await page.getByRole("button", { name: t("Sources & environments"), exact: true }).click();
-    await page.getByRole("button", { name: t("Environments"), exact: true }).click();
+    await expect.poll(() => writes[0]).toEqual({ allow_same_family_fallback: true });
+    await page.getByRole("navigation", { name: t("Administration"), exact: true }).getByRole("button", { name: t("Environments"), exact: true }).click();
     await expect(page.getByText(t("Agents and skills for this environment"), { exact: true })).toHaveCount(0);
     await page.getByText(t("Environment context"), { exact: true }).click();
     await expect(page.getByLabel(t("Business terminology and factual context"), { exact: true })).toHaveValue("A closed contract is archived.");
@@ -124,10 +166,13 @@ for (const language of ["en", "fr"] as const) {
     await page.getByLabel(t("Instructions"), { exact: true }).fill("Inspect billing boundaries and rare states.");
     await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
     await expect(page.getByRole("heading", { name: /Billing review/ })).toContainText("v2");
+    await page.getByLabel(t("More actions for {name}").replace("{name}", "Billing review"), { exact: true }).click();
     await page.getByRole("button", { name: t("Versions of {name}").replace("{name}", "Billing review"), exact: true }).click();
     await page.locator("summary").filter({ hasText: /^v1/ }).click();
     await expect(page.locator("details").filter({ has: page.locator("summary", { hasText: /^v1/ }) })).toContainText(original.instructions);
+    await page.getByLabel(t("More actions for {name}").replace("{name}", "Billing review"), { exact: true }).click();
     await page.getByRole("button", { name: t("Deactivate {name}").replace("{name}", "Billing review"), exact: true }).click();
+    await page.getByLabel(t("More actions for {name}").replace("{name}", "Billing review"), { exact: true }).click();
     await expect(page.getByRole("button", { name: t("Activate {name}").replace("{name}", "Billing review"), exact: true })).toBeVisible();
     await page.getByRole("button", { name: t("Delete {name}").replace("{name}", "Billing review"), exact: true }).click();
     await page.getByRole("group", { name: t("Confirm deletion"), exact: true }).getByRole("button", { name: t("Confirm deletion"), exact: true }).click();
@@ -148,11 +193,11 @@ for (const language of ["en", "fr"] as const) {
     await expect(panel.locator('[data-state="RUNNING"][data-job]')).toHaveCount(2);
     await expect(panel.locator('[data-job="1"]')).toContainText(t("Active AI: {minutes}m {seconds}s").replace("{minutes}", "6").replace("{seconds}", "7"));
     await expect(panel.locator('[data-job="1"]')).toContainText(t("Step {step} of {total}").replace("{step}", "1").replace("{total}", "3"));
-    await expect(panel.locator('[data-job="2"]')).toContainText(t("Counter-analyst"));
-    await expect(panel.locator('[data-job="2"] [data-provider="claude"]')).toBeVisible();
-    await expect(panel.locator('[data-job="3"]')).toContainText(t("Waiting for AI"));
-    await expect(panel.locator('[data-job="3"]')).toContainText(t("Waiting for an eligible connection from a different model family."));
-    await expect(panel.locator('[data-job="4"]')).toContainText(t("Your answer is needed"));
+    await expect(panel.locator("details")).toHaveCount(0);
+    await expect(panel).not.toContainText("recorded-model");
+    await expect(panel.locator('[data-job="3"]')).toContainText(t("Waiting for an AI resource"));
+    await expect(panel.locator('[data-job="4"]')).toContainText(t("Needs clarification"));
+    await panel.getByRole("button", { name: t("Show recent completed activity"), exact: true }).click();
     await expect(panel.locator('[data-job="5"]')).toContainText(t("Cancelled"));
     await expect(panel.getByText(/\d+%/)).toHaveCount(0);
     await panel.locator('[data-job="1"]').getByRole("button", { name: t("Cancel analysis: {title}").replace("{title}", "Export boundaries 1"), exact: true }).click();

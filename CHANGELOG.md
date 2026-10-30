@@ -5,6 +5,171 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 
 ## Unreleased
 
+### Persistent discussion and on-demand deep analysis
+
+- Start new Analyses with one conversational assistant and persist native CLI
+  context/IDs. Resume Codex, Claude Code and Antigravity using their own adapters;
+  explicitly recover missing sessions from stored history without silently changing models.
+- Launch the existing independent three-role pipeline only on explicit deep-analysis
+  or ticket preparation, with fresh role sessions and frozen human context.
+- Keep post-result discussion separate from immutable result versions; preserve
+  readable historical dossiers, optional reports and existing publication approval.
+- Add browser-owner isolation for new conversations under existing instance auth,
+  revision-checked submissions, fenced cancellation and additive migration 0042.
+- Keep factual clarification answers out of the normative business decision ledger.
+
+### Clarification resumption
+
+- Invalidate superseded checkpoint completion fences after a revised answer while
+  retaining their recorded evidence and the current no-progress protections.
+- Expose the latest user answer explicitly to each analysis step; reject repeated
+  answered questions even when they use new identifiers, and clarify factual intent.
+- Place resumed progress after the latest input and remove sender labels, user
+  avatars and clarification-detail disclosures from the conversation.
+
+### Review response validation
+
+- Explain cross-field review rules in the schema and use review-specific bounded
+  correction instructions. A requested focused check must remain explicit rather
+  than being silently discarded to accept an inconsistent approval.
+
+### Analysis deletion and shared interface
+
+- Add confirmed analysis deletion from the detail page; remove deleted dossiers from
+  discovery and Activity while retaining published-ticket provenance and linked history.
+- Require running agents to stop before deletion and preserve publications in progress.
+- Use the AI Connections screen as the shared visual reference: quiet surfaces,
+  thin borders, restrained controls and rounded semantic tags in both themes.
+
+### Business conversation
+
+- Use a plain assistant icon, tighter spacing and a compact three-stage progress block.
+- Show one accepted business answer; keep individual recorded-role reports as optional
+  Markdown downloads in the final report, separate from ticket attachments.
+- Format explicit role mentions in assistant questions and answers as colored tags.
+
+- Keep the configured instance as the single visible assistant; expose original role attribution only in clarification details.
+- Update one expandable progress message per investigation cycle with recorded stage completion and observed resource-wait causes, preserving partial-result limits.
+
+- Recover historical clarification authors from matching saved questions and accepted execution history without rewriting messages or using current account settings.
+
+- Present needs, clarifications, answers and versioned conclusions in a single business conversation.
+- Keep actual role attribution, accepted structured reports and technical provenance expandable behind the single assistant.
+- Move report details and deliverables out of the main thread while preserving partial-result limits, publication review, decision conflicts and independent analysis.
+
+### Native analysis policy and progress safeguards
+
+- Remove global prompt editing and the total AI-call setting from standard
+  administration. Continue progressing checkpoints regardless of stored call totals;
+  stop empty or repeated transitions while retaining validated observations.
+- Supply conditional official-source consultation natively, preserving automatic
+  evidence receipts and technical sandbox/read-only controls.
+- Archive retired guidance without duplicate execution; preserve nonstandard safe
+  text as inactive custom skills for review and support an optional deployment file.
+- Distinguish read-only built-in skills from fully editable custom procedures,
+  preserving previous revisions and customized content during migration.
+
+### Role coverage cards
+
+- Show Analyst, Counter-analyst and Verifier side by side in Orchestration,
+  with coverage badges and the named AI connections eligible for each role.
+- Keep configured coverage separate from temporary availability; stack the cards
+  on smaller screens without changing scheduling or assignment rules.
+
+### Consistent buttons and tags
+
+- Keep the Activity toggle at the same page position when its panel opens and
+  remove the duplicated panel title, retaining accessible panel labels.
+- Share a slightly rounded rectangular shape across action buttons and menus.
+- Use fully rounded tags across Activity, analyses, tickets, AI connections,
+  role coverage and environments, retaining existing status colors and actions.
+
+### Explicit CLI maintenance
+
+- Detect actual runtime CLI versions and check official stable releases automatically;
+  show the installed version above each connection's Quotas disclosure.
+- Offer an explicit Update action, queue it behind running invocations and sign-ins,
+  validate activation and retain the previous executable for rollback.
+- Isolate installation in a dedicated maintenance service without application
+  credentials or Docker access; mount managed tools read-only in the AI runtime.
+- Hide separate reasoning controls for Antigravity, whose model identifiers already
+  encode their supported reasoning variants.
+
+### Clearer model catalog feedback
+
+- Show plain model names without discovery/access labels or explanatory catalog
+  text; keep the refresh action, loading indicator and failure feedback.
+- Select medium reasoning when supported, retain existing explicit choices, and
+  use only native supported alternatives when medium is unavailable.
+- Remove the redundant assistant selector from connection editing; keep the
+  assistant choice when creating a connection and retain access evidence internally.
+
+### Light and dark theme consistency
+
+- Keep the same illustrated Home, filled Activity actions, button typography and
+  synchronization badges in both themes, using readable theme-specific colors.
+- Make Tailwind dark variants follow the application preference rather than the
+  operating-system theme. Verify layout parity in English/French on desktop/mobile.
+
+### Model refresh and navigation follow-ups
+
+- Keep complete quota windows in a closed Quotas disclosure on each AI card,
+  preserving shared-identity observations, model-pool labels and refresh behavior.
+- Shorten quota periods, hide technical quota sources/limit IDs, order Gemini
+  before Claude/GPT windows, and remove repeated provider/account metadata.
+- Show exhausted quotas as an empty progress bar with 0% remaining inside AI
+  connection cards, preserving unknown observations and independent model pools.
+- Show a red exhausted-quota badge before Edit only for total weekly exhaustion:
+  a global weekly limit, or both Antigravity Gemini and Claude/GPT weekly pools.
+  Session exhaustion, a single exhausted pool and missing data do not trigger it.
+- Show the model/effort and each permitted role as distinct colored tags beside
+  connection status, reusing its badge design while keeping both themes readable
+  and long names responsive.
+- Keep role tags in Analyst / Counter-analyst / Verifier order regardless of the
+  stored assignment order or the order in which checkboxes were toggled.
+- Preserve a scheduled quota refresh when polling lands on its reset boundary.
+- Open the connection editor inside its own card, retaining explicit save/cancel
+  and the existing creation form, model discovery and role configuration. A
+  second click on Edit cancels unsaved edits and closes that card's form.
+- Remove redundant connection-detail and role disclosures from AI cards, keeping
+  the assigned roles directly visible and editable through the existing form.
+- Remove selection-priority and participation controls from the connection form;
+  preserve stored priorities and keep activation in the existing action menu.
+- Clarify existing connection actions as Change account and Refresh status and
+  quotas, preserving the authorization and metadata checks they already perform.
+- Ignore expired authentication attempts when guarding model/connection operations,
+  while preserving active-login and busy-analysis protection across shared identities.
+- Keep administration access in the bottom-left button, remove redundant sidebar
+  shortcuts, and remove diagnostics from Activity cards.
+- Apply the same hover/focus treatment to Activity, Analyses and Tickets, with
+  reduced-motion support and unchanged ticket selection/publication behavior.
+
+### Dashboard reference styling
+
+- Match the supplied visual direction with navy surfaces, turquoise actions,
+  illustrated Home, colored analysis/activity cards and administrative shortcuts.
+- Show observed quota summaries on connection cards, with detailed windows kept
+  expandable and real role coverage/active-skill counts alongside connections.
+- Open environment creation on demand and keep theme, language, native metadata,
+  publication confirmation and the independent analysis pipeline intact.
+- Carry Home drafts privately to the existing creation form; preserve explicit
+  Light/System preferences and default new browsers to Dark.
+
+### Focused interface simplification (post-v2.9)
+
+- Reduce each sidebar assistant to one status/quota link, retaining model-pool
+  boundaries, the limiting applicable window, stale cues and metadata-only refresh.
+- Rename the shared panel Activity, close it by default for new preferences, count
+  only actionable items, and place execution diagnostics behind disclosures.
+- Make Home categories disjoint, keep partial results explicit and preserve old
+  actionable errors and pre-job scope questions without creating scheduler jobs.
+- Add short local title proposals and an editable presentation title without
+  replacing the original need or immutable results; show recorded family diversity.
+- Use Edit plus secondary-action menus, simplify settings into four sections,
+  reuse shared Git/PostgreSQL connections and record connector test timestamps.
+- Clarify synchronization, queue/resource waits and English/French system labels;
+  preserve authentication, role ordering, quotas and human publication confirmation.
+
 ### Clearer AI configuration and ticket actions (v2.9.1)
 
 - Stop short configured credentials from replacing fragments of ordinary interface

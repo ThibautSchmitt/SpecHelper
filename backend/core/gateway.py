@@ -35,13 +35,14 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         health = parsed.path == "/health" and self.command == "GET"
         models = parsed.path == "/models" and self.command == "GET"
+        versions = parsed.path == "/cli-versions" and self.command == "GET"
         auth_get = bool(re.fullmatch(r"/auth/[a-f0-9-]{36}", parsed.path)) and self.command == "GET"
         auth_post = (
             bool(re.fullmatch(r"/auth/(?:start|api-key|[a-f0-9-]{36}/(?:code|cancel))", parsed.path))
             and self.command == "POST"
         )
         cancel_run = parsed.path == "/runs/cancel" and self.command == "POST"
-        if not (health or models or auth_get or auth_post or cancel_run):
+        if not (health or models or versions or auth_get or auth_post or cancel_run):
             self.respond(404, {"detail": "Command unavailable"})
             return
         target = parsed.path

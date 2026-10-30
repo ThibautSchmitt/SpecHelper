@@ -11,6 +11,10 @@ def strict_output_schema(schema):
             for item in value:
                 visit(item)
         elif isinstance(value, dict):
+            # The Responses strict subset rejects annotation siblings of $ref.
+            # A single alternative preserves both reference semantics and field help.
+            if "$ref" in value and len(value) > 1:
+                value["anyOf"] = [{"$ref": value.pop("$ref")}]
             # Pydantic discriminated unions emit oneOf; the supported strict subset
             # uses anyOf. Literal kind tags keep the alternatives disjoint.
             if "oneOf" in value:

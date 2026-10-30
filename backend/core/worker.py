@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .agent import ProviderUnavailable, runtime_call
 from .git import request_workspace, sync_environment
-from .models import AnalysisRun, Job, Request, RequestMessage
+from .models import AnalysisRun, ConnectionAttempt, InstanceSettings, Job, Request, RequestMessage
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,15 @@ def claim_job():
     from .providers import reserve_for_job
 
     with transaction.atomic():
+        # Serialize admission, not execution; maintenance drains running invocations.
+        InstanceSettings.objects.get_or_create(pk=1)
+        InstanceSettings.objects.select_for_update().get(pk=1)
         jobs = Job.objects.filter(status="QUEUED").order_by("created_at", "id")
+        maintenance = Job.objects.filter(kind="cli_update", status__in=["QUEUED", "RUNNING"]).order_by("created_at", "id").first()
+        if maintenance:
+            if Job.objects.filter(status="RUNNING").exists() or ConnectionAttempt.objects.filter(status__in=["STARTING", "AWAITING_USER"], expires_at__gt=timezone.now()).exists():
+                return None
+            jobs = jobs.filter(pk=maintenance.pk)
         from django.db import connection
 
         if connection.features.has_select_for_update_skip_locked:
@@ -77,7 +85,7 @@ def claim_job():
             if is_incremental(job):
                 if not reserve_step(job):
                     continue
-            elif job.kind in {"analysis", "library_assistant"} and not reserve_for_job(job):
+            elif job.kind in {"analysis", "library_assistant", "discussion"} and not reserve_for_job(job):
                 continue
             if Job.objects.filter(pk=job.pk, status="QUEUED").update(
                 status="RUNNING", started_at=job.started_at or timezone.now()
@@ -88,13 +96,15 @@ def claim_job():
 
 
 def recover_stale_jobs():
+    from .cli_maintenance import recover_updates
+    recover_updates()
     from django.db.models import Q
 
     from .providers import release_connections
 
     stale = Job.objects.filter(status="RUNNING").filter(
         Q(
-            kind__in=["analysis", "library_assistant"],
+            kind__in=["analysis", "library_assistant", "discussion"],
             started_at__lt=timezone.now() - timedelta(seconds=310),
         )
         | Q(kind="sync", started_at__lt=timezone.now() - timedelta(seconds=1210))
@@ -103,6 +113,14 @@ def recover_stale_jobs():
         from .step_execution import is_incremental
 
         if is_incremental(job):
+            continue
+        if job.kind == "discussion":
+            from .discussion import fail, stop_failed_attempt
+
+            fail(job, "The discussion was interrupted. Retry with a new session; history is preserved.")
+            if not stop_failed_attempt(job):
+                continue
+            release_connections(job.payload.get("connection_ids", []))
             continue
         if job.kind == "library_assistant":
             from .library_assistant import fail_job
@@ -133,8 +151,15 @@ def perform_job(job, attempt_id=None):
         return perform_invocation(job, attempt_id)
 
     try:
-        if job.kind == "sync":
+        if job.kind == "discussion":
+            from .discussion import run_job
+
+            run_job(job)
+        elif job.kind == "sync":
             sync_environment(int(job.target), job.payload.get("changed_repositories"))
+        elif job.kind == "cli_update":
+            from .cli_maintenance import perform_update
+            perform_update(job)
         elif job.kind == "library_assistant":
             from .library_assistant import run_job
 
@@ -171,6 +196,28 @@ def perform_job(job, attempt_id=None):
                     Request.objects.filter(pk=job.target).update(status="QUEUED", error="")
                     return
 
+    except ProviderUnavailable as unavailable:
+        if job.kind != "discussion":
+            if job.kind == "library_assistant":
+                from .library_assistant import fail_job
+
+                fail_job(job, "Assistant work interrupted. Check the selected connection and retry.")
+            elif job.kind == "analysis":
+                fail_analysis(job, "Analysis interrupted. Check connections and the runtime.")
+            return
+        from .discussion import fail
+        from .providers import mark_failure
+
+        if unavailable.kind in {"BUSY", "QUOTA_EXHAUSTED", "AUTH_ERROR", "MODEL_UNAVAILABLE"}:
+            mark_failure(job.payload["assignment"]["connection_id"], unavailable.kind,
+                         unavailable.retry_seconds, unavailable.quota_windows)
+            with transaction.atomic():
+                changed = Job.objects.filter(pk=job.pk, status="RUNNING").update(status="QUEUED", started_at=None,
+                    error="Waiting for the selected AI connection.")
+                if changed:
+                    Request.objects.filter(pk=job.target).update(status="QUEUED")
+        else:
+            fail(job, "The discussion response failed. Your messages are preserved; retry with a new session.")
     except RoleUnavailable as wait:
         Job.objects.filter(pk=job.pk).update(
             status="QUEUED", started_at=None, finished_at=None, error=wait.reason
@@ -183,7 +230,17 @@ def perform_job(job, attempt_id=None):
         return
     except Exception as exc:
         logger.warning("Job %s failed (%s)", job.pk, type(exc).__name__)
-        if job.kind == "sync":
+        if job.kind == "discussion":
+            from .discussion import fail
+
+            fail(job, "The discussion response failed. Your messages are preserved; retry with a new session.")
+            return
+        if job.kind == "cli_update":
+            from .cli_maintenance import UpdateUncertain
+            if isinstance(exc, UpdateUncertain):
+                return
+            message = str(exc) if isinstance(exc, ValueError) else "CLI update interrupted. Check the displayed version and retry."
+        elif job.kind == "sync":
             from .models import Environment
 
             message = (
@@ -216,14 +273,26 @@ def perform_job(job, attempt_id=None):
             status="DONE", finished_at=timezone.now()
         )
     finally:
-        if job.kind in {"analysis", "library_assistant"}:
+        if job.kind in {"analysis", "library_assistant", "discussion"}:
             from .providers import release_connections
 
             job.refresh_from_db()
-            release_connections(job.payload.get("connection_ids", []))
+            can_release = True
+            if job.kind == "discussion" and job.status in {"ERROR", "CANCELLED"}:
+                from .discussion import stop_failed_attempt
+
+                can_release = stop_failed_attempt(job)
+            if can_release:
+                release_connections(job.payload.get("connection_ids", []))
+                if job.kind == "discussion":
+                    job.payload["connection_ids"] = []
+                    job.save(update_fields=["payload"])
 
 
 def work_once():
+    from .discussion import recover_cancellations
+
+    recover_cancellations()
     from .providers import ensure_connections, recover_orphaned_leases, refresh_unknown_connections
     from .step_execution import recover_steps
     from .step_supervisor import poll_processes, start_invocation

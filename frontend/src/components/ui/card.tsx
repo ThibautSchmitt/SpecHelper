@@ -4,7 +4,7 @@ export function Card({ className, ...props }: React.ComponentProps<"section">) {
   return (
     <section
       data-slot="card"
-      className={cn("rounded-xl border bg-card p-6 shadow-sm", className)}
+      className={cn("rounded-xl border bg-card p-5", className)}
       {...props}
     />
   );

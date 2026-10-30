@@ -14,7 +14,7 @@ export function NeedEditor({ value, onUpdated }: { value: RequestDetail; onUpdat
   const [error, setError] = useState("");
   // Keep the exact submission after a timeout; its operation id makes retries safe.
   const submission = useRef<{ text: string; payload: Record<string, unknown> } | null>(null);
-  const canEdit = !value.validated_version && ["DRAFT", "READY", "PARTIAL", "ERROR", "CANCELLED", "NEEDS_CLARIFICATION"].includes(value.status);
+  const canEdit = !value.validated_version && ["DRAFT", "DISCUSSING", "READY", "PARTIAL", "ERROR", "CANCELLED", "NEEDS_CLARIFICATION"].includes(value.status);
 
   return <div className="mt-4">
     {!editing ? <Button variant="outline" disabled={!canEdit} onClick={() => { setText(value.need); setEditing(true); }}>{t("Edit the need")}</Button> : <form className="space-y-3" onSubmit={async event => {
@@ -35,10 +35,10 @@ export function NeedEditor({ value, onUpdated }: { value: RequestDetail; onUpdat
     }}>
       <label className="block font-medium" htmlFor="revised-need">{t("Updated need")}</label>
       <Textarea id="revised-need" value={text} onChange={event => setText(event.target.value)} required maxLength={30000} disabled={busy} rows={5} />
-      <p className="text-sm muted">{t("Saving keeps the original need, decisions and previous results, then restarts the independent analysis. Previous conclusions remain out of date until reassessed.")}</p>
+      <p className="text-sm muted">{t(value.discussion?.enabled ? "Saving continues the discussion. Previous results keep their original scope until another deep analysis." : "Saving keeps the original need, decisions and previous results, then restarts the independent analysis. Previous conclusions remain out of date until reassessed.")}</p>
       {error && <p role="alert" className="text-sm text-destructive">{t(error)}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button disabled={busy || (!canEdit && !submission.current) || !text.trim() || (text.trim() === value.need && !submission.current)}>{t(busy ? "Saving…" : "Save and reanalyze")}</Button>
+        <Button disabled={busy || (!canEdit && !submission.current) || !text.trim() || (text.trim() === value.need && !submission.current)}>{t(busy ? "Saving…" : value.discussion?.enabled ? "Save and discuss" : "Save and reanalyze")}</Button>
         <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditing(false); submission.current = null; setError(""); }}>{t("Cancel")}</Button>
       </div>
     </form>}

@@ -181,12 +181,17 @@ def test_connector(request, connector_id: int):
     try:
         provider_for(connector).test()
     except Exception as exc:
-        connector.status = "ERROR"
+        unavailable = str(exc) in {
+            "Ticket platform network failure; check publication status before retrying",
+            "Ticket platform operation exceeded its time limit",
+        }
+        connector.status = "UNAVAILABLE" if unavailable else "ERROR"
         connector.error = safe_provider_error(exc)
     else:
         connector.status = "CONNECTED"
         connector.error = ""
-    connector.save(update_fields=["status", "error", "updated_at"])
+    connector.checked_at = timezone.now()
+    connector.save(update_fields=["status", "error", "checked_at", "updated_at"])
     return connector_dict(connector)
 
 
@@ -206,7 +211,7 @@ def list_tickets(
 ):
     if status not in {"all", *PublishedTicket.Status.values}:
         raise HttpError(422, "Unknown ticket publication status.")
-    values = PublishedTicket.objects.all().select_related("connector", "version")
+    values = PublishedTicket.objects.all().select_related("connector", "version", "request")
     environments = list(
         values.order_by("version__environment_name")
         .values_list("version__environment_name", flat=True)
@@ -244,7 +249,7 @@ def list_tickets(
 @router.get("/tickets/{ticket_id}")
 def ticket_detail(request, ticket_id: UUID):
     value = get_object_or_404(
-        PublishedTicket.objects.select_related("connector", "version"), pk=ticket_id
+        PublishedTicket.objects.select_related("connector", "version", "request"), pk=ticket_id
     )
     labels = value.snapshot.get("labels", [])
     return {
@@ -260,7 +265,7 @@ def ticket_detail(request, ticket_id: UUID):
 @router.get("/requests/{request_id}/versions/{number}/publications")
 def version_publications(request, request_id: UUID, number: int):
     version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True, request__workflow="request"
     )
     return [
         publication_dict(value)
@@ -271,7 +276,7 @@ def version_publications(request, request_id: UUID, number: int):
 @router.post("/requests/{request_id}/versions/{number}/publication-preview")
 def publication_preview(request, request_id: UUID, number: int, payload: PreviewIn):
     version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True, request__workflow="request"
     )
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     return preview(
@@ -289,7 +294,7 @@ def publication_draft(request, request_id: UUID, number: int, connector_id: int,
     from .models import TicketPublicationDraft
 
     version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True, request__workflow="request"
     )
     connector = get_object_or_404(TicketConnector, pk=connector_id)
     draft = TicketPublicationDraft.objects.filter(
@@ -322,7 +327,7 @@ def update_publication_draft(request, request_id: UUID, number: int, payload: Pu
     )
 
     version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True, request__workflow="request"
     )
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     previous = TicketPublicationDraft.objects.filter(
@@ -380,7 +385,7 @@ def update_publication_draft(request, request_id: UUID, number: int, payload: Pu
 @router.post("/requests/{request_id}/versions/{number}/publications")
 def create_publication(request, request_id: UUID, number: int, payload: PublicationIn):
     version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__workflow="request"
+        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True, request__workflow="request"
     )
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     values = payload.model_dump(mode="json")

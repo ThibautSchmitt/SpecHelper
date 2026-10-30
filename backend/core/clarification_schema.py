@@ -41,6 +41,7 @@ class ClarificationQuestion(BaseModel):
     id: str = Field(min_length=1, max_length=50)
     question: str = Field(min_length=1, max_length=2000)
     kind: Literal["free", "choice"] = "free"
+    purpose: Literal["clarification", "business_decision"] = Field(default="clarification", description="Factual scope or observed-behavior questions are clarification. Use business_decision only for an explicit human choice of a desired business rule.")
     decision_key: str = Field(default="", max_length=100)
     options: list[BusinessOption] = Field(default_factory=list, max_length=3)
     reason: str = Field(default="", max_length=2000)

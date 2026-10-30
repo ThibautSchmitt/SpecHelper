@@ -172,6 +172,11 @@ def publish(request_id, run, output):
         kind="result",
         content=f"Result v{number} available.",
         version=version,
+        data={
+            "summary": explanation.get("summary") or ticket.get("proposed_solution") or ticket.get("context", ""),
+            "status": output.status,
+            "limitations": evidence.get("limitations", []),
+        },
     )
     request.status, request.error, request.questions = output.status, "", []
     request.progress += [{"label": f"Result v{number} available", "at": timezone.now().isoformat()}]

@@ -10,6 +10,11 @@ connector and test its connection. Each connector belongs to exactly one environ
 publication selects only destinations configured for the request's environment.
 Select the accessible destinations allowed for publication and an optional default.
 Credentials are encrypted, masked in the interface and excluded from analysis prompts.
+**Test connection** is explicit and records its observation time without publishing.
+An unchecked connector shows **Not tested**; changing an already tested configuration
+shows **Connection needs verification** while preserving the previous test date.
+Known network/time-limit failures show **Verification unavailable**, distinct from
+a rejected check. Original errors remain available under Diagnostics.
 Publication credentials must be distinct from repository-read credentials, including
 when both accounts belong to the same person. Existing GitHub connectors that relied
 on the shared source connection need a dedicated issue-publication token before

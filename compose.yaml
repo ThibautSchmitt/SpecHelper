@@ -12,6 +12,9 @@ x-backend: &backend
     SPECHELPER_DATA_DIR: /data
     RUNTIME_URL: http://worker:8091
     RUNTIME_TOKEN: ${RUNTIME_TOKEN:-}
+    CLI_MAINTENANCE_URL: http://cli-maintenance:8092
+    CLI_MAINTENANCE_TOKEN_FILE: /cli-control/token
+    SPECHELPER_ANALYSIS_POLICY_FILE: ${SPECHELPER_ANALYSIS_POLICY_FILE:-}
     CONTROL_TOKEN_FILE: /control/runtime.token
     TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
@@ -31,7 +34,8 @@ x-backend: &backend
     - analysis-workspaces:/data/analysis-workspaces
     - analysis-context:/data/analysis-context
     - uploads:/data/requests
-  networks: [app, backend-egress, runtime-control]
+    - cli-maintenance-control:/cli-control:ro
+  networks: [app, backend-egress, runtime-control, cli-control]
   read_only: true
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
@@ -73,11 +77,12 @@ services:
     restart: unless-stopped
   backend:
     <<: *backend
-    networks: [app, backend-egress]
+    networks: [app, backend-egress, cli-control]
     command: [sh, -c, 'python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60']
     depends_on:
       prepare-storage: {condition: service_completed_successfully}
       database: {condition: service_healthy}
+      cli-maintenance: {condition: service_healthy}
     healthcheck:
       test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://localhost:8000/api/health")']
       interval: 5s
@@ -123,8 +128,60 @@ services:
       - uploads:/data/requests:ro
       - ai-credentials:/credentials
       - ai-sessions:/sessions
+      - cli-tools:/cli-tools:ro
     networks: [runtime-control, agent-egress]
     restart: unless-stopped
+  prepare-cli-storage:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+      target: cli-maintenance
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+    volumes: [cli-tools:/cli-tools, cli-maintenance-control:/cli-control]
+    entrypoint: [python, -c]
+    command:
+      - |
+        import os, secrets
+        from pathlib import Path
+        for root in ("/cli-tools", "/cli-control"):
+            os.chown(root, 10000, 10000)
+        key = Path("/cli-control/token")
+        if not key.exists():
+            fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+            with os.fdopen(fd, "w") as stream:
+                stream.write(secrets.token_urlsafe(48))
+            os.chown(key, 10000, 10000)
+  cli-maintenance:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+      target: cli-maintenance
+    depends_on:
+      prepare-cli-storage: {condition: service_completed_successfully}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 128
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=256m,mode=1777"]
+    environment:
+      HOME: /tmp
+      CLI_MAINTENANCE_TOKEN_FILE: /cli-control/token
+    volumes: [cli-tools:/cli-tools, cli-maintenance-control:/cli-control:ro]
+    networks: [cli-control, cli-maintenance-egress]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; from pathlib import Path; urllib.request.urlopen(urllib.request.Request("http://localhost:8092/health",headers={"Authorization":"Bearer "+Path("/cli-control/token").read_text().strip()}),timeout=3)']
+      interval: 15s
+      timeout: 5s
+      retries: 20
   frontend:
     build:
       context: .
@@ -141,12 +198,16 @@ services:
       backend: {condition: service_healthy}
     restart: unless-stopped
 networks:
+  cli-control: {internal: true}
+  cli-maintenance-egress: {}
   web-ingress: {}
   app: {internal: true}
   runtime-control: {internal: true}
   backend-egress: {}
   agent-egress: {}
 volumes:
+  cli-tools: {}
+  cli-maintenance-control: {}
   runtime-control-secrets: {}
   database-data: {}
   app-data: {}

@@ -302,7 +302,7 @@ test("settings alone controls independent counter-analysis and color preferences
     .click();
   await expect.poll(() => writes.at(-1)?.allow_confrontation).toBe(false);
   expect(writes.at(-1)).not.toHaveProperty("primary_color");
-  await page.getByRole("button", { name: "General", exact: true }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
   await expect(page.getByLabel("Primary color", { exact: true })).toHaveValue("#0f766e");
 });
 

@@ -270,7 +270,7 @@ def test_quota_failure_reassigns_only_failed_stage_and_keeps_validated_counter_r
     assert any(w["code"] == "PROVIDER_FALLBACK" for w in request.analysis_runs.get().warnings)
 
 
-def test_global_call_budget_is_durable_across_provider_waits(
+def test_old_global_call_budget_no_longer_stops_progress(
     environment, storage, bundle, code_report
 ):
     config = get_config("legacy")
@@ -278,13 +278,13 @@ def test_global_call_budget_is_durable_across_provider_waits(
     InstanceSettings.objects.filter(pk=1).update(orchestration=config)
     request = Request.objects.create(environment=environment, need="Export", confrontation=True)
     enqueue_analysis(request.pk)
-    runtime = run_job(claim_job(), storage, [assessment(), code_report])
+    runtime = run_job(claim_job(), storage, outputs(code_report, bundle))
     request.refresh_from_db()
-    assert runtime.call_count == 2 and request.status == "ERROR"
+    assert runtime.call_count == 5 and request.status == "READY"
     run = request.analysis_runs.get()
-    assert run.orchestration["calls"] == 2
-    assert set(run.orchestration["outputs"]) == {"requirement", "analyst"}
-    assert request.versions.count() == 0
+    assert run.orchestration["calls"] == 5
+    assert {"requirement", "analyst", "counter_independent", "verifier"} <= set(run.orchestration["outputs"])
+    assert request.versions.count() == 1
 
 
 def test_role_selection_observes_availability_at_each_boundary(

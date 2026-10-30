@@ -211,7 +211,7 @@ def read_quota(env, *, timeout=10):
     return windows
 
 
-def headless_command(model, *, schema_path="/session/schema.json", timeout=300, binary="agy", effort=""):
+def headless_command(model, *, schema_path="/session/schema.json", timeout=300, binary="agy", effort="", conversation=None):
     """Use one stdin turn, avoiding prompts in argv and implicit session resumption.
 
     Streamed input and -p are mutually exclusive in the native CLI. Fresh stdin
@@ -225,11 +225,13 @@ def headless_command(model, *, schema_path="/session/schema.json", timeout=300, 
         raise ValueError("Invalid schema path")
     if effort not in {"", "low", "medium", "high", "xhigh", "max"}:
         raise ValueError("Unsupported Antigravity effort")
+    if conversation is not None:
+        conversation = str(uuid.UUID(conversation))
     return [
         binary, "--input-format", "stream-json", "--output-format", "stream-json",
         "--json-schema", schema_path, "--disable-slash-commands",
         "--print-timeout", f"{timeout}s",
-    ] + (["--model", model] if model else []) + (["--effort", effort] if effort else [])
+    ] + (["--model", model] if model else []) + (["--effort", effort] if effort else []) + (["--conversation", conversation] if conversation else [])
 
 
 def prompt_message(prompt):

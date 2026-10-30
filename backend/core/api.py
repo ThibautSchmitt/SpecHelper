@@ -195,14 +195,18 @@ def environment_dict(environment):
 
 
 def request_dict(value, full=False):
+    from .analysis_titles import analysis_title
+    from .discussion import describe as describe_discussion
+
     result = {
         "id": str(value.id),
         "need": value.need,
-        "title": value.need.splitlines()[0][:160],
+        "title": analysis_title(value),
         "workflow": value.workflow,
         "intent_mode": value.intent_mode,
         "category": value.category,
         "analysis_protocol": value.analysis_protocol,
+        "discussion": describe_discussion(value),
         "source_question": {
             "id": str(value.source_question_version.request_id),
             "version": value.source_question_version.number,
@@ -302,13 +306,24 @@ def request_dict(value, full=False):
                         "warnings",
                         "context_snapshot",
                         "context_usage",
+                        "orchestration",
+                        "job__status",
+                        "job__payload",
                     )
                 ),
                 "latest_version": version_dict(value.versions.order_by("-number").first()),
             }
         )
         from .analysis_states import result_state
+        from .conversation import attribute_messages, progress_snapshot, role_reviews
         from .models import PublishedTicket
+
+        attribute_messages(result["messages"], result["analysis_runs"])
+        for run in result["analysis_runs"]:
+            run["execution"] = progress_snapshot(run, result["messages"])
+            run["role_reviews"] = role_reviews(run.pop("orchestration") or {})
+            run.pop("job__status", None)
+            run.pop("job__payload", None)
 
         result["publications"] = [
             {"id": str(row.pk), "title": row.title, "status": row.observed_status,
@@ -319,12 +334,16 @@ def request_dict(value, full=False):
         evidence = result["evidence"] or {}
         result["result_state"] = result_state(
             value.status, value.workflow,
+            waiting_ai=bool(((result.get("discussion") or {}).get("job") or {}).get("waiting_reason"))
+            if (result.get("discussion") or {}).get("mode") == "discussion"
+            else bool(value.status == "QUEUED" and latest_run and (latest_run.orchestration.get("waiting_reason") or (latest_run.job_id and latest_run.job.payload.get("waiting_reason")))),
             latest_status=latest_version.status if latest_version else None,
             incomplete=bool(evidence.get("blocking")),
             published=bool(latest_version and PublishedTicket.objects.filter(version=latest_version, status="PUBLISHED").exists()),
             stale=result["conclusions_stale"],
             verification_unavailable=bool((latest_run and latest_run.orchestration.get("permission_limits"))
                                          or (evidence.get("blocking") and evidence.get("database", {}).get("status") == "unavailable")),
+            scope_rejected=value.scope_assessment.get("status") == "OUT_OF_SCOPE",
             scope_clarification=value.scope_assessment.get("status") == "NEEDS_CLARIFICATION",
         )
     return result
@@ -631,9 +650,11 @@ def delete_environment(request, environment_id: int, payload: EnvironmentDeleteI
 
 @api.get("/requests")
 def requests(request):
+    from .discussion_access import visible
+
     return [
         request_dict(r)
-        for r in Request.objects.filter(workflow="request")
+        for r in visible(request, Request.objects.filter(workflow="request"))
         .select_related("environment")
         .order_by("-created_at")[:100]
     ]
@@ -690,7 +711,7 @@ def upload_attachment(request, request_id: UUID, file: File[UploadedFile]):
 @api.get("/requests/{request_id}/attachments/{attachment_id}")
 def download_attachment(request, request_id: UUID, attachment_id: UUID):
     attachment = get_object_or_404(
-        RequestAttachment, pk=attachment_id, request_id=request_id, request__workflow="request"
+        RequestAttachment, pk=attachment_id, request_id=request_id, request__deleted_at__isnull=True, request__workflow="request"
     )
     response = FileResponse(
         attachment_path(attachment).open("rb"),
@@ -750,7 +771,7 @@ def answer_questions(request, request_id: UUID, payload: AnswersIn):
 
 @api.get("/requests/{request_id}/markdown")
 def download_markdown(request, request_id: UUID):
-    result = get_object_or_404(AnalysisResult, request_id=request_id, request__workflow="request")
+    result = get_object_or_404(AnalysisResult, request_id=request_id, request__deleted_at__isnull=True, request__workflow="request")
     response = HttpResponse(result.markdown, content_type="text/markdown; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="spechelper-{request_id}.md"'
     return response
@@ -771,7 +792,7 @@ def continue_request(request, request_id: UUID, payload: ContinuationIn):
 def get_version(request, request_id: UUID, number: int):
     return version_dict(
         get_object_or_404(
-            ResultVersion, request_id=request_id, number=number, request__workflow="request"
+            ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True, request__workflow="request"
         )
     )
 
@@ -783,7 +804,7 @@ def download_artifact(
     artifact = get_object_or_404(
         GeneratedArtifact,
         version__request_id=request_id,
-        version__request__workflow="request",
+        version__request__deleted_at__isnull=True, version__request__workflow="request",
         version__number=number,
         name=name,
     )
@@ -882,16 +903,20 @@ def system(request):
 
 @api.get("/queue")
 def queue(request):
+    from .discussion_access import visible
     from .queue import snapshot
 
-    return snapshot()
+    allowed = {str(pk) for pk in visible(request, Request.objects.all()).values_list("pk", flat=True)}
+    return [row for row in snapshot() if not row.get("request_id") or str(row["request_id"]) in allowed]
 
 
 from .ai_api import router as ai_router  # noqa: E402
 from .analysis_api import router as analysis_router  # noqa: E402
 from .business_decisions import DecisionConflict  # noqa: E402
 from .business_decisions import router as business_router  # noqa: E402
+from .cli_maintenance import router as cli_router  # noqa: E402
 from .context_api import router as context_router  # noqa: E402
+from .discussion import router as discussion_router  # noqa: E402
 from .git_source_api import router as git_source_router  # noqa: E402
 from .library import router as library_router  # noqa: E402
 from .library_assistant import router as library_assistant_router  # noqa: E402
@@ -902,10 +927,12 @@ from .ticket_api import router as ticket_router  # noqa: E402
 
 api.add_router("", question_router)
 api.add_router("", analysis_router)
+api.add_router("", discussion_router)
 api.add_router("", context_router)
 api.add_router("", ticket_router)
 api.add_router("", git_source_router)
 api.add_router("", ai_router)
+api.add_router("", cli_router)
 api.add_router("", orchestration_router)
 
 api.add_router("", library_router)

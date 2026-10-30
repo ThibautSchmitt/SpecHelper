@@ -1,7 +1,7 @@
 "use client";
 import { SkillMetadata } from "@/components/skill-metadata";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   BookOpen,
   Bot,
@@ -35,6 +35,7 @@ export type LibraryDefinition = {
   deleted: boolean;
   skills?: string[];
   expected_checks?: string[];
+  built_in?: boolean;
 };
 type Revision = {
   version: number;
@@ -225,7 +226,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
       </div>
       <p className="text-sm muted">
         {t(
-          "Definitions contain instructions only. They cannot change sandbox permissions or access credentials.",
+          kind === "skill" ? "Skills contain instructions only. They cannot change sandbox permissions or access credentials." : "Definitions contain instructions only. They cannot change sandbox permissions or access credentials.",
         )}
       </p>
       {error && (
@@ -382,16 +383,19 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
         </p>
       )}
       <div className="field"><label htmlFor={`${prefix}-search`}>{t(kind === "skill" ? "Search skills" : "Search agents")}</label><Input id={`${prefix}-search`} type="search" value={search} onChange={event => setSearch(event.target.value)} /></div>
-      {items.filter(item => `${item.name} ${item.objective} ${item.slug}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).map((item) => (
-        <article key={item.slug} className="rounded-lg border p-4">
+      {items.filter(item => `${item.name} ${item.objective} ${item.slug}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).sort((a, b) => Number(!!b.built_in) - Number(!!a.built_in)).map((item, index, filtered) => (
+        <Fragment key={item.slug}>
+        {kind === "skill" && (index === 0 || !!item.built_in !== !!filtered[index - 1].built_in) && <h3 className="pt-3 text-sm font-semibold">{t(item.built_in ? "Built-in skills" : "Custom skills")}</h3>}
+        <article className="rounded-lg border p-4" aria-label={item.built_in ? t(item.name) : item.name}>
           <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
             <div className="min-w-0 flex-1">
               <h3 className="break-words">
-                {item.name}{" "}
+                {item.built_in ? t(item.name) : item.name}{" "}
                 <span className="text-xs muted">v{item.version}</span>
+                {kind === "skill" && <span className="badge ml-2">{t(item.built_in ? "Built-in" : "Custom")}</span>}
               </h3>
               <p className="mt-1 text-sm muted break-words">
-                {item.objective || item.name}
+                {item.built_in ? t(item.objective || item.name) : item.objective || item.name}
               </p>
               <p className="mt-2 text-xs muted">
                 {t(item.enabled ? "Active" : "Inactive")} ·{" "}
@@ -403,10 +407,10 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
               </p>
             </div>
             <div className="connection-actions">
-              <Button
+              {!item.built_in && <Button
                 variant="ghost"
                 size="sm"
-                className="icon-action"
+
                 title={t("Edit {name}", { name: item.name })}
                 aria-label={t("Edit {name}", { name: item.name })}
                 disabled={busy}
@@ -417,8 +421,11 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                   setRemove(null);
                 }}
               >
-                <Pencil size={16} aria-hidden="true" />
-              </Button>
+                <Pencil size={16} aria-hidden="true" />{t("Edit")}
+              </Button>}
+              <details className="action-menu" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+                <summary aria-label={t("More actions for {name}", { name: item.name })}>⋯</summary>
+                <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
               <Button
                 variant="ghost"
                 size="sm"
@@ -438,7 +445,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                   })
                 }
               >
-                <History size={16} aria-hidden="true" />
+                <History size={16} aria-hidden="true" />{t("Versions")}
               </Button>
               <Button
                 variant="ghost"
@@ -465,9 +472,9 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                   })
                 }
               >
-                <Download size={16} aria-hidden="true" />
+                <Download size={16} aria-hidden="true" />{t("Export")}
               </Button>
-              <Button
+              {!item.built_in && <Button
                 variant="ghost"
                 size="sm"
                 className="icon-action"
@@ -492,9 +499,9 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                   )
                 }
               >
-                <Power size={16} aria-hidden="true" />
-              </Button>
-              <Button
+                <Power size={16} aria-hidden="true" />{t(item.enabled ? "Deactivate" : "Activate")}
+              </Button>}
+              {!item.built_in && <Button
                 variant="ghost"
                 size="sm"
                 className="icon-action"
@@ -510,11 +517,16 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                   setDraft(null);
                 }}
               >
-                <Trash2 size={16} aria-hidden="true" />
-              </Button>
+                <Trash2 size={16} aria-hidden="true" />{t("Delete")}
+              </Button>}
+
+                </div>
+              </details>
             </div>
           </div>
+          {item.built_in && <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium">{t("View instructions")}</summary><p className="mt-3 text-xs muted">{t("Maintained by SpecHelper and available automatically when the required tools are authorized.")}</p><pre className="mt-3 whitespace-pre-wrap break-words font-sans text-xs muted">{item.instructions}</pre></details>}
         </article>
+        </Fragment>
       ))}
       {remove && (
         <div
@@ -825,7 +837,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                 {(row.definition.expected_checks || []).map((check) => (
                   <p key={check}>{check}</p>
                 ))}
-                <Button
+                {!items.find(item => item.slug === history.slug)?.built_in && <Button
                   variant="outline"
                   size="sm"
                   disabled={
@@ -838,7 +850,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                   }
                 >
                   {t("Restore version {version}", { version: row.version })}
-                </Button>
+                </Button>}
               </div>
             </details>
           ))}

@@ -195,13 +195,25 @@ class EnvironmentRepository(models.Model):
         ]
 
 
+class VisibleRequestManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
 class Request(models.Model):
+    objects = VisibleRequestManager()
+    all_objects = models.Manager()
+
+    class Meta:
+        base_manager_name = "all_objects"
+
     class Workflow(models.TextChoices):
         REQUEST = "request", "Request"
         QUESTION = "question", "Question"
 
     class Status(models.TextChoices):
         DRAFT = "DRAFT"
+        DISCUSSING = "DISCUSSING"
         QUEUED = "QUEUED"
         UNDERSTANDING = "UNDERSTANDING"
         NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
@@ -219,6 +231,8 @@ class Request(models.Model):
     environment = models.ForeignKey(Environment, null=True, on_delete=models.SET_NULL)
     environment_name_snapshot = models.CharField(max_length=100, blank=True)
     need = models.TextField()
+    display_title = models.CharField(max_length=160, blank=True)
+    discussion_state = models.JSONField(default=dict)
     scope_assessment = models.JSONField(default=dict)
     scope_history = models.JSONField(default=list)
     scope_clarification = models.TextField(blank=True)
@@ -263,6 +277,8 @@ class Request(models.Model):
         return (
             self.primary_session or self.ai_sessions.filter(role="primary").order_by("id").first()
         )
+
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
 
 class RequestAttachment(models.Model):
@@ -313,6 +329,16 @@ class Job(models.Model):
     finished_at = models.DateTimeField(null=True)
     error = models.TextField(blank=True)
     payload = models.JSONField(default=dict)
+
+
+class CLITool(models.Model):
+    agent = models.CharField(max_length=20, primary_key=True)
+    installed_version = models.CharField(max_length=40, blank=True)
+    latest_version = models.CharField(max_length=40, blank=True)
+    checked_at = models.DateTimeField(null=True)
+    next_check_at = models.DateTimeField(default=timezone.now)
+    check_error = models.BooleanField(default=False)
+    update_job = models.ForeignKey(Job, null=True, on_delete=models.SET_NULL)
 
 
 class StepExecution(models.Model):
@@ -549,6 +575,7 @@ class TicketConnector(models.Model):
     default_project = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=20, default="UNKNOWN")
     error = models.TextField(blank=True)
+    checked_at = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

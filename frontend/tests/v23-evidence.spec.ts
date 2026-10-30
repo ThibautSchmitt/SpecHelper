@@ -102,9 +102,10 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByLabel(t("Verify compared analyses"), { exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Allow comparison of multiple analyses"), { exact: true })).toHaveCount(0);
     await page.locator("summary").filter({ hasText: t("Advanced options") }).click();
-    const calls = page.getByLabel(t("Maximum AI calls per analysis")); await expect(calls).toHaveAttribute("min", "6"); await calls.fill("8");
+    await expect(page.getByLabel(t("Maximum AI calls per analysis"))).toHaveCount(0);
     await page.getByRole("button", { name: t("Save analysis settings"), exact: true }).click();
-    await expect.poll(() => body).toMatchObject({ allow_confrontation: true, verifier_enabled: true, max_calls: 8 });
+    await expect.poll(() => body).toMatchObject({ allow_confrontation: true, verifier_enabled: true });
+    expect(body).not.toHaveProperty("max_calls");
     expect(body).not.toHaveProperty("reliability_protocol"); expect(body).not.toHaveProperty("available_agents");
   });
 }

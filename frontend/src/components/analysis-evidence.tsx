@@ -46,7 +46,7 @@ function Claim({ claim, checks, web }: { claim: AnalysisClaim; checks: SQLReceip
   return <article className="min-w-0 rounded-lg border p-4 sm:p-5 space-y-4" aria-label={claim.statement}>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <h3 className="min-w-0 w-full break-words text-base leading-6 sm:w-auto sm:flex-1">{claim.statement}</h3>
-      <span className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium"><Icon size={14} aria-hidden="true" />{t(statusLabels[claim.status])}</span>
+      <span className="badge border"><Icon size={14} aria-hidden="true" />{t(statusLabels[claim.status])}</span>
     </div>
     <p className="text-xs muted">{t(kindLabels[claim.kind])} · {t(claim.basis === "official_rule" ? "Official rule" : claim.basis === "external_contract" ? "External contract" : "Deployment observation")}</p>
     <dl className="grid min-w-0 gap-3 text-sm sm:grid-cols-2">

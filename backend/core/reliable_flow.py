@@ -21,6 +21,22 @@ from .presets_v23 import NAVIGATION_INSTRUCTIONS, VERIFICATION_INSTRUCTIONS
 from .question_outputs import QuestionOutput, QuestionReport
 
 
+def bound_report_limitations(report, run, language="en"):
+    """Keep the complete audit ledger while bounding the writer's report schema."""
+    limits = list(dict.fromkeys(report.limitations))
+    run.orchestration.setdefault("coverage", {})["limitations"] = limits
+    if len(limits) > 30:
+        from .i18n import translate
+
+        report.limitations = limits[:29] + [translate(
+            "Additional verification limits are recorded in the analysis coverage details.",
+            language,
+        )]
+    else:
+        report.limitations = limits
+    return report
+
+
 class EvidenceCodeReport(CodeReport):
     claims: list[EvidenceClaim] = Field(min_length=1, max_length=15)
     diagrams: list[DiagramProposal] = Field(default_factory=list, max_length=2)
@@ -315,6 +331,7 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             candidates(analyst, counter), verified.diagram_reviews, report.claims, self.request.language,
         )
         report.limitations = list(dict.fromkeys([*report.limitations, *omitted_diagrams]))
+        report = bound_report_limitations(report, self.run, self.request.language)
         self.run.orchestration["evidence"] = report.model_dump()
         self.persist_run(update_fields=["orchestration"])
         if verified.questions:
@@ -324,6 +341,9 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             "verified_report": report.model_dump(exclude={"web_references": {"__all__": {"text"}}}),
             "business_summary": self.run.orchestration.get("business_summary", {}),
         }
+        coverage_limits = self.run.orchestration.get("coverage", {}).get("limitations", [])
+        if len(coverage_limits) > 30:
+            self.facts["coverage_limitations"] = coverage_limits
         final = self.checkpoint(
             "writer",
             "verifier",
@@ -556,10 +576,6 @@ class OmissionsOrchestrator(ReliableOrchestrator):
                     verified.questions.append(Question.model_validate(question))
         if unresolved:
             limits = list(dict.fromkeys([*report.limitations, *unresolved]))
-            if len(limits) > 30:
-                raise FlowError(
-                    "Too many unresolved material areas remain. Narrow the request before continuing."
-                )
             report.limitations = limits
         if len(verified.questions) > 5:
             raise FlowError(

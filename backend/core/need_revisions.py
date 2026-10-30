@@ -49,7 +49,7 @@ def append_revision(value, need, *, operation_id, previous_version=None):
 
 
 @transaction.atomic
-def revise_need(analysis_id, payload):
+def revise_need(analysis_id, payload, *, discussion_actor=None):
     from .business_decisions import BUSY, assert_editable, check_revision
     from .environment_context import reject_credentials
     from .services import queue_run, require_session_connection
@@ -86,5 +86,10 @@ def revise_need(analysis_id, payload):
 
     if not assess(value):
         return value
+    if value.discussion_state.get("enabled"):
+        from .discussion import MessageIn, enqueue
+
+        return enqueue(value.pk, MessageIn(expected_revision=value.discussion_state.get("revision", 0)),
+                       discussion_actor or value.discussion_state.get("owner"), initial=True)
     require_session_connection(value)
     return queue_run(value)

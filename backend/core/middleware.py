@@ -1,5 +1,7 @@
 """Host, origin, authentication, CSRF and request budgets for the shared API."""
 
+import re
+import uuid
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -63,6 +65,9 @@ class AccessMiddleware(MiddlewareMixin):
         # Health reveals no business data; Compose must be able to check it before migrations.
         if request.path == "/api/health" and request.method in {"GET", "HEAD"}:
             return None
+        from .discussion_access import identify
+
+        identify(request)
         length = request.META.get("CONTENT_LENGTH")
         try:
             if length and (int(length) < 0 or int(length) > settings.ACCESS_MAX_REQUEST_BYTES):
@@ -103,6 +108,17 @@ class AccessMiddleware(MiddlewareMixin):
                 response = public_response({"detail": "Too many requests. Try again shortly."}, 429)
                 response["Retry-After"] = "60"
                 return response
+        match = re.match(r"^/api/(?:analyses|requests|questions)/([0-9a-fA-F-]{36})(?:/|$)", request.path)
+        if match:
+            from .models import Request
+
+            try:
+                identifier = uuid.UUID(match[1])
+            except ValueError:
+                return public_response({"detail": "Not found"}, 404)
+            state = Request.all_objects.filter(pk=identifier).values_list("discussion_state", flat=True).first()
+            if state and state.get("private") and state.get("owner") != request.discussion_actor:
+                return public_response({"detail": "Not found"}, 404)
         return None
 
     def process_exception(self, request, exception):
@@ -113,6 +129,11 @@ class AccessMiddleware(MiddlewareMixin):
         return None
 
     def process_response(self, request, response):
+        if getattr(request, "new_discussion_cookie", None) and (request.path == "/api/access/session" or request.method not in SAFE):
+            from .discussion_access import AGE, COOKIE
+
+            response.set_cookie(COOKIE, request.new_discussion_cookie, max_age=AGE,
+                                httponly=True, secure=request.is_secure(), samesite="Lax")
         if request.path.startswith("/api/"):
             release(getattr(request, "security_lease", None))
             if (

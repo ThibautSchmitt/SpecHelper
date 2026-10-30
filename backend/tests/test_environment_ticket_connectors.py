@@ -14,6 +14,34 @@ pytest_plugins = ["tests.test_ticket_publication"]
 pytestmark = pytest.mark.django_db
 
 
+def test_connector_check_records_observation_without_publication_and_preserves_it_on_edit(publication_context):
+    version, connector, provider, _ = publication_context
+    client = TestClient(router)
+    assert client.get(f"/ticket-connectors?environment_id={connector.environment_id}").json()[0]["checked_at"] is None
+    checked = client.post(f"/ticket-connectors/{connector.pk}/test").json()
+    assert checked["status"] == "CONNECTED" and checked["checked_at"]
+    payload = {"environment_id": connector.environment_id, "name": "Updated tracker", "platform": "gitlab", "base_url": connector.base_url, "projects": ["42"]}
+    edited = client.put(f"/ticket-connectors/{connector.pk}", json=payload).json()
+    assert edited["status"] == "UNKNOWN" and edited["checked_at"] == checked["checked_at"]
+    provider.create.assert_not_called()
+    assert not PublishedTicket.objects.exists() and version.request.need == "Export active contracts"
+
+
+@pytest.mark.parametrize("message,expected", [
+    ("Ticket platform network failure; check publication status before retrying", "UNAVAILABLE"),
+    ("Ticket platform operation exceeded its time limit", "UNAVAILABLE"),
+    ("Ticket platform HTTP 403", "ERROR"),
+])
+def test_connector_unavailable_is_distinct_from_rejected_check(publication_context, message, expected):
+    _, connector, provider, _ = publication_context
+    from core.ticket_providers import TicketProviderError
+
+    provider.test.side_effect = TicketProviderError(message)
+    response = TestClient(router).post(f"/ticket-connectors/{connector.pk}/test").json()
+    assert response["status"] == expected and response["checked_at"]
+    provider.create.assert_not_called()
+
+
 def test_connector_list_and_creation_are_environment_scoped(publication_context):
     version, connector, _, _ = publication_context
     other = Environment.objects.create(name="Other environment")

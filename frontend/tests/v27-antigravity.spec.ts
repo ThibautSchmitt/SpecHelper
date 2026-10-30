@@ -38,24 +38,36 @@ for (const language of ["en", "fr"] as const) {
   };
 
   test("native provider preserves discovered model and roles in " + language, async ({ page }) => {
-    await setup(page, language, [assistant()]);
+    await setup(page, language, [assistant({ reasoning_effort: "high" })]);
+    let edited: Record<string, unknown> | null = null;
+    await page.route("**/api/ai-connections/3", route => { edited = route.request().postDataJSON(); return route.fulfill({ json: assistant({ ...edited }) }); });
     let saved: Record<string, unknown> | null = null;
     await page.route("**/api/ai-connections", route => {
       if (route.request().method() === "POST") saved = route.request().postDataJSON();
       return route.fulfill({ json: [assistant()] });
     });
     await openConnections(page);
+    const card = page.locator("#ai-connection-3");
+    await expect(card.locator(".connection-model-tag")).toHaveText(model.identifier);
+    await card.getByRole("button", { name: t("Edit"), exact: true }).click();
+    await expect(card.locator("#ai-config-provider")).toHaveCount(0);
+    await expect(page.getByLabel(t("Reasoning"), { exact: true })).toHaveCount(0);
+    await card.getByLabel(t("Connection name"), { exact: true }).fill("Existing Gemini");
+    await page.getByRole("button", { name: t("Save connection"), exact: true }).click();
+    await expect.poll(() => edited).toMatchObject({ model: model.identifier, reasoning_effort: "" });
     await expect(page.getByRole("navigation", { name: t("Administration"), exact: true }).getByRole("button")).toHaveCount(4);
     await page.getByRole("button", { name: t("New AI connection"), exact: true }).click();
     await page.getByLabel(t("Connection name"), { exact: true }).fill("Team Gemini");
-    await page.getByLabel(t("Assistant provider"), { exact: true }).selectOption("antigravity");
+    await page.getByLabel(t("Assistant"), { exact: true }).selectOption("antigravity");
     await page.getByLabel(t("Authentication identity"), { exact: true }).selectOption("3");
     await page.getByLabel(t("Model"), { exact: true }).selectOption(model.identifier);
+    await expect(page.getByLabel(t("Reasoning"), { exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Authentication identity"), { exact: true })).toHaveValue("3");
     await page.getByRole("button", { name: t("Add AI connection"), exact: true }).click();
     await expect.poll(() => saved).toMatchObject({
       name: "Team Gemini", agent: "antigravity", model: model.identifier, share_identity_from: 3,
       roles: ["analyst", "counter_analyst", "verifier"],
+      reasoning_effort: "",
     });
     expect(saved).not.toHaveProperty("api_key");
     expect(saved).not.toHaveProperty("skill_overrides");
@@ -108,7 +120,8 @@ for (const language of ["en", "fr"] as const) {
       return route.fulfill({ json: { ...assistant(), authentication_mode: "api_key", access_verified: false } });
     });
     await openConnections(page);
-    await page.getByRole("button", { name: t("Reconnect with") + " Antigravity", exact: true }).click();
+    await page.locator("#ai-connection-3 .action-menu > summary").click();
+    await page.getByRole("button", { name: t("Change account"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Sign in with") + " Antigravity", exact: true });
     await dialog.getByRole("button", { name: t("Use a Gemini API key"), exact: true }).click();
     await expect(dialog).toContainText(t("Gemini API use may be billed by Google. SpecHelper uses this key only for this explicitly configured identity; it never inherits a key from your environment."));
@@ -125,7 +138,7 @@ for (const language of ["en", "fr"] as const) {
     expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain("fixture-key-not-a-live-secret");
     expect(inference).toEqual([]);
     await dialog.getByRole("button", { name: t("Close"), exact: true }).click();
-    await page.getByRole("button", { name: t("Reconnect with") + " Antigravity", exact: true }).click();
+    await page.getByRole("button", { name: t("Change account"), exact: true }).click();
     await dialog.getByRole("button", { name: t("Use a Gemini API key"), exact: true }).click();
     await expect(field).toHaveValue("");
     await expect(dialog.getByRole("checkbox")).not.toBeChecked();
@@ -137,7 +150,8 @@ for (const language of ["en", "fr"] as const) {
     await setup(page, language);
     await page.route("**/api/ai-connections/3/auth/api-key", route => route.fulfill({ status: 503, json: { detail: "Synthetic failure: fixture-key-not-a-live-secret" } }));
     await openConnections(page);
-    await page.getByRole("button", { name: t("Reconnect with") + " Antigravity", exact: true }).click();
+    await page.locator("#ai-connection-3 .action-menu > summary").click();
+    await page.getByRole("button", { name: t("Change account"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Sign in with") + " Antigravity", exact: true });
     await dialog.getByRole("button", { name: t("Use a Gemini API key"), exact: true }).click();
     const field = dialog.getByLabel(t("Gemini API key"), { exact: true });

@@ -13,7 +13,7 @@ from django.utils import timezone
 from ninja.errors import HttpError
 
 from .i18n import translate
-from .models import PublishedTicket, TicketPublicationDraft
+from .models import PublishedTicket, Request, TicketPublicationDraft
 from .ticket_providers import NetworkUncertain, TicketProviderError, provider_for, render_body
 
 
@@ -60,6 +60,7 @@ def connector_dict(connector):
         "projects": connector.projects,
         "default_project": connector.default_project,
         "status": connector.status,
+        "checked_at": connector.checked_at,
         "error": connector.error,
         "has_secret": bool(connector.secret),
         "has_app_token": bool(connector.app_token),
@@ -88,6 +89,7 @@ def publication_dict(value):
         "project": value.project,
         "environment_name": value.version.environment_name,
         "request_id": str(value.request_id),
+        "analysis_deleted": value.request.deleted_at is not None,
         "version_number": value.version.number,
         "external_id": value.external_id,
         "external_key": value.external_key,
@@ -498,6 +500,8 @@ def require_environment(version, connector):
 
 
 def publish(version, connector, payload):
+    if not Request.objects.filter(pk=version.request_id).exists():
+        raise HttpError(404, "Analysis not found.")
     if payload.get("confirmed") is not True:
         raise HttpError(422, "Explicit human confirmation is required to publish a ticket.")
     if version.request.workflow != "request":
@@ -654,6 +658,8 @@ def publish(version, connector, payload):
     if existing is None:
         try:
             with transaction.atomic():
+                if not Request.objects.select_for_update().filter(pk=version.request_id).exists():
+                    raise HttpError(404, "Analysis not found.")
                 record = PublishedTicket.objects.create(
                     request=version.request,
                     version=version,
@@ -686,6 +692,8 @@ def publish(version, connector, payload):
         record = existing
         try:
             with transaction.atomic():
+                if not Request.objects.select_for_update().filter(pk=version.request_id).exists():
+                    raise HttpError(404, "Analysis not found.")
                 claimed = PublishedTicket.objects.filter(
                     pk=record.pk, status=record.status, updated_at=record.updated_at
                 ).update(

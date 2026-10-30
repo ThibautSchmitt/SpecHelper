@@ -330,3 +330,25 @@ def test_strict_codex_schema_requires_all_fields_without_mutating_validation_def
                 check(item)
 
     check(strict)
+
+
+def test_final_question_schema_preserves_reference_help_without_ref_siblings():
+    from core.question_outputs import QuestionOutput
+
+    original = QuestionOutput.model_json_schema()
+    strict = strict_output_schema(original)
+    answer = strict["properties"]["answer"]
+    assert answer["description"] == original["properties"]["answer"]["description"]
+    assert answer["anyOf"] == [{"$ref": original["properties"]["answer"]["$ref"]}]
+
+    def check(value):
+        if isinstance(value, dict):
+            if "$ref" in value:
+                assert list(value) == ["$ref"]
+            for child in value.values():
+                check(child)
+        elif isinstance(value, list):
+            for child in value:
+                check(child)
+
+    check(strict)

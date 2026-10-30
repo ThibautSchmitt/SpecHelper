@@ -1,15 +1,15 @@
 # Configuration
 
-Open **Settings** at the bottom left. All settings belong to the trusted shared
+Open **Administration** at the bottom left to access Settings. All settings belong to the trusted shared
 instance except the browser's appearance preference. Never paste credentials into
 instructions, notes, attachments or documentation.
 
 | Tab | Owns |
 | --- | --- |
-| General | Browser appearance, instance name/short label/color/language and global instructions |
 | AI & Agents | Named assistants with native model/reasoning choices, eligible roles, connection instructions and global skills |
-| Sources & environments | Separate Git sources, PostgreSQL connections and Environments tabs |
+| Environments | Configured environments, with access to shared Git and PostgreSQL connections |
 | Connectors | Publication connectors, still associated with their own environment |
+| Appearance | Browser appearance and instance name/subtitle/color/language |
 
 ## First setup
 
@@ -21,7 +21,7 @@ credentials, templates and recovery rules.
 
 ## Git sources
 
-Use **Settings → Sources & environments → Git sources** to add named GitHub or GitLab connections. GitHub
+Use **Settings → Environments → Manage Git connections** to add named GitHub or GitLab connections. GitHub
 supports its official browser authorization flow. GitLab.com and self-hosted
 instances accept an appropriate read-only token; configure the server URL and
 grant only the repository/API read permissions required by the instance.
@@ -32,6 +32,12 @@ branch selectors support search and pagination. Forks retain their own remote
 identity and expose parent metadata when available. A fork's sources are never
 substituted with its parent's sources. The same remote can appear in multiple
 environments, or on distinct branches, while sharing its central mirror.
+
+The environment editor reuses existing Git and PostgreSQL connections, lists its
+associated publication connectors and links to connection management without
+discarding unsaved edits. Connections are not cloned or moved between environments.
+Synchronization labels distinguish queued, running, synchronized and failed states;
+last synchronization is shown only when recorded. Git references are labeled **Branch / tag**.
 
 Editing an environment previews the changes and starts a new synchronization.
 Request baselines keep their original SHAs, including commits retained after a
@@ -45,14 +51,37 @@ environment synchronization. Ticket publication retains its separate authorizati
 
 ## AI connections
 
-Add named Codex CLI, Claude Code or Antigravity configurations, set a model, and optionally
-choose a selection priority in advanced options. A configuration can share an existing provider
+New discussions use the existing eligible-analyst connection ordering for their
+first turn, preferring an available connection. The selected connection, credential
+identity, model and reasoning effort are then pinned to the conversation session.
+**Change assistant** explicitly starts a new native session on the next message,
+using saved history; quota exhaustion never silently switches providers. A changed
+connection configuration requires explicit session replacement. Deep analysis uses
+its existing role assignments in separate contexts. See [conversation and native
+continuation](analysis.md#one-conversation-two-phases) for recovery and browser
+ownership limits. No separate discussion administration page is introduced.
+
+Add named Codex CLI, Claude Code or Antigravity configurations and set their model
+and allowed analysis roles. A configuration can share an existing provider
 identity. All three assistants use official browser authorization. Antigravity
 accepts a Google account, with service eligibility checked by Google; an explicitly
 configured Gemini API key with billing consent is an optional alternative. Credential
 namespaces and session contexts remain isolated between identities.
 
-Model configuration belongs to each connection: **Provider / Model / Reasoning**.
+Choose the assistant when creating a connection. Editing its card shows only
+**Model / Reasoning**; the assistant is already identified by the card itself.
+Antigravity exposes reasoning in its model identifiers, so its form only shows
+the model selector. Other assistants select `medium` when supported, otherwise
+the supported native default or first supported effort. Existing explicit choices
+remain unchanged until saved.
+The selector displays model names without discovery/access status suffixes.
+Refresh rereads the catalogue without generating an analysis or upgrading the
+installed CLI. Successful-use evidence remains stored internally.
+Expand **Quotas** on a connection card to see all reported windows, reset times
+and observation dates. Each disclosure starts closed; configurations sharing an
+identity show the same account observations. **Edit** opens the form inside that
+connection's card. Changes are stored only with **Save connection**; **Cancel**
+or a second click on **Edit** discards the current form.
 Create and authenticate a connection using the provider default, then edit it and
 select **Refresh models**. Shared identities can reuse an existing native catalogue.
 Only the selected identity's native supported or successfully used models are
@@ -70,6 +99,31 @@ connection to retain a preferred model instead of the provider default.
 Codex/Claude accept subscription OAuth only. Antigravity's explicit API mode is
 separate and never an implicit fallback from Google sign-in, another provider or the host environment.
 See the [Antigravity contract](antigravity.md) for supported authentication and limits.
+
+### CLI versions and updates
+
+Each connection shows its actual runtime CLI version in small gray text above
+**Quotas**. These are container versions, independent of host installations.
+The worker checks installed versions at startup and release metadata hourly;
+official release metadata is cached for 24 hours (failed checks retry sooner).
+Codex and Claude releases come from their official npm packages; Antigravity
+uses its official platform manifest and checksum-verified binary.
+
+**Update** appears when a newer stable release is known. Installation is always
+manual: merely opening settings or refreshing models never installs anything.
+The job waits for running work and pending sign-ins, pauses new job admission,
+stages a versioned installation, then activates it atomically. Existing incremental
+analyses retain completed checkpoints and continue after maintenance.
+Version checks and previously working model-discovery metadata validate activation
+without generating a paid prompt. Failed validation restores the previous executable.
+If recovery cannot contact the maintenance service, new work remains paused until
+the installed state can be established. Credentials and sessions stay in place.
+
+The dedicated `cli-maintenance` service has no application credentials, analyzed
+sources or Docker socket. Only it writes the `cli-tools` volume; the runtime and
+its sandbox mount tools read-only. A separate private control token authenticates
+maintenance requests. Base image versions remain pinned in `runtime/Dockerfile`;
+a newer base image takes precedence over an older managed installation.
 
 ## Status and quota observations
 
@@ -109,8 +163,11 @@ while an unscoped account failure remains protected. Invocation token counts are
 never converted into quota percentages or monetary cost.
 The sidebar shows the limiting observed remaining percentage: green at 60–100%,
 orange at 20–<60% and red below 20%. Unknown and authentication-required states have
-no invented bar. Stale observations show **Data needs refreshing**; observation
-dates and known reset times are in the keyboard-accessible **Quota details** disclosure.
+no invented percentage. Each sidebar assistant is one link to its connection settings.
+A clock icon with an accessible **Data needs refreshing** label marks old observations;
+all windows, observation dates and known reset times remain in **AI & Agents → Connections**.
+A selected available model may show **Partially available** when another reported
+model pool is exhausted; this never marks the selected model as exhausted.
 Last observations and stale states remain visible offline. Visible
 tabs refresh metadata every 120 seconds and at known reset deadlines; a shared
 identity lock/throttle coordinates multiple browsers, and busy analyses are not probed.
@@ -123,12 +180,22 @@ visible and stale. Settings shows each reported window's observation, reset and 
 ## Roles and instructions
 
 A connection can allow Analyst, Counter-analyst and Verifier simultaneously.
-**Participate in analyses** controls the connection's existing enabled state.
-Disabling it retains its role assignments and credentials; role checkboxes become
-read-only until it is enabled again.
+The selected model/effort and each assigned role appear as separate colored tags
+beside the connection status. Role tags always follow Analyst / Counter-analyst /
+Verifier order, regardless of checkbox changes. Enabled, authenticated
+connections participate automatically when eligible for a role and available.
+The red exhausted-quota badge before **Edit** means total weekly exhaustion.
+Antigravity requires both Gemini and Claude/GPT weekly pools to be exhausted;
+a single depleted family, a short-session limit or missing data is insufficient.
+**Refresh status and quotas** checks the existing authentication and reads provider
+metadata without starting an analysis. **Change account** restarts the official
+authorization flow; it can select another account or renew the same account.
+Use **Disable** / **Enable** in the card's action menu to suspend or resume a
+connection without losing its role assignments or credentials. Roles remain
+editable while disabled; saving them does not implicitly enable the connection.
 
-**Selection priority** is the single automatic ordering setting, under collapsed
-**Advanced options**. Lower values are preferred, with creation order breaking ties.
+Stored selection priorities remain unchanged but are no longer exposed in the
+connection form. Lower values are preferred, with creation order breaking ties.
 Explicit per-request selection and model-family diversity constraints still apply.
 The migration converts the previous default/preference combination into numeric
 priorities while preserving its ordering, including disabled connections. The
@@ -145,9 +212,13 @@ diversity or override its policy. Configured models and provider defaults remain
 distinct from execution metadata; task details show the reported execution model
 when available rather than inventing a resolved default.
 
-The orchestration call budget also lives in advanced options. It protects against
-loops rather than limiting elapsed duration; an exhausted budget does not certify
-an incomplete result.
+There is no configurable total AI-call ceiling. Stored `max_calls` values are
+retained for client and historical-snapshot compatibility but do not stop execution.
+Only validated checkpoint output advances the fixed role graph. Repeated/cyclic
+transitions, a missing accepted output or premature completion stop the step and
+preserve completed observations. Format repair stays bounded; tool timeouts,
+heartbeat recovery, cancellation fencing and explicit retry remain independent.
+Waiting for a provider or quota is resource waiting, not a failed progression test.
 Configure eligibility and family fallback in AI & Agents. The
 [execution contract](analysis.md#execution-contract) owns scheduling, independence
 and the mandatory role sequence. Labels and separate accounts do not establish diversity.
@@ -157,15 +228,43 @@ and the mandatory role sequence. Labels and separate accounts do not establish d
 The [global skill library](#global-skill-library) owns discovery, applicability,
 loading and version history. Skills grant no tool or data permissions.
 
-Configurable instructions have two levels: common global instructions and specific
-instructions on an AI connection. The effective priority is technical/security rules,
-mandatory role mission, global instructions, connection instructions, then environment
-documents as untrusted factual data. Environments retain their authorized sources,
+SpecHelper supplies its analysis method natively: inspect real sources, consult
+official references when external rules matter, check dates and applicability,
+cite consulted evidence and state contradictions or verification limits. This is
+methodological guidance; isolation, authorized tools and read-only data access
+remain technical controls, independent of prompt text. The interface has no global
+prompt editor or instruction-hierarchy form. Specific connection guidance remains
+in its collapsed section. Environments retain their authorized sources,
 documents, database and business terminology without becoming another role-policy
-layer. Job snapshots retain the baseline and global configuration; a connection's
+layer. Job snapshots retain the baseline and native configuration; a connection's
 instructions are captured when that connection is assigned.
 
+For an advanced deployment, optionally set `SPECHELPER_ANALYSIS_POLICY_FILE` to a
+UTF-8 text file mounted read-only into **both backend and worker**, for example
+`/policy/analysis-policy.txt`. The file is bounded to 24,000 characters and checked
+by the existing credential and permission validators. It supplies additional
+deployment guidance below the native method, never new permissions. Existing API
+instruction fields remain compatible for advanced clients; the file takes precedence.
+
+The native-policy migration retains previous instance text and its version in
+`InstanceSettings.orchestration.retired_global_instructions`. Known stock Web
+guidance is retired without duplication. Nonstandard safe text is copied to an
+**inactive custom skill** for review; sensitive, permission-changing or oversized
+text stays only in the private archive. No custom guidance is silently activated.
+An administrator can inspect the archive through the deployment's Django shell;
+never paste its potentially sensitive content into logs or an AI conversation.
+
 ## Global skill library
+
+**Built-in skills** are maintained by SpecHelper, automatically available when
+their required tools are authorized, and read-only through the application and
+library mutation APIs. Their instructions, export and version history remain
+accessible. Historical customizations are preserved in revisions and, when safe,
+in inactive custom copies before source-owned defaults are restored.
+
+**Custom skills** retain creation, import, assisted generation, editing,
+activation/deactivation, deletion, export and versioning. Both groups use the same
+global lazy discovery; no manual role or environment assignment is introduced.
 
 ### Definitions and versions
 
@@ -238,7 +337,7 @@ new tools. They mark a procedure non-applicable while ordinary system analysis c
 continue with the available tools. A new step observes current skill activation;
 a step already running retains its frozen contents.
 
-The job freezes global instructions and source/environment snapshots. Connection
+The job freezes native/deployment guidance and source/environment snapshots. Connection
 instructions are captured when assigned; edits cannot silently rewrite previously
 used instructions. Archived agent definitions and old associations remain available
 for historical audit. They no longer configure current system roles.
@@ -256,8 +355,11 @@ effort list is offered as account availability.
 The global Models settings tab has been removed. Existing API records and legacy
 configured identifiers remain intact. Unverified legacy selections stay visible;
 they cannot be offered as verified choices to another identity. Failed discovery
-retains the last catalogue with its age/error notice. Reasoning defaults to the
-provider choice, and only returned model-specific levels are selectable. Unsupported
+retains the last catalogue and reports refresh failures. Reasoning selects `medium`
+when reported by the selected model; otherwise it uses a supported native default
+or the first reported level. Existing explicit choices are retained. There is no
+provider-default reasoning option in the form. Only returned model-specific levels
+are selectable; missing capabilities are not filled with invented choices. Unsupported
 `ultra` is excluded; execution modes are not reasoning levels. Model and effort are
 frozen together for a session, so changing either starts a new session context.
 See [provider verification](provider-metadata.md) for native evidence and limits.
@@ -297,7 +399,7 @@ continue to use their own separate attachments. No stack is assumed; actual sour
 and installed dependencies determine the analysis. Environment text is untrusted
 documentary data, not a third editable instruction level.
 
-Open **Settings → Sources & environments → Environments**, then expand **Environment context** for an
+Open **Settings → Environments → Configured environments**, then expand **Environment context** for an
 existing environment. Factual context accepts up to 4,000 characters and can be disabled
 without clearing them. Keep Git and database credentials in secure connection
 settings. Known configured credentials are rejected in factual context and text uploads.
@@ -342,7 +444,7 @@ operations and recovery are described in [operations](operations.md).
 
 ## Appearance
 
-Open **Settings → General → Appearance** to choose
+Open **Settings → Appearance** to choose
 **Light**, **Dark** or **System**. The preference is saved in this browser, including
 page reloads and navigation. Other tabs in the same browser update when that
 preference changes. Different browsers can use different themes on the same
@@ -350,7 +452,7 @@ shared instance. System mode follows device appearance changes immediately.
 
 The same pages, fields and actions are available in every theme. An early theme
 script applies the saved preference before the first paint; the React provider
-keeps it current afterward. Invalid storage values fall back to System. If browser
+keeps it current afterward. New browsers and invalid storage values default to Dark; explicit Light and System preferences remain unchanged. If browser
 storage is unavailable, a notice explains that the preference lasts only for the
 current tab. Interface language and existing generated files are unaffected.
 
@@ -362,7 +464,7 @@ green completed and red error. Text labels accompany colors.
 
 ## Language
 
-Select **Settings → General → Application language**, then save the settings. The
+Select **Settings → Appearance → Application language**, then save the settings. The
 setting belongs to the shared instance. Open browsers refresh it within 15 seconds;
 the browser saving it updates immediately. French is the default.
 
@@ -375,9 +477,7 @@ meaning and project conventions.
 
 Translation maintenance belongs in [CONTRIBUTING](../CONTRIBUTING.md#translations).
 
-If saved global instructions fail the existing credential-safety validation,
-administration remains readable and shows a review warning instead of the obsolete
-optional-verifier fallback. The rejected text is hidden and retained unchanged.
-Replace it explicitly in General settings; saving an untouched blank replacement
-is disabled. Analysis execution keeps its strict validation; this display recovery
-does not approve or silently apply rejected instructions.
+Credential-bearing retired instructions stay in the private migration archive,
+never in an editable standard prompt form or an automatically activated skill.
+Deployment-file and compatibility-API guidance still passes strict validation;
+removing the editor does not weaken the native method or technical permissions.

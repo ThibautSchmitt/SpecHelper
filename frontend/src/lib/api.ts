@@ -47,6 +47,7 @@ export type Environment = {
   revision: number;
   status: string;
   error: string;
+  synced_at?: string | null;
   database_id: number | null;
   database_name: string | null;
   repositories: {
@@ -123,6 +124,11 @@ export type ResultVersion = {
   context_usage?: ContextUsage[];
 };
 export type RequestDetail = RequestItem & {
+  discussion?: {
+    enabled: boolean; mode: "discussion" | "analysis"; revision: number;
+    has_new_messages: boolean; connection_id?: number;
+    job?: {id:number; status:string; created_at:string; error:string; waiting_reason:string} | null;
+  } | null;
   analysis_protocol?: string;
   evidence?: ReliabilityReport;
   decisions?: BusinessDecision[];
@@ -140,6 +146,18 @@ export type RequestDetail = RequestItem & {
   analysis_runs?: {
     number: number;
     status: string;
+    started_at?: string;
+    finished_at?: string | null;
+    execution?: {
+      status: string; current_role: string; checkpoint: string; waiting_reason: string;
+      waiting_causes: string[]; all_stages_done: boolean;
+      stages: {role: string; status: string}[];
+    };
+    role_reviews?: {
+      checkpoint: string; public_role: string; summary: string;
+      findings: { statement: string; status?: string; kind?: string; sources?: unknown[] }[];
+      issues: string[]; agreements: string[]; limits: string[];
+    }[];
     warnings?: AnalysisWarning[];
     context_snapshot?: ContextSnapshot;
     context_usage?: ContextUsage[];
@@ -156,6 +174,8 @@ export type RequestDetail = RequestItem & {
       provider?: string;
       model?: string;
       status?: string;
+      started_at?: string;
+      finished_at?: string;
       error?: string;
       failure?: string;
       diagnostic?: string;
@@ -207,16 +227,24 @@ export type RequestDetail = RequestItem & {
     content: string;
     created_at: string;
     data?: Record<string, unknown>;
+    attribution?: {
+      run_number: number; public_role: string; provider: string;
+      connection_name: string; model: string; context_id: string;
+      attempt_id: string; source: "recorded_history";
+    };
     version_number: number | null;
   }[];
 };
 export const resultStates: Record<string, string> = {
+  discussion: "Discussion · not independently verified",
+  waiting_ai: "Waiting for an AI resource", queued: "In queue", scope_rejected: "Outside project scope",
   processing: "In progress", clarification: "Needs clarification", needs_reassessment: "Needs reassessment",
   cancelled: "Analysis cancelled", verification_unavailable: "Partial result: verification unavailable", interrupted: "Technical failure",
   partial: "Partial result", published: "Ticket published", draft_ready: "Ticket draft ready",
   completed: "Analysis complete", saved: "Saved analysis",
 };
 export const statuses: Record<string, string> = {
+  DISCUSSING: "Discussion · not independently verified",
   DONE: "Completed",
   RUNNING: "Analyzing",
   DRAFT: "Draft",

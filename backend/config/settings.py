@@ -40,6 +40,9 @@ MEDIA_ROOT = DATA_DIR / "requests"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 26 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 RUNTIME_URL = os.environ.get("RUNTIME_URL", "http://agent-runtime:8090")
+CLI_MAINTENANCE_URL = os.environ.get("CLI_MAINTENANCE_URL", "")
+CLI_MAINTENANCE_TOKEN_FILE = os.environ.get("CLI_MAINTENANCE_TOKEN_FILE", "/cli-control/token")
+ANALYSIS_POLICY_FILE = os.environ.get("SPECHELPER_ANALYSIS_POLICY_FILE", "")
 RUNTIME_TOKEN = control_token(create=True, default_path=str(DATA_DIR / "control.token"))
 TRUSTED_ORIGINS = os.environ.get(
     "TRUSTED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"

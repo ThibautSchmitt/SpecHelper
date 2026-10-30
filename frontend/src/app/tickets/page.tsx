@@ -21,6 +21,7 @@ type Ticket = {
   connector_name?: string;
   environment_name: string;
   request_id: string;
+  analysis_deleted?: boolean;
   version_number: number;
   status: string;
   created_at: string;
@@ -301,9 +302,9 @@ export default function TicketsPage() {
             </p>
             <Link
               className="inline-block mt-4 text-primary underline text-sm"
-              href="/"
+              href="/analyses"
             >
-              {t("View requests")}
+              {t("View analyses")}
             </Link>
           </div>
         )}
@@ -333,11 +334,7 @@ export default function TicketsPage() {
                 {data.items.map((ticket) => (
                   <tr
                     key={ticket.id}
-                    className={
-                      selectedId === ticket.id
-                        ? "bg-muted"
-                        : "hover:bg-muted/50"
-                    }
+                    className={`ticket-row ${selectedId === ticket.id ? "bg-muted" : ""}`}
                   >
                     <td className="border-t px-5 py-4 min-w-48 max-w-sm align-top">
                       <button
@@ -467,7 +464,7 @@ export default function TicketsPage() {
                     detail.labels.map((label, index) => (
                       <span
                         key={`${label}-${index}`}
-                        className="rounded-md border bg-muted px-2 py-1 text-xs max-w-full break-words [overflow-wrap:anywhere]"
+                        className="badge border max-w-full break-words [overflow-wrap:anywhere]"
                       >
                         {label}
                       </span>
@@ -486,14 +483,14 @@ export default function TicketsPage() {
                     {detail.environment_name} · {platformName(detail.platform)}{" "}
                     · {detail.project}
                   </p>
-                  <Link
+                  {detail.analysis_deleted ? <p className="mt-2 text-sm muted">{t("Source analysis deleted · publication evidence preserved")}</p> : <Link
                     className="inline-block mt-2 text-primary underline text-sm"
                     href={`/requests/${detail.request_id}?version=${detail.version_number}`}
                   >
                     {t("Published analysis · v{number}", {
                       number: detail.version_number,
                     })}
-                  </Link>
+                  </Link>}
                   <p className="mt-2 text-xs muted">
                     {t("Created")}: {date(detail.created_at)}
                   </p>

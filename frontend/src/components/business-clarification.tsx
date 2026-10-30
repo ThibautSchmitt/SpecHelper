@@ -1,7 +1,8 @@
 "use client";
+import { RoleMentions } from "@/components/role-mentions";
 
 import { useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, MessageCircle, Pencil, RotateCcw } from "lucide-react";
+import { AlertCircle, CheckCircle2, MessageCircle, Pencil, RotateCcw, Send } from "lucide-react";
 import { APIError, send, type RequestDetail, type ResultVersion } from "@/lib/api";
 import type {
   BusinessDecision, BusinessOption, BusinessSummary, ClarificationQuestion, ConflictResponse,
@@ -40,15 +41,16 @@ function ConflictReview({ conflict, busy, onConfirm, onReview }: {
   </section>;
 }
 
-function QuestionFields({ question, selected, text, disabled, prefix, onSelect, onText }: {
+function QuestionFields({ question, selected, text, disabled, prefix, onSelect, onText, compact = false }: {
   question: ClarificationQuestion; selected: string; text: string; disabled: boolean; prefix: string;
   onSelect: (value: string) => void; onText: (value: string) => void;
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const choices = question.kind === "choice" && !!question.options?.length;
   return <fieldset disabled={disabled} className="min-w-0 space-y-3" aria-describedby={question.reason ? `${prefix}-reason` : undefined}>
-    <legend className="mb-3 text-base font-semibold break-words">{question.question}</legend>
-    {question.reason && <p id={`${prefix}-reason`} className="text-sm muted break-words">{question.reason}</p>}
+    <legend className="mb-2 text-base font-semibold break-words"><RoleMentions>{question.question}</RoleMentions></legend>
+    {question.reason && <p id={`${prefix}-reason`} className="text-sm muted break-words"><RoleMentions>{question.reason}</RoleMentions></p>}
     {!!question.unknowns?.length && <div className="rounded-md bg-muted/50 p-3 text-sm"><p className="font-medium">{t("Still to verify")}</p><ul className="mt-2 list-disc space-y-1 pl-5">{question.unknowns.map((item, i) => <li key={i} className="break-words">{item}</li>)}</ul></div>}
     {choices ? <>
       <p className="text-sm muted">{t("These are possible business rules. Choose the one that fits your need, or describe another rule.")}</p>
@@ -61,12 +63,14 @@ function QuestionFields({ question, selected, text, disabled, prefix, onSelect, 
         <label style={{ fontWeight: 400 }} className={`block cursor-pointer rounded-lg border bg-background p-4 focus-within:ring-2 focus-within:ring-ring ${selected === "other" ? "border-primary bg-primary/5" : "hover:bg-muted/30"}`}><span className="flex items-center gap-3"><input type="radio" className="accent-primary" aria-label={`${String.fromCharCode(65 + question.options!.length)} — ${t("Other / clarify")}`} name={`${prefix}-choice`} value="other" checked={selected === "other"} onChange={() => onSelect("other")} /><span className="font-medium">{String.fromCharCode(65 + question.options!.length)} — {t("Other / clarify")}</span></span><span className="mt-2 block text-sm muted">{t("Neither option fits, or you want to add a different rule.")}</span></label>
       </div>
       {selected === "other" && <div className="field"><label htmlFor={`${prefix}-other`}>{t("Describe your alternative rule")}</label><Textarea id={`${prefix}-other`} required maxLength={10000} value={text} onChange={event => onText(event.target.value)} /><p className="mt-2 text-xs muted">{t("A description is required for Other.")}</p></div>}
-    </> : <div className="field"><label className="sr-only" htmlFor={`${prefix}-answer`}>{question.question}</label><Textarea id={`${prefix}-answer`} required maxLength={10000} value={text} onChange={event => onText(event.target.value)} /></div>}
+    </> : <div className="field"><label className="sr-only" htmlFor={`${prefix}-answer`}>{question.question}</label><Textarea id={`${prefix}-answer`} className={compact ? "conversation-answer-input" : undefined} rows={compact ? 1 : undefined} placeholder={compact ? t("Reply or add a detail…") : undefined} onKeyDown={event=>{
+      if (compact && !disabled && event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+    }} required maxLength={10000} value={text} onChange={event => onText(event.target.value)} /></div>}
   </fieldset>;
 }
 
-export function BusinessClarification({ value, base, onUpdated }: {
-  value: RequestDetail; base: string; onUpdated: (value: RequestDetail) => void;
+export function BusinessClarification({ value, base, onUpdated, conversational = false }: {
+  value: RequestDetail; base: string; onUpdated: (value: RequestDetail) => void; conversational?: boolean;
 }) {
   const { t } = useI18n();
   const [texts, setTexts] = useState<Record<string, string>>({});
@@ -77,6 +81,7 @@ export function BusinessClarification({ value, base, onUpdated }: {
   const [pending, setPending] = useState<Record<string, unknown> | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const guided = value.questions.some(question => question.kind === "choice" && question.options?.length);
+  const compact = conversational && value.questions.length === 1 && !guided;
   function edit(update: () => void) { update(); setConflict(null); setPending(null); setError(""); }
   async function submit(payload: Record<string, unknown>) {
     setBusy(true); setError("");
@@ -84,10 +89,10 @@ export function BusinessClarification({ value, base, onUpdated }: {
     catch (error) { const changed = getConflict(error); if (changed) { setConflict(changed); setPending(payload); } else { setError((error as Error).message); setConflict(null); } }
     finally { setBusy(false); }
   }
-  return <Card className="border-primary/40" aria-label={t("Business clarification")}>
-    <h2 className="flex items-center gap-2"><MessageCircle size={20} className="text-primary" aria-hidden="true" />{t("A few details before continuing")}</h2>
-    <p className="mt-2 text-sm muted">{t(value.workflow === "question" ? "Your answers will help explain the relevant behavior." : "Your answers will help prepare a suitable proposal.")}</p>
-    <form ref={form} noValidate className="mt-5 space-y-6" onSubmit={event => {
+  return <Card className={conversational ? "conversation-clarification" : "border-primary/40"} aria-label={t("Business clarification")}>
+    <h2 className="flex items-center gap-2"><MessageCircle size={20} className="text-primary" aria-hidden="true" />{t(conversational ? "SpecHelper" : "A few details before continuing")}</h2>
+    {!conversational && <p className="mt-2 text-sm muted">{t(value.workflow === "question" ? "Your answers will help explain the relevant behavior." : "Your answers will help prepare a suitable proposal.")}</p>}
+    <form ref={form} noValidate className={compact ? "conversation-answer-form" : "mt-5 space-y-6"} onSubmit={event => {
       event.preventDefault();
       const answers: Record<string, string> = {}, selected: Record<string, { option_id: string; text?: string }> = {};
       for (const question of value.questions) {
@@ -102,10 +107,11 @@ export function BusinessClarification({ value, base, onUpdated }: {
       }
       submit({ answers, ...(Object.keys(selected).length ? { choices: selected } : {}), ...(value.decision_revision !== undefined ? { expected_decision_revision: value.decision_revision } : {}) });
     }}>
-      {value.questions.map(question => <section key={question.id} className="min-w-0 rounded-lg border p-4 sm:p-5"><QuestionFields question={question} prefix={`clarify-${question.id}`} disabled={busy || !!conflict} selected={choices[question.id] || ""} text={texts[question.id] || ""} onSelect={selected => edit(() => setChoices({ ...choices, [question.id]: selected }))} onText={text => edit(() => setTexts({ ...texts, [question.id]: text }))} />{question.conflicts_with && value.decisions?.some(item => item.id === question.conflicts_with) && <p className="mt-3 text-sm muted">{t("This question revisits a confirmed decision. You will review any change before it takes effect.")}</p>}</section>)}
-      {error && <p role="alert" className="text-sm break-words">{t(error)}</p>}
-      {!conflict && <Button disabled={busy}>{busy ? t("Sending…") : t(guided ? "Validate and continue" : "Answer and continue")}</Button>}
+      {value.questions.map(question => <section key={question.id} className="min-w-0 rounded-lg border p-4 sm:p-5"><QuestionFields compact={compact} question={question} prefix={`clarify-${question.id}`} disabled={busy || !!conflict} selected={choices[question.id] || ""} text={texts[question.id] || ""} onSelect={selected => edit(() => setChoices({ ...choices, [question.id]: selected }))} onText={text => edit(() => setTexts({ ...texts, [question.id]: text }))} />{question.conflicts_with && value.decisions?.some(item => item.id === question.conflicts_with) && <p className="mt-3 text-sm muted">{t("This question revisits a confirmed decision. You will review any change before it takes effect.")}</p>}</section>)}
+      {!compact && error && <p role="alert" className="text-sm break-words">{t(error)}</p>}
+      {!conflict && <Button className={compact ? "conversation-answer-send" : undefined} disabled={busy}>{compact && <Send size={20} aria-hidden="true" />}<span className={compact ? "sr-only" : undefined}>{busy ? t("Sending…") : t(guided ? "Validate and continue" : "Answer and continue")}</span></Button>}
     </form>
+    {compact && error && <p role="alert" className="mt-3 text-sm break-words">{t(error)}</p>}
     {conflict && pending && <ConflictReview conflict={conflict} busy={busy} onConfirm={() => submit({ ...pending, confirm_changes: true })} onReview={() => { setConflict(null); setPending(null); setTimeout(() => form.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>("input:checked, textarea")?.focus(), 0); }} />}
   </Card>;
 }

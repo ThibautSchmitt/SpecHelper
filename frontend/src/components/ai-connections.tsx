@@ -1,6 +1,6 @@
 "use client";
 import { ProviderLogo } from "@/components/provider-logo";
-import { Bot, Pencil, Plus, Power, RefreshCw, Trash2, Gauge, ExternalLink } from "lucide-react";
+import { Bot, Pencil, Plus, Power, RefreshCw, Trash2, Gauge, ExternalLink, ChevronDown, Download } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,48 @@ import { ConnectButton } from "@/components/connect-button";
 import { ModelSelect } from "@/components/ai-models";
 import { api, send } from "@/lib/api";
 import { assistantName, assistantProviders, type AssistantProvider } from "@/lib/assistant-providers";
-import { observedQuota } from "@/lib/quota";
+import { observedQuota, remainingPercent, weeklyQuotaExhausted } from "@/lib/quota";
+import type { CSSProperties } from "react";
+
+function ConnectionQuotas({ connection, group }: { connection: AIConnection; group: AIConnection[] }) {
+  const { t, dateLocale } = useI18n();
+  const windows = new Map<string, QuotaWindow>();
+  for (const value of group) for (const [name, window] of Object.entries(value.quota_windows || {})) {
+    const old = windows.get(name);
+    if (!old || (Date.parse(window.observed_at || "") || 0) > (Date.parse(old.observed_at || "") || 0)) windows.set(name, window);
+  }
+  const order = (name: string) => name === "session" ? 0 : name === "weekly" ? 1 : name === "daily" ? 2 : 3;
+  const accountExhausted = observedQuota(connection).state === "Quota exhausted";
+  const poolOrder = (name: string, window: QuotaWindow) => window.model_pool === "gemini" || name === "gemini-weekly" ? 0 : window.model_pool === "claude_gpt" || name === "3p-weekly" ? 1 : 2;
+  const checked = group.map(value => value.quota_status?.checked_at).filter((value): value is string => !!value && Number.isFinite(Date.parse(value))).sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  return <details className="connection-quotas mt-4">
+    <summary className="flex cursor-pointer items-center gap-2 rounded py-2 text-sm"><Gauge size={16} aria-hidden="true" />{t("Quotas")}<ChevronDown className="quota-chevron" size={14} aria-hidden="true" /></summary>
+    <dl className="connection-quota-preview" aria-label={t("All quota windows")}>
+      {Array.from(windows).sort(([a, first], [b, second]) => poolOrder(a, first) - poolOrder(b, second) || order(a) - order(b)).map(([name, window]) => {
+        const remaining = remainingPercent(window);
+        const exhausted = window.exhausted || remaining === 0;
+        const displayedRemaining = exhausted ? 0 : remaining;
+        const reset = window.reset_at || window.resets_at;
+        const observed = window.observed_at && Number.isFinite(Date.parse(window.observed_at)) ? window.observed_at : null;
+        const stale = !observed || Date.now() - Date.parse(observed) > 300000 || (!!reset && Date.parse(reset) <= Date.now() && Date.parse(observed) < Date.parse(reset)) || group.some(value => ["error", "unavailable"].includes(value.quota_status?.state || ""));
+        const label = name === "session" ? "Session quota" : name === "weekly" || window.window_type === "weekly" || ["gemini-weekly", "3p-weekly"].includes(name) ? "Weekly quota" : name === "daily" ? "Daily quota" : name === "credits" ? "Credits" : "Other quota window";
+        const title = name === "session" && typeof window.window_minutes === "number" && Number.isFinite(window.window_minutes) && window.window_minutes > 0 ? window.window_minutes % 60 === 0 ? t("Quota {hours}h", { hours: window.window_minutes / 60 }) : t("Quota {minutes} min", { minutes: window.window_minutes }) : t(label);
+        return <div key={name} data-quota-window={name} style={{ "--quota-ink": exhausted ? "var(--danger)" : remaining === null ? "var(--muted-foreground)" : remaining < 20 ? "var(--danger)" : remaining < 60 ? "var(--waiting)" : "var(--success)" } as CSSProperties}>
+          <dt>{window.group_name && <span className="block">{t(window.group_name)}</span>}{title}</dt>
+          <dd>{displayedRemaining !== null ? <><progress max={100} value={displayedRemaining} aria-label={t("Quota remaining")} /><span>{displayedRemaining === 0 ? t("0% remaining") : t("{percent}% remaining", { percent: Number(displayedRemaining.toFixed(1)) })}</span></> : typeof window.remaining_units === "number" && Number.isFinite(window.remaining_units) && window.remaining_units >= 0 ? `${window.remaining_units} ${window.unit || t("Credits")}` : t("Not reported")}</dd>
+          {reset && Number.isFinite(Date.parse(reset)) && <dd className="text-xs muted">{t("Reset")}: {new Date(reset).toLocaleString(dateLocale)}</dd>}
+          <dd className="text-xs muted">{t("Last observed")}: {observed ? new Date(observed).toLocaleString(dateLocale) : t("Not reported")}</dd>
+          {stale && <dd className="text-xs muted">{t("Old data")}</dd>}
+        </div>;
+      })}
+      {!windows.size && <div style={{ "--quota-ink": "var(--danger)" } as CSSProperties}><dt>{t("Quota")}</dt><dd>{accountExhausted ? <><progress max={100} value={0} aria-label={t("Quota remaining")} /><span>{t("0% remaining")}</span></> : t("Not reported")}</dd></div>}
+    </dl>
+    {group.some(value => value.quota_status?.state === "error") ? <p className="mt-2 text-xs text-red-700">{t("Quota refresh failed. Last known observations are preserved.")}</p> : group.some(value => value.quota_status?.state === "unavailable") ? <p className="mt-2 text-xs muted">{t(connection.agent === "claude" ? "This Claude Code version does not expose account quotas. Check your provider usage page." : "The provider did not return account quotas.")}</p> : null}
+    {checked && <p className="mt-2 text-xs muted">{t("Last checked")}: {new Date(checked).toLocaleString(dateLocale)}</p>}
+    {connection.agent === "claude" && <a className="mt-2 inline-flex items-center gap-1 text-xs text-primary underline" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">{t("Provider usage")}<ExternalLink size={12} aria-hidden="true" /></a>}
+    {group.length > 1 && <p className="mt-2 text-xs muted">{t("These configurations share one authentication identity and the same quota.")}</p>}
+  </details>;
+}
 
 export type QuotaWindow = {
   window_type?: string;
@@ -68,6 +109,14 @@ const emptyForm = {
   additional_instructions: "",
   skill_overrides: {} as Record<string, boolean>,
 };
+type CLITool = {
+  agent: AssistantProvider;
+  installed_version: string;
+  latest_version: string;
+  update_available: boolean;
+  update_status: string;
+  update_error: string;
+};
 export function AIConnections({
   onChanged,
   simplified = false,
@@ -76,15 +125,48 @@ export function AIConnections({
   simplified?: boolean;
   onChanged: () => Promise<void>;
 }) {
-  const { t, dateLocale } = useI18n();
+  const { t } = useI18n();
   const [values, setValues] = useState<AIConnection[]>([]);
   const [showForm, setShowForm] = useState(false);
   const editor = useRef<HTMLFormElement>(null);
+  const focusedConnection = useRef("");
   const [editing, setEditing] = useState<AIConnection | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [cliTools, setCliTools] = useState<Partial<Record<AssistantProvider, CLITool>>>({});
+  const [updatingCli, setUpdatingCli] = useState<AssistantProvider | null>(null);
+  const previousCliVersions = useRef<Record<string, string>>({});
+  const cliPending = Object.values(cliTools).some(tool => ["QUEUED", "RUNNING"].includes(tool.update_status));
+  useEffect(() => {
+    let alive = true;
+    let reading = false;
+    const read = async () => {
+      if (reading) return;
+      reading = true;
+      try {
+        const result = await api<{ items: CLITool[] }>("/cli-tools");
+        if (alive && Array.isArray(result.items)) {
+          const changed = result.items.some(tool => previousCliVersions.current[tool.agent] && previousCliVersions.current[tool.agent] !== tool.installed_version);
+          previousCliVersions.current = Object.fromEntries(result.items.map(tool => [tool.agent, tool.installed_version]));
+          setCliTools(Object.fromEntries(result.items.map(tool => [tool.agent, tool])));
+          if (changed) window.dispatchEvent(new Event("models-updated"));
+        }
+      } catch {} finally { reading = false; }
+    };
+    void read();
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void read(); }, cliPending ? 2000 : 60000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [cliPending]);
+  async function updateCli(agent: AssistantProvider) {
+    setUpdatingCli(agent); setError("");
+    try {
+      const tool = await send<CLITool>(`/cli-tools/${agent}/update`);
+      setCliTools(previous => ({ ...previous, [agent]: tool }));
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setUpdatingCli(null); }
+  }
   const [orchestration, setOrchestration] =
     useState<OrchestrationSettings | null>(null);
   const [removing, setRemoving] = useState<AIConnection | null>(null);
@@ -116,6 +198,12 @@ export function AIConnections({
     };
   }, []);
   useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("connection");
+    if (!id || focusedConnection.current === id || !values.some(value => String(value.id) === id)) return;
+    const element = document.getElementById(`ai-connection-${id}`);
+    element?.focus({ preventScroll: true }); element?.scrollIntoView({ block: "nearest" }); focusedConnection.current = id;
+  }, [values]);
+  useEffect(() => {
     if (removing) dialog.current?.showModal();
     else dialog.current?.close();
   }, [removing]);
@@ -144,254 +232,14 @@ export function AIConnections({
     );
     identities.set(key, [...(identities.get(key) || []), value]);
   }
-  function quota(window?: QuotaWindow) {
-    if (!window) return t("Not reported");
-    const percent =
-      window.remaining_percent ??
-      (window.used_percent !== undefined
-        ? 100 - window.used_percent
-        : undefined);
-    const reset = window.reset_at || window.resets_at;
-    return `${window.exhausted ? t("Quota exhausted") : percent === undefined ? (typeof window.remaining_units === "number" ? `${window.remaining_units} ${window.unit || t("Credits")}` : t("Not reported")) : t("{percent}% remaining", { percent: Math.max(0, Math.min(100, Number(percent.toPrecision(3)))) })}${reset && !Number.isNaN(Date.parse(reset)) ? ` · ${t("Reset")}: ${new Date(reset).toLocaleString(dateLocale)}` : ""}`;
-  }
   useEffect(() => {
     if (showForm)
       editor.current?.querySelector<HTMLInputElement>("input")?.focus();
   }, [showForm, editing]);
-  return (
-    <Card className="min-w-0" aria-label={t("AI connections")}>
-      <div className="section-heading">
-        <h2><Bot size={18} aria-hidden="true" />{t("AI connections")}</h2>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          aria-label={t("New AI connection")}
-          onClick={() => {
-            setEditing(null);
-            setForm(emptyForm);
-            setShowForm(true);
-          }}
-        >
-          <Plus size={15} aria-hidden="true" />{t("Add connection")}
-        </Button>
-      </div>
-      <p className="mt-2 text-sm muted">
-        {t(
-          "Connect your assistants, choose models and configure their analysis roles.",
-        )}
-      </p>
-      <div className="mt-5 space-y-4">
-        {values.map((value) => (
-          <section
-            key={value.id}
-            aria-label={value.name || value.agent}
-            className="rounded-lg border p-4"
-          >
-            <div className="flex flex-wrap justify-between gap-2">
-              <h3 className="flex items-center gap-2">
-                <ProviderLogo provider={value.agent} />
-                {value.name || assistantName(value.agent)}
-              </h3>
-              <span className="badge" data-state={value.enabled ? "AVAILABLE" : "DISABLED"}>{t(value.enabled ? "Enabled" : "Disabled")}</span>
-            </div>
-            <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-              <div><dt className="muted">{t("Authentication")}</dt><dd>{t(value.status === "CONNECTED" ? "Connected" : "Not connected")}</dd></div>
-              <div><dt className="muted">{t("Availability")}</dt><dd>{t(value.status !== "CONNECTED" || !value.enabled ? "Unavailable" : value.availability === "AVAILABLE" ? "Available" : value.availability === "BUSY" ? "Busy" : value.availability === "UNKNOWN" ? "Availability unknown" : "Unavailable")}</dd></div>
-              <div><dt className="muted">{t("Quota")}</dt><dd>{t(observedQuota(value).state === "Quota remaining" ? "Quota available" : observedQuota(value).state === "Quota exhausted" ? "Quota exhausted" : "Quota unknown")}</dd></div>
-              <div><dt className="muted">{t("Selection priority")}</dt><dd>{value.preference ?? 100}</dd></div>
-            </dl>
-            <p className="mt-2 break-words text-sm muted">
-              {assistantName(value.agent)} ·{" "}
-              {value.account ||
-                t(
-                  value.status === "CONNECTED"
-                    ? "Account not reported"
-                    : "Not connected",
-                )}{" "}
-              · {value.model || t("Provider default model")}
-            </p>
-            {value.error && (
-              <p className="mt-2 text-sm text-red-700">{t(value.error)}</p>
-            )}
-            <p className="mt-2 text-xs muted">
-              {t("Roles")}:{" "}
-              {(value.roles ?? publicRoles)
-                .map((role) => t(roleLabels[role] || role))
-                .join(" · ") || t("No analysis role")}
-            </p>
-            {value.availability === "MODEL_UNAVAILABLE" && (
-              <p className="mt-2 text-sm text-red-700">
-                {t(
-                  "The selected model is unavailable for this AI connection. Choose an accepted model in Settings and retry.",
-                )}
-              </p>
-            )}
-            <div className="connection-actions mt-3">
-              <ConnectButton
-                provider={value.agent}
-                startPath={`/ai-connections/${value.id}/auth/start`}
-                identityLabel={value.name}
-                reconnect={value.status === "CONNECTED" || value.status === "AUTH_ERROR"}
-                onConnected={() => {
-                  action(async () => {}, "Connection successful.");
-                }}
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="icon-action"
-                aria-label={t("Check connection")}
-                title={t("Check connection")}
-                disabled={busy || value.availability === "BUSY"}
-                onClick={() =>
-                  action(
-                    () => send(`/ai-connections/${value.id}/test`),
-                    "Connection checked.",
-                  )
-                }
-              >
-                <RefreshCw size={16} aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                className="icon-action"
-                aria-label={t("Edit")}
-                title={t("Edit")}
-                onClick={() => {
-                  setShowForm(true);
-                  setEditing(value);
-                  setForm({
-                    name: value.name || "",
-                    agent: value.agent,
-                    model: value.model || "",
-                    reasoning_effort: value.reasoning_effort || "",
-                    enabled: value.enabled,
-                    preference: value.preference ?? 100,
-                    share_identity_from: "",
-                    roles: [...(value.roles ?? publicRoles)],
-                    additional_instructions:
-                      value.additional_instructions || "",
-                    skill_overrides: { ...value.skill_overrides },
-                  });
-                }}
-              >
-                <Pencil size={16} aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                className="icon-action"
-                aria-label={t(value.enabled ? "Disable" : "Enable")}
-                title={t(value.enabled ? "Disable" : "Enable")}
-                onClick={() =>
-                  action(() =>
-                    send(
-                      `/ai-connections/${value.id}`,
-                      {
-                        name: value.name,
-                        agent: value.agent,
-                        model: value.model || "",
-                    reasoning_effort: value.reasoning_effort || "",
-                        enabled: !value.enabled,
-                        preference: value.preference ?? 100,
-                        roles: value.roles ?? [...publicRoles],
-                        additional_instructions:
-                          value.additional_instructions || "",
-                        ...(!simplified ? { skill_overrides: value.skill_overrides || {} } : {}),
-                      },
-                      "PUT",
-                    ),
-                  )
-                }
-              >
-                <Power size={16} aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                className="icon-action text-red-700"
-                aria-label={t("Delete")}
-                title={t("Delete")}
-                onClick={() => setRemoving(value)}
-              >
-                <Trash2 size={16} aria-hidden="true" />
-              </Button>
-            </div>
-          </section>
-        ))}
-      </div>
-      <div className="account-quotas mt-5">
-        <h3 className="flex items-center gap-2"><Gauge size={17} aria-hidden="true" />{t("Account quotas")}</h3>
-        {Array.from(identities.entries()).map(([id, group]) => (
-          <div key={id} className="rounded-lg bg-muted p-3 text-sm">
-            <p className="font-medium break-words">
-              {group[0].account || group[0].name} ·{" "}
-              {group.map((v) => v.name).join(", ")}
-            </p>
-            <dl className="mt-3 grid gap-3 sm:grid-cols-2" aria-label={t("All quota windows")}>
-              {(() => {
-                const windows = new Map<string, QuotaWindow>();
-                for (const connection of group) for (const [name, window] of Object.entries(connection.quota_windows || {})) {
-                  const old = windows.get(name);
-                  if (!old || (Date.parse(window.observed_at || "") || 0) > (Date.parse(old.observed_at || "") || 0)) windows.set(name, window);
-                }
-                if (!windows.size) return <div><dt>{t("Quota")}</dt><dd>{t("Not reported")}</dd></div>;
-                return Array.from(windows).map(([name, window]) => {
-                  const label = name === "session" ? "Session quota" : name === "weekly" || window.window_type === "weekly" || ["gemini-weekly", "3p-weekly"].includes(name) ? "Weekly quota" : name === "daily" ? "Daily quota" : name === "credits" ? "Credits" : "Other quota window";
-                  const observed = window.observed_at && Number.isFinite(Date.parse(window.observed_at)) ? window.observed_at : null;
-                  return <div key={name} className="min-w-0 rounded border p-3" data-quota-window={name}>
-                    <dt className="font-medium">{window.group_name && <span className="block">{t(window.group_name)}</span>}{t(label)}{window.window_minutes && <span className="ml-1 text-xs muted">· {t("{minutes} min window", { minutes: window.window_minutes })}</span>}{window.scope && window.scope !== "account" && <span className="mt-1 block text-xs muted">{t("Provider limit")} · {window.limit_id || name}</span>}</dt>
-                    <dd className="mt-1 break-words">{quota(window)}</dd>
-                    <dd className="mt-1 text-xs muted">{t("Last observed")}: {observed ? new Date(observed).toLocaleString(dateLocale) : t("Not reported")}</dd>
-                    {(!observed || Date.now()-Date.parse(observed)>300000 || (!!(window.reset_at || window.resets_at) && Date.parse(window.reset_at || window.resets_at || "") <= Date.now() && Date.parse(observed) < Date.parse(window.reset_at || window.resets_at || "")) || group.some(connection => ["error","unavailable"].includes(connection.quota_status?.state || ""))) && <dd className="text-xs muted">{t("Old data")}</dd>}
-                    {window.source && <dd className="mt-1 text-xs muted">{t("Source")}: {window.source}</dd>}
-                  </div>;
-                });
-              })()}
-            </dl>
-            <p className="mt-2 text-xs muted">
-              {t("Last observed")}: {(() => {
-                const timestamps = group.flatMap((value) => Object.values(value.quota_windows || {}).map((window) => window?.observed_at)).filter((value): value is string => !!value && !Number.isNaN(Date.parse(value)));
-                const latest = timestamps.sort((a, b) => Date.parse(b) - Date.parse(a))[0];
-                return latest ? new Date(latest).toLocaleString(dateLocale) : t("Unknown");
-              })()}
-            </p>
-            {group.some((value) => value.quota_status?.state === "error") ? (
-              <p className="mt-2 text-xs text-red-700">{t("Quota refresh failed. Last known observations are preserved.")}</p>
-            ) : group.some((value) => value.quota_status?.state === "unavailable") ? (
-              <p className="mt-2 text-xs muted">{t(group[0].agent === "claude" ? "This Claude Code version does not expose account quotas. Check your provider usage page." : "The provider did not return account quotas.")}</p>
-            ) : null}
-            {group.some((value) => value.quota_status?.checked_at) && <p className="mt-1 text-xs muted">{t("Last checked")}: {(() => {
-              const checked = group.map((value) => value.quota_status?.checked_at).filter((value): value is string => !!value && !Number.isNaN(Date.parse(value))).sort((a,b) => Date.parse(b) - Date.parse(a))[0];
-              return checked ? new Date(checked).toLocaleString(dateLocale) : t("Unknown");
-            })()}</p>}
-            {group[0].agent === "claude" && <a className="mt-2 inline-flex items-center gap-1 text-xs text-primary underline" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">{t("Provider usage")}<ExternalLink size={12} aria-hidden="true" /></a>}
-            {group.length > 1 && (
-              <p className="mt-2 text-xs muted">
-                {t(
-                  "These configurations share one authentication identity and the same quota.",
-                )}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-xs muted">
-        {t(
-          "Quotas and reset times remain Unknown unless observed. API credentials are used only when explicitly configured.",
-        )}
-      </p>
-      {showForm && (
+  const modelColumns = form.agent === "antigravity" ? (editing ? "md:grid-cols-1" : "md:grid-cols-2") : (editing ? "md:grid-cols-2" : "md:grid-cols-3");
+  const connectionForm = showForm ? (
         <form
+          aria-label={t(editing ? "Edit AI connection" : "New AI connection")}
           ref={editor}
           className="mt-6 border-t pt-5"
           onSubmit={(event) => {
@@ -403,6 +251,7 @@ export function AIConnections({
                 editing ? `/ai-connections/${editing.id}` : "/ai-connections",
                 {
                   ...body,
+                  reasoning_effort: form.agent === "antigravity" ? "" : form.reasoning_effort,
                   ...(!editing && share_identity_from
                     ? { share_identity_from: Number(share_identity_from) }
                     : {}),
@@ -428,14 +277,13 @@ export function AIConnections({
               }
             />
           </div>
-          <div className="grid min-w-0 gap-4 md:grid-cols-3" aria-label={t("Model configuration")}>
-          <div className="field">
+          <div className={`grid min-w-0 gap-4 ${modelColumns}`} aria-label={t("Model configuration")}>
+          {!editing && <div className="field">
             <label htmlFor="ai-config-provider">
-              {t("Assistant provider")}
+              {t("Assistant")}
             </label>
             <select
               id="ai-config-provider"
-              disabled={!!editing}
               value={form.agent}
               onChange={(e) =>
                 setForm({
@@ -450,7 +298,7 @@ export function AIConnections({
                 <option key={provider.id} value={provider.id}>{provider.name}</option>
               ))}
             </select>
-          </div>
+          </div>}
             <ModelSelect agent={form.agent} connectionId={editing?.id || (form.share_identity_from ? Number(form.share_identity_from) : undefined)}
               value={form.model} effort={form.reasoning_effort}
               onChange={model => setForm(previous => ({ ...previous, model, reasoning_effort: "" }))}
@@ -483,38 +331,7 @@ export function AIConnections({
               </select>
             </div>
           )}
-          <details className="mt-5 rounded-lg border p-4">
-            <summary className="cursor-pointer text-sm font-medium">{t("Advanced options")}</summary>
-          <div className="field">
-            <label htmlFor="ai-config-preference">
-              {t("Selection priority")}
-            </label>
-            <Input
-              id="ai-config-preference"
-              type="number"
-              min={0}
-              max={2147483647}
-              required
-              value={form.preference}
-              onChange={(e) =>
-                setForm((previous) => ({
-                  ...previous,
-                  preference: Number(e.target.value),
-                }))
-              }
-            />
-            <p className="mt-2 text-xs muted">
-              {t(
-                "Lower priorities are selected first among eligible assistants. Equal priorities use connection creation order; model diversity rules still apply.",
-              )}
-            </p>
-          </div>
-          </details>
-          <label className="mt-4 flex gap-2 text-sm">
-            <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />
-            {t("Participate in analyses")}
-          </label>
-          <fieldset disabled={!form.enabled} className="mt-5 space-y-3 disabled:opacity-60">
+          <fieldset className="mt-5 space-y-3">
             <legend className="text-sm font-medium">
               {t("Analysis roles")}
             </legend>
@@ -620,6 +437,7 @@ export function AIConnections({
               )}
             </p>
           </details>
+          {error && <p role="alert" className="mt-4 text-sm text-red-700">{t(error)}</p>}
           <div className="mt-4 flex gap-2">
             <Button disabled={busy}>
               {t(editing ? "Save connection" : "Add AI connection")}
@@ -639,8 +457,202 @@ export function AIConnections({
             )}
           </div>
         </form>
-      )}
-      {error && (
+  ) : null;
+  return (
+    <Card className="ai-connections min-w-0" aria-label={t("AI connections")}>
+      <div className="section-heading">
+        <h2><Bot size={18} aria-hidden="true" />{t("AI connections")}</h2>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={t("New AI connection")}
+          onClick={() => {
+            setEditing(null);
+            setForm(emptyForm);
+            setShowForm(true);
+          }}
+        >
+          <Plus size={15} aria-hidden="true" />{t("Add connection")}
+        </Button>
+      </div>
+      <p className="mt-2 text-sm muted">
+        {t(
+          "Connect your assistants, choose models and configure their analysis roles.",
+        )}
+      </p>
+      <div className="mt-5 space-y-4">
+        {values.map((value) => (
+          <section
+            key={value.id}
+            id={`ai-connection-${value.id}`}
+            tabIndex={-1}
+            aria-label={value.name || value.agent}
+            className="ai-connection-card rounded-lg border p-4"
+          >
+            <div className="flex flex-wrap justify-between gap-2">
+              <h3 className="flex items-center gap-2">
+                <ProviderLogo provider={value.agent} />
+                {value.name || assistantName(value.agent)}
+              </h3>
+              <div className="connection-tags">
+                <span className="badge" data-state={value.enabled && value.status === "CONNECTED" ? "CONNECTED" : "DISABLED"}>{t(!value.enabled ? "Disabled" : value.status === "CONNECTED" ? "Connected" : "Not connected")}</span>
+                <span className="badge connection-tag connection-model-tag" title={`${t("Model")}: ${value.model || t("Provider default model")}${value.agent !== "antigravity" && value.reasoning_effort ? ` · ${t("Reasoning effort")}: ${value.reasoning_effort}` : ""}`}>
+                  {value.model || t("Provider default model")}{value.agent !== "antigravity" && value.reasoning_effort && ` ${value.reasoning_effort}`}
+                </span>
+                {publicRoles.filter(role => (value.roles ?? publicRoles).includes(role)).map(role => <span key={role} className="badge connection-tag connection-role-tag" data-role={role}>{t(roleLabels[role])}</span>)}
+                {value.roles?.length === 0 && <span className="badge connection-tag">{t("No analysis role")}</span>}
+              </div>
+            </div>
+            {value.account && ![value.name, assistantName(value.agent), "ChatGPT", "Codex", "Claude", "Antigravity"].some(name => name?.trim().toLowerCase() === value.account.trim().toLowerCase()) && <p className="connection-metadata mt-2 break-words text-sm muted">{value.account}</p>}
+            {value.error && (
+              <p className="mt-2 text-sm text-red-700">{t(value.error)}</p>
+            )}
+            {cliTools[value.agent] && <div className="connection-cli-version mt-3 flex flex-wrap items-center gap-2 text-xs muted">
+              <span>{cliTools[value.agent]!.installed_version ? `v${cliTools[value.agent]!.installed_version}` : t("Version unknown")}</span>
+              {["QUEUED", "RUNNING"].includes(cliTools[value.agent]!.update_status) ? <span role="status">{t(cliTools[value.agent]!.update_status === "QUEUED" ? "Update waiting for current tasks" : "Updating…")}</span> : cliTools[value.agent]!.update_available && <button type="button" className="inline-flex items-center gap-1 rounded px-1 text-primary underline focus-visible:outline-2" disabled={updatingCli !== null} title={t("Update to version {version}", { version: cliTools[value.agent]!.latest_version })} onClick={() => void updateCli(value.agent)}><Download size={12} aria-hidden="true" />{t("Update")}</button>}
+              {cliTools[value.agent]!.update_error && <span role="alert" className="text-red-700">{t(cliTools[value.agent]!.update_error)}</span>}
+            </div>}
+            <ConnectionQuotas connection={value} group={identities.get(String(value.quota_identity_id ?? value.identity_id ?? `connection:${value.id}`)) || [value]} />
+            {value.availability === "MODEL_UNAVAILABLE" && (
+              <p className="mt-2 text-sm text-red-700">
+                {t(
+                  "The selected model is unavailable for this AI connection. Choose an accepted model in Settings and retry.",
+                )}
+              </p>
+            )}
+            <div className="connection-actions mt-3">
+              {value.status !== "CONNECTED" && (              <ConnectButton
+                provider={value.agent}
+                startPath={`/ai-connections/${value.id}/auth/start`}
+                identityLabel={value.name}
+                reconnect={value.status === "AUTH_ERROR"} secondary={false}
+                onConnected={() => {
+                  action(async () => {}, "Connection successful.");
+                }}
+              />)}
+              {weeklyQuotaExhausted(value) && <span className="badge connection-quota-exhausted" data-state="ERROR">{t("Quota depleted")}</span>}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+
+                aria-label={t("Edit")}
+                title={t("Edit")}
+                aria-expanded={showForm && editing?.id === value.id}
+                onClick={() => {
+                  if (showForm && editing?.id === value.id) {
+                    setEditing(null);
+                    setShowForm(false);
+                    setForm(emptyForm);
+                    setError("");
+                    return;
+                  }
+                  setShowForm(true);
+                  setEditing(value);
+                  setForm({
+                    name: value.name || "",
+                    agent: value.agent,
+                    model: value.model || "",
+                    reasoning_effort: value.reasoning_effort || "",
+                    enabled: value.enabled,
+                    preference: value.preference ?? 100,
+                    share_identity_from: "",
+                    roles: [...(value.roles ?? publicRoles)],
+                    additional_instructions:
+                      value.additional_instructions || "",
+                    skill_overrides: { ...value.skill_overrides },
+                  });
+                }}
+              >
+                <Pencil size={16} aria-hidden="true" />{t("Edit")}
+              </Button>
+              <details className="action-menu" onKeyDown={event => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("dialog"))) { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+                <summary aria-label={t("More actions for {name}", { name: value.name || assistantName(value.agent) })}>⋯</summary>
+                <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button") && !event.target.closest("[data-connection-auth]")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
+                  {value.status === "CONNECTED" && (              <ConnectButton
+                provider={value.agent}
+                label={t("Change account")}
+                startPath={`/ai-connections/${value.id}/auth/start`}
+                identityLabel={value.name}
+                reconnect={value.status === "CONNECTED" || value.status === "AUTH_ERROR"}
+                onConnected={() => {
+                  action(async () => {}, "Connection successful.");
+                }}
+              />)}
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="icon-action"
+                aria-label={t("Refresh status and quotas")}
+                title={t("Refresh status and quotas")}
+                disabled={busy || value.availability === "BUSY"}
+                onClick={() =>
+                  action(
+                    () => send(`/ai-connections/${value.id}/test`),
+                    "Connection checked.",
+                  )
+                }
+              >
+                <RefreshCw size={16} aria-hidden="true" />{t("Refresh status and quotas")}
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                className="icon-action"
+                aria-label={t(value.enabled ? "Disable" : "Enable")}
+                title={t(value.enabled ? "Disable" : "Enable")}
+                onClick={() =>
+                  action(() =>
+                    send(
+                      `/ai-connections/${value.id}`,
+                      {
+                        name: value.name,
+                        agent: value.agent,
+                        model: value.model || "",
+                    reasoning_effort: value.reasoning_effort || "",
+                        enabled: !value.enabled,
+                        preference: value.preference ?? 100,
+                        roles: value.roles ?? [...publicRoles],
+                        additional_instructions:
+                          value.additional_instructions || "",
+                        ...(!simplified ? { skill_overrides: value.skill_overrides || {} } : {}),
+                      },
+                      "PUT",
+                    ),
+                  )
+                }
+              >
+                <Power size={16} aria-hidden="true" />{t(value.enabled ? "Disable" : "Enable")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                className="icon-action"
+                aria-label={t("Delete")}
+                title={t("Delete")}
+                onClick={() => setRemoving(value)}
+              >
+                <Trash2 size={16} aria-hidden="true" />{t("Delete")}
+              </Button>
+
+                </div>
+              </details>
+            </div>
+            {editing?.id === value.id && connectionForm}
+          </section>
+        ))}
+      </div>
+      {!editing && connectionForm}
+      {error && !showForm && (
         <p role="alert" className="mt-4 text-sm text-red-700">
           {t(error)}
         </p>

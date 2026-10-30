@@ -13,6 +13,10 @@ from ninja.errors import HttpError
 
 from .models import AnalysisRun, Job, Request, StepExecution
 
+NO_PROGRESS = (
+    "The analysis could not advance to a new validated step. Completed observations are preserved."
+)
+
 
 class StepYield(Exception):
     """The current invocation completed; another ready checkpoint needs a lease."""
@@ -54,6 +58,11 @@ def heartbeat(job, attempt_id):
 
 def is_incremental(job):
     return job.kind == "analysis" and job.payload.get("analysis_protocol") == "2.4"
+
+
+def invalidate_superseded_steps(job, outputs):
+    """Completed work without a retained checkpoint must not block a new input revision."""
+    job.executions.filter(status="DONE").exclude(checkpoint__in=list(outputs)).update(status="INVALIDATED")
 
 
 def upgrade_pending(job):
@@ -255,6 +264,7 @@ def reserve_step(job):
         available_capabilities=available_capabilities,
     )
     instruction_snapshot = {
+        "native_analysis_policy": state["config"].get("native_analysis_policy", ""),
         "global_instructions": state["config"].get("global_instructions", ""),
         "global_instruction_version": state["config"].get("global_instruction_version", 1),
         "connection_instructions": copy.deepcopy(snapshots[key]),
@@ -291,6 +301,23 @@ def complete_invocation(job, attempt_id, pending=None):
     step = active_execution(job, attempt_id)
     run = AnalysisRun.objects.select_for_update().get(job=job)
     step.output = run.orchestration.get("outputs", {}).get(step.checkpoint, {})
+    from .models import ResultVersion
+
+    published = ResultVersion.objects.filter(run=run).exists()
+    stalled = (
+        not step.output
+        or pending.checkpoint == step.checkpoint
+        or pending.checkpoint in run.orchestration.get("outputs", {})
+        or job.executions.filter(checkpoint=pending.checkpoint, status="DONE").exists()
+    ) if pending else run.status != "NEEDS_CLARIFICATION"
+    if stalled and not published:
+        # Only accepted checkpoint output or a terminal business result advances
+        # the graph. Provider waiting and independent roles are never duplicates.
+        step.save(update_fields=["output"])
+        wait_or_retry(job, attempt_id, NO_PROGRESS, failed=True)
+        return
+    if published:
+        pending = None
     step.status, step.finished_at = "DONE", timezone.now()
     step.save(update_fields=["output", "status", "finished_at"])
     release_connections(job.payload.get("connection_ids", []))
@@ -403,6 +430,10 @@ def acknowledge_cancellation(job):
 
 
 def cancel_analysis(request_id):
+    if Job.objects.filter(kind="discussion", target=str(request_id), status__in=["QUEUED", "RUNNING"]).exists():
+        from .discussion import cancel_jobs
+
+        return cancel_jobs(request_id)
     cancel_request(request_id)
     for job in Job.objects.filter(kind="analysis", target=str(request_id), status="CANCELLED"):
         if job.payload.get("connection_ids"):
@@ -462,6 +493,8 @@ def retry_analysis(request_id):
         raise HttpError(409, "Start a new analysis to use the current execution protocol.")
     if job.payload.get("connection_ids"):
         raise HttpError(409, "The previous execution is still stopping. Retry shortly.")
+    run = AnalysisRun.objects.get(job=job)
+    invalidate_superseded_steps(job, run.orchestration.get("outputs", {}))
     job.status, job.error, job.finished_at = "QUEUED", "", None
     job.payload["waiting_reason"] = ""
     job.save(update_fields=["status", "error", "finished_at", "payload"])

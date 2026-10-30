@@ -6,6 +6,7 @@ import unicodedata
 BUILTIN_CAPABILITIES = {
     "attachment-analysis": {"read_attachments"},
     "codebase-navigation": {"read_sources"},
+    "git-history-analysis": {"read_sources"},
     "effective-navigation": {"read_sources"},
     "impact-analysis": {"read_sources"},
     "minimal-change": {"read_sources"},
@@ -29,6 +30,10 @@ def inferred_capabilities(value):
     """
     result = set(value.get("required_capabilities", [])) & CAPABILITIES
     result |= BUILTIN_CAPABILITIES.get(value.get("slug", ""), set())
+    if value.get("slug") in BUILTIN_CAPABILITIES:
+        # Source-owned procedures have explicit requirements. A prohibition such
+        # as "do not modify the database" is not a dependency on database access.
+        return sorted(result)
     text = " ".join(str(value.get(key, "")) for key in ("name", "objective", "instructions"))
     text = "".join(
         c for c in unicodedata.normalize("NFKD", text).casefold() if not unicodedata.combining(c)

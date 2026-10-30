@@ -54,6 +54,11 @@ export function WorkItemForm({
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [environment, setEnvironment] = useState("");
   const [need, setNeed] = useState("");
+  useEffect(() => {
+    if (unified && search.get("from_home") === "1") {
+      try { setNeed(sessionStorage.getItem("spechelper-home-draft") || ""); } catch {}
+    }
+  }, [unified, search]);
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -515,14 +520,14 @@ export function WorkItemForm({
               {busy
                 ? t(
                     unified
-                      ? "Starting your analysis…"
+                      ? "Starting your discussion…"
                       : isQuestion
                       ? "Sending your question…"
                       : "Sending your request…",
                   )
                 : draftId
                   ? t("Resume submission")
-                  : t(unified ? "Start analysis" : isQuestion ? "Analyze question" : "Analyze request")}
+                  : t(unified ? sourceQuestion ? "Launch deep analysis" : "Start discussion" : isQuestion ? "Analyze question" : "Analyze request")}
               <ArrowRight size={16} />
             </Button>
           </div>

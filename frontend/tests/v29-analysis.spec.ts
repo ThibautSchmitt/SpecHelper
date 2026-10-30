@@ -38,8 +38,9 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: dossier() }));
     await page.goto(`/analyses/${id}`);
     await expect(page.getByRole("link", { name: t("All analyses"), exact: true })).toBeVisible();
-    await expect(page.getByRole("region", { name: t("Analysis history"), exact: true })).toContainText(t("Original need"));
-    const diagram = page.getByRole("group").filter({ has: page.locator('summary', { hasText: "Contract export" }) }).first();
+    await expect(page.getByRole("region", { name: t("Business conversation"), exact: true })).toContainText("Explain the export.");
+    await page.getByRole("button", { name: t("Analysis report"), exact: true }).click();
+    const diagram = page.locator("summary").filter({ hasText: /^Contract export$/ }).locator("..");
     await page.locator("summary").filter({ hasText: /^Contract export$/ }).click();
     await expect(diagram.getByRole("img")).toBeVisible();
     await expect(diagram.getByRole("img")).toHaveAttribute("alt", /eligibility/);
@@ -60,7 +61,7 @@ for (const language of ["en", "fr"] as const) {
     });
     await page.getByRole("button", { name: t("Save and reanalyze"), exact: true }).click();
     await expect.poll(() => saved).toBe(true);
-    await expect(page.getByText(t("Previous conclusions need reassessment"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("Previous conclusions need reassessment"), { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Only active contracts are exported.", { exact: true }).first()).toBeVisible();
   });
 
@@ -68,6 +69,7 @@ for (const language of ["en", "fr"] as const) {
     await setup(page, language);
     await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: dossier(true) }));
     await page.goto(`/analyses/${id}`);
+    await page.getByRole("button", { name: t("Analysis report"), exact: true }).click();
     await page.locator("summary").filter({ hasText: /^Contract export$/ }).click();
     await expect(page.getByText(t("The diagram could not be rendered. Its explanation and Mermaid source remain available."), { exact: true })).toBeVisible();
     await expect(page.locator("pre").filter({ hasText: "invalid Mermaid fixture" })).toBeVisible();
@@ -91,6 +93,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto(`/analyses/${id}?version=1`);
     await expect(page.getByText(t("Loading analysis…"), { exact: true })).toBeVisible();
     release();
+    await page.getByRole("button", { name: t("Analysis report"), exact: true }).click();
     await expect(page.getByLabel(t("Result version"), { exact: true })).toHaveValue("1");
     await expect(page.getByText("The historical export had an explicit limit.", { exact: true }).first()).toBeVisible();
     expect(wrongWorkflow).toEqual([]);
@@ -98,6 +101,7 @@ for (const language of ["en", "fr"] as const) {
 
   test(`home links to creation of one untyped analysis with attachments in ${language}`, async ({ page }) => {
     await setup(page, language);
+    await page.route("**/api/settings", route => route.fulfill({ json: { name: "Acme Assistant", language, primary_color: "#2563eb" } }));
     await page.route("**/api/environments", route => route.fulfill({ json: [{ id: 1, name: "Staging", status: "READY", repositories: [] }] }));
     await page.route("**/api/analyses/overview", route => route.fulfill({ json: { sections: {
       clarify: { count: 0, items: [] }, consult: { count: 0, items: [] }, active: { count: 0, items: [] },
@@ -110,14 +114,17 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/analyses/${id}/attachments`, route => { uploads++; return route.fulfill({ status: 201, json: { id: "attachment" } }); });
     await page.route(`**/api/analyses/${id}/analyze`, route => { analyses++; saved = { ...saved, status: "QUEUED" }; return route.fulfill({ json: saved }); });
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: t("Home"), exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Acme Assistant", exact: true })).toBeVisible();
+    await expect(page.locator(".home-hero h1 svg")).toHaveCount(1);
+    await expect(page.locator(".home-eyebrow")).toHaveCount(0);
+    await expect(page.getByText(t("Welcome back to SpecHelper!"), { exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Your question or change"), { exact: true })).toHaveCount(0);
-    await page.getByRole("link", { name: t("New analysis"), exact: true }).click();
-    await expect(page).toHaveURL(/\/analyses\?new=1$/);
+    await page.getByRole("button", { name: t("New analysis"), exact: true }).click();
+    await expect(page).toHaveURL(/\/analyses\?new=1&from_home=1$/);
     await page.getByLabel(t("Environment"), { exact: true }).selectOption("1");
     await page.getByLabel(t("Your question or change"), { exact: true }).fill("Explain the export and how to improve it.");
     await page.locator('input[type="file"]').setInputFiles({ name: "context.md", mimeType: "text/markdown", buffer: Buffer.from("Export context") });
-    await page.getByRole("button", { name: t("Start analysis"), exact: true }).click();
+    await page.getByRole("button", { name: t("Start discussion"), exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/analyses/${id}$`));
     expect(created).toEqual({ environment_id: 1, need: "Explain the export and how to improve it." });
     expect(uploads).toBe(1); expect(analyses).toBe(1);
@@ -173,15 +180,15 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/analyses/${childId}`, route => route.fulfill({ json: child }));
     await page.route(`**/api/analyses/${childId}/analyze`, route => route.fulfill({ json: { ...child, status: "QUEUED" } }));
     await page.goto(`/questions/${id}`);
-    await page.getByRole("link", { name: t("Evolve this behavior"), exact: true }).click();
+    await page.getByRole("link", { name: t("Prepare a change"), exact: true }).click();
     await expect(page.getByText(t("Partial source answer: its conclusions still have verification limits."), { exact: true })).toBeVisible();
     await expect(page.getByLabel(t("Your requested change"), { exact: true })).toHaveValue("");
     await page.getByLabel(t("Your requested change"), { exact: true }).fill("Add an explicit archived-contract export option.");
-    await page.getByRole("button", { name: t("Start analysis"), exact: true }).click();
+    await page.getByRole("button", { name: t("Launch deep analysis"), exact: true }).click();
     await expect(page.getByRole("alert").first()).toBeVisible();
     await page.reload();
     await expect(page.getByLabel(t("Your requested change"), { exact: true })).toHaveValue("Add an explicit archived-contract export option.");
-    await page.getByRole("button", { name: t("Start analysis"), exact: true }).click();
+    await page.getByRole("button", { name: t("Launch deep analysis"), exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/analyses/${childId}$`));
     expect(submitted).toMatchObject({ source_version: 1, environment_id: 1, include_context: true, need: "Add an explicit archived-contract export option." });
     expect(submitted?.operation_id).toMatch(/^[0-9a-f-]{36}$/);

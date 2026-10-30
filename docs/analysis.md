@@ -6,24 +6,105 @@ clarification and evidence. [Configuration](configuration.md) owns setup and ski
 
 ## Start and read an analysis
 
-Home separates analyses needing an answer or recovery action, available results
-(including explicitly partial results), and active work. Analyses retains the
-shared search, type/status/environment filters and history.
+### One conversation, two phases
 
-The activity panel can be collapsed manually and remembers the browser preference
-across pages and reloads. Its attention indicator remains visible; clarification
+New dossiers from **Analyses → New analysis** start with **Start discussion**.
+One assistant answers in a persistent CLI session. This is exploratory discussion,
+not independent verification. Sending another message, reopening the page or asking
+a follow-up after a result does not start the three-role pipeline.
+
+**Launch deep analysis** explicitly freezes the current human messages, confirmed
+decisions, documents and project references, then starts the existing Analyst →
+Counter-analyst → Validator sequence. Each role has a fresh isolated context;
+the discussion session and its unverified hypotheses are not supplied as established
+facts. **Prepare a ticket** before any result selects change intent and launches
+this same mandatory investigation. Publication still requires the existing human
+review and explicit connector action.
+
+The assistant appears with the application's star icon and configured instance
+name. The thread retains Markdown responses, attachments and concise results.
+One expandable progress message per deep cycle uses recorded stage states; the
+ordinary discussion shows only its own reply/queue state. Material limitations of
+a partial deep result remain visible. Detailed reports, exact provenance and the
+optional **See the AI review** disclosure stay under **Analysis report**. Role
+downloads are never attached automatically to tickets.
+
+Subsequent discussion preserves the old result and its frozen references. A small
+notice distinguishes new messages from that result's verified scope. Launch another
+deep cycle explicitly when those messages need independent verification. A factual
+clarification stays conversation context; only an explicit structured choice marked
+as a business decision enters the normative decision ledger.
+
+### Native continuation and recovery
+
+| Provider | Native continuation used by the adapter |
+| --- | --- |
+| Codex | `codex exec ... resume <thread-id> -`, in the same private CLI home |
+| Claude Code | `claude --resume <session-id>`, in the same private CLI home |
+| Antigravity | `agy --conversation <conversation-id>` with stream JSON, in the same private CLI home |
+
+CLI command contracts are covered by runtime fixtures; that does not establish live
+subscription access. An unavailable account or exhausted quota cannot be described
+as a successful live-provider test. The provider must return a real native session
+ID. Ordinary continuation sends the latest turn rather than replaying the whole
+conversation. A new accepted analysis summary is supplied once, explicitly bound
+to its frozen references.
+
+An explicitly missing/expired native session or its storage limit allows one fresh
+context with a visible recovery notice. Recovery uses the application history and
+frozen project context, with older omitted context identified to the assistant when
+the bounded recovery window is exceeded; the stored user history is never removed.
+Other provider/transport failures are errors, not invented answers or silent session
+replacement. The connection, account identity, model and effort remain pinned;
+configuration changes require an explicit new session. Quota waiting does not rotate
+to another assistant. Cancellation retains the provider reservation until the runtime
+acknowledges the exact attempt stopped, and late outputs cannot enter the thread.
+
+### Ownership and historical compatibility
+
+The current deployment has shared instance authentication, not individual human
+accounts. New unified conversations use a signed, HttpOnly browser-owner cookie:
+their lists, legacy aliases, mutations and downloads are restricted to that owner.
+Keep that browser profile/cookie to reopen them. Clearing it or using another browser
+does not establish the same identity; there is no cross-browser account recovery UI.
+Sessions are additionally isolated per conversation and frozen environment. This is
+browser-session separation, not an individual-account authorization system.
+
+Migration `0042_persistent_discussion` adds one JSON state field and the `DISCUSSING`
+status, with no new table and no historical rewrite. Existing dossiers keep their
+original shared visibility and immutable results. Opening them through Analyses
+allows a new discussion session; historical direct Request/Question API contracts
+remain compatible. Their completed analyses are not replayed automatically.
+
+Home separates analyses needing an answer or recovery action, available results
+(including explicitly partial results), and active work into mutually exclusive
+categories. Each shows a few recent items and a filtered **See all** link.
+Analyses retains the shared search, type/status/environment filters and history.
+Review Home's usefulness after actual team use; this change does not remove it.
+
+**Activity** starts closed in browsers without a saved preference and remembers
+manual opening/closing across pages and reloads. Its badge counts only actionable
+clarifications and failures, including scope questions before any job exists.
+Running work has a separate animation, never an action count. Its attention indicator remains visible; clarification
 waits never count as active AI work. Recorded step intervals provide active AI time;
 older runs without intervals retain an unknown measurement. Business-answer waits
 start at the saved clarification checkpoint. Queue waiting time is displayed only
 when the latest admission time is known, without estimating resumed-job waits.
-Only five recent completed cards are shown; full history remains in Analyses.
+Up to five recent completed cards can be expanded; analysis history remains in Analyses.
+Activity cards contain only business status, timing and actions. Execution diagnostics
+and safe retry actions remain on the analysis detail page.
 These are read-only presentation fields and do not change execution or scheduling.
+
+Home also offers a short question launcher. It carries the text to the existing
+new-analysis form through tab-local session storage, without putting business text
+in the URL or starting an AI call. Environment selection, attachments and explicit
+submission remain on Analyses. If storage is blocked, the text remains visible.
 
 Choose an environment, describe the need or question in free text, and optionally
 attach files. No initial type or comparison switch is required. Requests produce
 a concise `ticket.md` and detailed `goal.md`; Questions produce `answer.md`.
-Select a result version to copy or download immutable files. Continue the discussion
-for a new version; changing instance settings never rewrites old files.
+Select a result version to copy or download immutable files. An explicit new deep
+cycle creates another result version; changing instance settings never rewrites old files.
 
 Start from **Analyses → New analysis** without selecting a Question/Request type. The requirement
 stage infers whether to explain existing behavior, prepare a change or address
@@ -32,10 +113,96 @@ both. Mixed intent keeps the existing behavior distinct from the desired change.
 filters, stable pagination and links ordered by actual discussion/result activity.
 Home's counts and resumable items come from the same persisted records.
 
-The detail page shows business conclusions, important limits and pending questions
-before optional evidence. The chronological history retains the original need,
-clarifications, answers, confirmed decisions, result versions and linked changes.
-Git/DB receipts and tool/agent execution details remain expandable.
+## Delete an analysis
+
+Open the analysis and choose **Delete analysis**, then confirm. Cancel or Escape
+leaves it unchanged. Running and queued analyses must first be cancelled; deletion
+waits for their agents to stop and release their reservations. A ticket currently
+being published also blocks deletion.
+
+Deletion removes the dossier from Analyses, Home and Activity and prevents access
+through its current and legacy analysis URLs, including result downloads. This is
+a logical deletion: records, attachments and immutable evidence are retained for
+publication provenance and linked evolutions. Published tickets remain available
+in Tickets and on the external platform; their details indicate that the source
+analysis was deleted. There is no restore or physical data-purge action in the UI.
+
+The detail page opens as a **business conversation**: the original need, actual
+clarifications and answers, follow-ups and versioned conclusions share one thread.
+Pending questions appear once with the existing guided choice/free-text controls.
+The reply composer continues from the latest result and preserves revision checks,
+scope admission and immutable previous versions. Older conversation ledgers remain
+readable. When message metadata predates role attribution, SpecHelper matches the
+saved question identifiers/text to accepted structured reports and their recorded
+execution intervals, within the same human-answer cycle. It uses the original
+provider/session snapshots, never today's connection configuration. Ambiguous or
+incomplete history stays unattributed. This read-only projection does not rewrite
+messages, restart analyses or make additional AI calls.
+
+The conversation uses a plain assistant icon and the configured name for enabled discussions. User
+messages have no avatar or "You" label. Clarification provenance stays in recorded
+history rather than an extra disclosure in the thread. Explicit role mentions can
+still appear as colored tags without adding separate speakers.
+
+Each investigation cycle has one expandable progress message, keyed to its saved
+run. Polling updates that same message instead of appending agent announcements.
+Resumed progress appears after the latest user message for that investigation;
+display ordering never rewrites saved timestamps. Prompts include the latest actual
+answer separately from the older question it answered. Informational questions
+investigate current behavior rather than requesting approval of future rules.
+When an answer invalidates completed checkpoints, their evidence is retained in
+history and their completion fences are invalidated before reanalysis. The
+no-progress guard still rejects repeated or empty transitions within current work.
+Comparison responses must keep status, verification requests and business questions
+consistent. The existing single format-correction attempt uses review-specific
+instructions; contradictory approvals are never accepted by dropping a check.
+The triangle exposes Analyst, Counter-analyst and Verifier stages. A green check
+means execution finished, not that the conclusion is guaranteed correct. Recorded
+quota, authentication, model or busy states explain resource waiting; unavailable
+evidence remains unknown. A completed partial investigation stays explicitly partial.
+
+The conversation shows stage status and the accepted final synthesis, including
+its business explanation and important remaining limits. Preliminary agent reports
+are not concatenated into a second answer or presented as an agent conversation.
+The assistant uses a plain icon without an avatar frame. The progress block stays
+compact, with one row per role and no review or diagnostic panels inside it.
+Explicit role names in assistant questions and prose appear as small colored tags;
+the instance remains the single speaker. Tags do not infer attribution, alter user
+messages or decorate code identifiers.
+
+After a result is available, **Analysis report → Individual AI reports** offers an
+optional Markdown download for each role with recorded findings. Each file contains
+its saved summaries, findings, source references, agreements, issues, limits and
+available connection/model provenance, tied to that result version and run. Missing
+reports are not reconstructed. These downloads contain public recorded fields,
+not runtime transcripts, prompts or private reasoning. They are created locally
+on demand, trigger no AI invocation, and are never included in ticket publication.
+Analyst and counter-analyst still investigate in separate contexts before comparison.
+All three roles can suspend their current step for a necessary human clarification;
+the existing decision ledger and repeated-question validation remain authoritative.
+
+The progress message keeps the mandatory role sequence expandable. A clarification,
+missing stage or partial result never becomes a verified conclusion merely because
+a technical invocation ended. Important limits from the final accepted result
+remain visible in its single response.
+
+Final response actions open the existing **Analysis report and deliverables**,
+prepare a reviewed ticket, start a linked change or copy the concise response.
+Reports, diagrams, confirmed decisions, documentation generation, `goal.md`,
+Git/DB receipts and exact execution provenance remain in expandable details.
+Markdown documentation is generated only on explicit request through the existing
+version-bound workflow; this change introduces no automatic PDF or extra AI calls.
+
+Titles are proposed locally from the first sentence/line, without an AI call.
+**Edit title** changes only the presentation title (up to 160 characters), never
+the original need, decisions, baselines, results or their history. Editing is
+temporarily unavailable during queued/running work to avoid concurrent worker saves.
+
+Results show diversity from the recorded completed Analyst, Counter-analyst and
+Verifier steps of that result's run: three families, two families, or one family.
+A missing role means incomplete verification; absent family metadata stays unknown.
+Independent sessions of the same family do not count as different families, and
+diversity is never a confidence score.
 
 ## Need revisions and linked changes
 
@@ -273,9 +440,9 @@ publication action for the exact result version.
 
 ### Explore a project
 
-Open **Questions**, select an environment, ask a question and optionally attach
-files. No initial question type is required. Independent
-analysis, counter-analysis and verification are mandatory and respect eligible assistant roles. A question can ask about business rules,
+Open **Analyses → New analysis**, select an environment, ask a question and optionally attach
+files. No initial question type is required. Discussion uses one assistant; explicit deep
+analysis requires independent analysis, counter-analysis and validation with eligible assistant roles. A question can ask about business rules,
 source behavior, data flows or architecture; no development terminology is required.
 
 Answer clarification questions when requested. Clarification may happen before or
@@ -285,8 +452,8 @@ separate contexts when one account performs all roles.
 
 Each consolidated answer distinguishes verified facts, inferences and uncertainties,
 with repository-relative paths, optional symbols, branches and frozen Git SHAs.
-Use **Continue discussion** to refine the explanation. Each new answer is a separate
-immutable version. Follow-ups keep useful history and the original Git baseline;
+Use the conversation to refine the explanation. Each new deep result is a separate
+immutable version. Discussion follow-ups keep native history and the frozen Git baseline;
 start a new question to explore a newly synchronized source revision.
 
 ### Copy or document an answer
@@ -333,21 +500,21 @@ prior technical conclusions, especially after changing environments or synchroni
 Several requests can be created from one answer. Each has independent sessions,
 results, frozen context and baseline. Later question answers never update an
 already-created request's attachment. Links retain provenance in both directions,
-even when the attachment is excluded. Application data is shared with the trusted
-team; these links do not create user-private spaces.
+even when the attachment is excluded. Historical data remains shared with the trusted
+team. New private conversation links preserve browser ownership and do not grant access themselves.
 
 ## Official external references
 
 Analyses retain the independent Analyst, Counter-analyst and Verifier workflow.
-Global instructions request official external documentation only when a need depends
+The native analysis method requests official external documentation only when a need depends
 on regulation, a standard, contractual reference material or version-dependent
 external behavior. A purely internal code question does not require Web research.
-The global instruction remains visible and editable in Settings; source access and
-security enforcement belong to the backend/runtime.
+Native analysis instructions supply this method; source access and security
+enforcement belong to the backend/runtime.
 
 ### Environment hints
 
-Settings → Sources & environments → Environments → Environment context accepts up to twelve public HTTPS URLs
+Settings → Environments → Configured environments → Environment context accepts up to twelve public HTTPS URLs
 or domains, each with an optional applicability note. These are non-exclusive factual
 starting points, not role instructions or an allowlist. Saving a hint does not fetch
 it. Changes use the context revision and do not alter existing frozen analyses.

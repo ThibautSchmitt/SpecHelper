@@ -389,7 +389,8 @@ def test_migration_preserves_business_context_connections_pending_jobs_and_legac
         config = apps.get_model("core", "InstanceSettings").objects.get(pk=1).orchestration
         assert config["v24_legacy_configuration"] == raw
         # v2.5 appends the official-reference policy without promoting role-specific text.
-        assert config["global_instructions"].startswith(
+        assert config["global_instructions"] == ""
+        assert config["retired_global_instructions"]["text"].startswith(
             "Shared precision\n\nCONDITIONAL OFFICIAL" if common is True else "CONDITIONAL OFFICIAL"
         )
         assert config["v25_official_reference_policy"] is True

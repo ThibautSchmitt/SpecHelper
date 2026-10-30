@@ -39,7 +39,7 @@ test("settings have one bottom access point and exactly four nonduplicated secti
   await settings.focus();
   await settings.press("Enter");
   const tabs = page.getByRole("navigation", { name: "Administration", exact: true });
-  await expect(tabs.getByRole("button")).toHaveText(["General", "AI & Agents", "Sources & environments", "Connectors"]);
+  await expect(tabs.getByRole("button")).toHaveText(["AI & Agents", "Environments", "Connectors", "Appearance"]);
   await expect(page.getByRole("group", { name: "Theme", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Instance name", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Request activity", exact: true })).toHaveCount(0);
@@ -108,18 +108,22 @@ test("compact AI actions expose accessible names and preserve honest quota obser
   await page.goto("/admin");
   await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   const primary = page.getByRole("region", { name: "Primary assistant", exact: true });
-  for (const name of ["Edit", "Delete", "Disable", "Check connection"]) {
+  await primary.getByLabel("More actions for Primary assistant", { exact: true }).click();
+  for (const name of ["Edit", "Delete", "Disable", "Refresh status and quotas"]) {
     const button = primary.getByRole("button", { name, exact: true });
     await expect(button).toBeVisible();
     await expect(button).toHaveAttribute("title", name);
     await expect(button.locator("svg")).toHaveCount(1);
-    await expect(button).toHaveText("");
+    await expect(button).toHaveText(name);
   }
+  await page.keyboard.press("Escape");
+  for (const summary of await page.locator(".connection-quotas > summary").all()) await summary.click();
   await expect(page.getByRole("region", { name: "AI connections", exact: true }).locator('[data-quota-window="session"]').getByText("42% remaining", { exact: true })).toBeVisible();
   await expect(page.getByRole("main").getByText("Not reported", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("This Claude Code version does not expose account quotas. Check your provider usage page.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Provider usage", exact: true })).toHaveAttribute("href", "https://claude.ai/settings/usage");
-  await primary.getByRole("button", { name: "Check connection", exact: true }).click();
+  await primary.getByLabel("More actions for Primary assistant", { exact: true }).click();
+  await primary.getByRole("button", { name: "Refresh status and quotas", exact: true }).click();
   await expect.poll(() => checked).toBe(true);
   await expect(page.getByText("Quota refresh failed. Last known observations are preserved.", { exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "AI connections", exact: true }).locator('[data-quota-window="session"]').getByText("42% remaining", { exact: true })).toBeVisible();

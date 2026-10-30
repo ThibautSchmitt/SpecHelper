@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { send, type Environment } from "@/lib/api";
+import { api, send, type Environment } from "@/lib/api";
+import type { TicketConnector } from "@/components/ticket-connectors";
 
 import {
   RepositoryPicker,
@@ -36,6 +37,14 @@ export function EnvironmentActions({
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [connectors, setConnectors] = useState<TicketConnector[] | null>(null);
+  useEffect(() => {
+    if (mode !== "edit") return;
+    let alive = true;
+    setConnectors(null);
+    api<TicketConnector[]>(`/ticket-connectors?environment_id=${value.id}`).then(rows => { if (alive) setConnectors(rows); }).catch(() => {});
+    return () => { alive = false; };
+  }, [mode, value.id]);
   useEffect(() => {
     if (mode && !dialog.current?.open) dialog.current?.showModal();
     if (!mode && dialog.current?.open) dialog.current.close();
@@ -285,6 +294,7 @@ export function EnvironmentActions({
                 onChange={setSelection}
                 disabled={busy}
               />
+              <a className="mt-2 inline-block text-xs text-primary underline" href="/admin?tab=environments&sources=git" target="_blank" rel="noopener noreferrer">{t("Manage Git connections")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
               <div className="field">
                 <label htmlFor={`edit-db-${value.id}`}>{t("Database")}</label>
                 <select
@@ -300,6 +310,12 @@ export function EnvironmentActions({
                   ))}
                 </select>
               </div>
+              <a className="text-xs text-primary underline" href="/admin?tab=environments&sources=postgres" target="_blank" rel="noopener noreferrer">{t("Manage PostgreSQL connections")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
+              <section className="mt-5 rounded-lg border p-3 text-sm" aria-label={t("Associated publication connectors")}>
+                <h3 className="font-medium">{t("Associated publication connectors")}</h3>
+                {connectors ? <p className="mt-2 muted">{connectors.map(item => item.name).join(" · ") || t("No connector configured")}</p> : <p className="mt-2 muted">{t("Open connector settings to see the current associations.")}</p>}
+                <a className="mt-2 inline-block text-xs text-primary underline" href={`/admin?tab=connectors#environment-connectors-${value.id}`} target="_blank" rel="noopener noreferrer">{t("Manage publication connectors")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
+              </section>
               <div className="mt-6 flex flex-wrap justify-end gap-3">
                 <Button
                   type="button"

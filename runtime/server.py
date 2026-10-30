@@ -79,6 +79,7 @@ class RunIn(BaseModel):
     web_references: bool = False
     context_id: uuid.UUID | None = None
     independent_context: bool = False
+    persistent_conversation: bool = False
     session_id: uuid.UUID | None = None
     agent: Literal["codex", "claude", "antigravity"] = "codex"
     identity_id: uuid.UUID | None = None
@@ -171,7 +172,7 @@ def sandbox(
         "GIT_CONFIG_VALUE_1",
         "/dev/null",
     ]
-    for directory in ("/usr", "/bin", "/lib", "/lib64"):
+    for directory in ("/usr", "/bin", "/lib", "/lib64", "/cli-tools"):
         if Path(directory).exists():
             command += ["--ro-bind", directory, directory]
     for file in (
@@ -403,6 +404,12 @@ def models(agent: Literal["codex", "claude", "antigravity"], identity_id: uuid.U
     return discover(identity_root(CREDENTIALS, identity_id), agent, model)
 
 
+@app.get("/cli-versions", dependencies=[Depends(authorize)])
+def cli_versions():
+    from .cli_tools import installed_versions
+    return {"versions": installed_versions()}
+
+
 class LoginIn(BaseModel):
     attempt_id: uuid.UUID
     provider: Literal["codex", "claude", "antigravity"]
@@ -586,7 +593,7 @@ def execute_run(payload: RunIn):
             session = (
                 SESSIONS / "contexts" / request_id / str(payload.context_id or payload.request_id)
             )
-        if payload.agent == "antigravity":
+        if payload.agent == "antigravity" and not payload.persistent_conversation:
             # Every invocation, including format repair, gets a new CLI home and
             # conversation; a public role's cached SID never resumes another step.
             session = SESSIONS / "contexts" / request_id / str(uuid.uuid4())
@@ -637,7 +644,12 @@ def execute_run(payload: RunIn):
         broker.__enter__()
         context_observation["database_checks"] = broker.database_checks
         context_observation["web_checks"] = broker.web.receipts if broker.web else []
-        scrub_session(session, root)
+        try:
+            scrub_session(session, root)
+        except HTTPException as exc:
+            if payload.persistent_conversation and payload.session_id and exc.detail == "Session storage limit exceeded":
+                return {"failure": {"kind": "SESSION_UNAVAILABLE"}, **context_observation}
+            raise
         # Remove all legacy credential copies, including an alternate provider used in this context.
         for provider in ("codex", "claude", "antigravity"):
             for name in ("auth.json", ".credentials.json", ".claude.json"):
@@ -775,7 +787,8 @@ def execute_run(payload: RunIn):
         elif payload.agent == "antigravity":
             from .antigravity import headless_command
 
-            cli = headless_command(payload.model, timeout=payload.timeout, effort=payload.reasoning_effort)
+            cli = headless_command(payload.model, timeout=payload.timeout, effort=payload.reasoning_effort,
+                                   conversation=str(payload.session_id) if payload.persistent_conversation and payload.session_id else None)
         elif payload.session_id:
             cli += ["resume", str(payload.session_id), "-"]
         else:
@@ -811,7 +824,7 @@ def execute_run(payload: RunIn):
         observed_after = datetime.now(UTC)
         reads = ResourceReads(resources)
         captured = tempfile.TemporaryFile()
-        diagnostic_stream = tempfile.TemporaryFile() if payload.agent == "antigravity" else None
+        diagnostic_stream = tempfile.TemporaryFile()
         process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
@@ -875,6 +888,8 @@ def execute_run(payload: RunIn):
                 stdout, stderr, process.returncode,
                 timed_out=timed_out, expected_model=payload.model,
             ))
+            if result.get("failure") and payload.session_id and session_unavailable(stdout, stderr):
+                result["failure"] = {"kind": "SESSION_UNAVAILABLE"}
             result["permission_events"] = [
                 {"tool": event["tool_name"], "status": "denied" if event.get("permission_denied") else "unknown"}
                 for event in result.get("events", [])
@@ -895,7 +910,7 @@ def execute_run(payload: RunIn):
                     or process.returncode
                 ):
                     return {
-                        "failure": classify_failure(stdout),
+                        "failure": {"kind": "SESSION_UNAVAILABLE"} if payload.session_id and session_unavailable(stdout, stderr) else classify_failure(stdout),
                         "usage": result.get("usage", {}),
                         **context_observation,
                     }
@@ -910,6 +925,8 @@ def execute_run(payload: RunIn):
                     ),
                 }
             except (ValueError, KeyError):
+                if payload.session_id and session_unavailable(stdout, stderr):
+                    return {"failure": {"kind": "SESSION_UNAVAILABLE"}, **context_observation}
                 return {"failure": {"kind": "ERROR"}, **context_observation}
         for line in stdout.decode(errors="replace").splitlines():
             try:
@@ -935,6 +952,8 @@ def execute_run(payload: RunIn):
                 **context_observation,
             }
         if process.returncode or not output.exists() or not session_id:
+            if payload.session_id and session_unavailable(stdout, stderr):
+                return {"failure": {"kind": "SESSION_UNAVAILABLE"}, **context_observation}
             return {
                 "failure": {**classify_failure(stdout), "quota_windows": quota_windows},
                 **context_observation,
@@ -972,6 +991,16 @@ def execute_run(payload: RunIn):
         if capability:
             capabilities.pop(capability, None)
         mutex.release()
+
+
+def session_unavailable(stdout, stderr=b""):
+    """Recognize explicit missing-session errors without exposing provider diagnostics."""
+    text = (stdout[-65536:] + stderr[-65536:]).decode(errors="replace").lower()
+    return any(marker in text for marker in (
+        "session not found", "conversation not found", "no conversation found",
+        "no saved session found", "failed to load rollout", "session has expired",
+        "conversation has expired", "no session found with id",
+    ))
 
 
 def classify_failure(stdout):

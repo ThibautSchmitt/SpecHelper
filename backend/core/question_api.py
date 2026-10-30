@@ -55,9 +55,11 @@ def markdown_response(content, filename):
 
 @router.get("/questions")
 def questions(request):
+    from .discussion_access import visible
+
     return [
         actions.question_dict(value)
-        for value in Request.objects.filter(workflow="question")
+        for value in visible(request, Request.objects.filter(workflow="question"))
         .select_related("environment")
         .order_by("-created_at")[:100]
     ]

@@ -377,6 +377,27 @@ def test_material_unexplored_area_cannot_disappear_from_review():
     assert checked.blocking and "Scheduled migration entry point" in checked.limitations
 
 
+def test_many_coverage_limits_preserve_partial_result_and_full_audit():
+    from core.reliable_flow import bound_report_limitations
+
+    source = synthetic_source()
+    analyst, counter = model_reports(source)
+    reviewed = CoverageAssessment(**verification(source, False))
+    reviewed.report.limitations = [f"Unverified area {index}" for index in range(30)]
+    value = qualifier()
+    checked = value.qualify_coverage(reviewed.report, reviewed, analyst, counter)
+    assert checked.blocking
+    assert len(checked.limitations) > 30
+    complete = list(checked.limitations)
+    bounded = bound_report_limitations(checked, value.run, "fr")
+    assert bounded.blocking
+    assert len(bounded.limitations) == 30
+    assert value.run.orchestration["coverage"]["limitations"] == complete
+    assert EXCEPTION in value.run.orchestration["coverage"]["unresolved"]
+    assert "D’autres limites" in bounded.limitations[-1]
+    type(bounded).model_validate(bounded.model_dump())
+
+
 def test_verifier_discovers_an_essential_area_missed_by_both_explorations():
     source = synthetic_source()
     analyst = CoverageCodeReport(**report(source))

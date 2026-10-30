@@ -3,8 +3,9 @@
 SpecHelper helps a trusted team understand an existing application and turn a
 business need into an actionable ticket and a detailed `goal.md` for a coding agent.
 
-It explores actual project sources, clarifies business decisions, and runs independent
-analysis, counter-analysis and verification. Optional read-only PostgreSQL investigations
+One conversation starts with a single persistent assistant. **Launch deep analysis**
+explicitly runs independent analysis, counter-analysis and validation of actual sources.
+Optional read-only PostgreSQL investigations
 and official external references add evidence where relevant. Questions explain existing
 behavior with sources; Requests describe a desired change.
 
@@ -37,6 +38,11 @@ Open <http://localhost:3000>. In **Settings** at the bottom left:
 3. Create an environment with repositories and branches, then wait for synchronization.
 4. From **Analyses → New analysis**, select an environment and describe a question, a change or both,
    with optional files. Resume the work from **Analyses**.
+5. Discuss freely, then choose **Launch deep analysis** when independent verification
+   is needed. Reports and reviewed ticket preparation follow its result.
+
+See the [conversation workflow](docs/analysis.md#one-conversation-two-phases) and
+[provider validation and limits](docs/conversation-validation.md).
 
 An eligible provider account/subscription and repository access are needed for real
 analyses. PostgreSQL and ticket publication are optional. The interface and generated

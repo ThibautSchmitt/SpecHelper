@@ -129,27 +129,7 @@ export function GitSources() {
               <p className="mt-2 text-sm text-red-700">{t(value.error)}</p>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
-              {value.provider === "github" && (
-                <ConnectButton
-                  provider="github"
-                  startPath={`/git-connections/${value.id}/auth/start`}
-                  identityLabel={value.name}
-                  onConnected={() => {
-                    action(async () => {});
-                  }}
-                />
-              )}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  action(() => send(`/git-connections/${value.id}/test`))
-                }
-              >
-                {t("Test connection")}
-              </Button>
+              {value.provider === "github" && value.status !== "CONNECTED" && <ConnectButton provider="github" startPath={`/git-connections/${value.id}/auth/start`} identityLabel={value.name} onConnected={() => { action(async () => {}); }} />}
               <Button
                 type="button"
                 size="sm"
@@ -169,6 +149,22 @@ export function GitSources() {
               >
                 {t("Edit")}
               </Button>
+              <details className="action-menu" onKeyDown={event => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest("dialog"))) { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+                <summary aria-label={t("More actions for {name}", { name: value.name })}>⋯</summary>
+                <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button") && !event.target.closest("[data-connection-auth]")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
+                  {value.provider === "github" && value.status === "CONNECTED" && <ConnectButton provider="github" startPath={`/git-connections/${value.id}/auth/start`} identityLabel={value.name} reconnect onConnected={() => { action(async () => {}); }} />}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  action(() => send(`/git-connections/${value.id}/test`))
+                }
+              >
+                {t("Test connection")}
+              </Button>
+
               <Button
                 type="button"
                 size="sm"
@@ -203,6 +199,9 @@ export function GitSources() {
               >
                 {t("Delete")}
               </Button>
+
+                </div>
+              </details>
             </div>
           </section>
         ))}

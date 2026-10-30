@@ -7,20 +7,12 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  Fragment,
 } from "react";
-import { ChevronDown, Activity, Bot, CheckCircle2, Clock3, GitBranch, LoaderCircle, PauseCircle, ShieldCheck, Ticket, UserRound, UsersRound, XCircle } from "lucide-react";
-import { AssistantLogo } from "@/components/assistant-logo";
+import { ChevronDown } from "lucide-react";
 import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
-import { AnalysisRetryButton } from "@/components/analysis-retry-button";
 import { api, resultStates } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { assistantName } from "@/lib/assistant-providers";
-import {
-  roleLabels,
-  warningMessage,
-  type AnalysisWarning,
-} from "@/lib/orchestration";
+import type { AnalysisWarning } from "@/lib/orchestration";
 
 export type QueueJob = {
   id: number | string;
@@ -28,6 +20,8 @@ export type QueueJob = {
   workflow?: "request" | "question";
   status: string;
   queue_state?: string;
+  activity_key?: string;
+  requires_attention?: boolean;
   stage?: string;
   stage_number?: number;
   stage_count?: number;
@@ -85,7 +79,7 @@ function stateOf(job: QueueJob) {
 function queueCards(jobs: QueueJob[]) {
   const latest = new Map<string, QueueJob>();
   for (const job of jobs) {
-    const key = job.kind === "analysis" && job.request_id ? `analysis:${job.request_id}` : `${job.kind}:${job.id}`;
+    const key = job.activity_key || (job.kind === "analysis" && job.request_id ? `analysis:${job.request_id}` : `${job.kind}:${job.id}`);
     const previous = latest.get(key);
     if (!previous || Date.parse(job.created_at) > Date.parse(previous.created_at) || (job.created_at === previous.created_at && Number(job.id) > Number(previous.id))) latest.set(key, job);
   }
@@ -95,8 +89,11 @@ function queueCards(jobs: QueueJob[]) {
 export function useQueueAttention() {
   const { jobs, error } = useContext(QueueContext);
   const cards = queueCards(jobs);
-  return { count: cards.filter(job => ["PAUSED", "ERROR"].includes(stateOf(job)) || job.result_status === "partial").length,
-    clarifications: cards.filter(job => stateOf(job) === "PAUSED").length, error: !!error };
+  return { count: cards.filter(job => job.requires_attention ?? (stateOf(job) === "PAUSED" || (stateOf(job) === "ERROR" && !!(job.href || job.request_id || job.can_retry)))).length,
+    clarifications: cards.filter(job => !!job.request_id && stateOf(job) === "PAUSED" && job.analysis_state !== "scope_rejected").length,
+    running: cards.filter(job => ["RUNNING", "QUEUED", "WAITING_AI"].includes(stateOf(job))).length,
+    error: !!error };
+
 }
 
 function waitingDuration(since: string | null | undefined, now: number) {
@@ -173,165 +170,51 @@ export function TaskQueue() {
     }
     positions.current = next;
   }, [jobs]);
-  const groups = [
-    { state: "RUNNING", label: "In progress", icon: LoaderCircle },
-    { state: "QUEUED", label: "Waiting", icon: Clock3 },
-    { state: "WAITING_AI", label: "Waiting for AI", icon: Clock3 },
-    { state: "PAUSED", label: "Needs clarification", icon: PauseCircle },
-    { state: "ERROR", label: "Failed", icon: XCircle },
-    { state: "CANCELLED", label: "Cancelled", icon: XCircle },
-    { state: "DONE", label: "Completed", icon: CheckCircle2 },
-  ];
-  // Retained jobs are history, not additional live cards for the same request.
-  // The newest analysis owns the card even if an older attempt had a higher state.
   const cards = queueCards(jobs);
-  const recent = cards
-    .filter((j) => ["DONE", "ERROR", "CANCELLED"].includes(stateOf(j)))
-    .sort((a, b) => Date.parse(b.finished_at || b.created_at) - Date.parse(a.finished_at || a.created_at))
-    .slice(0, 5);
-  const visible = groups.flatMap((group) =>
-    cards.filter(
-      (job) =>
-        stateOf(job) === group.state &&
-        (!["DONE", "CANCELLED"].includes(group.state) || recent.includes(job)),
-    ),
-  );
-
-  return (
-    <div className="task-queue">
-      <h2 className="flex items-center gap-2">
-        <Activity size={18} aria-hidden="true" />
-        {t("Task queue")}
-        <span className="queue-total">{visible.length}</span>
-      </h2>
-      <p className="mt-2 text-xs muted">
-        {t("Shared activity across all pages and browsers.")}
-      </p>
-      {error && (
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          {t(error)}
-        </p>
-      )}
-      {loading && (
-        <p className="mt-6 text-sm muted" role="status">
-          {t("Loading tasks…")}
-        </p>
-      )}
-      {!visible.length && !error && !loading && (
-        <p className="mt-6 text-sm muted">{t("No tasks yet.")}</p>
-      )}
-      <ol ref={list} className="mt-5 space-y-2" aria-label={t("Tasks")}>
-        {visible.map((job, jobIndex) => {
-          const state = stateOf(job);
-          const clarification = state === "PAUSED";
-          const group = groups.find((group) => group.state === state)!;
-          const firstInGroup =
-            jobIndex === 0 || stateOf(visible[jobIndex - 1]) !== state;
-          const assignment = job.assignments?.at(-1);
-          const previous = job.assignment_state === "previous" || (job.assignment_state !== "current" && state !== "RUNNING");
-          const assistant = assignment?.connection_name || (assignment?.agent ? assistantName(assignment.agent) : t("Recorded AI"));
-          const role = assignment?.public_role || job.public_role;
-          const roleName = role ? t(roleLabels[role] || role) : "";
-          const RoleIcon = role === "verifier" ? ShieldCheck : role === "counter_analyst" ? UsersRound : UserRound;
-          const warning = job.warnings?.map((value) => t(warningMessage(value))).join(" · ");
-          const description = t(job.error || job.pause_reason || job.waiting_reason || (clarification ? "A business answer is needed." : job.stage || job.operation || job.kind));
-          const resultState = job.result_status || (job.request_status === "PARTIAL" ? "partial" : job.request_status === "READY" ? "complete" : ["ERROR", "CANCELLED"].includes(job.request_status) ? "unusable" : "pending");
-          const resultLabel = resultState === "partial" ? "Partial result" : resultState === "complete" ? "Complete result" : resultState === "unusable" ? "No usable result" : "";
-          const limits = job.result_limits?.map(reason => t(reason)).join(" · ") || (resultState === "partial" ? t("Required independent checks are incomplete. Publication is blocked.") : "");
-          const identifier = `#${String(job.id).replace(/^publication:/, "").slice(0, typeof job.id === "number" ? undefined : 8)}`;
-          const elapsed = job.kind === "analysis" ? job.active_analysis_seconds ?? null : job.started_at
-            ? Math.max(
-                0,
-                Math.floor(
-                  ((job.finished_at ? Date.parse(job.finished_at) : now) -
-                    Date.parse(job.started_at)) /
-                    1000,
-                ),
-              )
-            : null;
-          const waiting = clarification ? waitingDuration(job.clarification_since || job.finished_at, now)
-            : ["QUEUED", "WAITING_AI"].includes(state) ? waitingDuration(job.queued_since || (!job.started_at ? job.created_at : null), now) : null;
-          const timing = clarification ? (waiting ? t("Waiting for your answer for {duration}", { duration: waiting }) : t("Your answer is needed"))
-            : ["QUEUED", "WAITING_AI"].includes(state) ? (waiting ? t("In queue for {duration}", { duration: waiting }) : t("Waiting for a resource")) : "";
-          return (
-            <Fragment key={job.id}>
-              {firstInGroup && (
-                <li className="queue-group-heading" role="presentation">
-                  {state === "DONE" ? <h3 data-state={state}><button type="button" className="flex w-full items-center gap-2 text-left" aria-expanded={showCompleted} onClick={() => setShowCompleted(value => !value)}><group.icon size={14} aria-hidden="true" />{t(group.label)} ({visible.filter((item) => stateOf(item) === state).length})<ChevronDown className={`ml-auto transition-transform ${showCompleted ? "rotate-180" : ""}`} size={14} aria-hidden="true" /></button></h3> : <h3 data-state={state}><group.icon size={14} aria-hidden="true" />{t(group.label)} ({visible.filter((item) => stateOf(item) === state).length})</h3>}
-                </li>
-              )}
-              {(state !== "DONE" || showCompleted) && <li
-                data-job={String(job.id)}
-                className="queue-card"
-                data-state={state}
-                data-result-status={resultState}
-              >
-                <Link href={job.href || "/"} className="queue-card-content">
-                  <div className="queue-card-title">
-                    <strong title={job.title || t("Request")}>{job.title || t("Request")}</strong>
-                    <span className="queue-identifier" title={t("Task {id}", { id: String(job.id) })}>{identifier}</span>
-                  </div>
-                  <div className="queue-card-status">
-                    <group.icon className={state === "RUNNING" ? "queue-running-icon" : ""} size={17} aria-hidden="true" />
-                    <span className="badge" data-state={state === "DONE" && resultState === "partial" ? "PARTIAL" : state}>
-                      <group.icon size={11} aria-hidden="true" />
-                      {t(job.publication_status === "UNCERTAIN" ? "Publication uncertain" : job.kind === "publication" && state === "DONE" ? "Ticket published" : job.analysis_state && job.analysis_state !== "processing" && resultStates[job.analysis_state] ? resultStates[job.analysis_state] : state === "PAUSED" ? "Needs clarification" : state === "ERROR" ? "Technical failure" : state === "DONE" && job.kind === "analysis" ? resultLabel || "Processing completed" : group.label)}
-                    </span>
-                    <span className="queue-context" title={[job.environment_name, job.stage].filter(Boolean).join(" · ")}>
-                      {job.status === "QUEUED" && job.queue_position != null
-                        ? t("Queue position: {position}", { position: job.queue_position })
-                        : clarification ? t("Your answer is needed") : job.environment_name || t(job.operation || job.kind)}
-                    </span>
-                  </div>
-                  <div className="queue-assistants">
-                    {["sync", "publication"].includes(job.kind) ? (
-                      <span className="queue-executor" title={t("No AI execution")}>
-                        {job.kind === "sync" ? <GitBranch size={17} aria-hidden="true" /> : <Ticket size={17} aria-hidden="true" />}
-                        {job.executor_name || t(job.kind === "sync" ? "Git synchronization" : "Ticket connector")} · {t("No AI execution")}
-                      </span>
-                    ) : assignment ? (
-                      <>
-                        <span className="queue-assignment" data-assignment={previous ? "previous" : "current"} title={[t(previous ? "Previous AI" : "Current AI"), assistant, assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model"), roleName].filter(Boolean).join(" · ")}>
-                          <AssistantLogo agent={assignment.agent} />
-                          {previous && <span className={state === "RUNNING" ? "" : "sr-only"}>{t("Previous AI")}: </span>}
-                          <span className="queue-assistant-name">{assistant}</span>
-                        </span>
-                        {roleName && <span className="queue-role" title={roleName}><RoleIcon size={13} aria-hidden="true" /><span>{roleName}</span></span>}
-                        <span className="queue-model" title={[assistantName(assignment.agent), assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model")].join(" · ")}>
-                          {assignment.model && assignment.model !== "runtime-default" ? assignment.model : t("Provider default model")}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="queue-assignment"><Bot size={16} aria-hidden="true" /><span className="queue-assistant-name">{t("AI not assigned")}</span></span>
-                        {roleName && <span className="queue-role" title={roleName}><RoleIcon size={13} aria-hidden="true" /><span>{roleName}</span></span>}
-                      </>
-                    )}
-                  </div>
-                  <p className="queue-description" data-error={!!job.error} title={[description, warning].filter(Boolean).join(" · ")}>{warning && !job.error ? `${warning} · ${description}` : description}</p>
-                  {(job.stage_number || elapsed !== null || timing) && <p className="mt-2 flex flex-wrap justify-between gap-2 text-xs muted">
-                    {job.stage_number && job.stage_count === 3 ? <span>{t("Step {step} of {total}", { step: job.stage_number, total: job.stage_count })}</span> : <span />}
-                    {timing && <span>{timing}</span>}
-                    {elapsed !== null && <span>{t(job.kind === "analysis" ? "Active AI: {minutes}m {seconds}s" : "Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(elapsed / 60), seconds: elapsed % 60 })}</span>}
-                  </p>}
-                  {job.kind === "analysis" && resultLabel && <div className="mt-2 text-xs" data-result-status={resultState}>
-                    {!job.analysis_state && <p className={resultState === "partial" ? "font-medium text-amber-700 dark:text-amber-300" : "muted"}>{t(resultLabel)}</p>}
-                    {limits && <p className="mt-1 line-clamp-2 muted" title={limits}>{limits}</p>}
-                  </div>}
-                </Link>
-                {job.can_cancel && job.request_id && <div className="border-t px-1"><AnalysisCancelButton requestId={job.request_id} workflow={job.workflow} title={job.title} /></div>}
-                {job.can_retry && job.request_id && ["ERROR", "CANCELLED"].includes(state) && <div className="border-t p-2"><AnalysisRetryButton requestId={job.request_id} workflow={job.workflow} title={job.title} /></div>}
-              </li>}
-            </Fragment>
-          );
-        })}
-      </ol>
-      <p className="mt-5 text-xs muted">
-        {t(
-          "Only recent completed tasks are shown here. Open Analyses or Tickets for full history.",
-        )}
-      </p>
-      <Link href="/analyses" className="mt-2 inline-block text-xs text-primary underline">{t("Analysis history")}</Link>
-    </div>
-  );
+  const order = ["PAUSED", "ERROR", "RUNNING", "WAITING_AI", "QUEUED", "CANCELLED", "DONE"];
+  const completed = cards.filter(job => ["DONE", "CANCELLED"].includes(stateOf(job)))
+    .sort((a, b) => Date.parse(b.finished_at || b.created_at) - Date.parse(a.finished_at || a.created_at)).slice(0, 5);
+  const visible = cards.filter(job => !["DONE", "CANCELLED"].includes(stateOf(job)) || (showCompleted && completed.includes(job)))
+    .sort((a, b) => order.indexOf(stateOf(a)) - order.indexOf(stateOf(b)));
+  return <div className="task-queue">
+    {error && <p role="alert" className="mt-4 text-sm">{t("Activity updates are unavailable. Previous information is retained.")}</p>}
+    {loading && <p role="status" className="mt-4 text-sm muted">{t("Loading activity…")}</p>}
+    {!cards.length && !error && !loading && <p className="mt-4 text-sm muted">{t("No activity yet.")}</p>}
+    <ol ref={list} className="mt-4 space-y-3" aria-label={t("Activity items")}>
+      {visible.map(job => {
+        const state = stateOf(job);
+        const clarification = state === "PAUSED";
+        const resultState = job.result_status || (job.request_status === "PARTIAL" ? "partial" : "pending");
+        const status = job.publication_status === "UNCERTAIN" ? "Publication uncertain"
+          : job.analysis_state === "scope_rejected" ? "Outside project scope" : clarification ? "Needs clarification" : state === "ERROR" ? "Technical failure"
+          : state === "WAITING_AI" ? "Waiting for an AI resource" : state === "QUEUED" ? "In queue"
+          : job.kind === "publication" && state === "DONE" ? "Ticket published"
+          : job.kind === "discussion" && state === "RUNNING" ? "The assistant is replying…"
+          : job.analysis_state && resultStates[job.analysis_state] ? resultStates[job.analysis_state]
+          : state === "DONE" && resultState === "partial" ? "Partial result"
+          : state === "DONE" ? "Completed" : state === "CANCELLED" ? "Cancelled" : job.kind === "sync" ? "Synchronizing" : job.kind === "publication" ? "Publishing ticket" : "Analysis in progress";
+        const waiting = clarification ? waitingDuration(job.clarification_since || job.finished_at, now)
+          : ["QUEUED", "WAITING_AI"].includes(state) ? waitingDuration(job.queued_since || (!job.started_at ? job.created_at : null), now) : null;
+        const active = job.kind === "analysis" ? job.active_analysis_seconds
+          : job.started_at ? Math.max(0, Math.floor((now - Date.parse(job.started_at)) / 1000)) : null;
+        const timing = clarification && waiting ? t("Waiting for your answer for {duration}", { duration: waiting })
+          : waiting ? t("In queue for {duration}", { duration: waiting })
+          : state === "RUNNING" && typeof active === "number" ? t(job.kind === "analysis" ? "Active AI: {minutes}m {seconds}s" : "Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(active / 60), seconds: active % 60 }) : "";
+        const action = job.analysis_state === "scope_rejected" ? "Revise analysis" : clarification ? "Answer" : state === "ERROR" ? "See the problem" : job.kind === "sync" ? "Open environment" : "Open analysis";
+        return <li key={job.id} data-job={String(job.id)} className="queue-card" data-state={state} data-result-status={resultState}>
+          <div className="p-3">
+            <span className="badge" data-state={state === "WAITING_AI" ? "QUEUED" : state === "PAUSED" ? "NEEDS_CLARIFICATION" : state === "DONE" && resultState === "partial" ? "PARTIAL" : state}>{t(status)}</span>
+            <h3 className="mt-3 line-clamp-2 break-words text-sm font-semibold" title={job.title}>{job.title || t("Analysis")}</h3>
+            {state === "ERROR" && <p className="mt-1 text-xs muted">{t("Analysis interrupted")}</p>}
+            {state === "RUNNING" && job.stage_number && job.stage_count ? <p className="mt-1 text-xs muted">{t("Step {step} of {total}", { step: job.stage_number, total: job.stage_count })}</p> : null}
+            {timing && <p className="mt-1 text-xs muted">{timing}</p>}
+            <Link href={job.href || "/analyses"} className="mt-3 inline-block rounded text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-primary">{t(action)}</Link>
+          </div>
+          {job.can_cancel && job.request_id && <div className="border-t p-2"><AnalysisCancelButton requestId={job.request_id} workflow={job.workflow} title={job.title} /></div>}
+        </li>;
+      })}
+    </ol>
+    {!!completed.length && <button type="button" className="mt-4 inline-flex items-center gap-2 rounded text-xs text-primary focus-visible:outline-2 focus-visible:outline-primary" aria-expanded={showCompleted} onClick={() => setShowCompleted(value => !value)}><ChevronDown size={14} aria-hidden="true" />{t(showCompleted ? "Hide recent completed activity" : "Show recent completed activity")}</button>}
+    <Link href="/analyses" className="mt-4 block text-xs text-primary underline">{t("Activity history")}</Link>
+  </div>;
 }

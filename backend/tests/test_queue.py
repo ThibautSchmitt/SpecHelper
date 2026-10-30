@@ -87,7 +87,7 @@ def test_waiting_ai_cards_are_active_and_never_truncated_by_completed_history(cl
             analysis_protocol="2.4",
             status="QUEUED",
         )
-        waiting.append(Job.objects.create(kind="analysis", target=str(request.pk)))
+        waiting.append(Job.objects.create(kind="analysis", target=str(request.pk), payload={"waiting_reason": "No AI resource available"}))
         finished = Request.objects.create(
             environment=environment, need=f"Finished {index}", status="READY"
         )

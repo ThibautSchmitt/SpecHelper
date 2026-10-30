@@ -75,15 +75,12 @@ for (const language of ["en", "fr"] as const) {
   test(`legacy migration warnings remain explicit without automatic instruction promotion in ${language}`, async ({ page }) => {
     await setup(page, language);
     let written: Record<string, unknown> | null = null;
-    const config = { ...settings, migration_review: [{ kind: "skill", slug: "unsupported-review", reason: reasons[0] }, { kind: "instructions", reason: reasons[1] }] };
+    const config = { ...settings, preserved_guidance_review: true, migration_review: [{ kind: "skill", slug: "unsupported-review", reason: reasons[0] }, { kind: "instructions", reason: reasons[1] }] };
     await page.route("**/api/orchestration-settings", route => { if (route.request().method() === "PUT") { written = route.request().postDataJSON(); config.global_instructions = written!.global_instructions as string; } return route.fulfill({ json: config }); });
     await page.goto("/admin");
-    const warnings = page.getByRole("complementary", { name: t("Legacy settings need review"), exact: true });
-    for (const reason of reasons) await expect(warnings).toContainText(t(reason));
-    await expect(page.getByLabel(t("Global instructions"), { exact: true })).toHaveValue("");
-    await page.getByLabel(t("Global instructions"), { exact: true }).fill("Approved shared evidence guidance.");
-    await page.getByRole("button", { name: t("Save global instructions"), exact: true }).click();
-    await expect.poll(() => written).toEqual({ global_instructions: "Approved shared evidence guidance." });
-    await expect(warnings).toBeVisible();
+    await expect(page.getByText(t("Previous custom guidance was preserved for review. Check custom skills and the deployment migration notes before enabling it."), { exact: true })).toBeVisible();
+    await expect(page.getByLabel(t("Global instructions"), { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: t("Save global instructions"), exact: true })).toHaveCount(0);
+    expect(written).toBeNull();
   });
 }

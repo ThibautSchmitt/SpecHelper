@@ -484,7 +484,7 @@ def recover_orphaned_leases():
     active = {
         pk
         for payload in Job.objects.filter(
-            kind__in=["analysis", "library_assistant"], status__in=["RUNNING", "CANCELLED"]
+            kind__in=["analysis", "library_assistant", "discussion"], status__in=["RUNNING", "CANCELLED"]
         ).values_list("payload", flat=True)
         for pk in payload.get("connection_ids", [])
     }
@@ -578,6 +578,10 @@ def bind_session(request, connection, role="primary"):
 
 @transaction.atomic
 def reserve_for_job(job, exclude=()):
+    if job.kind == "discussion":
+        from .discussion import reserve
+
+        return reserve(job)
     if job.kind == "library_assistant":
         from .library_assistant import reserve_job
 

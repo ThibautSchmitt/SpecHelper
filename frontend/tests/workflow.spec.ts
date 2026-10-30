@@ -23,7 +23,7 @@ test("administration, theme and business navigation", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Instance settings", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "General", exact: true }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
   await page.getByLabel("Instance name").fill("SpecHelper — Validation");
   await page.getByLabel("Primary color", { exact: true }).fill("#7c3aed");
   await page.getByRole("button", { name: "Save settings" }).click();
@@ -41,7 +41,7 @@ test("administration, theme and business navigation", async ({ page }) => {
     .click();
   await expect(page.getByLabel("Project 2", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Remove project 2" }).click();
-  await page.getByRole("button", { name: "General", exact: true }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Instance settings", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Request activity", exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "Requests", exact: true }).click();

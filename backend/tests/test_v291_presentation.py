@@ -50,7 +50,7 @@ def test_home_and_queue_keep_partial_and_failure_states_honest(client, environme
     assert listing["result_state"] == "partial"
     assert listing["result_limits"] == ["Verifier quota unavailable."]
     sections = client.get("/api/analyses/overview").json()["sections"]
-    assert sections["clarify"]["count"] == 1 and sections["consult"]["count"] == 1
+    assert sections["clarify"]["count"] == 0 and sections["consult"]["count"] == 1
     assert sections["active"]["count"] == 0
     assert client.get("/api/queue").json()[0]["analysis_state"] == "partial"
     row.status = "ERROR"
@@ -93,7 +93,7 @@ def test_blocking_evidence_is_partial_even_when_historical_status_is_ready(clien
     ResultVersion.objects.create(request=row, number=1, status="READY", evidence={"blocking": True, "limitations": ["Independent verification is unfinished."]})
     assert client.get(f"/api/analyses/{row.pk}").json()["result_state"] == "partial"
     assert client.get("/api/analyses").json()["items"][0]["result_state"] == "partial"
-    assert client.get("/api/analyses/overview").json()["sections"]["clarify"]["count"] == 1
+    assert client.get("/api/analyses/overview").json()["sections"]["consult"]["count"] == 1
     queue = client.get("/api/queue").json()[0]
     assert queue["analysis_state"] == queue["result_status"] == "partial"
     assert queue["result_limits"] == ["Independent verification is unfinished."]

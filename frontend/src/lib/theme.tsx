@@ -5,7 +5,7 @@ import { createContext, useContext, useLayoutEffect, useState } from "react";
 export type ThemePreference = "light" | "dark" | "system";
 const storageKey = "spechelper-theme";
 const valid = (value: string | null): ThemePreference =>
-  value === "light" || value === "dark" ? value : "system";
+  value === "light" || value === "dark" || value === "system" ? value : "dark";
 
 function luminance(rgb: number[]) {
   const values = rgb

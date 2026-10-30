@@ -110,9 +110,9 @@ def test_home_sections_use_real_states_and_require_an_actual_result(client, envi
     response = client.get("/api/analyses/overview")
     assert response.status_code == 200
     sections = response.json()["sections"]
-    assert sections["clarify"]["count"] == 4
+    assert sections["clarify"]["count"] == 3
     assert len(sections["clarify"]["items"]) == 3
-    assert {item["id"] for item in sections["clarify"]["items"]} <= {str(clarify.pk), str(scope.pk), str(ready.pk), str(outside.pk)}
+    assert {item["id"] for item in sections["clarify"]["items"]} == {str(clarify.pk), str(scope.pk), str(outside.pk)}
     assert sections["active"]["count"] == 1 and sections["active"]["items"][0]["id"] == str(active.pk)
     assert sections["consult"]["count"] == 1 and sections["consult"]["items"][0]["id"] == str(ready.pk)
     assert not Job.objects.exists()

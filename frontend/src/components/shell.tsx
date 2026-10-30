@@ -9,8 +9,8 @@ import {
   Settings,
   Sparkles,
   Tickets,
-  PanelRightOpen,
-  PanelRightClose,
+  Activity,
+  LoaderCircle,
   X,
   ChevronRight,
 } from "lucide-react";
@@ -19,6 +19,7 @@ import { ThemeProvider, applyAccent } from "@/lib/theme";
 import { TaskQueue, TaskQueueProvider, useQueueAttention } from "@/components/task-queue";
 import { api } from "@/lib/api";
 import { SidebarAssistants } from "@/components/sidebar-assistants";
+import { InstanceNameContext } from "@/lib/instance";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -41,10 +42,10 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
   const settingsVersion = useRef(0);
-  const [queueCollapsed, setQueueCollapsed] = useState(false);
+  const [queueCollapsed, setQueueCollapsed] = useState(true);
   const attention = useQueueAttention();
   useEffect(() => {
-    try { setQueueCollapsed(localStorage.getItem("spechelper-queue-collapsed") === "true"); } catch {}
+    try { setQueueCollapsed(localStorage.getItem("spechelper-queue-collapsed") !== "false"); } catch {}
   }, []);
   function toggleQueue() {
     setQueueCollapsed(value => {
@@ -53,8 +54,27 @@ function ShellContent({ children }: { children: React.ReactNode }) {
     });
   }
   useEffect(() => {
-    drawer.current?.close();
+    if (drawer.current?.open) {
+      drawer.current.close();
+      setQueueCollapsed(true);
+      try { localStorage.setItem("spechelper-queue-collapsed", "true"); } catch {}
+    }
   }, [pathname]);
+  useEffect(() => {
+    const synchronize = () => {
+      if (window.innerWidth < 1280 && !queueCollapsed) {
+        if (!drawer.current?.open) drawer.current?.showModal();
+      } else drawer.current?.close();
+    };
+    synchronize();
+    window.addEventListener("resize", synchronize);
+    return () => window.removeEventListener("resize", synchronize);
+  }, [queueCollapsed]);
+  function closeActivity() {
+    setQueueCollapsed(true);
+    drawer.current?.close();
+    try { localStorage.setItem("spechelper-queue-collapsed", "true"); } catch {}
+  }
   useEffect(() => {
     const update = () => {
       const version = ++settingsVersion.current;
@@ -83,7 +103,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
     };
   }, []);
   return (
-    <div className="dashboard" data-queue-collapsed={queueCollapsed}>
+    <InstanceNameContext.Provider value={name}><div className="dashboard" data-queue-collapsed={queueCollapsed}>
       <aside
         className="dashboard-sidebar"
         aria-label={t("Instance navigation")}
@@ -121,6 +141,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
             <Link
               key={item.href}
               href={item.href}
+              aria-label={t(item.label)}
               aria-current={item.active ? "page" : undefined}
             >
               <item.icon size={18} />
@@ -132,15 +153,15 @@ function ShellContent({ children }: { children: React.ReactNode }) {
         <Link
           href="/admin"
           className="sidebar-admin"
-          aria-label={t("Settings")}
-          title={t("Settings")}
+          aria-label={t("Administration")}
+          title={t("Administration")}
           aria-current={pathname.startsWith("/admin") ? "page" : undefined}
         >
           <span className="admin-avatar">
-            <Settings size={18} />
+            {(shortLabel || name).slice(0, 1).toUpperCase()}
           </span>
           <span>
-            {t("Settings")}
+            {shortLabel || name}
             <small>{t("Administration")}</small>
           </span>
           <ChevronRight size={14} />
@@ -148,58 +169,47 @@ function ShellContent({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="dashboard-center">
         <div className="queue-toolbar">
-          <button
-            type="button"
-            className="queue-mobile-toggle inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm"
-            onClick={() => drawer.current?.showModal()}
-            aria-haspopup="dialog"
-            aria-label={t("Task queue")}
-          >
-            <PanelRightOpen size={18} />
-            {t("Task queue")}
+          <button type="button" className="activity-toggle inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-primary"
+            aria-label={t("Activity")} aria-expanded={!queueCollapsed} aria-controls="desktop-task-queue activity-drawer" aria-describedby="activity-attention" onClick={toggleQueue}>
+            <Activity size={18} aria-hidden="true" />{t("Activity")}
             {!!attention.count && <span className="queue-total" aria-hidden="true">{attention.count}</span>}
+            {attention.running > 0 && <LoaderCircle size={12} className="queue-running-icon" aria-hidden="true" />}
           </button>
-          <button type="button" className="queue-desktop-toggle inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm"
-            aria-label={t(queueCollapsed ? "Show task queue" : "Collapse task queue")} aria-expanded={!queueCollapsed} aria-controls="desktop-task-queue" onClick={toggleQueue}>
-            {queueCollapsed ? <PanelRightOpen size={18} aria-hidden="true" /> : <PanelRightClose size={18} aria-hidden="true" />}
-            {t(queueCollapsed ? "Show task queue" : "Collapse task queue")}
-            {!!attention.count && <span className="queue-total" aria-hidden="true">{attention.count}</span>}
-          </button>
-          <span className="text-xs muted" aria-live="polite">
-            {attention.clarifications > 0 ? t("{count} analyses need your answer", { count: attention.clarifications }) : attention.count > 0 ? t("{count} tasks need attention", { count: attention.count }) : ""}
-            {attention.error && t("Task updates unavailable")}
+          <span id="activity-attention" className="sr-only" aria-live="polite">
+            {attention.clarifications === 1 ? t("One analysis needs your answer") : attention.clarifications > 1 ? t("{count} analyses need your answer", { count: attention.clarifications }) : attention.count === 1 ? t("One action needs attention") : attention.count > 0 ? t("{count} actions need attention", { count: attention.count }) : t("No action needed")}
+            {attention.running > 0 && ` · ${t("Analyses in progress")}`}
+            {attention.error && ` · ${t("Activity updates unavailable")}`}
           </span>
         </div>
         <main className="min-w-0">{children}</main>
-        <footer className="mt-10 text-xs muted">
-          {t("SpecHelper · A clear need, a well-prepared change.")}
-        </footer>
       </div>
-      <aside id="desktop-task-queue" className="dashboard-queue" aria-label={t("Task queue")} hidden={queueCollapsed}>
+      <aside id="desktop-task-queue" className="dashboard-queue" aria-label={t("Activity")} hidden={queueCollapsed}>
         {!queueCollapsed && <TaskQueue />}
       </aside>
       <dialog
         ref={drawer}
+        id="activity-drawer"
+        onCancel={event => { event.preventDefault(); closeActivity(); }}
         className="queue-drawer"
-        aria-label={t("Task queue")}
+        aria-label={t("Activity")}
         onClick={(e) => {
           if (
             e.target === e.currentTarget ||
             (e.target instanceof Element && e.target.closest("a"))
           )
-            drawer.current?.close();
+            closeActivity();
         }}
       >
         <button
           type="button"
           className="mb-5 inline-flex items-center gap-2 rounded border px-3 py-2"
-          onClick={() => drawer.current?.close()}
+          onClick={closeActivity}
         >
           <X size={18} />
           {t("Close")}
         </button>
         <TaskQueue />
       </dialog>
-    </div>
+    </div></InstanceNameContext.Provider>
   );
 }

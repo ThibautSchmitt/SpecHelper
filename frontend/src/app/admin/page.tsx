@@ -1,8 +1,8 @@
 "use client";
 import { useI18n } from "@/lib/i18n";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { GitBranch, Plug, Paintbrush, RefreshCw, Settings } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { GitBranch, Plug, Paintbrush, RefreshCw, Settings, Database, Plus } from "lucide-react";
 import { ThemeControl } from "@/components/theme-control";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,7 +20,6 @@ import {
 } from "@/components/repository-picker";
 import { type AIConnection } from "@/components/ai-connections";
 import { AISettings } from "@/components/ai-settings";
-import { GlobalInstructionsForm } from "@/components/global-instructions";
 import type { OrchestrationSettings } from "@/components/orchestration-settings";
 import { EnvironmentLibrary } from "@/components/environment-library";
 import {
@@ -45,13 +44,22 @@ export default function Admin() {
   );
 }
 function AdminPanel() {
-  const { t } = useI18n();
+  const { t, dateLocale } = useI18n();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const libraryDraft = searchParams.get("library_draft");
   const libraryKind = searchParams.get("library_kind");
   const [tab, setTab] = useState("general");
-  const [sourceTab, setSourceTab] = useState("git");
+  const [sourceTab, setSourceTab] = useState("environments");
+  const requestedTab = searchParams.get("tab");
+  const requestedSource = searchParams.get("sources");
+  useEffect(() => {
+    if (requestedTab && ["general", "ai-agents", "environments", "connectors"].includes(requestedTab)) setTab(requestedTab);
+    else if (!libraryDraft) setTab("general");
+    if (requestedSource && ["git", "postgres", "environments"].includes(requestedSource)) setSourceTab(requestedSource);
+  }, [requestedTab, requestedSource]);
   const [protocol, setProtocol] = useState("");
+  const [guidanceReview, setGuidanceReview] = useState(false);
   const [connections, setConnections] = useState<Connections | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [settings, setSettings] = useState({
@@ -72,6 +80,7 @@ function AdminPanel() {
     { repository: "", branch: "" },
   ]);
   const [envName, setEnvName] = useState("");
+  const [showEnvironmentForm, setShowEnvironmentForm] = useState(false);
   const [dbId, setDbId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -87,7 +96,7 @@ function AdminPanel() {
       api<OrchestrationSettings>("/orchestration-settings").catch(() => null),
     ]);
     if (version !== refreshVersion.current) return;
-    if (config) setProtocol(config.reliability_protocol || "");
+    if (config) { setProtocol(config.reliability_protocol || ""); setGuidanceReview(!!config.preserved_guidance_review); }
     setConnections(c);
     setEnvironments(e);
     if (draft === draftVersion.current) setSettings(s);
@@ -125,28 +134,29 @@ function AdminPanel() {
     }
   }
   const tabs = [
-    { id: "general", label: t("General"), icon: Paintbrush },
     { id: "ai-agents", label: t("AI & Agents"), icon: Settings },
-    { id: "environments", label: t("Sources & environments"), icon: GitBranch },
+    { id: "environments", label: t("Environments"), icon: GitBranch },
     { id: "connectors", label: t("Connectors"), icon: Plug },
+    { id: "general", label: t("Appearance"), icon: Paintbrush },
   ];
   return (
-    <div className="space-y-6">
+    <div className="admin-page space-y-6" data-admin-section={tab}>
       <header className="page-heading">
         <div className="page-title">
           <span className="page-icon">
             <Settings size={20} />
           </span>
           <div>
-            <h1>{t("Settings")}</h1>
+            <h1>{tab === "general" ? t("Settings") : tabs.find(item => item.id === tab)?.label}</h1>
             <p className="muted">
               {t("Connect your tools and prepare analysis environments.")}
             </p>
           </div>
         </div>
+        {tab === "environments" && sourceTab === "environments" && <Button onClick={() => { setShowEnvironmentForm(true); requestAnimationFrame(() => document.getElementById("env-name")?.focus()); }}><Plus size={16} aria-hidden="true" />{t("New environment")}</Button>}
       </header>
       <nav
-        className="flex flex-wrap gap-1 border-b pb-3"
+        className="admin-route-nav flex flex-wrap gap-1 border-b pb-3"
         aria-label={t("Administration")}
       >
         {tabs.map((item) => (
@@ -154,7 +164,7 @@ function AdminPanel() {
             key={item.id}
             variant={tab === item.id ? "default" : "ghost"}
             onClick={() => {
-              setTab(item.id);
+              router.replace(item.id === "general" ? "/admin" : `/admin?tab=${item.id}`, { scroll: false });
               setError("");
               setNotice("");
             }}
@@ -182,27 +192,27 @@ function AdminPanel() {
       )}
       {tab === "ai-agents" && (
         <AISettings
-          key={`${libraryKind}:${libraryDraft}`}
+          key={`${libraryKind}:${libraryDraft}:${searchParams.get("connection") || ""}:${searchParams.get("section") || ""}`}
           onChanged={refresh}
           simplified={protocol === "2.4"}
         />
       )}
       {tab === "environments" && (
         <div className="space-y-6">
-          <nav className="flex flex-wrap gap-2" aria-label={t("Sources & environments")}>
-            {[["git", "Git sources"], ["postgres", "PostgreSQL connections"], ["environments", "Environments"]].map(([id, label]) =>
+          <nav className="flex flex-wrap gap-2" aria-label={t("Environment settings")}>
+            {[["environments", "Configured environments"], ["git", "Manage Git connections"], ["postgres", "Manage PostgreSQL connections"]].map(([id, label]) =>
               <Button key={id} variant={sourceTab === id ? "default" : "outline"} aria-pressed={sourceTab === id} onClick={() => setSourceTab(id)}>{t(label)}</Button>)}
           </nav>
           {sourceTab === "git" && <GitSources />}
           {sourceTab === "postgres" && <DatabaseConnections values={connections?.databases || []} onChanged={refresh} />}
           {sourceTab === "environments" && <>
           {environments.map((e) => (
-            <Card key={e.id}>
+            <Card key={e.id} className="environment-card">
               <div className="flex flex-wrap justify-between gap-3">
-                <h2>{e.name}</h2>
+                <h2><Database size={22} className="environment-logo" aria-hidden="true" />{e.name}</h2>
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="badge" data-state={e.status}>
-                    {t(statuses[e.status] || e.status)}
+                    {t(({ READY: "Synchronized", PENDING: "Synchronization queued", SYNCING: "Synchronizing", ERROR: "Synchronization failed" } as Record<string, string>)[e.status] || statuses[e.status] || e.status)}
                   </span>
                   <Button
                     variant="outline"
@@ -229,12 +239,13 @@ function AdminPanel() {
                   />
                 </div>
               </div>
+              {e.synced_at && <p className="mt-2 text-xs muted">{t("Last synchronization")}: {new Date(e.synced_at).toLocaleString(dateLocale)}</p>}
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="muted">
                     <tr>
                       <th className="pb-2 pr-4">{t("Project")}</th>
-                      <th className="pb-2 pr-4">{t("Version")}</th>
+                      <th className="pb-2 pr-4">{t("Branch / tag")}</th>
                       <th className="pb-2">SHA</th>
                     </tr>
                   </thead>
@@ -270,14 +281,14 @@ function AdminPanel() {
                 {t("Database:")} {e.database_name || t("None")}
               </p>
               {e.error && (
-                <p className="mt-3 text-sm text-red-700">{t(e.error)}</p>
+                <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("Synchronization failed")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{e.error}</pre></details>
               )}
               <EnvironmentContext environmentId={e.id} factualOnly={protocol === "2.4"} />
               <EnvironmentSyncHistory environmentId={e.id} />
               {protocol !== "2.4" && <EnvironmentLibrary environmentId={e.id} />}
             </Card>
           ))}
-          <Card>
+          {showEnvironmentForm && <Card>
             <h2 className="flex items-center gap-2">
               <GitBranch size={20} /> {t("New environment")}
             </h2>
@@ -341,15 +352,16 @@ function AdminPanel() {
               >
                 {t("Create environment")}
               </Button>
+              <Button className="mt-5 ml-3" type="button" variant="ghost" onClick={() => setShowEnvironmentForm(false)}>{t("Cancel")}</Button>
             </form>
-          </Card>
+          </Card>}
           </>}
         </div>
       )}
       {tab === "connectors" && <div className="space-y-6">
         <p className="text-sm muted">{t("Publication connectors remain assigned to their environment. Git source access is configured separately.")}</p>
         <UnassignedTicketConnectors environments={environments} onAssigned={refresh} />
-        {environments.map(environment => <Card key={environment.id}>
+        {environments.map(environment => <Card key={environment.id} id={`environment-connectors-${environment.id}`}>
           <h2>{environment.name}</h2>
           <TicketConnectors environmentId={environment.id} environmentName={environment.name} />
         </Card>)}
@@ -357,13 +369,7 @@ function AdminPanel() {
       {tab === "general" && (
         <div className="space-y-6">
         <Card className="max-w-2xl">
-          <h2 className="flex items-center gap-2">
-            <Paintbrush size={20} /> {t("Instance settings")}
-          </h2>
-          <div className="mt-5">
-            <h3 className="mb-3">{t("Appearance")}</h3>
-            <ThemeControl />
-          </div>
+          <ThemeControl />
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -398,7 +404,7 @@ function AdminPanel() {
               </div>
               <div className="field">
                 <label htmlFor="instance-label">
-                  {t("Short label (optional)")}
+                  {t("Instance subtitle (optional)")}
                 </label>
                 <Input
                   id="instance-label"
@@ -408,6 +414,7 @@ function AdminPanel() {
                     updateSettings({ short_label: e.target.value })
                   }
                 />
+                <p className="mt-1 text-xs muted">{t("A short subtitle shown below the instance name.")}</p>
               </div>
               <div className="field">
                 <label htmlFor="instance-language">
@@ -469,7 +476,7 @@ function AdminPanel() {
             </fieldset>
           </form>
         </Card>
-        {protocol === "2.4" && <GlobalInstructionsForm />}
+        {guidanceReview && <p role="status" className="rounded-lg border p-4 text-sm">{t("Previous custom guidance was preserved for review. Check custom skills and the deployment migration notes before enabling it.")}</p>}
         </div>
       )}
     </div>

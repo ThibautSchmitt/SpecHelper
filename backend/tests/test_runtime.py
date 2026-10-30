@@ -175,3 +175,75 @@ def test_same_request_independent_contexts_mount_separate_session_roots(runtime)
         not a.is_relative_to(b) and not b.is_relative_to(a)
         for a, b in ((mounts[0], mounts[1]), (mounts[0], mounts[2]), (mounts[1], mounts[2]))
     )
+
+
+@pytest.mark.parametrize("provider", ["codex", "claude", "antigravity"])
+def test_persistent_conversation_resumes_in_its_own_readonly_context(runtime, monkeypatch, provider):
+    client, payload, _ = runtime
+    credentials = server.CREDENTIALS / provider
+    credentials.mkdir(exist_ok=True)
+    if provider == "claude":
+        (credentials / ".credentials.json").write_text(json.dumps({"claudeAiOauth": {"accessToken": "synthetic-oauth-fixture"}}))
+    elif provider == "antigravity":
+        (credentials / "auth.json").write_text(json.dumps({"auth_mode": "gemini_api_key", "api_key": "synthetic-key", "billing_confirmed": True}))
+        monkeypatch.setattr("runtime.server.subscription_credentials", lambda *a: True)
+        monkeypatch.setattr("runtime.model_discovery.discover", lambda *a: {"state": "supported", "items": [{"identifier": "fixture-model"}]})
+    commands, mounts = [], []
+    native_id, context_id = str(uuid.uuid4()), str(uuid.uuid4())
+
+    class Process:
+        returncode = 0
+
+        def __init__(self, command, **kwargs):
+            commands.append(command)
+            self.session = Path(command[command.index("--bind") + 1])
+            mounts.append(self.session)
+            assert "--ro-bind" in command and "--cap-drop" in command
+            assert self.session != server.SESSIONS / payload["request_id"]
+
+        def communicate(self, *args, **kwargs):
+            output = {"message": "Scoped reply"}
+            if provider == "claude":
+                return json.dumps({"structured_output": output, "session_id": native_id}).encode(), None
+            if provider == "antigravity":
+                events = [{"event": "init", "conversation_id": native_id, "init": {"permission_mode": "request-review", "model": "fixture-model", "tools": []}}, {"event": "result", "result": {"conversation_id": native_id, "status": "SUCCESS", "structured_output": output}}]
+                return ("\n".join(json.dumps(e) for e in events) + "\n").encode(), None
+            (self.session / "result.json").write_text(json.dumps(output))
+            return json.dumps({"type": "thread.started", "thread_id": native_id}).encode(), None
+
+    with patch("runtime.server.subprocess.Popen", Process):
+        for native in (None, native_id):
+            response = client.post("/run", json={**payload, "agent": provider, "model": "fixture-model", "persistent_conversation": True, "independent_context": True, "context_id": context_id, "session_id": native}, headers={"Authorization": "Bearer test-control-secret"})
+            assert response.status_code == 200, response.text
+            assert response.json().get("session_id") == native_id, response.text
+    assert mounts[0] == mounts[1]
+    flag = {"codex": "resume", "claude": "--resume", "antigravity": "--conversation"}[provider]
+    assert flag not in commands[0]
+    assert commands[1][commands[1].index(flag) + 1] == native_id
+
+
+@pytest.mark.parametrize("text", [b"session not found", b"No conversation found with session ID", b"failed to load rollout"])
+def test_explicit_missing_session_is_distinct_from_quota_or_transport_failure(text):
+    assert server.session_unavailable(b"", text)
+    assert not server.session_unavailable(b"RESOURCE_EXHAUSTED")
+    assert not server.session_unavailable(b"connection reset by peer")
+
+
+def test_missing_codex_session_error_is_recoverable_without_raw_diagnostics(runtime):
+    client, payload, _ = runtime
+
+    class Process:
+        returncode = 1
+
+        def __init__(self, command, **kwargs):
+            kwargs["stderr"].write(b"failed to load rollout: private-session-details")
+
+        def communicate(self, *args, **kwargs):
+            return b"", None
+
+    with patch("runtime.server.subprocess.Popen", Process):
+        response = client.post("/run", json={**payload, "persistent_conversation": True,
+            "session_id": str(uuid.uuid4())}, headers={"Authorization": "Bearer test-control-secret"})
+    assert response.status_code == 200
+    assert response.json()["failure"]["kind"] == "SESSION_UNAVAILABLE"
+    assert "private-session-details" not in response.text

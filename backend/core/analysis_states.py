@@ -2,12 +2,18 @@
 
 
 def result_state(status, workflow, *, latest_status=None, published=False, stale=False,
-                 verification_unavailable=False, scope_clarification=False, incomplete=False):
+                 verification_unavailable=False, scope_clarification=False, incomplete=False, waiting_ai=False, scope_rejected=False):
     from .business_decisions import BUSY
 
+    if status == "DISCUSSING":
+        return "discussion"
+    if status == "QUEUED":
+        return "waiting_ai" if waiting_ai else "queued"
     if status in BUSY:
         return "processing"
-    if status == "NEEDS_CLARIFICATION" or scope_clarification:
+    if scope_rejected and status in {"DRAFT", "READY", "PARTIAL"}:
+        return "scope_rejected"
+    if status == "NEEDS_CLARIFICATION" or (scope_clarification and status in {"DRAFT", "READY", "PARTIAL"}):
         return "clarification"
     if stale:
         return "needs_reassessment"

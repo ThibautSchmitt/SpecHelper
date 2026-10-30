@@ -18,6 +18,7 @@ export type TicketConnector = {
   has_secret: boolean;
   has_app_token: boolean;
   status: string;
+  checked_at?: string | null;
   error: string;
   projects: string[];
   default_project: string;
@@ -37,7 +38,7 @@ const empty = {
 
 export function TicketConnectors({ environmentId, environmentName }: { environmentId: number; environmentName: string }) {
   const prefix = `connector-${environmentId}`;
-  const { t } = useI18n();
+  const { t, dateLocale } = useI18n();
   const [items, setItems] = useState<TicketConnector[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -76,24 +77,24 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
       setBusy(false);
     }
   }
+  async function testConnection(id: number) {
+    const tested = await send<TicketConnector>(`/ticket-connectors/${id}/test`);
+    setItems(values => values.map(value => value.id === id ? tested : value));
+    if (tested.status !== "CONNECTED") { setError("Connector check failed"); return; }
+    setNotice("Connection verified.");
+  }
   return (
     <div className="environment-connectors mt-5 border-t pt-5" aria-label={t("Ticket connectors for {environment}", { environment: environmentName })}>
       <h3 className="flex items-center gap-2"><Ticket size={17} aria-hidden="true" />{t("Ticket publication connectors")}</h3>
-      <p className="mt-2 text-sm muted">
-        {t(
-          "Publish only after explicit confirmation. Analysis assistants never receive these credentials.",
-        )}
-      </p>
       <div className="mt-5 flex flex-wrap gap-2">
-        {items.map((item) => (
-          <Button
-            key={item.id}
-            variant={selected === item.id ? "default" : "outline"}
-            onClick={() => edit(item)}
-          >
-            <ProviderLogo provider={item.platform} /> {item.name} · {t(statuses[item.status] || item.status)}
-          </Button>
-        ))}
+        {items.map((item) => <section key={item.id} className="min-w-0 w-full rounded-lg border p-3" aria-label={item.name}>
+          <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="flex items-center gap-2 text-sm font-medium"><ProviderLogo provider={item.platform} />{item.name}</h4>
+            <span className="text-xs muted">{t(item.status === "UNKNOWN" ? item.checked_at ? "Connection needs verification" : "Not tested" : item.status === "UNAVAILABLE" ? "Verification unavailable" : item.status === "ERROR" ? "Failed" : statuses[item.status] || item.status)}</span></div>
+          {item.checked_at && <p className="mt-1 text-xs muted">{t("Last checked")}: {new Date(item.checked_at).toLocaleString(dateLocale)}</p>}
+          <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => edit(item)} aria-label={t("Edit {name}", { name: item.name })}>{t("Edit")}</Button>
+            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => action(() => testConnection(item.id))} aria-label={t("Test {name}", { name: item.name })}>{t("Test connection")}</Button></div>
+          {item.error && <details className="mt-2 text-xs"><summary className="cursor-pointer">{t("Diagnostics")}</summary><p className="mt-2 whitespace-pre-wrap break-words">{item.error}</p></details>}
+        </section>)}
         <Button variant="outline" onClick={() => edit()}>
           {t("New connector")}
         </Button>
@@ -284,19 +285,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
                   type="button"
                   variant="outline"
                   disabled={busy}
-                  onClick={() =>
-                    action(async () => {
-                      const tested = await send<TicketConnector>(
-                        `/ticket-connectors/${selected}/test`,
-                      );
-                      setItems((values) =>
-                        values.map((v) => (v.id === tested.id ? tested : v)),
-                      );
-                      if (tested.status !== "CONNECTED")
-                        throw new Error(tested.error || "Connection failed.");
-                      setNotice("Connection verified.");
-                    })
-                  }
+                    onClick={() => action(() => testConnection(selected))}
                 >
                   {t("Test connection")}
                 </Button>

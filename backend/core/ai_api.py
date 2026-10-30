@@ -96,10 +96,15 @@ class APIKeyAuthenticationIn(Schema):
 
 
 def not_processing(connection):
+    from .models import Job
+    if Job.objects.filter(kind="cli_update", status="RUNNING").exists():
+        raise HttpError(409, "AI tools are updating. Try again shortly.")
     identity = identity_for(connection)
     if quota_group(identity).filter(availability="BUSY", retry_after__isnull=True).exists():
         raise HttpError(409, "This assistant is processing a request. Retry after the result.")
-    if ConnectionAttempt.objects.filter(identity=identity, status__in=ACTIVE).exists():
+    if ConnectionAttempt.objects.filter(
+        identity=identity, status__in=ACTIVE, expires_at__gt=timezone.now()
+    ).exists():
         raise HttpError(409, "A connection is already in progress")
 
 

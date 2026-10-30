@@ -305,6 +305,9 @@ def freeze_context(request, run=None, reuse=None):
     snapshot["dossier"]["attachments"] = [
         {**item, "id": str(item["id"])} for item in snapshot["dossier"]["attachments"]
     ]
+    if request.discussion_state.get("enabled"):
+        snapshot["dossier"]["discussion_revision"] = request.discussion_state.get("revision", 0)
+        snapshot["dossier"]["user_messages"] = list(request.messages.filter(role="user").values("id", "kind", "content"))
     snapshot = redact(snapshot, configured_secrets())
     snapshot.pop("sha256", None)
     snapshot["sha256"] = hashlib.sha256(

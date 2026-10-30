@@ -2,6 +2,7 @@
 
 import copy
 import json
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -71,11 +72,16 @@ class VerificationRequest(StrictModel):
 
 
 class Review(StrictModel):
-    status: Literal["APPROVED", "NEEDS_VERIFICATION", "NEEDS_CLARIFICATION"]
+    status: Literal["APPROVED", "NEEDS_VERIFICATION", "NEEDS_CLARIFICATION"] = Field(
+        description="Use NEEDS_VERIFICATION when verification is present; NEEDS_CLARIFICATION when business questions are present; otherwise APPROVED."
+    )
     summary: Text
     issues: list[Text] = Field(max_length=10)
-    verification: VerificationRequest | None
-    questions: list[Question] = Field(default_factory=list, max_length=5)
+    verification: VerificationRequest | None = Field(
+        description="A focused check only when status is NEEDS_VERIFICATION. Must be null for APPROVED or NEEDS_CLARIFICATION."
+    )
+    questions: list[Question] = Field(default_factory=list, max_length=5,
+        description="Business questions only when status is NEEDS_CLARIFICATION; otherwise an empty list.")
 
     @model_validator(mode="after")
     def consistent(self):
@@ -162,6 +168,9 @@ class RepeatedBusinessQuestion(ValueError):
 
 
 def context(request, run=None):
+    latest = request.messages.filter(role="user").order_by("-id").values("id", "content", "data").first()
+    latest_answers = (latest.get("data") or {}).get("answers") if latest else None
+    latest_text = "\n\n".join(value for value in latest_answers.values() if isinstance(value, str)) if isinstance(latest_answers, dict) else latest["content"] if latest else request.need
     messages = list(request.messages.order_by("-id").values("role", "kind", "content")[:12])
     messages.reverse()
     previous = request.versions.order_by("-number").first()
@@ -172,6 +181,8 @@ def context(request, run=None):
         "category": request.category,
         "output_language": request.language,
         "need": request.need,
+        "latest_user_message": latest_text,
+        "latest_user_message_id": latest["id"] if latest else None,
         "project_relationship_clarification": frozen.get("dossier", {}).get(
             "project_relationship_clarification", request.scope_clarification
         ),
@@ -209,6 +220,9 @@ def context(request, run=None):
         # replace duplicated full dialogue. Agents can still inspect real sources.
         data["recent_messages"] = [item for item in messages if item["role"] == "user"][-3:]
         data.pop("clarification_answers", None)
+        if request.discussion_state.get("enabled"):
+            data["user_dossier"] = frozen.get("dossier", {}).get("user_messages", [])
+            data["discussion_hypotheses_are_not_evidence"] = True
         if previous:
             data["previous_result"] = {
                 "version": previous.number,
@@ -343,6 +357,10 @@ class Orchestrator:
             "Summarize relevant information; never reproduce original sensitive documents or the "
             "entire dialogue. Do not expose runtime/host paths or private notes. Ask clarification before "
             "or during exploration only when scope or a business rule is genuinely blocking. "
+            "Treat latest_user_message as the latest authoritative clarification of the question's scope and intent. "
+            "For an informational question, investigate and explain CURRENT behavior. Never ask the user to approve "
+            "a desired rule, decide whether existing behavior should remain authorized, or specify a future change. "
+            "If actual behavior cannot be verified, report that limit rather than demanding a policy decision. "
         )
         task = {
             RequirementAssessment: "Assess whether the question's scope is clear enough to investigate. "
@@ -579,7 +597,7 @@ class Orchestrator:
                     if self.incremental
                     else int(self.deadline - time.monotonic()) - reserve
                 )
-                if remaining < 3 or self.calls >= self.config["max_calls"]:
+                if remaining < 3:
                     raise FlowError(
                         "The analysis limit was reached. The previous result remains available; narrow the scope before continuing."
                     )
@@ -684,6 +702,10 @@ class Orchestrator:
                         ) from exc
                     if isinstance(exc, RepeatedBusinessQuestion):
                         prompt += "\nBUSINESS QUESTION CORRECTION: a returned question has already been answered in confirmed_decisions. Reuse that confirmed answer, do not ask the user again. Ask only a genuinely new dependent question, or report an explicit conflict using conflicts_with and its factual reason if new information contradicts the old rule."
+                    elif schema in {Review, ReviewAndResult, QuestionReviewAndResult}:
+                        prompt += "\nFORMAT CORRECTION: return the requested review schema, not a final explanation. The review status and its fields must agree: APPROVED requires verification=null and questions=[]; NEEDS_VERIFICATION requires a verification object with target and one to three specific questions, and questions=[]; NEEDS_CLARIFICATION requires nonempty business questions and verification=null. If a focused check is still necessary, preserve it and use NEEDS_VERIFICATION rather than dropping the check to obtain APPROVED. Do not invent business questions or claim unperformed checks."
+                        if schema is not Review:
+                            prompt += " Keep this review inside the review field. result must be null unless the review is APPROVED; follow the supplied schema for any approved result."
                     elif self.is_question:
                         prompt += "\nFORMAT CORRECTION: strictly follow the explanation schema. The answer field must be a JSON object with required title and summary, not a prose or Markdown string. Use only declared QuestionAnswer fields. Use only known repository identifiers and existing repository-relative paths. Do not include private paths, ticket fields, goal fields or internal reasoning. Leave unsupported details empty."
                     else:
@@ -841,8 +863,15 @@ class Orchestrator:
         ]
         if questions:
             confirmed = self.run.context_snapshot.get("business_decisions", {}).get("decisions", [])
+            answered_texts = {
+                re.sub(r"\W+", " ", item.get("question", "")).casefold().strip()
+                for turn in self.request.conversation for item in turn.get("questions", [])
+                if turn.get("answers", {}).get(item.get("id"))
+            }
             for question in questions:
                 key = question.decision_key or question.id
+                if (self.is_question or not question.conflicts_with) and re.sub(r"\W+", " ", question.question).casefold().strip() in answered_texts:
+                    raise RepeatedBusinessQuestion("Use the latest user clarification instead of repeating the same question.")
                 if not question.conflicts_with and any(
                     item["key"] == key
                     for item in confirmed
@@ -897,7 +926,11 @@ class Orchestrator:
             role="assistant",
             kind="clarification",
             content="\n".join(q.question for q in questions),
-            data={"questions": self.request.questions},
+            data={
+                "questions": self.request.questions,
+                "public_role": getattr(self, "public_role", None),
+                "run_number": self.run.number,
+            },
         )
         self.on_progress(self.request, "NEEDS_CLARIFICATION", "Your answer is needed")
         self.run.status, self.run.finished_at = "NEEDS_CLARIFICATION", timezone.now()
@@ -1118,7 +1151,7 @@ class ConfrontationOrchestrator(Orchestrator):
             if execution.checkpoint != name:
                 raise StepYield(name, public_role)
             self.session, self.public_role = execution.session, public_role
-        if self.calls >= self.config["max_calls"] or self.deadline - time.monotonic() < 3:
+        if self.deadline - time.monotonic() < 3:
             raise FlowError(
                 "The analysis limit was reached. Validated observations and previous results are preserved."
             )
@@ -1154,7 +1187,7 @@ class ConfrontationOrchestrator(Orchestrator):
                     self.run.warnings.append(warning)
                 self.persist_run(update_fields=["warnings"])
                 self.public_role = None
-                if self.calls >= self.config["max_calls"] or self.deadline - time.monotonic() < 3:
+                if self.deadline - time.monotonic() < 3:
                     raise FlowError(
                         "The analysis limit was reached. Validated observations and previous results are preserved."
                     ) from unavailable

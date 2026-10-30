@@ -87,6 +87,14 @@ test("ticket selection displays submitted content, labels, immutable provenance 
   });
   await page.goto("/tickets");
   const table = page.getByRole("region", { name: "Ticket table", exact: true });
+  const secondTitle = table.getByRole("button", { name: records[1].title, exact: true });
+  await secondTitle.focus();
+  const hoveredRow = secondTitle.locator("xpath=ancestor::tr");
+  await expect(hoveredRow).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, -2)");
+  await expect(secondTitle).toHaveAttribute("aria-pressed", "false");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(hoveredRow).toHaveCSS("transform", "none");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(
     table.getByRole("button", { name: records[0].title, exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
@@ -178,8 +186,8 @@ test("ticket filters are server-backed and empty matches have a useful next acti
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "View requests", exact: true }),
-  ).toHaveAttribute("href", "/");
+    page.getByRole("link", { name: "View analyses", exact: true }),
+  ).toHaveAttribute("href", "/analyses");
   const last = new URLSearchParams(query.at(-1));
   expect(Object.fromEntries(last)).toEqual({
     platform: "github",

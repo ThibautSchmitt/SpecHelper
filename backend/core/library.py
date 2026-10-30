@@ -13,6 +13,7 @@ from pydantic import ConfigDict, Field, ValidationError, field_validator
 from .catalogue import ensure_catalogue
 from .environment_context import reject_credentials
 from .models import AgentProfile, AIConnection, Environment, LibraryRevision, SkillDefinition
+from .presets_v23 import SKILLS
 from .skill_metadata import CAPABILITIES, normalize_skill
 
 router = Router(tags=["Agent and skill library"])
@@ -235,6 +236,8 @@ def check_definition(kind, raw):
 def save_definition(kind, payload, slug=None, editor="administrator", action_name=None):
     ensure_catalogue()
     model = model_for(kind)
+    if kind == "skill" and (slug or payload.slug) in SKILLS:
+        raise HttpError(409, "Built-in skills are maintained by SpecHelper. Create a custom skill instead.")
     validate_definition(payload, kind)
     if kind == "skill":
         payload = normalize_skill(payload)
@@ -320,7 +323,7 @@ def import_definition(request, payload: ImportIn):
 def list_definitions(request, kind: str):
     ensure_catalogue()
     model = model_for(kind)
-    return [definition(item, kind) for item in model.objects.filter(deleted=False).order_by("slug")]
+    return [{**definition(item, kind), "built_in": kind == "skill" and item.slug in SKILLS} for item in model.objects.filter(deleted=False).order_by("slug")]
 
 
 @router.post("/library/{kind}")
@@ -346,6 +349,8 @@ def export_definition(request, kind: str, slug: str):
 @router.post("/library/{kind}/{slug}/restore")
 @transaction.atomic
 def restore_definition(request, kind: str, slug: str, payload: RestoreIn):
+    if kind == "skill" and slug in SKILLS:
+        raise HttpError(409, "Built-in skills are maintained by SpecHelper. Create a custom skill instead.")
     item = get_object_or_404(model_for(kind).objects.select_for_update(), pk=slug, deleted=False)
     if item.version != payload.expected_version:
         raise HttpError(409, "The definition has changed. Refresh before editing.")
@@ -377,6 +382,8 @@ def versions(request, kind: str, slug: str):
 @router.delete("/library/{kind}/{slug}")
 @transaction.atomic
 def delete_definition(request, kind: str, slug: str, expected_version: int):
+    if kind == "skill" and slug in SKILLS:
+        raise HttpError(409, "Built-in skills are maintained by SpecHelper. Create a custom skill instead.")
     item = get_object_or_404(model_for(kind).objects.select_for_update(), pk=slug, deleted=False)
     if item.version != expected_version:
         raise HttpError(409, "The definition has changed. Refresh before editing.")

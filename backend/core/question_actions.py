@@ -34,7 +34,7 @@ def source_version(question_id, number):
     value = get_object_or_404(
         ResultVersion.objects.select_related("request", "run"),
         request_id=question_id,
-        request__workflow="question",
+        request__deleted_at__isnull=True, request__workflow="question",
         number=number,
     )
     if value.status not in {"READY", "PARTIAL"} or not value.explanation:
@@ -235,6 +235,8 @@ def create_request(
         workflow="request",
         analysis_protocol="2.4",
         source_question_version=version,
+        discussion_state={"private": True, "owner": parent.discussion_state["owner"]}
+        if parent.discussion_state.get("private") else {},
         environment=environment,
         environment_name_snapshot=environment.name if environment else "",
         need=need.strip(),

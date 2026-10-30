@@ -6,6 +6,7 @@ from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from .analysis_titles import analysis_title
 from .models import (
     AIConnection,
     AnalysisRun,
@@ -176,18 +177,24 @@ def result_state(job, run):
 
 
 def snapshot():
-    latest_analysis = Job.objects.filter(kind="analysis", target=OuterRef("target")).order_by(
+    latest_analysis = Job.objects.filter(kind=OuterRef("kind"), target=OuterRef("target")).order_by(
         "-created_at", "-id"
     )
     visible = Job.objects.filter(
-        ~Q(kind="analysis") | Q(pk=Subquery(latest_analysis.values("pk")[:1]))
-    )
+        pk=Subquery(latest_analysis.values("pk")[:1])
+    ).exclude(kind__in=["cli_update", "discussion"]).exclude(kind="analysis", target__in=[
+        str(pk) for pk in Request.all_objects.filter(deleted_at__isnull=False).values_list("pk", flat=True)
+    ])
     jobs = list(visible.filter(status__in=["RUNNING", "QUEUED"]).order_by("created_at", "id"))
     jobs += list(
         visible.exclude(status__in=["RUNNING", "QUEUED"])
         .exclude(kind="sync", status="DONE")
         .order_by("-finished_at", "-created_at", "-id")[:RECENT_LIMIT]
     )
+    seen_errors = {job.pk for job in jobs}
+    jobs += [job for job in visible.filter(status="ERROR") if job.pk not in seen_errors]
+    seen = {job.pk for job in jobs}
+    jobs += [job for job in visible.filter(kind="library_assistant", status="DONE", payload__outcome="NEEDS_CLARIFICATION") if job.pk not in seen]
     # Clarification is not a scheduler state: retain its latest completed job even
     # when it falls outside the bounded terminal history, without creating work.
     latest_job = Job.objects.filter(kind="analysis", target=OuterRef("target")).order_by(
@@ -247,10 +254,10 @@ def snapshot():
             and item.status == "NEEDS_CLARIFICATION"
             and job.status == "DONE"
             and job.pk in paused_ids
-        )
+        ) or (job.kind == "library_assistant" and job.status == "DONE" and job.payload.get("outcome") == "NEEDS_CLARIFICATION")
         queue_state = "PAUSED" if paused else job.status
         incremental = bool(item and item.analysis_protocol == "2.4")
-        if incremental and job.status == "QUEUED":
+        if incremental and job.status == "QUEUED" and (job.payload.get("waiting_reason") or (run and run.orchestration.get("waiting_reason"))):
             queue_state = "WAITING_AI"
         public_role = (
             (current_assignment(job, run) or {}).get("public_role")
@@ -288,6 +295,11 @@ def snapshot():
         ) or [agents[pk] for pk in job.payload.get("connection_ids", []) if pk in agents]
         if assignment_state == "current":
             provider_names = list(dict.fromkeys(a["agent"] for a in assignments if a["agent"]))
+        actionable_error = job.status == "ERROR" and (
+            bool(item and item.status == "ERROR")
+            or bool(job.kind == "sync" and environment and environment.status == "ERROR")
+            or job.kind == "library_assistant"
+        )
         values.append(
             {
                 **result_state(job, run),
@@ -298,6 +310,8 @@ def snapshot():
                 "workflow": item.workflow if item else None,
                 "status": job.status,
                 "queue_state": queue_state,
+                "activity_key": f"{job.kind}:{job.target}",
+                "requires_attention": bool(paused or actionable_error),
                 "assignment_state": assignment_state,
                 "stage_number": {"analyst": 1, "counter_analyst": 2, "verifier": 3}.get(
                     public_role, 1
@@ -319,7 +333,7 @@ def snapshot():
                 "executor_name": "Git synchronization" if job.kind == "sync" else None,
                 "request_id": str(item.pk) if item else None,
                 "environment_id": environment.pk if environment else None,
-                "title": item.need[:180]
+                "title": analysis_title(item)
                 if item
                 else environment.name
                 if environment
@@ -379,7 +393,7 @@ def snapshot():
                 if item
                 else f"/admin?library_draft={job.target}&library_kind={job.payload.get('draft_kind', 'agent')}"
                 if job.kind == "library_assistant"
-                else "/admin",
+                else "/admin?tab=environments",
             }
         )
         if item:
@@ -389,11 +403,13 @@ def snapshot():
             evidence = version.evidence if version else {}
             values[-1]["analysis_state"] = business_state(
                 item.status, item.workflow, latest_status=version.status if version else None,
+                waiting_ai=queue_state == "WAITING_AI",
                 published=bool(version and version.pk in published),
                 incomplete=bool(evidence.get("blocking")),
                 stale=bool(version and item.last_need_revision and item.last_need_revision > version.created_at),
                 verification_unavailable=bool(evidence.get("blocking") and evidence.get("database", {}).get("status") == "unavailable"),
                 scope_clarification=item.scope_assessment.get("status") == "NEEDS_CLARIFICATION",
+                scope_rejected=item.scope_assessment.get("status") == "OUT_OF_SCOPE",
             )
             if values[-1]["result_status"] == "partial" and values[-1]["analysis_state"] in {"draft_ready", "completed", "saved"}:
                 values[-1]["analysis_state"] = "partial"
@@ -401,13 +417,19 @@ def snapshot():
                 values[-1]["result_status"] = "partial"
             if values[-1]["result_status"] == "partial" and not values[-1]["result_limits"]:
                 values[-1]["result_limits"] = evidence.get("limitations", [])[:30]
+    # A failed older attempt no longer needs intervention after a newer attempt
+    # to the same destination. Uncertain writes always remain visible for recovery.
+    latest_publication = PublishedTicket.objects.filter(
+        request_id=OuterRef("request_id"), connector_id=OuterRef("connector_id"), project=OuterRef("project")
+    ).order_by("-created_at", "-id")
+    current_publications = PublishedTicket.objects.filter(Q(status="UNCERTAIN") | Q(pk=Subquery(latest_publication.values("pk")[:1])))
     publications = list(
-        PublishedTicket.objects.filter(status="PUBLISHING").select_related(
+        current_publications.filter(status__in=["PUBLISHING", "UNCERTAIN", "ERROR"]).select_related(
             "version", "request", "connector"
         )
     )
     publications += list(
-        PublishedTicket.objects.exclude(status="PUBLISHING")
+        current_publications.exclude(status__in=["PUBLISHING", "UNCERTAIN", "ERROR"])
         .select_related("version", "request", "connector")
         .order_by("-finished_at", "-created_at")[:RECENT_LIMIT]
     )
@@ -420,6 +442,7 @@ def snapshot():
                 "kind": "publication",
                 "status": {"PUBLISHING": "RUNNING", "PUBLISHED": "DONE"}.get(state, "ERROR"),
                 "publication_status": state,
+                "requires_attention": state in {"UNCERTAIN", "ERROR"},
                 "queue_state": {"PUBLISHING": "RUNNING", "PUBLISHED": "DONE"}.get(state, "ERROR"),
                 "assignment_state": "unassigned",
                 "executor_name": publication.connector.name,
@@ -455,6 +478,28 @@ def snapshot():
                 "href": f"/analyses/{publication.request_id}?version={publication.version.number}",
             }
         )
+    for item in Request.objects.select_related("environment").filter(status__in=["DRAFT", "READY", "PARTIAL"], scope_assessment__status__in=["NEEDS_CLARIFICATION", "OUT_OF_SCOPE"]):
+        try:
+            assessed_at = parse_datetime(item.scope_assessment.get("assessed_at", ""))
+        except (TypeError, ValueError):
+            assessed_at = None
+        assessed_at = assessed_at if assessed_at and timezone.is_aware(assessed_at) else item.updated_at
+        values.append({
+            "id": f"scope:{item.pk}", "kind": "scope_clarification", "activity_key": f"analysis:{item.pk}",
+            "status": item.status, "queue_state": "PAUSED", "requires_attention": True,
+            "analysis_state": "scope_rejected" if item.scope_assessment.get("status") == "OUT_OF_SCOPE" else "clarification", "request_status": item.status, "workflow": item.workflow,
+            "request_id": str(item.pk), "title": analysis_title(item),
+            "environment_name": item.environment_name_snapshot or (item.environment.name if item.environment else ""),
+            "environment_id": item.environment_id, "operation": "Scope clarification", "stage": "",
+            "pause_reason": item.scope_assessment.get("question", ""), "waiting_reason": "",
+            "clarification_since": assessed_at, "active_analysis_seconds": None,
+            "agent": None, "model": None, "assignments": [], "queue_position": None,
+            "can_cancel": False, "can_retry": False, "error": "", "created_at": assessed_at,
+            "started_at": None, "finished_at": None, "href": f"/analyses/{item.pk}",
+        })
+    from .discussion import activity_snapshot
+
+    values += activity_snapshot()
     ordered = sorted(
         values,
         key=lambda value: (
@@ -469,11 +514,11 @@ def snapshot():
     active = [
         value
         for value in ordered
-        if value["queue_state"] in {"RUNNING", "QUEUED", "WAITING_AI", "PAUSED"}
+        if value["queue_state"] in {"RUNNING", "QUEUED", "WAITING_AI", "PAUSED"} or value.get("requires_attention")
     ]
     recent = [
         value
         for value in ordered
-        if value["queue_state"] not in {"RUNNING", "QUEUED", "WAITING_AI", "PAUSED"}
+        if value["queue_state"] not in {"RUNNING", "QUEUED", "WAITING_AI", "PAUSED"} and not value.get("requires_attention")
     ]
     return active + recent[:RECENT_LIMIT]

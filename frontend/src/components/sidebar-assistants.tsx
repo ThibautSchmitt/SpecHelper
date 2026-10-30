@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Clock3, RefreshCw } from "lucide-react";
 import { AssistantLogo } from "@/components/assistant-logo";
 import type { AIConnection } from "@/components/ai-connections";
-import { api, send, statuses } from "@/lib/api";
+import { api, send } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { observedQuota } from "@/lib/quota";
 import { assistantName } from "@/lib/assistant-providers";
 import "./sidebar-assistants.css";
 
 export function SidebarAssistants() {
-  const { t, dateLocale } = useI18n();
+  const { t } = useI18n();
   const [connections, setConnections] = useState<AIConnection[] | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,9 +30,12 @@ export function SidebarAssistants() {
         const values = await api<AIConnection[]>("/ai-connections");
         if (alive) {
           current.current = values; setConnections(values); setUnavailable(false);
-          window.clearTimeout(resetTimer);
           const resets = values.flatMap(connection => Object.values(connection.quota_windows || {}).map(window => Date.parse(window.reset_at || window.resets_at || ""))).filter(time => Number.isFinite(time) && time > Date.now());
-          if (resets.length) resetTimer = window.setTimeout(() => { if (alive && navigator.onLine) refresh(); }, Math.min(Math.min(...resets)-Date.now()+500, 2147483647));
+          if (resets.length) {
+            window.clearTimeout(resetTimer);
+            resetTimer = window.setTimeout(() => { resetTimer = undefined; if (alive && navigator.onLine) refresh(); }, Math.min(Math.min(...resets)-Date.now()+500, 2147483647));
+          }
+          // A poll at the reset boundary must not cancel the pending refresh.
         }
       } catch { if (alive) setUnavailable(true); }
       finally { reading = false; }
@@ -70,23 +74,17 @@ export function SidebarAssistants() {
     </div>
     {connections?.map(connection => {
       const quota = observedQuota(connection);
-      const details = quota.windows.map(({ name, window, remaining }) => {
-        const reset = window.reset_at || window.resets_at;
-        return `${window.group_name ? t(window.group_name) + " · " : ""}${t(name === "weekly" || window.window_type === "weekly" || ["gemini-weekly", "3p-weekly"].includes(name) ? "Weekly quota" : name === "session" ? "Session quota" : name === "daily" ? "Daily quota" : name === "credits" ? "Credits" : "Other quota window")}: ${remaining === null ? t("Quota unknown") : t("{percent}% remaining", { percent: Number(remaining.toFixed(1)) })}${reset && Number.isFinite(Date.parse(reset)) ? ` · ${t("Reset")}: ${new Date(reset).toLocaleString(dateLocale)}` : ""}`;
-      }).join("\n");
+      const windowName = quota.limiting === "session" ? "session" : quota.limiting === "weekly" || quota.limitingWindow?.window_type === "weekly" || ["gemini-weekly", "3p-weekly"].includes(quota.limiting) ? "weekly" : quota.limiting === "daily" ? "daily" : "remaining";
+      const summary = quota.partiallyAvailable ? t("Partially available") : quota.state === "Quota remaining"
+        ? t("{percent}% {window}", { percent: Number(quota.remaining!.toFixed(1)), window: t(windowName) }) : t(quota.state);
+      const label = `${connection.name || assistantName(connection.agent)} · ${summary}`;
       return <section key={connection.id} className="sidebar-assistant" data-connection={connection.id} data-quota-state={quota.state} aria-label={connection.name || assistantName(connection.agent)}>
-        <p><AssistantLogo agent={connection.agent} /><span className="min-w-0 break-words">{connection.name || assistantName(connection.agent)}<small>{t(connection.enabled ? statuses[connection.status] || "Unknown" : "Disabled")}</small></span></p>
-        <div className="sidebar-quota" data-quota-color={quota.color} data-stale={quota.stale || unavailable}>
-          <span className="text-xs">{quota.state === "Quota remaining" ? t("{percent}% remaining", { percent: Number(quota.remaining!.toFixed(1)) }) : t(quota.state)}</span>
-          {quota.remaining !== null && <div className="quota-track" role="meter" aria-label={t("Quota remaining")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={quota.remaining} aria-valuetext={t("{percent}% remaining", { percent: Number(quota.remaining.toFixed(1)) })}><span style={{ width: `${quota.remaining}%` }} /></div>}
-          {(quota.stale || unavailable) && (quota.observed || quota.remaining !== null) && <small className="block text-[10px] muted">{t("Data needs refreshing")}</small>}
-          <details className="mt-1 text-[10px] muted">
-            <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-primary">{t("Quota details")}</summary>
-            {details && <p className="whitespace-pre-line">{details}</p>}
-            {quota.observed && <span className="block">{t("Observed: {time}", { time: new Date(quota.observed).toLocaleString(dateLocale) })}</span>}
-            {!quota.observed && <span>{t("No quota observation available")}</span>}
-          </details>
-        </div>
+        <Link href={`/admin?tab=ai-agents&connection=${connection.id}`} className="sidebar-assistant-link" aria-label={label + ((quota.stale || unavailable) && quota.observed ? ` · ${t("Data needs refreshing")}` : "")} title={label}>
+          <AssistantLogo agent={connection.agent} />
+          <span className="connection-dot" data-quota-color={quota.color} data-stale={quota.stale || unavailable} data-connected={connection.enabled && connection.status === "CONNECTED" && ["AVAILABLE", "UNKNOWN"].includes(connection.availability || "UNKNOWN") && quota.state !== "Quota exhausted"} aria-hidden="true" />
+          <span className="sidebar-assistant-label"><strong>{connection.name || assistantName(connection.agent)}</strong><small>{summary}</small></span>
+          {(quota.stale || unavailable) && quota.observed && <Clock3 size={12} aria-label={t("Data needs refreshing")} className="shrink-0 muted" />}
+        </Link>
       </section>;
     })}
     {!connections && <p>{t("AI connections")}: {t("Quota unknown")}</p>}

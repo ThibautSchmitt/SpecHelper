@@ -78,7 +78,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
   await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
   await page.getByRole("button", { name: "Roles and orchestration", exact: true }).click();
   await page.getByLabel("Verify compared analyses", { exact: true }).uncheck();
-  await page.getByLabel("Maximum AI calls per analysis").fill("10");
+  await expect(page.getByLabel("Maximum AI calls per analysis")).toHaveCount(0);
   await page.getByLabel("Analysis time limit (seconds)").fill("200");
   await page
     .getByText("Advanced role instructions and tools", { exact: true })
@@ -100,11 +100,11 @@ test("global orchestration and cumulative connection roles preserve sparse inher
     .poll(() => settingsBody)
     .toMatchObject({
       verifier_enabled: false,
-      max_calls: 10,
       timeout_seconds: 200,
       role_instructions: { analyst: "Check file references" },
     });
   expect(settingsBody).not.toHaveProperty("available_agents");
+  expect(settingsBody).not.toHaveProperty("max_calls");
   expect(settingsBody).not.toHaveProperty("available_skills");
   await page.getByRole("navigation", {name:"AI settings"}).getByRole("button", {name:"Connections",exact:true}).click();
   await page
@@ -208,7 +208,7 @@ test("French settings keep verifier policy in administration and translate publi
     page.getByRole("checkbox", { name: "Contre-analyste", exact: true }),
   ).toBeChecked();
   await expect(
-    page.getByRole("checkbox", { name: "Vérificateur", exact: true }),
+    page.getByRole("checkbox", { name: "Validateur", exact: true }),
   ).toBeChecked();
   expect(
     await page.evaluate(

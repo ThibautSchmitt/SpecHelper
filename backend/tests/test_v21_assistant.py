@@ -499,6 +499,7 @@ def test_provider_failure_updates_model_evidence_and_releases_identity(
 
 def test_builtin_skill_with_legacy_empty_objective_remains_testable(client, storage, monkeypatch):
     draft = create(client)
+    SkillDefinition.objects.filter(pk="project-conventions").update(objective="")
     assert SkillDefinition.objects.get(pk="project-conventions").objective == ""
     run(monkeypatch, proposal(definition(skills=["project-conventions"])))
     path = "/api/library-assistant/drafts/" + draft["id"]

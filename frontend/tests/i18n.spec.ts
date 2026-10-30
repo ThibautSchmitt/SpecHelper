@@ -63,7 +63,7 @@ test("admin language persists across navigation, reload and translated errors", 
     }),
   );
   await page.goto("/admin");
-  await page.getByRole("button", { name: "General", exact: true }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
   await expect(
     page.getByLabel("Application language", { exact: true }),
   ).toHaveValue("en");
@@ -113,7 +113,7 @@ test("admin language persists across navigation, reload and translated errors", 
   const settingsLink = page.getByRole("link", { name: fr["Settings"], exact: true });
   await settingsLink.focus();
   await settingsLink.press("Enter");
-  await page.getByRole("button", { name: fr["General"], exact: true }).click();
+  await page.getByRole("button", { name: fr["Appearance"], exact: true }).click();
   await page
     .getByLabel(fr["Application language"], { exact: true })
     .selectOption("en");

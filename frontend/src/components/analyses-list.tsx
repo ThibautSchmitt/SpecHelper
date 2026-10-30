@@ -95,57 +95,58 @@ export function AnalysesList() {
   </section>;
 
   return (
-    <section className="space-y-6" aria-labelledby="analyses-heading">
+    <section className="analyses-page space-y-6" aria-labelledby="analyses-heading">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div><h1 id="analyses-heading" className="text-2xl font-semibold">{t("Analyses")}</h1>
           <p className="mt-1 text-sm muted">{t("Understand your project and prepare its next changes.")}</p></div>
         <Button asChild><Link href="/analyses?new=1"><Plus size={16} aria-hidden="true" />{t("New analysis")}</Link></Button>
       </header>
-      <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); navigate({ q: text }); }}>
-        <label className="min-w-48 flex-1 text-sm">{t("Search analyses")}
-          <Input value={text} onChange={(event) => setText(event.target.value)} className="mt-1" maxLength={500} />
+      <form className="analysis-filters flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); navigate({ q: text }); }}>
+        <label className="min-w-48 flex-1 text-sm"><span className="sr-only">{t("Search analyses")}</span>
+          <Input placeholder={t("Search analyses")} value={text} onChange={(event) => setText(event.target.value)} className="mt-1" maxLength={500} />
         </label>
-        <label className="text-sm">{t("Status")}
+        <label className="text-sm"><span className="sr-only">{t("Status")}</span>
           <select aria-label={t("Status")} className="mt-1 block h-10 rounded-md border bg-background px-3" value={parameters.get("status") || ""}
             onChange={(event) => navigate({ status: event.target.value, q: text })}>
             <option value="">{t("All statuses")}</option>
             {analysisStatuses.map((status) => <option key={status} value={status}>{t(statuses[status] || status)}</option>)}
           </select>
         </label>
-        <label className="text-sm">{t("Environment")}
+        <label className="text-sm"><span className="sr-only">{t("Environment")}</span>
           <select aria-label={t("Environment")} className="mt-1 block h-10 max-w-full rounded-md border bg-background px-3" value={parameters.get("environment_id") || ""}
             onChange={(event) => navigate({ environment_id: event.target.value, q: text })}>
             <option value="">{t("All environments")}</option>
             {environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.name}</option>)}
           </select>
         </label>
-        <Button type="submit" variant="outline"><Search size={16} aria-hidden="true" />{t("Search")}</Button>
+        <Button type="submit" variant="outline" aria-label={t("Search")} title={t("Search")} className="analysis-search-submit"><Search size={16} aria-hidden="true" /></Button>
       </form>
       <div className="flex flex-wrap gap-2" role="group" aria-label={t("Analysis type")}>
         {([ ["all", "All analyses"], ["question", "Questions"], ["request", "Changes"] ] as const).map(([value, label]) => (
-          <Button key={value} variant={workflow === value ? "default" : "outline"} size="sm"
-            aria-pressed={workflow === value} onClick={() => navigate({ workflow: value, q: text })}>{t(label)}</Button>
+          <Button key={value} variant={workflow === value ? "default" : "outline"} size="sm" aria-label={t(label)}
+            aria-pressed={workflow === value} onClick={() => navigate({ workflow: value, q: text })}>{t(label)}{workflow === "all" && data && data.pages <= 1 && <span className="filter-count">({value === "all" ? data.total : data.items.filter(item => item.workflow === value).length})</span>}</Button>
         ))}
       </div>
-      {error && <p role="alert">{t(error)}</p>}
+      {error && <div role="alert"><p>{t("Analyses are unavailable. Try refreshing the page.")}</p><details className="mt-2 text-sm"><summary>{t("Diagnostics")}</summary><pre className="whitespace-pre-wrap break-words">{error}</pre></details></div>}
       <div aria-busy={loading} className="space-y-3">
         {loading && <p role="status" className="text-sm muted">{t("Loading analyses…")}</p>}
         {!loading && !error && !data?.items.length && <p className="rounded-lg border p-6 muted">{t("No analyses match these filters.")}</p>}
         {!loading && !error && data?.items.map((item) => {
           const Icon = item.workflow === "question" ? CircleHelp : FileText;
-          const title = item.title && !item.need.startsWith(item.title) ? item.title : item.need.split("\n")[0];
-          return <Link key={item.id} href={item.href} className="block rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-            <div className="flex items-start gap-3"><Icon size={19} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+          const title = item.title || item.need.split("\n")[0];
+          const prefix = title.replace(/…$/, "");
+          const summary = (item.need.startsWith(prefix) ? item.need.slice(prefix.length) : item.need).replace(/^[\s.,:;!?-]+/, "").trim();
+          return <Link key={item.id} href={item.href} data-business-state={item.result_state || item.status} className="analysis-row block rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+            <div className="flex items-start gap-3"><span className="analysis-row-icon"><Icon size={19} aria-hidden="true" /></span>
               <div className="min-w-0 flex-1"><h2 className="line-clamp-2 break-words font-semibold" title={title}>{title}</h2>
-                <p className="mt-1 line-clamp-2 break-words text-sm muted">{item.need}</p>
+                {summary && <p className="mt-1 line-clamp-2 break-words text-sm muted">{summary}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted">
-                  <span className="rounded-full border px-2 py-0.5">{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
-                  <span>{t(!item.intent_resolved ? "Analysis" : item.workflow === "question" ? "Question" : "Change")}</span>
-                  <span>{item.environment_name}</span>
+                  <span className="badge analysis-state-pill" data-state={item.status}>{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
+                  <span className="badge analysis-intent-pill">{t(!item.intent_resolved ? "Analysis" : item.workflow === "question" ? "Question" : "Change")}</span>
+                  <span className="badge analysis-environment-pill">{item.environment_name}</span>
                   <time dateTime={item.latest_activity_at}>{new Date(item.latest_activity_at).toLocaleString(dateLocale)}</time>
                   {item.latest_version_number !== null && <span>{t("Version")} {item.latest_version_number}</span>}
                 </div>
-                {!!item.result_limits?.length && <p className="mt-2 line-clamp-2 text-xs text-amber-800 dark:text-amber-200">{t(item.result_limits[0])}</p>}
               </div><ArrowRight size={16} className="shrink-0" aria-hidden="true" />
             </div>
           </Link>;

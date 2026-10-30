@@ -1,9 +1,11 @@
 import io
 import json
 import uuid
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from django.utils import timezone
 
 from core.model_catalog import (
     ModelIn,
@@ -15,6 +17,54 @@ from core.model_catalog import (
 )
 from core.models import AIConnection, AIIdentity, AIModel, AIModelObservation
 from runtime import model_discovery
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("state", ["STARTING", "AWAITING_USER"])
+@pytest.mark.parametrize("minutes,blocked", [(-4 * 24 * 60, False), (0, False), (5, True)])
+def test_model_refresh_only_blocks_unexpired_login_attempts(client, monkeypatch, state, minutes, blocked):
+    from unittest.mock import Mock
+
+    from core.models import ConnectionAttempt
+
+    now = timezone.now()
+    monkeypatch.setattr("core.ai_api.timezone.now", lambda: now)
+    identity = AIIdentity.objects.create(agent="codex", status="CONNECTED")
+    connection = AIConnection.objects.create(agent="codex", identity=identity, status="CONNECTED")
+    ConnectionAttempt.objects.create(provider="codex", identity=identity, status=state, expires_at=now + timedelta(minutes=minutes))
+    runtime = Mock(return_value={"state": "supported", "reason": "catalog_not_entitlement", "items": [{"identifier": "native-model", "name": "Native model"}]})
+    monkeypatch.setattr("core.model_catalog.runtime_call", runtime)
+    response = client.post(f"/api/ai-connections/{connection.pk}/models/refresh")
+    assert response.status_code == (409 if blocked else 200)
+    if blocked:
+        runtime.assert_not_called()
+    else:
+        assert response.json()["discovery"]["state"] == "supported"
+        runtime.assert_called_once()
+    identity.refresh_from_db()
+    assert identity.status == "CONNECTED"
+
+
+@pytest.mark.django_db
+def test_model_refresh_keeps_busy_and_shared_identity_guards(client, monkeypatch):
+    from unittest.mock import Mock
+
+    from core.models import ConnectionAttempt
+
+    identity = AIIdentity.objects.create(agent="codex", status="CONNECTED", availability="BUSY")
+    connection = AIConnection.objects.create(agent="codex", identity=identity, status="CONNECTED")
+    runtime = Mock(return_value={"state": "supported", "reason": "catalog_not_entitlement", "items": []})
+    monkeypatch.setattr("core.model_catalog.runtime_call", runtime)
+    assert client.post(f"/api/ai-connections/{connection.pk}/models/refresh").status_code == 409
+    runtime.assert_not_called()
+    identity.availability = "AVAILABLE"
+    identity.save(update_fields=["availability"])
+    ConnectionAttempt.objects.create(provider="codex", identity=identity, status="AWAITING_USER", expires_at=timezone.now() + timedelta(minutes=5))
+    shared = AIConnection.objects.create(agent="codex", identity=identity, status="CONNECTED")
+    assert client.post(f"/api/ai-connections/{shared.pk}/models/refresh").status_code == 409
+    another = AIConnection.objects.create(agent="codex", identity=AIIdentity.objects.create(agent="codex"))
+    assert client.post(f"/api/ai-connections/{another.pk}/models/refresh").status_code == 200
+    runtime.assert_called_once()
 
 
 @pytest.mark.django_db

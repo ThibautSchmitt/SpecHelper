@@ -10,6 +10,7 @@ runtime behavior take precedence over an old report or an unimplemented target.
 | [README](../README.md) | Product value, shortest installation path, guide navigation | Fine settings and internal architecture |
 | [Overview](overview.md) | Home, unified analysis entry and output orientation | Execution rules |
 | [Configuration](configuration.md) | Settings, connections, skills, models, context, appearance and language | Scheduling or publication recovery |
+| [Interface](interface.md) | Shared visual conventions, surfaces, controls and accessible states | Analysis and publication behavior |
 | [Analysis](analysis.md) | Mandatory roles, scheduling, clarification, evidence and completeness | Administrative instructions or platform templates |
 | [Architecture](architecture.md) | Components, storage and technical trust-boundary implementation | Operations commands or policy |
 | [Operations](operations.md) | Startup, upgrades, backups, diagnostics and runtime commands | Security policy and dated release totals |

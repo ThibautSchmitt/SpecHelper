@@ -74,8 +74,17 @@ def poll_processes():
 
     for job_id, (process, attempt_id, started) in list(PROCESSES.items()):
         job = Job.objects.get(pk=job_id)
+        if job.kind == "discussion" and job.status == "CANCELLED":
+            if stop_runtime(job, job.payload["attempt_id"]):
+                if process.poll() is None:
+                    stop_tree(process)
+                release_connections(job.payload.get("connection_ids", []))
+                job.payload["connection_ids"] = []
+                job.save(update_fields=["payload"])
+                PROCESSES.pop(job_id, None)
+            continue
         if attempt_id is None:
-            limit = 1200 if job.kind == "sync" else 295
+            limit = 1200 if job.kind in {"sync", "cli_update"} else 295
             if process.poll() is None and time.monotonic() - started < limit:
                 continue
             if process.poll() is None:
@@ -86,12 +95,22 @@ def poll_processes():
 
                 if job.kind == "analysis":
                     fail_analysis(job, "Analysis process interrupted.")
+                elif job.kind == "discussion":
+                    from .discussion import fail, stop_failed_attempt
+
+                    fail(job, "The discussion was interrupted. Retry with a new session; history is preserved.")
+                    if not stop_failed_attempt(job):
+                        continue
                 elif job.kind == "library_assistant":
                     from .library_assistant import fail_job
 
                     fail_job(
                         job, "Assistant work interrupted. Check the selected connection and retry."
                     )
+                elif job.kind == "cli_update":
+                    # Recovery reads the maintenance journal and rolls back if needed.
+                    # Process exit alone cannot establish which executable is active.
+                    continue
                 else:
                     Job.objects.filter(pk=job_id, status="RUNNING").update(
                         status="ERROR",
