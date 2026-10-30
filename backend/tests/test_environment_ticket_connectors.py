@@ -22,7 +22,7 @@ def test_connector_check_records_observation_without_publication_and_preserves_i
     assert checked["status"] == "CONNECTED" and checked["checked_at"]
     payload = {"environment_id": connector.environment_id, "name": "Updated tracker", "platform": "gitlab", "base_url": connector.base_url, "projects": ["42"]}
     edited = client.put(f"/ticket-connectors/{connector.pk}", json=payload).json()
-    assert edited["status"] == "UNKNOWN" and edited["checked_at"] == checked["checked_at"]
+    assert edited["status"] == "CONNECTED" and edited["checked_at"] == checked["checked_at"]
     provider.create.assert_not_called()
     assert not PublishedTicket.objects.exists() and version.request.need == "Export active contracts"
 
@@ -48,6 +48,7 @@ def test_connector_list_and_creation_are_environment_scoped(publication_context)
     second = TicketConnector.objects.create(
         environment=other, name="Other tracker", platform="gitlab", base_url="https://other.example"
     )
+    second.environments.add(other)
     orphan = TicketConnector.objects.create(
         name="Legacy unassigned", platform="gitlab", base_url="https://legacy.example"
     )
@@ -66,10 +67,10 @@ def test_connector_list_and_creation_are_environment_scoped(publication_context)
     missing = Request.objects.create(need="Detached historical request")
     assert client.get(f"/ticket-connectors?request_id={missing.pk}").json() == []
     data = {"name": "New tracker", "platform": "gitlab", "base_url": "https://new.example", "secret": "fixture-dedicated-destination-token"}
-    assert client.post("/ticket-connectors", json=data).status_code == 422
+    assert client.post("/ticket-connectors", json=data).status_code == 200
     data["environment_id"] = other.pk
     assert client.post("/ticket-connectors", json=data).json()["environment_id"] == other.pk
-    assert client.put(f"/ticket-connectors/{connector.pk}", json=data).status_code == 409
+    assert client.put(f"/ticket-connectors/{connector.pk}", json=data).status_code == 200
     assert (
         client.put(f"/ticket-connectors/{orphan.pk}", json=data).json()["environment_id"]
         == other.pk
@@ -79,8 +80,7 @@ def test_connector_list_and_creation_are_environment_scoped(publication_context)
 
 def test_cross_environment_preview_and_new_write_are_rejected_before_provider(publication_context):
     version, connector, provider, payload = publication_context
-    connector.environment = Environment.objects.create(name="Different environment")
-    connector.save()
+    connector.environments.set([Environment.objects.create(name="Different environment")])
     with pytest.raises(HttpError, match="environment"):
         preview(version, connector, payload["project"])
     with pytest.raises(HttpError, match="environment"):
@@ -98,8 +98,7 @@ def test_historical_cross_environment_uncertain_delivery_can_only_reconcile(publ
     record = publish(version, connector, payload)
     assert record.status == "UNCERTAIN"
     original_snapshot = record.snapshot
-    connector.environment = Environment.objects.create(name="Migrated connector owner")
-    connector.save()
+    connector.environments.set([Environment.objects.create(name="Migrated connector owner")])
     provider.find.return_value = {
         "external_id": "123",
         "external_key": "#1",
@@ -121,8 +120,7 @@ def test_definitively_failed_legacy_attempt_cannot_write_outside_current_scope(p
     provider.create.side_effect = TicketProviderError("Rejected")
     record = publish(version, connector, payload)
     assert record.status == "ERROR"
-    connector.environment = Environment.objects.create(name="Changed owner")
-    connector.save()
+    connector.environments.set([Environment.objects.create(name="Changed owner")])
     with pytest.raises(HttpError, match="environment"):
         publish(version, connector, payload)
     assert provider.create.call_count == 1
@@ -136,8 +134,7 @@ def test_migrated_clone_reconciles_with_original_connector_not_changed_clone(
 
     provider.create.side_effect = NetworkUncertain("Response lost")
     record = publish(version, connector, payload)
-    connector.environment = Environment.objects.create(name="Historical connector owner")
-    connector.save()
+    connector.environments.set([Environment.objects.create(name="Historical connector owner")])
     clone = TicketConnector.objects.create(
         environment=version.request.environment,
         name="Independent clone",
@@ -146,6 +143,7 @@ def test_migrated_clone_reconciles_with_original_connector_not_changed_clone(
         projects=connector.projects,
         secret="different-encrypted-secret",
     )
+    clone.environments.add(version.request.environment)
     seen = []
 
     def original_provider(value):
@@ -158,36 +156,29 @@ def test_migrated_clone_reconciles_with_original_connector_not_changed_clone(
         "external_key": "#1",
         "url": "https://gitlab.example/team/project/-/issues/1",
     }
-    recovered = publish(version, clone, {**payload, "connector_id": clone.pk})
+    with pytest.raises(HttpError, match="another connection"):
+        publish(version, clone, {**payload, "connector_id": clone.pk})
+    assert seen == []
+    recovered = publish(version, connector, payload)
     assert recovered.pk == record.pk
     assert recovered.status == "PUBLISHED"
     assert seen == [connector.pk]
     assert provider.create.call_count == 1
 
 
-def test_environment_delete_with_connector_returns_conflict_without_removing_sources(
-    publication_context, client, storage
-):
+def test_environment_delete_preserves_global_connector(publication_context, client, storage):
     import json
 
     version, connector, _, _ = publication_context
     environment = version.request.environment
-    root = storage / "environments" / str(environment.pk)
-    root.mkdir(parents=True)
-    evidence = root / "existing-source"
-    evidence.write_text("Preserved source data")
     response = client.delete(
         f"/api/environments/{environment.pk}",
-        data=json.dumps(
-            {"confirm_name": environment.name, "expected_revision": environment.revision}
-        ),
+        data=json.dumps({"confirm_name": environment.name, "expected_revision": environment.revision}),
         content_type="application/json",
     )
-    assert response.status_code == 409
-    assert "ticket connectors" in response.json()["detail"]
-    assert evidence.read_text() == "Preserved source data"
-    assert Environment.objects.filter(pk=environment.pk).exists()
-    assert environment.repositories.count() == 1
-    version.request.refresh_from_db()
-    assert version.request.environment_id == environment.pk
+    assert response.status_code == 200
+    assert not Environment.objects.filter(pk=environment.pk).exists()
     assert TicketConnector.objects.filter(pk=connector.pk).exists()
+    assert not connector.environments.exists()
+    version.request.refresh_from_db()
+    assert version.request.environment_id is None

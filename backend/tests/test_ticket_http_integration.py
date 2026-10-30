@@ -95,6 +95,7 @@ def test_confirmed_http_creation_and_lost_response_reconciliation(
             projects=["7"],
             status="CONNECTED",
         )
+        connector.environments.add(environment)
         endpoint = f"/api/requests/{request.pk}/versions/{version.number}"
         prepared = client.post(
             endpoint + "/publication-preview",

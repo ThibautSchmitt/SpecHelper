@@ -151,7 +151,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
         </nav>
         <SidebarAssistants />
         <Link
-          href="/admin"
+          href="/admin?tab=ai-agents&section=connections"
           className="sidebar-admin"
           aria-label={t("Administration")}
           title={t("Administration")}

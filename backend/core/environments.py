@@ -12,7 +12,14 @@ from ninja.errors import HttpError
 from . import github
 from .git import environment_worktrees, lock, lock_key, remove_environment_worktree, run
 from .git_sources import normalize_selection
-from .models import DatabaseConnection, Environment, EnvironmentRepository, Job, Request
+from .models import (
+    DatabaseConnection,
+    Environment,
+    EnvironmentRepository,
+    Job,
+    Request,
+    TicketConnector,
+)
 
 
 def validate(payload, environment_id=None):
@@ -36,6 +43,12 @@ def validate(payload, environment_id=None):
         run("check-ref-format", "refs/heads/" + repo.branch)
     if payload.database_id:
         get_object_or_404(DatabaseConnection, pk=payload.database_id)
+    connections = getattr(payload, "publication_connection_ids", None)
+    if connections is not None:
+        if len(set(connections)) != len(connections) or any(value <= 0 for value in connections):
+            raise HttpError(422, "Select unique publication connection identifiers.")
+        if len(list(TicketConnector.objects.select_for_update().filter(pk__in=connections).order_by("pk"))) != len(connections):
+            raise HttpError(422, "A selected publication connection no longer exists.")
 
 
 @contextlib.contextmanager
@@ -69,6 +82,16 @@ def update(environment_id, payload):
         )
         existing = {r.repository: r for r in environment.repositories.all()}
         selected = {r.repository: r for r in payload.repositories}
+        resources_changed = (
+            environment.name != payload.name
+            or environment.database_id != payload.database_id
+            or set(existing) != set(selected)
+            or any(
+                existing[name].branch != selection.branch
+                or existing[name].git_repository_id != getattr(selection, "git_repository_id", None)
+                for name, selection in selected.items() if name in existing
+            )
+        )
         changed = []
         for name, repo in existing.items():
             if name not in selected:
@@ -97,12 +120,16 @@ def update(environment_id, payload):
                 changed.append(name)
         environment.name = payload.name
         environment.database_id = payload.database_id
+        if getattr(payload, "publication_connection_ids", None) is not None:
+            environment.publication_connections.set(payload.publication_connection_ids)
         environment.revision += 1
-        environment.status, environment.error = "PENDING", ""
+        if resources_changed:
+            environment.status, environment.error = "PENDING", ""
         environment.save()
-        Job.objects.create(
-            kind="sync", target=str(environment.id), payload={"changed_repositories": changed}
-        )
+        if resources_changed:
+            Job.objects.create(
+                kind="sync", target=str(environment.id), payload={"changed_repositories": changed}
+            )
         return environment
 
 
@@ -113,11 +140,6 @@ def delete(environment_id, confirmation):
         writable(environment, confirmation.expected_revision)
         if confirmation.confirm_name != environment.name:
             raise HttpError(409, "Explicitly confirm deletion of this environment.")
-        if environment.ticket_connectors.exists():
-            raise HttpError(
-                409,
-                "This environment has ticket connectors. Remove unused connectors first; connectors with publication history must be retained.",
-            )
         repos = list(environment.repositories.all())
         worktrees = [
             {"repository": r.repository, "workspace": r.workspace} for r in repos

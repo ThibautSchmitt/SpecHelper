@@ -558,13 +558,18 @@ class TicketConnector(models.Model):
         JIRA = "jira", "Jira"
         GLPI = "glpi", "GLPI"
 
+    # Retained for compatibility with stored installations; authorization uses environments.
     environment = models.ForeignKey(
         Environment,
         null=True,
         blank=True,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="ticket_connectors",
     )
+    environments = models.ManyToManyField(
+        Environment, blank=True, related_name="publication_connections"
+    )
+    enabled = models.BooleanField(default=True)
     name = models.CharField(max_length=100)
     platform = models.CharField(max_length=10, choices=Platform)
     base_url = models.URLField(max_length=1000)

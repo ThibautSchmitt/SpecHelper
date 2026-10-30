@@ -7,6 +7,25 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Git server editing and provider identification
+
+- Allow editing an unused GitLab connection's server URL with a new read token,
+  clearing discovery results and account/test status. Preserve server identities
+  referenced by environments or analysis history; explain the GitHub cloud-only limit.
+- Ignore stale discovery results after a connection edit and bundle the official
+  Jira and GLPI identification marks locally alongside GitHub and GitLab.
+
+### Reusable ticket publication connections
+
+- Manage freely named publication accounts in one global catalogue and associate
+  several accounts with each environment through a many-to-many relation.
+- Choose the effective external account and accessible destination explicitly at
+  publication. Preserve previews, human confirmation, history and original-account
+  recovery; never silently substitute another connection.
+- Migrations 0044 and 0045 retain existing connections, encrypted credentials and
+  associations. Keep the legacy environment field only for compatibility data.
+
+
 ### Current documentation
 
 - Replace release-oriented guides and duplicate specifications with five topical

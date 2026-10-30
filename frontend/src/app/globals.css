@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 .analysis-conversation, .conversation-report { max-width: 1160px; margin-inline: auto; min-width: 0; }
-.analysis-conversation-page > div > div > h1 { display: inline; font-size: clamp(24px, 2.3vw, 32px); }
+.analysis-conversation-page .analysis-title h1 { font-size: clamp(24px, 2.3vw, 32px); }
 .conversation-title-edit { margin-left: 8px; vertical-align: middle; opacity: .65; }
 .conversation-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
 .conversation-metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; font-size: 13px; color: var(--muted-foreground); }
@@ -957,6 +957,9 @@ summary:focus-visible {
   padding: 3px 8px;
   border-radius: var(--tag-radius);
 }
+.title-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.title-tags > :is(h1, h2, h3, h4, .title-text) { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.title-tags .badge { flex: 0 0 auto; max-width: 100%; overflow-wrap: anywhere; }
 .badge:is(
   [data-state="RUNNING"],
   [data-state="UNDERSTANDING"],

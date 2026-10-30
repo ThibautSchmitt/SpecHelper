@@ -70,8 +70,9 @@ export function AnalysisHome() {
           </Link>
           {section && <ul className="mt-3 space-y-3">{section.items.map((item) => <li key={item.id} className="home-result">
             <Link href={item.href} className="block min-w-0 rounded text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-primary">
-              <span className="line-clamp-2 break-words" title={item.title || item.need}>{item.title || item.need}</span>
-              <span className="mt-1 block text-xs muted">{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
+              <span className="title-tags"><span className="title-text line-clamp-2 break-words" title={item.title || item.need}>{item.title || item.need}</span>
+                <span className="badge" data-state={item.status}>{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
+              </span>
               {item.stage && <span className="mt-1 block line-clamp-2 text-xs muted">{t(item.stage)}</span>}
               <span className="mt-1 block truncate text-xs muted">{item.environment_name}</span><time className="home-item-date" dateTime={item.latest_activity_at}>{new Date(item.latest_activity_at).toLocaleDateString(dateLocale, { day: "numeric", month: "short" })}</time>
             </Link>

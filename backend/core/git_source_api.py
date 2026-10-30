@@ -39,10 +39,17 @@ def values(payload, existing=None):
     if not result["name"]:
         raise HttpError(422, "Enter a connection name.")
     result["base_url"] = base_url(payload.provider, payload.base_url)
-    if existing and (
-        existing.provider != payload.provider or existing.base_url != result["base_url"]
-    ):
-        raise HttpError(409, "Create a new connection to change its Git provider or instance.")
+    if existing and existing.provider != payload.provider:
+        raise HttpError(409, "Create a new connection to change its Git provider.")
+    if existing and existing.base_url != result["base_url"]:
+        if connection_is_referenced(existing):
+            raise HttpError(
+                409,
+                "This Git server is linked to environments or analysis history. Create a new connection to use another server.",
+            )
+        if not payload.secret.strip():
+            raise HttpError(422, "Enter a new read access token when changing the Git server.")
+        result.update(account="", checked_at=None)
     if payload.secret:
         result["secret"] = encrypt(payload.secret)
     if payload.import_github:
@@ -59,6 +66,25 @@ def values(payload, existing=None):
     return result
 
 
+def connection_is_referenced(connection):
+    repository_ids = set(connection.repositories.values_list("id", flat=True))
+    return (
+        connection.repositories.filter(environment_repositories__isnull=False).exists()
+        or (
+            connection.legacy_source
+            and EnvironmentRepository.objects.filter(git_repository__isnull=True).exists()
+        )
+        or any(
+            any(
+                row.get("git_repository_id") in repository_ids
+                or (connection.legacy_source and not row.get("git_repository_id"))
+                for row in baseline
+            )
+            for baseline in Request.objects.values_list("baseline", flat=True).iterator()
+        )
+    )
+
+
 @router.get("/git-connections")
 def connections(request):
     return [connection_dict(value) for value in GitConnection.objects.order_by("name", "id")]
@@ -70,9 +96,17 @@ def create(request, payload: ConnectionIn):
 
 
 @router.put("/git-connections/{connection_id}")
+@transaction.atomic
 def update(request, connection_id: int, payload: ConnectionIn):
-    connection = get_object_or_404(GitConnection, pk=connection_id)
-    for key, value in values(payload, connection).items():
+    connection = get_object_or_404(GitConnection.objects.select_for_update(), pk=connection_id)
+    changes = values(payload, connection)
+    if changes["base_url"] != connection.base_url:
+        # Remote project IDs belong to an instance; discard unused discovery results.
+        try:
+            connection.repositories.all().delete()
+        except ProtectedError as exc:
+            raise HttpError(409, "This Git server is now referenced. Create a new connection.") from exc
+    for key, value in changes.items():
         setattr(connection, key, value)
     connection.save()
     return connection_dict(connection)
@@ -82,24 +116,7 @@ def update(request, connection_id: int, payload: ConnectionIn):
 @transaction.atomic
 def delete(request, connection_id: int, confirm_name: str = ""):
     connection = get_object_or_404(GitConnection.objects.select_for_update(), pk=connection_id)
-    repository_ids = set(connection.repositories.values_list("id", flat=True))
-    historical = any(
-        any(
-            row.get("git_repository_id") in repository_ids
-            or (connection.legacy_source and not row.get("git_repository_id"))
-            for row in baseline
-        )
-        for baseline in Request.objects.values_list("baseline", flat=True).iterator()
-    )
-    legacy_referenced = (
-        connection.legacy_source
-        and EnvironmentRepository.objects.filter(git_repository__isnull=True).exists()
-    )
-    if (
-        historical
-        or legacy_referenced
-        or connection.repositories.filter(environment_repositories__isnull=False).exists()
-    ):
+    if connection_is_referenced(connection):
         if confirm_name != connection.name:
             raise HttpError(
                 409,
@@ -139,7 +156,13 @@ def test(request, connection_id: int):
     else:
         connection.status, connection.error = "CONNECTED", ""
     connection.checked_at = timezone.now()
-    connection.save(update_fields=["account", "status", "error", "checked_at", "updated_at"])
+    GitConnection.objects.filter(
+        pk=connection.pk, base_url=connection.base_url, secret=connection.secret
+    ).update(
+        account=connection.account, status=connection.status, error=connection.error,
+        checked_at=connection.checked_at, updated_at=timezone.now(),
+    )
+    connection.refresh_from_db()
     return connection_dict(connection)
 
 
@@ -156,7 +179,9 @@ def discover(connection_id, search, page, page_size, remote_id=None):
     except SourceError as exc:
         fail_connection(connection, exc)
         raise HttpError(422, str(exc)) from exc
-    GitConnection.objects.filter(pk=connection.pk).update(
+    GitConnection.objects.filter(
+        pk=connection.pk, base_url=connection.base_url, secret=connection.secret
+    ).update(
         status="CONNECTED", error="", checked_at=timezone.now()
     )
     return {"items": items, "page": page, "page_size": page_size, "has_more": more}

@@ -13,7 +13,7 @@ from django.utils import timezone
 from ninja.errors import HttpError
 
 from .i18n import translate
-from .models import PublishedTicket, Request, TicketPublicationDraft
+from .models import Environment, PublishedTicket, Request, TicketConnector, TicketPublicationDraft
 from .ticket_providers import NetworkUncertain, TicketProviderError, provider_for, render_body
 
 
@@ -49,9 +49,12 @@ def validate_base_url(value):
 
 
 def connector_dict(connector):
+    environment_ids = [item.pk for item in connector.environments.all()]
     return {
         "id": connector.pk,
-        "environment_id": connector.environment_id,
+        "environment_id": environment_ids[0] if len(environment_ids) == 1 else None,
+        "environment_ids": environment_ids,
+        "enabled": connector.enabled,
         "name": connector.name,
         "platform": connector.platform,
         "base_url": connector.base_url,
@@ -154,6 +157,8 @@ def safe_provider_error(exc):
 
 
 def accessible_projects(connector):
+    if not connector.enabled:
+        raise HttpError(409, "This publication connection is disabled.")
     try:
         return provider_for(connector).projects()
     except Exception as exc:
@@ -161,7 +166,9 @@ def accessible_projects(connector):
 
 
 def checked_access(connector, project):
-    if project not in connector.projects:
+    if not connector.enabled:
+        raise HttpError(409, "This publication connection is disabled.")
+    if connector.projects and project not in connector.projects:
         raise HttpError(403, "This project is not allowed for this connector.")
     try:
         provider = provider_for(connector)
@@ -494,9 +501,24 @@ def require_environment(version, connector):
     """Keep new external writes within the request's configured environment."""
     if (
         not version.request.environment_id
-        or connector.environment_id != version.request.environment_id
+        or not connector.environments.filter(pk=version.request.environment_id).exists()
     ):
         raise HttpError(409, "Choose a ticket connector configured for this request's environment.")
+    if not connector.enabled or connector.status != "CONNECTED":
+        raise HttpError(409, "Choose an enabled, verified publication connection.")
+
+
+def lock_selected_connection(version, connector):
+    """Recheck mutable associations and credentials at new-write admission."""
+    environment = Environment.objects.select_for_update().filter(pk=version.request.environment_id).first()
+    current = TicketConnector.objects.select_for_update().filter(pk=connector.pk).first()
+    if environment is None or current is None:
+        raise HttpError(409, "The publication connection changed. Review the preview again.")
+    require_environment(version, current)
+    if any(getattr(current, field) != getattr(connector, field) for field in (
+        "base_url", "username", "secret", "app_token", "api_version", "projects"
+    )):
+        raise HttpError(409, "The publication connection changed. Review the preview again.")
 
 
 def publish(version, connector, payload):
@@ -587,6 +609,8 @@ def publish(version, connector, payload):
         # An old, definitively rejected attempt must never reactivate after a
         # later attempt has claimed or completed the same logical publication.
         existing = active
+    if existing is not None and existing.connector_id != connector.pk:
+        raise HttpError(409, "This destination already has a publication using another connection. Use the original connection to verify that publication.")
     if existing and existing.payload_hash != digest:
         raise HttpError(
             409,
@@ -658,6 +682,7 @@ def publish(version, connector, payload):
     if existing is None:
         try:
             with transaction.atomic():
+                lock_selected_connection(version, connector)
                 if not Request.objects.select_for_update().filter(pk=version.request_id).exists():
                     raise HttpError(404, "Analysis not found.")
                 record = PublishedTicket.objects.create(
@@ -692,6 +717,8 @@ def publish(version, connector, payload):
         record = existing
         try:
             with transaction.atomic():
+                if not legacy_recovery:
+                    lock_selected_connection(version, connector)
                 if not Request.objects.select_for_update().filter(pk=version.request_id).exists():
                     raise HttpError(404, "Analysis not found.")
                 claimed = PublishedTicket.objects.filter(

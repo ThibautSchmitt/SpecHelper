@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import Literal
 from uuid import UUID
 
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -39,7 +40,9 @@ class StrictSchema(Schema):
 
 
 class ConnectorIn(StrictSchema):
-    environment_id: int = Field(ge=1)
+    # Older clients may associate one environment when saving a connection.
+    environment_id: int | None = Field(default=None, ge=1)
+    enabled: bool = True
     name: str = Field(min_length=1, max_length=100)
     platform: Literal["github", "gitlab", "jira", "glpi"]
     base_url: str = Field(min_length=1, max_length=1000)
@@ -101,15 +104,18 @@ class PublicationIn(PublicationDraftIn):
 
 
 def connector_values(payload, existing=None):
-    values = payload.model_dump(exclude={"secret", "app_token"})
-    get_object_or_404(Environment, pk=payload.environment_id)
-    if existing and existing.environment_id not in {None, payload.environment_id}:
-        raise HttpError(409, "Create a new connector to use a different environment.")
+    values = payload.model_dump(exclude={"secret", "app_token", "environment_id"})
+    if payload.environment_id is not None:
+        get_object_or_404(Environment, pk=payload.environment_id)
+    if existing:
+        for key in ("enabled", "username", "api_version", "projects", "default_project"):
+            if key not in payload.model_fields_set:
+                values[key] = getattr(existing, key)
     values["base_url"] = validate_base_url(values["base_url"])
     projects = values["projects"]
     if any(not item or len(item) > 255 for item in projects) or len(set(projects)) != len(projects):
         raise HttpError(422, "Enter unique project identifiers of at most 255 characters.")
-    if values["default_project"] and values["default_project"] not in projects:
+    if projects and values["default_project"] and values["default_project"] not in projects:
         raise HttpError(422, "The default project must be allowed by this connector.")
     for key in ("secret", "app_token"):
         value = getattr(payload, key)
@@ -133,44 +139,61 @@ def connector_values(payload, existing=None):
             409,
             "Create a new connector to change the URL of a destination with publication history.",
         )
-    values.update(status="UNKNOWN", error="")
+    credentials_changed = existing is None or any(
+        values[key] != getattr(existing, key)
+        for key in ("base_url", "username", "api_version")
+    ) or any(getattr(payload, key) for key in ("secret", "app_token"))
+    if credentials_changed:
+        if existing and existing.published_tickets.filter(status__in=["PUBLISHING", "UNCERTAIN"]).exists():
+            raise HttpError(409, "Resolve the pending publication before changing its connection credentials.")
+        values.update(status="UNKNOWN", error="")
     return values
 
 
 @router.get("/ticket-connectors")
 def list_connectors(request, environment_id: int | None = None, request_id: UUID | None = None):
-    values = TicketConnector.objects.order_by("name", "id")
+    values = TicketConnector.objects.prefetch_related("environments").order_by("name", "id")
     if request_id is not None:
         item = get_object_or_404(Request, pk=request_id)
         if item.environment_id is None:
             return []
-        values = values.filter(environment_id=item.environment_id)
+        values = values.filter(environments__id=item.environment_id)
     if environment_id is not None:
         get_object_or_404(Environment, pk=environment_id)
-        values = values.filter(environment_id=environment_id)
+        values = values.filter(environments__id=environment_id)
     return [connector_dict(value) for value in values]
 
 
 @router.post("/ticket-connectors")
+@transaction.atomic
 def create_connector(request, payload: ConnectorIn):
-    return connector_dict(TicketConnector.objects.create(**connector_values(payload)))
+    connector = TicketConnector.objects.create(**connector_values(payload))
+    if payload.environment_id is not None:
+        connector.environments.add(payload.environment_id)
+    return connector_dict(connector)
 
 
 @router.put("/ticket-connectors/{connector_id}")
+@transaction.atomic
 def update_connector(request, connector_id: int, payload: ConnectorIn):
-    connector = get_object_or_404(TicketConnector, pk=connector_id)
+    connector = get_object_or_404(TicketConnector.objects.select_for_update(), pk=connector_id)
     values = connector_values(payload, connector)
     for name, value in values.items():
         setattr(connector, name, value)
     connector.save()
+    if payload.environment_id is not None:
+        connector.environments.add(payload.environment_id)
     return connector_dict(connector)
 
 
 @router.delete("/ticket-connectors/{connector_id}")
+@transaction.atomic
 def delete_connector(request, connector_id: int):
-    connector = get_object_or_404(TicketConnector, pk=connector_id)
+    connector = get_object_or_404(TicketConnector.objects.select_for_update(), pk=connector_id)
     if connector.published_tickets.exists():
         raise HttpError(409, "This connector has publication history and cannot be deleted.")
+    if connector.environments.exists():
+        raise HttpError(409, "Remove this publication connection from its environments before deleting it.")
     connector.delete()
     return {"status": "DELETED"}
 
@@ -178,6 +201,8 @@ def delete_connector(request, connector_id: int):
 @router.post("/ticket-connectors/{connector_id}/test")
 def test_connector(request, connector_id: int):
     connector = get_object_or_404(TicketConnector, pk=connector_id)
+    if not connector.enabled:
+        raise HttpError(409, "Enable this publication connection before testing it.")
     try:
         provider_for(connector).test()
     except Exception as exc:

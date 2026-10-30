@@ -125,6 +125,14 @@ transactions, query validation, timeouts and result limits. A captured connectio
 not a database snapshot. Evidence describes the rows and observation period actually
 read, not all possible records or a live UI session.
 
+Publication credentials live in a global connection catalogue. A many-to-many relation
+associates connection IDs with environments; it never duplicates credentials. The old
+single-environment column is retained only as migration/compatibility data and grants
+no publication access. The association and enabled/verified status are checked at
+preview and again under row locks when admitting a new write. Immutable publication
+records retain their original connection and destination. Changing accounts cannot
+silently reconcile another account's operation.
+
 Ticket publication is a separate backend operation. Agents cannot write business data
 or publish tickets through their resource tools. Destination credentials, preview edits,
 templates, attachments and uncertain-write reconciliation have their own validation.

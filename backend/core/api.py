@@ -97,6 +97,7 @@ class EnvironmentIn(Schema):
     name: str = Field(min_length=1, max_length=100)
     repositories: list[RepositoryIn] = Field(min_length=1, max_length=100)
     database_id: int | None = None
+    publication_connection_ids: list[int] | None = None
 
 
 class EnvironmentEditIn(EnvironmentIn):
@@ -177,6 +178,8 @@ def settings_dict():
 
 def environment_dict(environment):
     from .git_sources import repository_snapshot
+    from .ticket_publication import connector_dict
+    connections = list(environment.publication_connections.all())
 
     return {
         "id": environment.id,
@@ -187,6 +190,8 @@ def environment_dict(environment):
         "synced_at": environment.synced_at,
         "database_id": environment.database_id,
         "database_name": environment.database.name if environment.database_id else None,
+        "publication_connection_ids": [item.pk for item in connections],
+        "publication_connections": [connector_dict(item) for item in connections],
         "repositories": [
             {"id": repo.pk, **repository_snapshot(repo)}
             for repo in environment.repositories.select_related("git_repository__connection")
@@ -587,7 +592,7 @@ def environments(request):
     return [
         environment_dict(e)
         for e in Environment.objects.select_related("database")
-        .prefetch_related("repositories")
+        .prefetch_related("repositories", "publication_connections__environments")
         .order_by("name")
     ]
 
@@ -597,6 +602,8 @@ def environments(request):
 def create_environment(request, payload: EnvironmentIn):
     environment_actions.validate(payload)
     environment = Environment.objects.create(name=payload.name, database_id=payload.database_id)
+    if payload.publication_connection_ids is not None:
+        environment.publication_connections.set(payload.publication_connection_ids)
     EnvironmentRepository.objects.bulk_create(
         [
             EnvironmentRepository(

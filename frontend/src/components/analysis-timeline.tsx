@@ -6,7 +6,7 @@ import { Sparkles, Folder, CalendarDays, ChevronDown, LoaderCircle, CheckCircle2
 import { SafeMarkdown } from "@/components/safe-markdown";
 import { RoleMentions } from "@/components/role-mentions";
 import { Button } from "@/components/ui/button";
-import { type RequestDetail, type ResultVersion, type WorkExecution, resultStates, statuses } from "@/lib/api";
+import { type RequestDetail, type ResultVersion, type WorkExecution } from "@/lib/api";
 import { activityLabel, DiscussionProgress, ProgressDisclosure, ResponsePreview, WorkSteps } from "@/components/work-progress";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels } from "@/lib/orchestration";
@@ -100,7 +100,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
 
   return <section className="analysis-conversation" aria-label={t("Business conversation")}>
     <div className="conversation-toolbar">
-      <div className="conversation-metadata"><span><Folder size={17} aria-hidden="true" />{t("Business conversation")}</span><time dateTime={value.created_at}><CalendarDays size={17} aria-hidden="true" />{new Date(value.created_at).toLocaleString(dateLocale)}</time><span role="status" className="badge conversation-state" data-state={value.status}>{t(resultStates[value.result_state || ""] || statuses[value.status] || value.status)}</span></div>
+      <div className="conversation-metadata"><span><Folder size={17} aria-hidden="true" />{t("Business conversation")}</span><time dateTime={value.created_at}><CalendarDays size={17} aria-hidden="true" />{new Date(value.created_at).toLocaleString(dateLocale)}</time></div>
     </div>
     <ol className="conversation-messages" ref={list}>
       {events.map(event => <li key={event.id} className={`conversation-message conversation-${event.speaker}`} data-message={event.id}>

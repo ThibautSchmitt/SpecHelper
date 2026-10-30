@@ -389,11 +389,12 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
         <article className="rounded-lg border p-4" aria-label={item.built_in ? t(item.name) : item.name}>
           <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
             <div className="min-w-0 flex-1">
-              <h3 className="break-words">
+              <div className="title-tags"><h3 className="break-words">
                 {item.built_in ? t(item.name) : item.name}{" "}
                 <span className="text-xs muted">v{item.version}</span>
-                {kind === "skill" && <span className="badge ml-2">{t(item.built_in ? "Built-in" : "Custom")}</span>}
               </h3>
+                {kind === "skill" && <span className="badge">{t(item.built_in ? "Built-in" : "Custom")}</span>}
+              </div>
               <p className="mt-1 text-sm muted break-words">
                 {item.built_in ? t(item.objective || item.name) : item.objective || item.name}
               </p>

@@ -11,11 +11,81 @@ import pytest
 from ninja.errors import HttpError
 
 from core.git_source_api import ConnectionIn, create, delete, update
-from core.git_sources import Provider, SourceError, base_url, normalize_selection
+from core.git_sources import Provider, SourceError, base_url, fail_connection, normalize_selection
 from core.models import Environment, EnvironmentRepository, GitConnection, Request
 from core.secrets import decrypt, encrypt
 
 pytestmark = pytest.mark.django_db
+
+
+def test_changing_unused_gitlab_server_clears_discovery_and_requires_new_token(storage):
+    from django.utils import timezone
+
+    with server("old-token") as (old_url, old_seen), server("new-token") as (new_url, new_seen):
+        conn = connection(old_url, "old-token")
+        stale = Provider(GitConnection.objects.get(pk=conn.pk))
+        source = stale.project("17")
+        conn.account, conn.status, conn.checked_at = "old-account", "CONNECTED", timezone.now()
+        conn.save()
+        with pytest.raises(HttpError, match="new read access token"):
+            update(None, conn.pk, ConnectionIn(name=conn.name, provider="gitlab", base_url=new_url))
+        conn.refresh_from_db()
+        assert conn.base_url == old_url and conn.repositories.filter(pk=source.pk).exists()
+        changed = update(None, conn.pk, ConnectionIn(
+            name=conn.name, provider="gitlab", base_url=new_url, secret="new-token",
+        ))
+        conn.refresh_from_db()
+        assert changed["base_url"] == new_url and changed["account"] == ""
+        assert changed["status"] == "UNKNOWN" and changed["checked_at"] is None
+        assert decrypt(conn.secret) == "new-token" and not conn.repositories.exists()
+        assert Provider(conn).test() == "reader"
+        with pytest.raises(SourceError, match="connection changed"):
+            stale.project("17")
+        fail_connection(stale.connection, SourceError("stale error"))
+        conn.refresh_from_db()
+        assert conn.status == "UNKNOWN" and not conn.repositories.exists()
+        assert all(token == "old-token" for _, token in old_seen)
+        assert all(token == "new-token" for _, token in new_seen)
+
+
+@pytest.mark.parametrize("reference", ["environment", "history"])
+def test_referenced_gitlab_server_cannot_retarget_repositories(storage, reference):
+    from core.models import GitRepository
+
+    conn = connection("https://old.example.test", "old-token")
+    source = GitRepository.objects.create(
+        connection=conn, provider="gitlab", instance=conn.base_url,
+        remote_id="17", path="team/repo", name="repo",
+        clone_url=conn.base_url + "/team/repo.git",
+    )
+    if reference == "environment":
+        env = Environment.objects.create(name="Existing")
+        EnvironmentRepository.objects.create(
+            environment=env, git_repository=source, repository="team/repo", branch="main",
+        )
+    else:
+        Request.objects.create(need="Historical", baseline=[{"git_repository_id": source.pk}])
+    with pytest.raises(HttpError, match="linked to environments or analysis history"):
+        update(None, conn.pk, ConnectionIn(
+            name=conn.name, provider="gitlab", base_url="https://new.example.test", secret="new-token",
+        ))
+    conn.refresh_from_db()
+    assert conn.base_url == "https://old.example.test"
+    assert decrypt(conn.secret) == "old-token" and conn.repositories.filter(pk=source.pk).exists()
+
+
+def test_normalized_same_server_keeps_existing_token(storage):
+    conn = connection("https://gitlab.example.test", "old-token")
+    update(None, conn.pk, ConnectionIn(
+        name="Renamed", provider="gitlab", base_url="https://GITLAB.example.test/",
+    ))
+    conn.refresh_from_db()
+    assert conn.base_url == "https://gitlab.example.test" and decrypt(conn.secret) == "old-token"
+
+
+def test_github_server_remains_cloud_only(storage):
+    with pytest.raises(HttpError, match="https://github.com"):
+        create(None, ConnectionIn(name="Enterprise", provider="github", base_url="https://git.example.test"))
 
 
 @contextmanager

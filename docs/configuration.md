@@ -1,7 +1,8 @@
 # Configuration
 
-Open **Administration** at the bottom left. The main sections are **AI & Agents**,
-**Environments**, **Connectors** and **Appearance**. They are not separate sidebar
+Open **Administration** at the bottom left; it opens **AI & Agents → Connections**.
+The main sections are **AI & Agents**,
+**Environments**, **Ticket publication** and **Appearance**. They are not separate sidebar
 menus. This guide uses the English interface labels; the application also supports French.
 
 ## Git sources and environments
@@ -10,6 +11,13 @@ Under **Environments → Manage Git connections**, connect GitHub or GitLab usin
 or token method offered for that provider. GitLab can use a self-hosted instance URL.
 Use only accounts authorized for the selected repositories. Source checkout and ticket
 publication are separate operations with separate credentials.
+
+GitHub source connections currently support `https://github.com` only; GitHub
+Enterprise servers are not supported. Select GitLab to enter a custom GitLab URL.
+An unused GitLab connection's URL can be edited with a new read access token;
+this clears cached project discovery and the previous account/test status.
+For connections referenced by an environment or analysis history, add a new
+connection instead of changing the server of existing repository references.
 
 Create an environment under **Configured environments**:
 
@@ -153,10 +161,26 @@ from earlier installations is retained for review, not silently activated.
 
 ## Ticket connectors
 
-Under **Connectors**, add a named destination for the appropriate environment and
-use **Test connection**. A connector belongs to one environment; publication chooses
-only its allowed projects/destinations. Untested, failed, unavailable and disabled
-states are distinct. Connection testing performs reads, not a ticket publication.
+Under **Ticket publication**, manage the instance-wide catalogue of publication
+connections. Give each connection any useful name. Several connections may use the
+same provider; renaming keeps the stable connection ID, credentials and associations.
+Use **Test connection** to observe its real status. A name-only edit retains that
+observation; credential changes require verification again. Disable a connection to
+prevent new publication without deleting its credentials or history.
+
+Under **Environments**, **Publication destinations** selects zero, one or several
+catalogue connections. The selector is available during creation and editing; the
+current associations are also shown on each environment. One connection may be used
+by several environments and several accounts of one provider may share an environment.
+Changing only these associations does not resynchronize Git or rerun an analysis.
+
+A connection authenticates an external account. A destination is a repository,
+project, entity or other accessible target. Choose the effective connection and
+actual destination at publication time. Optional project restrictions/defaults remain
+connection settings; an empty restriction list allows destinations accessible to the
+account. Actual access is rechecked by the provider adapter before a new write.
+Untested, failed, unavailable and disabled connections are shown but unavailable
+for selection. Saving or testing a connection does not publish a ticket.
 
 | Destination | Implemented adapter |
 | --- | --- |
@@ -170,9 +194,16 @@ these adapters. Publication OAuth is not implemented; Git source authorization d
 not establish publication rights. GitHub publication must not reuse repository-read
 credentials. A successful test is not proof of every destination's write permissions.
 
-Connector endpoints with publication history cannot be retargeted. Create another
-connector for a different instance, preserving recovery links to existing tickets.
-Unassigned retained connectors must be explicitly associated before new publication.
+Connection endpoints with publication history cannot be retargeted. Create another
+connection for a different instance, preserving recovery links to existing tickets.
+Deleting an associated connection requires unlinking it first. Publication history
+prevents deletion; disable the connection instead. Existing single-environment
+associations migrate to the shared catalogue without copying accounts or decrypting
+secrets. Unassociated connections remain available for explicit configuration.
+
+These accounts are shared by the trusted instance. The selected external account
+performs publication; it need not identify the person operating SpecHelper. No new
+individual SpecHelper account or per-connection user permission is introduced.
 See [Usage](usage.md#prepare-and-publish-a-ticket) for previews, templates and attachments.
 
 ## Appearance and language

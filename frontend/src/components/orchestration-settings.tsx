@@ -75,7 +75,7 @@ export function OrchestrationSettingsForm() {
         const status = value.role_coverage!.roles[role];
         const Icon = role === "analyst" ? UserRound : role === "counter_analyst" ? ScanEye : ShieldCheck;
         return <article key={role} className="orchestration-role-card min-w-0 rounded-xl border p-5" data-role={role} aria-labelledby={`coverage-${role}`}>
-          <header className="flex flex-wrap items-center justify-between gap-3">
+          <header className="title-tags">
             <h4 id={`coverage-${role}`} className="flex items-center gap-2 text-sm font-semibold"><Icon size={18} aria-hidden="true" />{t(roleLabels[role])}</h4>
             <span className="badge" data-state={status.configured.length ? "READY" : "ERROR"}>{t(status.configured.length ? "Covered" : "Not covered")}</span>
           </header>
@@ -86,10 +86,11 @@ export function OrchestrationSettingsForm() {
             return <li key={id} className="flex min-w-0 items-start gap-2" data-connection-id={id}>
               {connection && <ProviderLogo provider={connection.agent} />}
               <div className="min-w-0 flex-1">
-                <p className="break-words text-sm font-medium">{connection ? connection.name || assistantName(connection.agent) : t("Connection #{id}", { id })}</p>
+                <div className="title-tags"><p className="break-words text-sm font-medium">{connection ? connection.name || assistantName(connection.agent) : t("Connection #{id}", { id })}</p>
+                  <span className="badge" data-state={available ? "READY" : "QUEUED"}>{t(available ? "Available" : "Waiting")}</span>
+                </div>
                 {connection?.model && <p className="mt-1 break-words text-xs muted">{connection.model}</p>}
               </div>
-              <span className="badge shrink-0" data-state={available ? "READY" : "QUEUED"}>{t(available ? "Available" : "Waiting")}</span>
             </li>;
           })}</ul> : <p className="mt-3 text-sm muted">{t("No AI connection covers this role.")}</p>}
         </article>;

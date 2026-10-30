@@ -71,6 +71,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto(`/requests/${id}`);
     await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await expect(dialog.getByLabel(t("Include attachments"), { exact: true })).not.toBeChecked();
     await dialog.getByLabel(t("Include attachments"), { exact: true }).check();
     await expect(dialog.getByLabel(/^diagrams.md/)).not.toBeChecked();
@@ -134,6 +135,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto(`/requests/${id}`);
     await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await expect(dialog.getByLabel(t("Ticket template"), { exact: true }).locator("option")).toHaveCount(3);
     await dialog.getByLabel(t("Ticket template"), { exact: true }).selectOption("feature");
     await expect(dialog.getByLabel(t("Ticket description"), { exact: true })).toHaveValue(/Short verified feature description/);
@@ -159,6 +161,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(dialog.getByText(t("Publication draft saved."), { exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: t("Close"), exact: true }).click();
     await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await expect(dialog.getByLabel(t("Ticket title"), { exact: true })).toHaveValue("Reviewed title");
     await expect(dialog.getByLabel("Owning team", { exact: false })).toHaveValue("billing");
     await expect(dialog.getByLabel(t("Include attachments"), { exact: true })).not.toBeChecked();
@@ -171,6 +174,7 @@ for (const language of ["en", "fr"] as const) {
     await setup(page, language); await publications(page, false, true, false);
     await page.goto(`/requests/${id}`); await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await expect(dialog.getByLabel(t("Ticket format"), { exact: true })).toHaveValue("standard");
     await expect(dialog.getByLabel(t("Ticket format"), { exact: true }).locator('option[value="project"]')).toBeDisabled();
     await expect(dialog.getByText(t("This project exposes no usable ticket template. The standard SpecHelper format is selected; required destination fields still apply."), { exact: true })).toBeVisible();
@@ -183,6 +187,7 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**${endpoint}/publications`, route => { if (route.request().method() === "GET") return route.fulfill({ json: [] }); payload = route.request().postDataJSON(); return route.fulfill({ json: { id: "publication-1", status: "PUBLISHED", external_id: "123", attachment_delivery: [{ id: "original-1", name: "screen.png", status: "TRANSFERRED" }, { id: "goal", name: "goal.md", status: "UNCERTAIN", error: "Upload interrupted." }] } }); });
     await page.goto(`/requests/${id}`); await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await expect(dialog.getByLabel(t("Include attachments"), { exact: true })).not.toBeChecked();
     await expect(dialog.getByLabel(t("Attachment transfer preview"), { exact: true })).toContainText(t("None"));
     await dialog.getByLabel(t("Include attachments"), { exact: true }).check();
@@ -205,6 +210,7 @@ for (const language of ["en", "fr"] as const) {
     });
     await page.goto(`/requests/${id}`); await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await dialog.getByLabel(t("Include attachments"), { exact: true }).check();
     await dialog.getByLabel(/screen.png/).check();
     await dialog.getByLabel(t("Include attachments"), { exact: true }).uncheck();
@@ -222,6 +228,7 @@ for (const language of ["en", "fr"] as const) {
     });
     await page.goto(`/requests/${id}`); await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     let dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await dialog.getByLabel(t("Ticket title"), { exact: true }).fill("Exact reviewed title");
     await dialog.getByRole("button", { name: t("Create ticket"), exact: true }).click();
     await expect(dialog.getByRole("button", { name: t("Verify publication"), exact: true })).toBeVisible();
@@ -242,6 +249,7 @@ for (const language of ["en", "fr"] as const) {
     });
     await page.goto(`/requests/${id}`); await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await dialog.getByLabel(t("Ticket title"), { exact: true }).fill("Unsaved local edit");
     await dialog.getByRole("button", { name: t("Save publication draft"), exact: true }).click();
     await expect(dialog.getByRole("alert")).toContainText(t("The ticket draft changed. Reload it before saving your edits."));
@@ -262,6 +270,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByLabel(t("Result reliability"), { exact: true })).toContainText("Verifier quota unavailable.");
     await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await expect(dialog.getByText(t("Publication is blocked"), { exact: true })).toBeVisible();
     await expect(dialog.getByRole("button", { name: t("Create ticket"), exact: true })).toBeDisabled();
     await expect(dialog.getByRole("button", { name: t("Create ticket"), exact: true })).toHaveAccessibleDescription(/Verifier quota unavailable/);
@@ -270,6 +279,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(dialog).not.toBeVisible();
     await expect.poll(() => fixture.saves.length).toBe(1);
     await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
+    await dialog.getByLabel(t("Publication connection"), { exact: true }).selectOption("1");
     await expect(dialog.getByLabel(t("Ticket title"), { exact: true })).toHaveValue("Consultable partial draft");
     expect(posts).toBe(0); expect(fixture.value.latest_version.status).toBe("PARTIAL");
   });

@@ -608,9 +608,11 @@ export function WorkItemForm({
           <article className="work-list-row" key={item.id}>
             <div className="work-list-main">
               <div className="min-w-0 flex-1">
-                <Link className="work-list-title" href={`${base}/${item.id}`}>
+                <div className="title-tags"><Link className="work-list-title" href={`${base}/${item.id}`}>
                   {item.title || item.need}
                 </Link>
+                  <span className="badge" data-state={item.status}>{t(statuses[item.status] || item.status)}</span>
+                </div>
                 <p className="row-subtitle">
                   {item.environment_name} ·{" "}
                   {new Date(item.created_at).toLocaleDateString(dateLocale)}
@@ -622,9 +624,6 @@ export function WorkItemForm({
                   </p>
                 )}
               </div>
-              <span className="badge shrink-0" data-state={item.status}>
-                {t(statuses[item.status] || item.status)}
-              </span>
               {isQuestion && ["READY", "PARTIAL"].includes(item.status) && (
                 <button
                   type="button"

@@ -1,7 +1,7 @@
 "use client";
 import { ProviderLogo } from "@/components/provider-logo";
 import { useEffect, useState } from "react";
-import { api, send, statuses, type Environment } from "@/lib/api";
+import { api, send, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Ticket, Trash2 } from "lucide-react";
@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 
 export type TicketConnector = {
   id: number;
-  environment_id: number | null;
+  environment_id?: number | null;
+  environment_ids: number[];
+  enabled: boolean;
   name: string;
   platform: string;
   base_url: string;
@@ -24,7 +26,10 @@ export type TicketConnector = {
   default_project: string;
 };
 export type Destination = { id: string; name: string };
+export const publicationPlatforms: Record<string, string> = { github: "GitHub", gitlab: "GitLab", jira: "Jira", glpi: "GLPI" };
+
 const empty = {
+  enabled: true,
   name: "",
   platform: "github",
   base_url: "https://api.github.com",
@@ -36,8 +41,8 @@ const empty = {
   default_project: "",
 };
 
-export function TicketConnectors({ environmentId, environmentName }: { environmentId: number; environmentName: string }) {
-  const prefix = `connector-${environmentId}`;
+export function TicketConnectors() {
+  const prefix = "publication-connection";
   const { t, dateLocale } = useI18n();
   const [items, setItems] = useState<TicketConnector[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -49,10 +54,10 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
   const [notice, setNotice] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const refresh = () =>
-    api<TicketConnector[]>(`/ticket-connectors?environment_id=${environmentId}`).then(setItems);
+    api<TicketConnector[]>("/ticket-connectors").then(setItems);
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
-  }, [environmentId]);
+  }, []);
   function edit(item?: TicketConnector) {
     setConfirmDelete(false);
     setShowForm(true);
@@ -71,6 +76,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
     try {
       await task();
       await refresh();
+      window.dispatchEvent(new Event("publication-connections-updated"));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -84,15 +90,21 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
     setNotice("Connection verified.");
   }
   return (
-    <div className="environment-connectors mt-5 border-t pt-5" aria-label={t("Ticket connectors for {environment}", { environment: environmentName })}>
-      <h3 className="flex items-center gap-2"><Ticket size={17} aria-hidden="true" />{t("Ticket publication connectors")}</h3>
+    <div className="publication-connection-catalog" aria-label={t("Publication connections")}>
+      <h2 className="flex items-center gap-2"><Ticket size={18} aria-hidden="true" />{t("Publication connections")}</h2>
+      <p className="mt-2 text-sm muted">{t("Reusable publication accounts. Associate them with environments, then choose the account and destination when publishing.")}</p>
       <div className="mt-5 flex flex-wrap gap-2">
         {items.map((item) => <section key={item.id} className="min-w-0 w-full rounded-lg border p-3" aria-label={item.name}>
-          <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="flex items-center gap-2 text-sm font-medium"><ProviderLogo provider={item.platform} />{item.name}</h4>
-            <span className="text-xs muted">{t(item.status === "UNKNOWN" ? item.checked_at ? "Connection needs verification" : "Not tested" : item.status === "UNAVAILABLE" ? "Verification unavailable" : item.status === "ERROR" ? "Failed" : statuses[item.status] || item.status)}</span></div>
+          <div className="title-tags"><h4 className="flex items-center gap-2 text-sm font-medium"><ProviderLogo provider={item.platform} />{item.name}</h4>
+            <span className="badge">{publicationPlatforms[item.platform] || item.platform}</span>
+            <span className="badge" data-state={!item.enabled ? "DISABLED" : item.status}>{t(!item.enabled ? "Disabled" : item.status === "UNKNOWN" ? item.checked_at ? "Connection needs verification" : "Not tested" : item.status === "UNAVAILABLE" ? "Verification unavailable" : item.status === "ERROR" ? "Failed" : statuses[item.status] || item.status)}</span></div>
           {item.checked_at && <p className="mt-1 text-xs muted">{t("Last checked")}: {new Date(item.checked_at).toLocaleString(dateLocale)}</p>}
           <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => edit(item)} aria-label={t("Edit {name}", { name: item.name })}>{t("Edit")}</Button>
-            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => action(() => testConnection(item.id))} aria-label={t("Test {name}", { name: item.name })}>{t("Test connection")}</Button></div>
+            <Button type="button" size="sm" variant="ghost" disabled={busy || item.enabled === false} onClick={() => action(() => testConnection(item.id))} aria-label={t("Test {name}", { name: item.name })}>{t("Test connection")}</Button>
+            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => action(() => {
+              const {name, platform, base_url, username, api_version, projects, default_project} = item;
+              return send(`/ticket-connectors/${item.id}`, {name, platform, base_url, username, api_version, projects, default_project, enabled: !item.enabled}, "PUT");
+            })}>{t(item.enabled ? "Disable" : "Enable")}</Button></div>
           {item.error && <details className="mt-2 text-xs"><summary className="cursor-pointer">{t("Diagnostics")}</summary><p className="mt-2 whitespace-pre-wrap break-words">{item.error}</p></details>}
         </section>)}
         <Button variant="outline" onClick={() => edit()}>
@@ -117,7 +129,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
             event.preventDefault();
             action(async () => {
               const payload: Record<string, unknown> = {
-                environment_id: environmentId,
+                enabled: form.enabled,
                 name: form.name,
                 platform: form.platform,
                 base_url:
@@ -147,7 +159,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
         >
           <div className="grid gap-x-5 sm:grid-cols-2">
             <div className="field">
-              <label htmlFor={`${prefix}-name`}>{t("Connector name")}</label>
+              <label htmlFor={`${prefix}-name`}>{t("Connection name")}</label>
               <Input
                 id={`${prefix}-name`}
                 required
@@ -277,6 +289,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
             <Input id={`${prefix}-publication-secret`} type="password" autoComplete="new-password" required={selected === null} value={form.secret} onChange={(event) => setForm({ ...form, secret: event.target.value })} />
             <p className="mt-2 text-xs muted">{t("Use a separate fine-grained credential with issue permissions. Git source credentials cannot publish tickets.")}</p>
           </div>}
+          <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={event => setForm({...form, enabled: event.target.checked})} />{t("Enabled")}</label>
           <div className="mt-5 flex flex-wrap gap-2">
             <Button disabled={busy}>{t("Save connector")}</Button>
             {selected !== null && (
@@ -311,7 +324,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
           {selected !== null && <div className="mt-3">
             <Button type="button" variant="ghost" className="icon-action text-red-700" disabled={busy} aria-label={t("Delete connector")} title={t("Delete connector")} onClick={() => setConfirmDelete(true)}><Trash2 size={16} aria-hidden="true" /></Button>
             {confirmDelete && <div role="alertdialog" aria-label={t("Delete connector")} className="mt-2 rounded-lg border p-4">
-              <p className="text-sm">{t("Delete this connector? Existing publication history prevents deletion.")}</p>
+              <p className="text-sm">{t("Delete this connection? Associated environments and publication history prevent deletion.")}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmDelete(false)}>{t("Cancel")}</Button>
                 <Button type="button" disabled={busy} onClick={() => action(async () => {
@@ -322,7 +335,7 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
             </div>}
           </div>}
           {!!destinations.length && (
-            <fieldset className="mt-5 rounded-lg border p-4">
+            <fieldset className="mt-5 rounded-lg border p-4"><p className="mb-3 text-xs muted">{t("Optional restrictions: leave all projects unchecked to allow any destination accessible to this account.")}</p>
               <legend className="px-2 text-sm font-semibold">
                 {t("Allowed publication destinations")}
               </legend>
@@ -389,36 +402,4 @@ export function TicketConnectors({ environmentId, environmentName }: { environme
       )}
     </div>
   );
-}
-
-
-export function UnassignedTicketConnectors({ environments, onAssigned }: { environments: Environment[]; onAssigned: () => Promise<void> }) {
-  const { t } = useI18n();
-  const [items, setItems] = useState<TicketConnector[]>([]);
-  const [target, setTarget] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    api<TicketConnector[]>("/ticket-connectors").then((values) => setItems(values.filter((value) => value.environment_id === null))).catch((error) => setError(error.message));
-  }, []);
-  if (!items.length && !error) return null;
-  return <section className="rounded-lg border bg-card p-5">
-    <h2>{t("Unassigned ticket connectors")}</h2>
-    <p className="mt-2 text-sm muted">{t("Choose an environment for a saved connector before using it for new publications.")}</p>
-    {error && <p role="alert" className="mt-3 text-sm text-red-700">{t(error)}</p>}
-    <label htmlFor="legacy-connector-environment" className="mt-4 block">{t("Environment")}</label>
-    <select id="legacy-connector-environment" value={target} disabled={busy} onChange={(event) => setTarget(event.target.value)}>
-      <option value="">{t("Select an environment")}</option>
-      {environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.name}</option>)}
-    </select>
-    <div className="mt-3 flex flex-wrap gap-2">{items.map((item) => <Button key={item.id} disabled={busy || !target} variant="outline" onClick={async () => {
-      setBusy(true); setError("");
-      try {
-        const { name, platform, base_url, username, api_version, projects, default_project } = item;
-        await send(`/ticket-connectors/${item.id}`, { name, platform, base_url, username, api_version, projects, default_project, environment_id: Number(target) }, "PUT");
-        setItems((values) => values.filter((value) => value.id !== item.id));
-        await onAssigned();
-      } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
-    }}>{t("Assign {name}", { name: item.name })}</Button>)}</div>
-  </section>;
 }

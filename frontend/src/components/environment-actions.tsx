@@ -6,7 +6,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, send, type Environment } from "@/lib/api";
-import type { TicketConnector } from "@/components/ticket-connectors";
+import { PublicationConnectionPicker } from "@/components/publication-connections";
 
 import {
   RepositoryPicker,
@@ -37,14 +37,7 @@ export function EnvironmentActions({
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [connectors, setConnectors] = useState<TicketConnector[] | null>(null);
-  useEffect(() => {
-    if (mode !== "edit") return;
-    let alive = true;
-    setConnectors(null);
-    api<TicketConnector[]>(`/ticket-connectors?environment_id=${value.id}`).then(rows => { if (alive) setConnectors(rows); }).catch(() => {});
-    return () => { alive = false; };
-  }, [mode, value.id]);
+  const [publicationConnections, setPublicationConnections] = useState<number[]>([]);
   useEffect(() => {
     if (mode && !dialog.current?.open) dialog.current?.showModal();
     if (!mode && dialog.current?.open) dialog.current.close();
@@ -52,6 +45,7 @@ export function EnvironmentActions({
   function open(next: "edit" | "delete") {
     setOriginal(structuredClone(value));
     setName(value.name);
+    setPublicationConnections([...(value.publication_connection_ids || [])]);
     setDatabase(value.database_id ? String(value.database_id) : "");
     setSelection(
       value.repositories.map((r) => ({
@@ -126,19 +120,21 @@ export function EnvironmentActions({
           databases.find((d) => String(d.id) === database)?.name || t("None"),
       }),
     );
+  if (JSON.stringify([...publicationConnections].sort()) !== JSON.stringify([...(original.publication_connection_ids || [])].sort())) changes.push(t("Publication destinations updated."));
   async function save() {
-    await send(
+    const saved = await send<Environment>(
       `/environments/${original.id}`,
       {
         name,
         repositories: selection.map(sourcePayload),
         database_id: database ? Number(database) : null,
         expected_revision: original.revision,
+        publication_connection_ids: publicationConnections,
       },
       "PATCH",
     );
     setMode(null);
-    await onChanged(t("Changes saved. Preparing the environment."));
+    await onChanged(t(saved.status === "PENDING" ? "Changes saved. Preparing the environment." : "Changes saved."));
   }
   async function remove() {
     await send(
@@ -311,11 +307,7 @@ export function EnvironmentActions({
                 </select>
               </div>
               <a className="text-xs text-primary underline" href="/admin?tab=environments&sources=postgres" target="_blank" rel="noopener noreferrer">{t("Manage PostgreSQL connections")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
-              <section className="mt-5 rounded-lg border p-3 text-sm" aria-label={t("Associated publication connectors")}>
-                <h3 className="font-medium">{t("Associated publication connectors")}</h3>
-                {connectors ? <p className="mt-2 muted">{connectors.map(item => item.name).join(" · ") || t("No connector configured")}</p> : <p className="mt-2 muted">{t("Open connector settings to see the current associations.")}</p>}
-                <a className="mt-2 inline-block text-xs text-primary underline" href={`/admin?tab=connectors#environment-connectors-${value.id}`} target="_blank" rel="noopener noreferrer">{t("Manage publication connectors")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
-              </section>
+              <PublicationConnectionPicker selected={publicationConnections} onChange={setPublicationConnections} disabled={busy} />
               <div className="mt-6 flex flex-wrap justify-end gap-3">
                 <Button
                   type="button"

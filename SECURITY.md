@@ -106,7 +106,11 @@ Supported originals are limited to 25 MB each; environment context accepts at mo
 can still contain sensitive data or malicious instructions.
 
 Ticket publication uses encrypted, separate connector credentials and explicit human
-confirmation of an allowed destination. GitHub publication must not reuse Git-source
+confirmation of an allowed destination. Connections are shared instance configuration;
+environments permit connection IDs through a many-to-many association. New writes
+require an enabled, verified associated connection and actual destination access.
+The external account is the publisher, not an individually authenticated SpecHelper
+user. An account failure does not authorize a silent switch. GitHub publication must not reuse Git-source
 credentials. Agents cannot publish through their analysis tools. Verify the preview,
 required fields and optional files; a successful connection test does not prove write
 permission. Uncertain external writes must be reconciled before another creation

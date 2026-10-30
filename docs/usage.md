@@ -110,7 +110,11 @@ A partial result may be prepared as a draft, but a new external publication requ
 completed mandatory checks and non-blocking verified evidence. Changing the need
 requires reassessment before an earlier result can be published.
 
-Select a connector belonging to the environment and an allowed project. Choose the
+Select an enabled, verified connection associated with the environment, then a
+destination accessible with that account. Multiple accounts of the same provider
+remain separate choices. An unavailable account stays visible but cannot be selected;
+a failure never silently switches accounts. If none is associated, follow the link
+to the environment’s **Publication destinations** configuration. Choose the
 standard concise format or a real destination template, complete mandatory fields,
 edit the draft and inspect the preview. Draft edits persist separately from the
 immutable result and reject stale concurrent changes. Publication happens only after

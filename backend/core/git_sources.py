@@ -6,6 +6,7 @@ import time
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import httpx
+from django.db import transaction
 from django.utils import timezone
 from ninja.errors import HttpError
 
@@ -96,6 +97,9 @@ def repository_dict(value):
 class Provider:
     def __init__(self, connection):
         self.connection = connection
+        self.configuration = (
+            connection.base_url, connection.provider, connection.secret, connection.enabled,
+        )
         self.base = base_url(connection.provider, connection.base_url)
         if not connection.enabled:
             raise SourceError("This Git connection is disabled.")
@@ -153,7 +157,14 @@ class Provider:
             raise SourceError("The Git server returned invalid account metadata.")
         return str(data.get("login") or data.get("username") or data.get("name") or "")[:200]
 
+    @transaction.atomic
     def _record(self, data):
+        # A response started before an edit must not refill the new server's cache.
+        current = GitConnection.objects.select_for_update().filter(pk=self.connection.pk).first()
+        if not current or (
+            current.base_url, current.provider, current.secret, current.enabled
+        ) != self.configuration:
+            raise SourceError("The Git connection changed. Refresh and retry.")
         if not isinstance(data, dict):
             raise SourceError("The Git server returned invalid project metadata.")
         github = self.connection.provider == "github"
@@ -308,7 +319,9 @@ class Provider:
 
 
 def fail_connection(connection, error):
-    GitConnection.objects.filter(pk=connection.pk).update(
+    GitConnection.objects.filter(
+        pk=connection.pk, base_url=connection.base_url, secret=connection.secret
+    ).update(
         status="ERROR", error=str(error), checked_at=timezone.now()
     )
 

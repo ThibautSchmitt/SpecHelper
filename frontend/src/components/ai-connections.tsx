@@ -490,7 +490,7 @@ export function AIConnections({
             aria-label={value.name || value.agent}
             className="ai-connection-card rounded-lg border p-4"
           >
-            <div className="flex flex-wrap justify-between gap-2">
+            <div className="title-tags">
               <h3 className="flex items-center gap-2">
                 <ProviderLogo provider={value.agent} />
                 {value.name || assistantName(value.agent)}
@@ -531,7 +531,6 @@ export function AIConnections({
                   action(async () => {}, "Connection successful.");
                 }}
               />)}
-              {weeklyQuotaExhausted(value) && <span className="badge connection-quota-exhausted" data-state="ERROR">{t("Quota depleted")}</span>}
               <Button
                 type="button"
                 size="sm"
@@ -646,6 +645,7 @@ export function AIConnections({
 
                 </div>
               </details>
+              {weeklyQuotaExhausted(value) && <span className="badge connection-quota-exhausted" data-state="ERROR">{t("Quota exhausted")}</span>}
             </div>
             {editing?.id === value.id && connectionForm}
           </section>

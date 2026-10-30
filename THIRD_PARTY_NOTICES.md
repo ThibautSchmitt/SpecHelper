@@ -97,7 +97,43 @@ to OpenAI and Anthropic respectively; they are not covered by SpecHelper's MIT
 license and do not imply endorsement. Artwork is bundled locally; viewing a queue
 does not request assets from either provider.
 
-GitHub and GitLab identification uses the locally bundled Lucide icons under
-Lucide's ISC license. Jira, GLPI and unknown platforms use a neutral ticket icon
-beside their visible platform name when no redistributable provider artwork is
-bundled. No external image request or third-party logo download is needed.
+GitHub identification uses the official [Primer Octicons mark](https://github.com/primer/octicons/blob/main/icons/mark-github-24.svg),
+with its MIT notice below. GitLab identification uses the official
+[Tanuki press asset](https://about.gitlab.com/images/press/tanuki.svg), bundled as
+`frontend/public/gitlab.svg`. GitHub and GitLab retain their respective marks and
+trademark rights; identification does not imply endorsement. GitLab artwork is not
+relicensed by SpecHelper's MIT license.
+
+Jira identification uses Atlassian's official
+[Jira product icon](https://wac-cdn.atlassian.com/misc-assets/adg4-nav/prod-icon-Jira.svg),
+bundled as `frontend/public/jira.svg`; see the
+[Atlassian trademark information](https://www.atlassian.com/legal/trademark).
+GLPI identification uses the official [GLPI site icon](https://www.glpi-project.org/wp-content/uploads/2025/10/cropped-glpi-logo-ig-192x192.png),
+bundled as `frontend/public/glpi.png`. These marks belong to Atlassian and
+GLPI/Teclib respectively. They identify the integrated services, imply no endorsement,
+and are not relicensed under SpecHelper's MIT license. Unknown platforms retain a
+neutral ticket icon. Rendering provider marks makes no external image request.
+
+## Primer Octicons
+
+MIT License
+
+Copyright (c) 2026 GitHub Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

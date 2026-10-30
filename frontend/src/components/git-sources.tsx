@@ -106,10 +106,10 @@ export function GitSources() {
           <section
             className="rounded-lg border p-4"
             key={value.id}
-            aria-label={value.name}
+            aria-label={value.account || value.name}
           >
-            <div className="flex flex-wrap justify-between gap-2">
-              <h3>{value.name}</h3>
+            <div className="title-tags">
+              <h3 className="flex items-center gap-2"><ProviderLogo provider={value.provider} />{value.provider === "github" ? "GitHub" : "GitLab"}{value.account ? ` - ${value.account}` : value.name.toLowerCase() !== value.provider ? ` - ${value.name}` : ""}</h3>
               <span
                 className="badge"
                 data-state={value.enabled ? value.status : "DISCONNECTED"}
@@ -122,8 +122,7 @@ export function GitSources() {
               </span>
             </div>
             <p className="mt-2 break-all text-sm muted">
-              <ProviderLogo provider={value.provider} /> {value.provider === "github" ? "GitHub" : "GitLab"} ·{" "}
-              {value.account || value.base_url}
+              {value.base_url}
             </p>
             {value.error && (
               <p className="mt-2 text-sm text-red-700">{t(value.error)}</p>
@@ -265,10 +264,16 @@ export function GitSources() {
               id="git-source-server"
               type="url"
               required
-              disabled={form.provider === "github" || !!editing}
+              readOnly={form.provider === "github"}
+              aria-describedby="git-source-server-help"
               value={form.base_url}
               onChange={(e) => setForm({ ...form, base_url: e.target.value })}
             />
+            <p id="git-source-server-help" className="mt-2 text-xs muted">
+              {t(form.provider === "github"
+                ? "GitHub connections currently support github.com only. Self-hosted GitLab servers can be configured by selecting GitLab."
+                : "Enter your GitLab server URL. Changing servers requires a new token; connections linked to environments or analysis history must be replaced by a new connection.")}
+            </p>
           </div>
           {form.provider === "gitlab" && (
             <div className="field">
@@ -279,6 +284,7 @@ export function GitSources() {
                 id="git-source-secret"
                 type="password"
                 autoComplete="new-password"
+                required={!!editing && form.base_url.trim().replace(/\/$/, "") !== editing.base_url}
                 value={form.secret}
                 onChange={(e) => setForm({ ...form, secret: e.target.value })}
               />

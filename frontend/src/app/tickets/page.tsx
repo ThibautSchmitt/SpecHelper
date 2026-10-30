@@ -323,9 +323,6 @@ export default function TicketsPage() {
                     {t("Ticket")}
                   </th>
                   <th scope="col" className="px-4 py-3 font-medium">
-                    {t("Publication status")}
-                  </th>
-                  <th scope="col" className="px-4 py-3 font-medium">
                     {t("Environment")}
                   </th>
                 </tr>
@@ -337,6 +334,7 @@ export default function TicketsPage() {
                     className={`ticket-row ${selectedId === ticket.id ? "bg-muted" : ""}`}
                   >
                     <td className="border-t px-5 py-4 min-w-48 max-w-sm align-top">
+                      <div className="title-tags">
                       <button
                         type="button"
                         className="text-left font-semibold text-primary break-words [overflow-wrap:anywhere]"
@@ -345,14 +343,6 @@ export default function TicketsPage() {
                       >
                         {ticket.title}
                       </button>
-                      <p className="mt-1 text-xs muted break-words">
-                        {platformName(ticket.platform)} ·{" "}
-                        {ticket.external_key ||
-                          ticket.external_id ||
-                          t("No external reference")}
-                      </p>
-                    </td>
-                    <td className="border-t px-4 py-4 align-top">
                       <span
                         className="badge"
                         data-state={
@@ -370,6 +360,13 @@ export default function TicketsPage() {
                       >
                         {t(publicationStatuses[ticket.status] || ticket.status)}
                       </span>
+                      </div>
+                      <p className="mt-1 text-xs muted break-words">
+                        {platformName(ticket.platform)} ·{" "}
+                        {ticket.external_key ||
+                          ticket.external_id ||
+                          t("No external reference")}
+                      </p>
                     </td>
                     <td className="border-t px-4 py-4 align-top break-words max-w-40">
                       {ticket.environment_name}

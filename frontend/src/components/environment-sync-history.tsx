@@ -52,7 +52,7 @@ export function EnvironmentSyncHistory({ environmentId }: { environmentId: numbe
         {!items.length && <p className="text-sm muted">{t("No synchronization jobs have been recorded for this environment.")}</p>}
         <ul className="space-y-3" aria-label={t("Recorded synchronizations")}>
           {items.map(item => <li key={item.id} className="min-w-0 space-y-2 rounded border p-3 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">#{item.id}</span><span className="badge" data-state={item.status}>{t(item.status === "RUNNING" ? "In progress" : item.status === "QUEUED" ? "Waiting" : item.status === "ERROR" ? "Failed" : statuses[item.status] || item.status)}</span></div>
+            <div className="title-tags"><span className="font-medium">#{item.id}</span><span className="badge" data-state={item.status}>{t(item.status === "RUNNING" ? "In progress" : item.status === "QUEUED" ? "Waiting" : item.status === "ERROR" ? "Failed" : statuses[item.status] || item.status)}</span></div>
             <dl className="grid gap-2 text-xs sm:grid-cols-3">
               <div><dt className="muted">{t("Queued on")}</dt><dd className="mt-1 break-words">{timestamp(item.created_at)}</dd></div>
               <div><dt className="muted">{t("Started on")}</dt><dd className="mt-1 break-words">{timestamp(item.started_at)}</dd></div>

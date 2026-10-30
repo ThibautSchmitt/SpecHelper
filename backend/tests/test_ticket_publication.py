@@ -45,6 +45,7 @@ def publication_context(environment, storage, monkeypatch):
         default_project="42",
         status="CONNECTED",
     )
+    connector.environments.add(environment)
     provider = Mock()
     provider.projects.return_value = [{"id": "42", "name": "Team"}, {"id": "99", "name": "Other"}]
     provider.options.return_value = {

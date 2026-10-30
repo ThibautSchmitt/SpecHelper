@@ -1,4 +1,5 @@
 import { secureFetch } from "@/lib/access";
+import type { TicketConnector } from "@/components/ticket-connectors";
 import type { AnalysisWarning } from "@/lib/orchestration";
 import type { ContextSnapshot, ContextUsage } from "@/lib/context";
 import type { BusinessDecision, BusinessSummary, ClarificationQuestion } from "@/lib/business-decisions";
@@ -42,6 +43,8 @@ export function send<T>(path: string, body?: unknown, method = "POST") {
   });
 }
 export type Environment = {
+  publication_connection_ids?: number[];
+  publication_connections?: TicketConnector[];
   id: number;
   name: string;
   revision: number;

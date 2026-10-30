@@ -138,12 +138,13 @@ export function AnalysesList() {
           const summary = (item.need.startsWith(prefix) ? item.need.slice(prefix.length) : item.need).replace(/^[\s.,:;!?-]+/, "").trim();
           return <Link key={item.id} href={item.href} data-business-state={item.result_state || item.status} className="analysis-row block rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
             <div className="flex items-start gap-3"><span className="analysis-row-icon"><Icon size={19} aria-hidden="true" /></span>
-              <div className="min-w-0 flex-1"><h2 className="line-clamp-2 break-words font-semibold" title={title}>{title}</h2>
-                {summary && <p className="mt-1 line-clamp-2 break-words text-sm muted">{summary}</p>}
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted">
+              <div className="min-w-0 flex-1"><div className="title-tags"><h2 className="line-clamp-2 break-words font-semibold" title={title}>{title}</h2>
                   <span className="badge analysis-state-pill" data-state={item.status}>{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
                   <span className="badge analysis-intent-pill">{t(!item.intent_resolved ? "Analysis" : item.workflow === "question" ? "Question" : "Change")}</span>
                   <span className="badge analysis-environment-pill">{item.environment_name}</span>
+                </div>
+                {summary && <p className="mt-1 line-clamp-2 break-words text-sm muted">{summary}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted">
                   <time dateTime={item.latest_activity_at}>{new Date(item.latest_activity_at).toLocaleString(dateLocale)}</time>
                   {item.latest_version_number !== null && <span>{t("Version")} {item.latest_version_number}</span>}
                 </div>

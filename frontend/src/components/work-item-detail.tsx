@@ -38,6 +38,7 @@ import {
   api,
   send,
   statuses,
+  resultStates,
   scopeNeedsContext,
   type RequestDetail,
   type ResultVersion,
@@ -361,8 +362,12 @@ function RequestContent({
             {value.environment_name}{" "}
             {t(value.intent_mode === "auto" && !value.understanding && !value.latest_version ? "· Analysis" : isQuestion ? "· Question" : "· Change")} {value.id.slice(0, 8)}
           </p>
-          <h1 className="break-words">{value.title || value.need.split("\n")[0] || t("Analysis")}</h1>
-          {editingTitle ? <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={async event => {
+          <div className="title-tags analysis-title">
+            <h1 className="break-words">{value.title || value.need.split("\n")[0] || t("Analysis")}</h1>
+            {!editingTitle && <Button id="edit-analysis-title" className="conversation-title-edit" aria-label={t("Edit title")} type="button" size="sm" variant="ghost" disabled={titleLocked} title={titleLocked ? t("Wait for the analysis to finish before renaming it.") : t("Edit title")} onClick={() => { setTitleDraft(value.title || value.need.split("\n")[0]); setEditingTitle(true); }}><Pencil size={14} aria-hidden="true" /></Button>}
+            <span role="status" className="badge conversation-state" data-state={value.status}>{t(resultStates[value.result_state || ""] || statuses[value.status] || value.status)}</span>
+          </div>
+          {editingTitle && <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={async event => {
             event.preventDefault(); setBusy(true); setError("");
             try { const renamed = await send<{ title: string }>(`/analyses/${value.id}/title`, { title: titleDraft }, "PATCH"); setValue({ ...value, title: renamed.title }); setEditingTitle(false); requestAnimationFrame(() => document.getElementById("edit-analysis-title")?.focus()); window.dispatchEvent(new Event("queue-updated")); }
             catch (failure) { setError((failure as Error).message); }
@@ -371,7 +376,7 @@ function RequestContent({
             <label className="min-w-0 flex-1 text-sm" htmlFor="analysis-title">{t("Analysis title")}<Input id="analysis-title" autoFocus className="mt-1" maxLength={160} required value={titleDraft} onChange={event => setTitleDraft(event.target.value)} /></label>
             <Button size="sm" disabled={titleLocked}>{t("Save title")}</Button>
             <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setEditingTitle(false); requestAnimationFrame(() => document.getElementById("edit-analysis-title")?.focus()); }}>{t("Cancel")}</Button>
-          </form> : <Button id="edit-analysis-title" className="conversation-title-edit" aria-label={t("Edit title")} type="button" size="sm" variant="ghost" disabled={titleLocked} title={titleLocked ? t("Wait for the analysis to finish before renaming it.") : t("Edit title")} onClick={() => { setTitleDraft(value.title || value.need.split("\n")[0]); setEditingTitle(true); }}><Pencil size={14} aria-hidden="true" /></Button>}
+          </form>}
         </div>
       </div>
       {(error || value.error) && (

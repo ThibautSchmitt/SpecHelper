@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  publicationPlatforms,
   type TicketConnector,
   type Destination,
 } from "@/components/ticket-connectors";
@@ -204,11 +205,8 @@ export function PublishTicket({
     api<TicketConnector[]>(`/ticket-connectors?request_id=${requestId}`)
       .then((v) => {
         if (alive) {
-          const available = v.filter(
-            (c) => c.status === "CONNECTED" && c.projects.length,
-          );
-          setConnectors(available);
-          setConnector(available[0] ? String(available[0].id) : "");
+          setConnectors(v);
+          setConnector("");
         }
       })
       .catch((e) => {
@@ -230,11 +228,10 @@ export function PublishTicket({
     api<Destination[]>(`/ticket-connectors/${connector}/projects`)
       .then((v) => {
         if (alive) {
-          const allowed = v.filter((p) => current?.projects.includes(p.id));
+          const allowed = v.filter((p) => !current?.projects.length || current.projects.includes(p.id));
           setProjects(allowed);
           setProject(
             allowed.find((p) => p.id === current?.default_project)?.id ||
-              allowed[0]?.id ||
               "",
           );
         }
@@ -602,14 +599,14 @@ export function PublishTicket({
           >
             {!connectors.length && (
               <p className="mt-5 muted">
-                {t(
-                  "No connected publication destination is configured. Configure a connector and allowed projects in Settings.",
-                )}
+                {t("No publication connection is associated with this environment.")}{" "}
+                <a className="text-primary underline" href="/admin?tab=environments" target="_blank" rel="noopener noreferrer">{t("Configure publication destinations")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
               </p>
             )}
             <fieldset disabled={busy} className="grid gap-x-4 sm:grid-cols-2">
+              <p className="mt-3 text-xs muted sm:col-span-2">{t("The selected external account publishes the ticket; it does not identify the person using SpecHelper.")}</p>
               <div className="field">
-                <label htmlFor="publish-connector">{t("Connector")}</label>
+                <label htmlFor="publish-connector">{t("Publication connection")}</label>
                 <select
                   id="publish-connector"
                   required
@@ -618,8 +615,8 @@ export function PublishTicket({
                 >
                   <option value="">{t("Select a connector")}</option>
                   {connectors.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
+                    <option key={c.id} value={c.id} disabled={c.enabled === false || c.status !== "CONNECTED"}>
+                      {c.name} · {publicationPlatforms[c.platform] || c.platform}{c.enabled === false ? ` · ${t("Disabled")}` : c.status !== "CONNECTED" ? ` · ${t(c.status === "UNKNOWN" ? "Not tested" : c.status === "UNAVAILABLE" ? "Verification unavailable" : "Failed")}` : ""}
                     </option>
                   ))}
                 </select>

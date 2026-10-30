@@ -203,8 +203,10 @@ export function TaskQueue() {
         const action = job.analysis_state === "scope_rejected" ? "Revise analysis" : clarification ? "Answer" : state === "ERROR" ? "See the problem" : job.kind === "sync" ? "Open environment" : "Open analysis";
         return <li key={job.id} data-job={String(job.id)} className="queue-card" data-state={state} data-result-status={resultState}>
           <div className="p-3">
-            <span className="badge" data-state={state === "WAITING_AI" ? "QUEUED" : state === "PAUSED" ? "NEEDS_CLARIFICATION" : state === "DONE" && resultState === "partial" ? "PARTIAL" : state}>{t(status)}</span>
-            <h3 className="mt-3 line-clamp-2 break-words text-sm font-semibold" title={job.title}>{job.title || t("Analysis")}</h3>
+            <div className="title-tags">
+              <h3 className="line-clamp-2 break-words text-sm font-semibold" title={job.title}>{job.title || t("Analysis")}</h3>
+              <span className="badge" data-state={state === "WAITING_AI" ? "QUEUED" : state === "PAUSED" ? "NEEDS_CLARIFICATION" : state === "DONE" && resultState === "partial" ? "PARTIAL" : state}>{t(status)}</span>
+            </div>
             {state === "ERROR" && <p className="mt-1 text-xs muted">{t("Analysis interrupted")}</p>}
             {state === "RUNNING" && job.stage_number && job.stage_count ? <p className="mt-1 text-xs muted">{t("Step {step} of {total}", { step: job.stage_number, total: job.stage_count })}</p> : null}
             {timing && <p className="mt-1 text-xs muted">{timing}</p>}

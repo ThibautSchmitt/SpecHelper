@@ -132,6 +132,7 @@ def test_business_states_distinguish_drafts_publications_and_unavailable_checks(
     assert states[str(unavailable.pk)] == "verification_unavailable"
     assert client.get(f"/api/analyses/{unavailable.pk}").json()["result_state"] == "verification_unavailable"
     connector = TicketConnector.objects.create(environment=environment, platform="gitlab", base_url="https://example.test")
+    connector.environments.add(environment)
     PublishedTicket.objects.create(request=row, version=version, connector=connector, status="PUBLISHED",
                                    idempotency_key=uuid4(), external_reference="fixture:published")
     assert client.get(f"/api/analyses/{row.pk}").json()["result_state"] == "published"

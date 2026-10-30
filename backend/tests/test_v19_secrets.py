@@ -102,6 +102,7 @@ def test_public_connector_username_is_not_confused_with_its_short_password(clien
         name="Local GLPI", platform="glpi", environment=environment,
         base_url="http://glpi.invalid/apirest.php", username="admin", secret=encrypt("admin"),
     )
+    connector.environments.add(environment)
     response = client.get("/api/ticket-connectors")
     assert response.status_code == 200
     row = next(item for item in response.json() if item["id"] == connector.pk)

@@ -7,10 +7,8 @@ import { ThemeControl } from "@/components/theme-control";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  TicketConnectors,
-  UnassignedTicketConnectors,
-} from "@/components/ticket-connectors";
+import { TicketConnectors } from "@/components/ticket-connectors";
+import { PublicationConnectionPicker, PublicationConnectionsSummary } from "@/components/publication-connections";
 import { GitSources } from "@/components/git-sources";
 import {
   RepositoryPicker,
@@ -49,15 +47,15 @@ function AdminPanel() {
   const router = useRouter();
   const libraryDraft = searchParams.get("library_draft");
   const libraryKind = searchParams.get("library_kind");
-  const [tab, setTab] = useState("general");
+  const [tab, setTab] = useState("ai-agents");
   const [sourceTab, setSourceTab] = useState("environments");
   const requestedTab = searchParams.get("tab");
   const requestedSource = searchParams.get("sources");
   useEffect(() => {
     if (requestedTab && ["general", "ai-agents", "environments", "connectors"].includes(requestedTab)) setTab(requestedTab);
-    else if (!libraryDraft) setTab("general");
+    else if (!libraryDraft) setTab("ai-agents");
     if (requestedSource && ["git", "postgres", "environments"].includes(requestedSource)) setSourceTab(requestedSource);
-  }, [requestedTab, requestedSource]);
+  }, [requestedTab, requestedSource, libraryDraft]);
   const [protocol, setProtocol] = useState("");
   const [guidanceReview, setGuidanceReview] = useState(false);
   const [connections, setConnections] = useState<Connections | null>(null);
@@ -80,6 +78,7 @@ function AdminPanel() {
     { repository: "", branch: "" },
   ]);
   const [envName, setEnvName] = useState("");
+  const [publicationConnections, setPublicationConnections] = useState<number[]>([]);
   const [showEnvironmentForm, setShowEnvironmentForm] = useState(false);
   const [dbId, setDbId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -136,7 +135,7 @@ function AdminPanel() {
   const tabs = [
     { id: "ai-agents", label: t("AI & Agents"), icon: Settings },
     { id: "environments", label: t("Environments"), icon: GitBranch },
-    { id: "connectors", label: t("Connectors"), icon: Plug },
+    { id: "connectors", label: t("Ticket publication"), icon: Plug },
     { id: "general", label: t("Appearance"), icon: Paintbrush },
   ];
   return (
@@ -164,7 +163,7 @@ function AdminPanel() {
             key={item.id}
             variant={tab === item.id ? "default" : "ghost"}
             onClick={() => {
-              router.replace(item.id === "general" ? "/admin" : `/admin?tab=${item.id}`, { scroll: false });
+              router.replace(`/admin?tab=${item.id}`, { scroll: false });
               setError("");
               setNotice("");
             }}
@@ -209,11 +208,13 @@ function AdminPanel() {
           {environments.map((e) => (
             <Card key={e.id} className="environment-card">
               <div className="flex flex-wrap justify-between gap-3">
-                <h2><Database size={22} className="environment-logo" aria-hidden="true" />{e.name}</h2>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="title-tags">
+                  <h2 className="flex items-center gap-2"><Database size={22} className="environment-logo" aria-hidden="true" />{e.name}</h2>
                   <span className="badge" data-state={e.status}>
                     {t(({ READY: "Synchronized", PENDING: "Synchronization queued", SYNCING: "Synchronizing", ERROR: "Synchronization failed" } as Record<string, string>)[e.status] || statuses[e.status] || e.status)}
                   </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
                   <Button
                     variant="outline"
                     size="sm"
@@ -283,6 +284,7 @@ function AdminPanel() {
               {e.error && (
                 <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("Synchronization failed")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{e.error}</pre></details>
               )}
+              <PublicationConnectionsSummary values={e.publication_connections || []} />
               <EnvironmentContext environmentId={e.id} factualOnly={protocol === "2.4"} />
               <EnvironmentSyncHistory environmentId={e.id} />
               {protocol !== "2.4" && <EnvironmentLibrary environmentId={e.id} />}
@@ -307,9 +309,11 @@ function AdminPanel() {
                   await send("/environments", {
                     name: envName,
                     database_id: dbId ? Number(dbId) : null,
+                    publication_connection_ids: publicationConnections,
                     repositories: selection.map(sourcePayload),
                   });
                   setEnvName("");
+                  setPublicationConnections([]);
                   setSelection([{ repository: "", branch: "" }]);
                 }, t("Environment created. Synchronization in progress."));
               }}
@@ -346,6 +350,7 @@ function AdminPanel() {
                   ))}
                 </select>
               </div>
+              <PublicationConnectionPicker selected={publicationConnections} onChange={setPublicationConnections} disabled={busy} />
               <Button
                 className="mt-5"
                 disabled={busy || duplicateSources(selection)}
@@ -359,12 +364,7 @@ function AdminPanel() {
         </div>
       )}
       {tab === "connectors" && <div className="space-y-6">
-        <p className="text-sm muted">{t("Publication connectors remain assigned to their environment. Git source access is configured separately.")}</p>
-        <UnassignedTicketConnectors environments={environments} onAssigned={refresh} />
-        {environments.map(environment => <Card key={environment.id} id={`environment-connectors-${environment.id}`}>
-          <h2>{environment.name}</h2>
-          <TicketConnectors environmentId={environment.id} environmentName={environment.name} />
-        </Card>)}
+        <TicketConnectors />
       </div>}
       {tab === "general" && (
         <div className="space-y-6">

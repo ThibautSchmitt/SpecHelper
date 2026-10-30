@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BookOpen, Bot, Network, Plug, UserRound, ShieldCheck } from "lucide-react";
 import { AIConnections } from "@/components/ai-connections";
 import { AILibrary } from "@/components/ai-library";
@@ -13,7 +14,17 @@ import type { OrchestrationSettings } from "@/components/orchestration-settings"
 
 export function AISettings({ onChanged, simplified = false }: { onChanged: () => Promise<void>; simplified?: boolean }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState("connections");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const section = searchParams.get("section");
+  const tab = section && ["connections", "roles", "skills"].includes(section)
+    ? section
+    : searchParams.has("library_draft")
+      ? simplified || searchParams.get("library_kind") === "skill" ? "skills" : "agents"
+      : "connections";
+  function setTab(value: string) {
+    router.replace(`/admin?tab=ai-agents&section=${value}`, { scroll: false });
+  }
   const [coverage, setCoverage] = useState<OrchestrationSettings["role_coverage"]>();
   const [skillCount, setSkillCount] = useState<number | null>(null);
   useEffect(() => {
@@ -25,12 +36,6 @@ export function AISettings({ onChanged, simplified = false }: { onChanged: () =>
     refresh(); window.addEventListener("connections-updated", refresh);
     return () => { alive = false; window.removeEventListener("connections-updated", refresh); };
   }, [tab]);
-  useEffect(() => {
-    const query = new URLSearchParams(window.location.search);
-    if (query.get("section") === "skills") setTab("skills");
-    if (query.has("library_draft"))
-      setTab(simplified || query.get("library_kind") === "skill" ? "skills" : "agents");
-  }, [simplified]);
   const tabs = [
     { id: "connections", label: "Connections", icon: Plug },
     { id: "roles", label: "Orchestration", icon: Network },

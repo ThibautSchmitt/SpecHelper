@@ -79,6 +79,7 @@ def test_published_tickets_and_derived_evolutions_remain_accessible(client, envi
     version = ResultVersion.objects.create(request=value, number=1)
     derived = Request.objects.create(environment=environment, need="Follow-up", source_question_version=version)
     connector = TicketConnector.objects.create(environment=environment, platform="gitlab", base_url="https://example.test")
+    connector.environments.add(environment)
     ticket = PublishedTicket.objects.create(request=value, version=version, connector=connector, status="PUBLISHED", idempotency_key=uuid4(), external_reference="fixture:delete")
     assert remove(client, value).status_code == 200
     response = client.get(f"/api/tickets/{ticket.pk}")
@@ -91,5 +92,6 @@ def test_publication_in_progress_blocks_deletion(client, environment):
     value = Request.objects.create(environment=environment, need="Publishing", status="READY")
     version = ResultVersion.objects.create(request=value, number=1)
     connector = TicketConnector.objects.create(environment=environment, platform="gitlab", base_url="https://example.test")
+    connector.environments.add(environment)
     PublishedTicket.objects.create(request=value, version=version, connector=connector, status="PUBLISHING", idempotency_key=uuid4(), external_reference="fixture:busy")
     assert remove(client, value).status_code == 409
