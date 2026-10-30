@@ -78,7 +78,7 @@ def poll_processes():
             if stop_runtime(job, job.payload["attempt_id"]):
                 if process.poll() is None:
                     stop_tree(process)
-                release_connections(job.payload.get("connection_ids", []))
+                release_connections(job.payload.get("connection_ids", []), job=job)
                 job.payload["connection_ids"] = []
                 job.save(update_fields=["payload"])
                 PROCESSES.pop(job_id, None)
@@ -117,14 +117,14 @@ def poll_processes():
                         error="Synchronization process interrupted",
                         finished_at=timezone.now(),
                     )
-            release_connections(job.payload.get("connection_ids", []))
+            release_connections(job.payload.get("connection_ids", []), job=job)
             continue
         if job.status == "CANCELLED":
             stopped = stop_runtime(job, attempt_id)
             if process.poll() is None:
                 stop_tree(process)
             if stopped:
-                release_connections(job.payload.get("connection_ids", []))
+                release_connections(job.payload.get("connection_ids", []), job=job)
                 job.payload["connection_ids"] = []
                 job.save(update_fields=["payload"])
                 PROCESSES.pop(job_id, None)

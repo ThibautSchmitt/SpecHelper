@@ -17,7 +17,7 @@ import { useI18n } from "@/lib/i18n";
 import { modelFamilyDiversity, roleLabels, warningMessage } from "@/lib/orchestration";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, use, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Copy,
@@ -41,6 +41,7 @@ import {
   scopeNeedsContext,
   type RequestDetail,
   type ResultVersion,
+  type WorkUpdate,
 } from "@/lib/api";
 
 const labels: Record<string, string> = {
@@ -123,6 +124,10 @@ function RequestContent({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [trackingUnavailable,setTrackingUnavailable]=useState(false);
+  const latestValue=useRef<RequestDetail|null>(null);
+  useEffect(()=>{latestValue.current=value;},[value]);
+  const pollingActive=!!value&&active.includes(value.status);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   useEffect(() => { setEditingTitle(false); setTitleDraft(""); }, [id]);
@@ -141,24 +146,30 @@ function RequestContent({
   }, [id, search]);
   useEffect(() => {
     let alive = true;
-    const load = () =>
-      api<RequestDetail>(`${unified ? "/analyses" : base}/${id}`)
-        .then((v) => {
-          if (alive) {
-            setValue(v);
-            setError("");
+    let timer:ReturnType<typeof setTimeout>;
+    const poll=async()=>{
+      const before=latestValue.current?.id===id ? latestValue.current : null;
+      try {
+        if(before?.progress_token){
+          const update=await api<WorkUpdate>(`/analyses/${id}/progress?cursor=${encodeURIComponent(before.progress_cursor||"")}`,{signal:AbortSignal.timeout(15000)});
+          if(!alive)return;
+          if(update.unchanged){setTrackingUnavailable(false);return;}
+          if(update.progress_token===before.progress_token){
+            setValue(current=>current&&current.progress_token===before.progress_token ? {...current,work_progress:update.work_progress,progress_cursor:update.progress_cursor} : current);
+            setTrackingUnavailable(false);return;
           }
-        })
-        .catch((e) => {
-          if (alive) setError(e.message);
-        });
-    load();
-    const timer = setInterval(load, 2000);
+        }
+        const fresh=await api<RequestDetail>(`${unified ? "/analyses" : base}/${id}`,{signal:AbortSignal.timeout(15000)});
+        if(alive){setValue(current=>!before || current?.progress_token===before.progress_token ? fresh : current);setError("");setTrackingUnavailable(false);}
+      } catch(failure){if(alive){setTrackingUnavailable(true);if(!before)setError((failure as Error).message);}}
+      finally {if(alive)timer=setTimeout(poll,before?.progress_token&&!active.includes(before.status) ? 10000 : 2000);}
+    };
+    void poll();
     return () => {
       alive = false;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
-  }, [id, base, unified]);
+  }, [id, base, unified,pollingActive]);
   useEffect(() => {
     if (unified && (!value || value.id !== id)) return;
     if (selectedNumber === null) {
@@ -372,7 +383,7 @@ function RequestContent({
           {value.error && value.discussion?.mode !== "discussion" && <details className="mt-2"><summary className="cursor-pointer">{t("Diagnostics")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{value.error}</pre></details>}
         </div>
       )}
-      <AnalysisConversation value={value} result={loadingVersion ? null : result}
+      <AnalysisConversation value={value} result={loadingVersion ? null : result} trackingUnavailable={trackingUnavailable}
         reply={conversationReply} onSelectVersion={selectConversationVersion}
         actions={<>
           <Button variant="outline" size="sm" onClick={openReport}>{t("Analysis report")}</Button>

@@ -346,7 +346,8 @@ def test_incompatible_demo_fails_before_execution(client, storage, monkeypatch):
     assert Job.objects.count() == 1
 
 
-def test_connection_lease_is_shared_and_stale_worker_is_recovered(client, storage):
+def test_connection_lease_is_shared_and_stale_worker_is_recovered(client, storage, settings):
+    settings.AI_ACCOUNT_CONCURRENCY = 1
     ai = connection()
     first = create(client, ai)
     second = create(client, ai)

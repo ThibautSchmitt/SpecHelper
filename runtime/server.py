@@ -3,6 +3,7 @@
 import contextlib
 import json
 import os
+import queue
 import re
 import secrets
 import shutil
@@ -19,7 +20,7 @@ from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 from core.control import control_token
@@ -80,6 +81,8 @@ class RunIn(BaseModel):
     context_id: uuid.UUID | None = None
     independent_context: bool = False
     persistent_conversation: bool = False
+    stream_events: bool = False
+    preview_field: Literal["", "message", "answer.summary", "ticket.proposed_solution"] = ""
     session_id: uuid.UUID | None = None
     agent: Literal["codex", "claude", "antigravity"] = "codex"
     identity_id: uuid.UUID | None = None
@@ -324,9 +327,11 @@ def scrub_session(session, root):
             item.write_bytes(cleaned)
 
 
-def watch_session(session, process, stop):
+def watch_session(session, process, stop, tail=None):
     while not stop.wait(0.5):
         try:
+            if tail is not None:
+                tail.read()
             if session_size(session) > SESSION_BYTES:
                 os.killpg(process.pid, signal.SIGKILL)
                 return
@@ -518,10 +523,64 @@ def cancel_run(payload: CancelRunIn):
 
 @app.post("/run", dependencies=[Depends(authorize)])
 def run(payload: RunIn):
+    if payload.stream_events:
+        if not payload.attempt_id:
+            raise HTTPException(422, "An execution attempt is required for progress")
+        return stream_run(payload)
+    return completed_run(payload)
+
+
+def stream_run(payload):
+    """Extend the existing authenticated run transport; only sanitized snapshots stream."""
+    messages = queue.Queue(maxsize=4)
+
+    def emit(value):
+        while True:
+            try:
+                messages.put_nowait(value)
+                return
+            except queue.Full:
+                try:
+                    messages.get_nowait()
+                except queue.Empty:
+                    pass
+
+    def execute():
+        try:
+            result = completed_run(payload, emit)
+        except Exception:
+            # Error diagnostics and request data never enter the public event transport.
+            result = {"failure": {"kind": "ERROR"}}
+        emit({"type": "result", "result": result})
+
+    def events():
+        finished = False
+        thread = threading.Thread(target=execute, daemon=True, name="observed-cli-run")
+        thread.start()
+        try:
+            while True:
+                try:
+                    value = messages.get(timeout=5)
+                except queue.Empty:
+                    value = {"type": "heartbeat"}
+                if value["type"] == "result":
+                    finished = True
+                yield json.dumps(value, ensure_ascii=True) + "\n"
+                if finished:
+                    return
+        finally:
+            if not finished:
+                cancel_run(CancelRunIn(request_id=payload.request_id, attempt_id=payload.attempt_id))
+
+    return StreamingResponse(events(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+def completed_run(payload, emit=None):
     result = None
     try:
         try:
-            result = execute_run(payload)
+            result = execute_run(payload, emit=emit) if emit else execute_run(payload)
         except HTTPException as error:
             if error.status_code < 500:
                 raise
@@ -542,7 +601,7 @@ def run(payload: RunIn):
                 result["quota_status"] = {"state": "error", "reason": "refresh_failed"}
 
 
-def execute_run(payload: RunIn):
+def execute_run(payload: RunIn, emit=None):
     request_id = str(payload.request_id)
     expected = DATA / "analysis-workspaces" / request_id
     if Path(payload.workspace) != expected or not expected.is_dir():
@@ -582,6 +641,28 @@ def execute_run(payload: RunIn):
     skill_root = None
     context_observation = {"context_usage": [], "context_audit": "unavailable"}
     try:
+        observer = None
+        if emit:
+            from core.progress_text import safe_prefix
+
+            from .progress import Observer
+
+            preview_secrets = []
+
+            def publish(frame):
+                if frame.get("preview") and broker:
+                    if not preview_secrets:
+                        def strings(value):
+                            if isinstance(value, dict):
+                                return [item for child in value.values() for item in strings(child)]
+                            return [value] if isinstance(value, str) and len(value) >= 8 else []
+                        preview_secrets.extend([broker.token, *strings(broker.credentials)])
+                    frame = {**frame, "preview": safe_prefix(frame["preview"], preview_secrets,
+                        lambda text: broker.redact(text).replace(broker.token, "[REDACTED]"))}
+                emit(frame)
+
+            observer = Observer(payload.agent, publish, payload.preview_field)
+            observer.snapshot()
         if control and control["cancelled"].is_set():
             return {"cancelled": True, **context_observation}
         session = SESSIONS / request_id
@@ -784,6 +865,9 @@ def execute_run(payload: RunIn):
                 cli += ["--session-id", str(uuid.uuid4())]
             if payload.model:
                 cli += ["--model", payload.model]
+            if payload.stream_events:
+                cli[cli.index("--output-format") + 1] = "stream-json"
+                cli += ["--verbose", "--include-partial-messages"]
         elif payload.agent == "antigravity":
             from .antigravity import headless_command
 
@@ -824,6 +908,11 @@ def execute_run(payload: RunIn):
         observed_after = datetime.now(UTC)
         reads = ResourceReads(resources)
         captured = tempfile.TemporaryFile()
+        tail = None
+        if observer:
+            from .progress import Tail
+
+            tail = Tail(captured, observer)
         diagnostic_stream = tempfile.TemporaryFile()
         process = subprocess.Popen(
             command,
@@ -840,9 +929,12 @@ def execute_run(payload: RunIn):
                     os.killpg(process.pid, signal.SIGKILL)
         monitor_stop = threading.Event()
         monitor = threading.Thread(
-            target=watch_session, args=(session, process, monitor_stop), daemon=True
+            target=watch_session, args=(session, process, monitor_stop, tail), daemon=True
         )
         monitor.start()
+        if observer:
+            observer.activity = "processing"
+            observer.snapshot()
         try:
             if payload.agent == "antigravity":
                 from .antigravity import prompt_message
@@ -859,6 +951,8 @@ def execute_run(payload: RunIn):
         finally:
             monitor_stop.set()
             monitor.join(timeout=1)
+        if tail:
+            tail.finish()
         if stdout is None:
             captured.seek(0)
             stdout = captured.read(64 * 1024 * 1024 + 1)
@@ -903,7 +997,14 @@ def execute_run(payload: RunIn):
         usage = {}
         if payload.agent == "claude" and not timed_out:
             try:
-                result = broker.redact(json.loads(stdout))
+                if payload.stream_events:
+                    envelopes = [json.loads(line) for line in stdout.splitlines() if line.strip()]
+                    finals = [item for item in envelopes if isinstance(item, dict) and item.get("type") == "result"]
+                    if len(finals) != 1:
+                        raise ValueError("Missing terminal response")
+                    result = broker.redact(finals[0])
+                else:
+                    result = broker.redact(json.loads(stdout))
                 if (
                     result.get("is_error")
                     or not result.get("structured_output")

@@ -320,7 +320,7 @@ def complete_invocation(job, attempt_id, pending=None):
         pending = None
     step.status, step.finished_at = "DONE", timezone.now()
     step.save(update_fields=["output", "status", "finished_at"])
-    release_connections(job.payload.get("connection_ids", []))
+    release_connections(job.payload.get("connection_ids", []), job=job)
     job.payload["connection_ids"] = []
     if pending:
         job.status = "QUEUED"
@@ -353,7 +353,7 @@ def wait_or_retry(job, attempt_id, message, failed=False):
     step.status = "ERROR" if failed else "QUEUED"
     step.error, step.finished_at = message, timezone.now()
     step.save(update_fields=["status", "error", "finished_at"])
-    release_connections(job.payload.get("connection_ids", []))
+    release_connections(job.payload.get("connection_ids", []), job=job)
     job.status = "ERROR" if failed else "QUEUED"
     job.error = message
     job.payload.update(connection_ids=[], waiting_reason=message)
@@ -423,7 +423,7 @@ def acknowledge_cancellation(job):
         job = Job.objects.select_for_update().get(pk=job.pk)
         if job.status != "CANCELLED":
             return False
-        release_connections(job.payload.get("connection_ids", []))
+        release_connections(job.payload.get("connection_ids", []), job=job)
         job.payload["connection_ids"] = []
         job.save(update_fields=["payload"])
     return True

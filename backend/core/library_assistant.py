@@ -395,7 +395,7 @@ def reserve_job(job):
     AIConnection.objects.filter(identity_id__in=ids).exclude(
         availability="MODEL_UNAVAILABLE"
     ).update(availability="BUSY", retry_after=None)
-    job.payload.update(connection_ids=[connection.pk], waiting_reason="")
+    job.payload.update(connection_ids=[connection.pk], capacity_reserved=True, waiting_reason="")
     job.save(update_fields=["payload"])
     return True
 

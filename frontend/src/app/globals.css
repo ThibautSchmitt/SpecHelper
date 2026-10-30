@@ -42,6 +42,24 @@
 .investigation-stages [data-stage-status="done"] > svg { color: var(--success); }
 .investigation-attention, .investigation-stages [data-stage-status="blocked"] > svg, .investigation-stages [data-stage-status="clarification"] > svg { color: var(--waiting); }
 .investigation-stages [data-stage-status="error"] > svg { color: var(--danger); }
+.work-progress { border: 0; border-radius: 0; background: transparent; padding: 2px 0; min-width: 0; width: 100%; }
+.work-progress > summary { display: flex; align-items: center; gap: 10px; list-style: none; cursor: pointer; font-size: 14px; min-height: 30px; }
+.work-progress > summary::-webkit-details-marker { display: none; }
+.work-progress > summary > svg { flex-shrink: 0; }
+.work-progress > summary:focus-visible, .work-role-steps > summary:focus-visible, .work-older > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 3px; }
+.work-progress:not([open]) .investigation-subtitle { display: none; }
+.work-progress[open] > summary .investigation-disclosure { transform: rotate(180deg); }
+.work-progress .investigation-content { margin-top: 8px; padding-top: 10px; }
+.work-elapsed { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.work-complete, .work-observations [data-work-state="done"] > svg { color: var(--success); }
+.work-observations [data-work-state="error"] > svg { color: var(--danger); }
+.work-observations { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted-foreground); }
+.work-observations > li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.work-observations > li > svg { flex-shrink: 0; }
+.work-role-steps { grid-column: 2 / 4; font-size: 12px; color: var(--muted-foreground); }
+.work-role-steps > summary, .work-older > summary { cursor: pointer; font-size: 12px; }
+.work-response-preview { padding-top: 12px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.work-response-preview :is(pre,table) { max-width: 100%; overflow-x: auto; }
 .conversation-bubble { min-width: 0; flex: 1; padding: 6px 0 2px; }
 .conversation-assistant .conversation-bubble > header { min-height: 38px; gap: 14px; }
 .conversation-assistant header strong, .conversation-pending-author strong { font-size: 18px; font-weight: 600; }

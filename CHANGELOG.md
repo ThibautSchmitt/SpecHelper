@@ -5,6 +5,28 @@ Detailed dated evidence remains in the [archive](docs/archive/README.md).
 
 ## Unreleased
 
+### Parallel AI account execution
+
+- Allow independent discussions and deep-analysis checkpoints to share an account
+  concurrently, with configurable per-account and instance-wide slot limits.
+- Keep aliases within the same account budget and release only the ending job's
+  reservation. Preserve exact-attempt cancellation, provider backoff, quota windows,
+  administrative in-use guards and CLI maintenance draining.
+- Use existing job reservations without a data migration or new tables. Keep one
+  active operation per conversation and independent deep-role sessions.
+
+### Observed work in conversations
+
+- Acknowledge accepted turns immediately and update one expandable progress
+  element from actual CLI tool events, for both discussion and deep analysis.
+- Show available user-facing response prefixes without exposing raw JSON,
+  commands, source output or private reasoning. Keep silent processing, resource
+  waiting, interrupted tracking and terminal outcomes distinct.
+- Persist bounded observations in the existing jobs with additive migration 0043;
+  use narrow cursor polling instead of repeatedly loading the full history.
+- Preserve provider sessions, independent role contexts and existing evidence,
+  quota refresh and publication paths. See [provider limits and validation](docs/work-progress.md).
+
 ### Persistent discussion and on-demand deep analysis
 
 - Start new Analyses with one conversational assistant and persist native CLI

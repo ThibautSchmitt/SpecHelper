@@ -513,7 +513,7 @@ def recover_cancellations():
         if result.get("stopped") is True:
             with transaction.atomic():
                 locked = Job.objects.select_for_update().get(pk=job.pk)
-                release_connections(locked.payload.get("connection_ids", []))
+                release_connections(locked.payload.get("connection_ids", []), job=locked)
                 locked.payload["connection_ids"] = []
                 locked.payload.pop("awaiting_stop", None)
                 locked.save(update_fields=["payload"])

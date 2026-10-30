@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Sparkles, Folder, CalendarDays, ChevronDown, LoaderCircle, CheckCircle2, Clock3, CircleHelp, AlertCircle, Circle, MessageCircle } from "lucide-react";
 import { SafeMarkdown } from "@/components/safe-markdown";
 import { RoleMentions } from "@/components/role-mentions";
 import { Button } from "@/components/ui/button";
-import { type RequestDetail, type ResultVersion, resultStates, statuses } from "@/lib/api";
+import { type RequestDetail, type ResultVersion, type WorkExecution, resultStates, statuses } from "@/lib/api";
+import { activityLabel, DiscussionProgress, ProgressDisclosure, ResponsePreview, WorkSteps } from "@/components/work-progress";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels } from "@/lib/orchestration";
 import { useInstanceName } from "@/lib/instance";
@@ -19,11 +20,13 @@ type Event = {
   run?: Run;
   markdown?: boolean;
   discussion?: boolean;
+  work?: WorkExecution;
 };
 
-export function AnalysisConversation({ value, result, reply, actions, controls, onSelectVersion }: {
+export function AnalysisConversation({ value, result, reply, actions, controls, onSelectVersion, trackingUnavailable=false }: {
   value: RequestDetail; result?: ResultVersion | null; reply?: ReactNode;
   actions?: ReactNode; controls?: ReactNode; onSelectVersion?: (version: number) => void;
+  trackingUnavailable?:boolean;
 }) {
   const { t, dateLocale } = useI18n();
   const instanceName = useInstanceName();
@@ -31,6 +34,16 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   const working = ["QUEUED", "UNDERSTANDING", "ANALYZING", "REVIEWING", "GENERATING_TICKET", "GENERATING_RESULT", "CONTINUING_CONVERSATION"].includes(value.status);
   const pending = value.status === "NEEDS_CLARIFICATION";
   const messages = value.messages || [];
+  const list=useRef<HTMLOListElement>(null);
+  const nearBottom=useRef(true);
+  useEffect(()=>{
+    function measure(){const root=document.scrollingElement;if(root)nearBottom.current=root.scrollHeight-root.clientHeight-root.scrollTop<160;}
+    function disclosure(event:PointerEvent){if((event.target as Element)?.closest("summary"))nearBottom.current=false;}
+    const observer=new ResizeObserver(()=>{if(nearBottom.current)window.scrollTo({top:document.documentElement.scrollHeight,behavior:"instant"});});
+    if(list.current)observer.observe(list.current);
+    window.addEventListener("scroll",measure,{passive:true});list.current?.addEventListener("pointerdown",disclosure);
+    const node=list.current;return()=>{observer.disconnect();window.removeEventListener("scroll",measure);node?.removeEventListener("pointerdown",disclosure);};
+  },[value.id]);
   const lastClarification = messages.filter(message => ["questions", "clarification"].includes(message.kind)).at(-1);
   const pendingMessage = pending && lastClarification?.content === value.questions.map(question=>question.question).join("\n") ? lastClarification : undefined;
   const events: Event[] = messages.filter(message => {
@@ -78,9 +91,10 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     events.push({id:`progress-${run.number}`,at,sortAt:latestInput + 1,speaker:"assistant",content:"",run});
   }
   if (!runs.length && (working || pending) && value.discussion?.mode !== "discussion") events.push({id:"progress-pending",at:value.created_at,sortAt:Math.max(new Date(value.created_at).getTime(),...events.filter(event=>event.speaker === "user").map(event=>new Date(event.at).getTime()))+1,speaker:"assistant",content:"",run:{number:0,status:value.status,steps:[]}});
-  if (value.discussion?.mode === "discussion" && value.discussion.job && ["QUEUED","RUNNING"].includes(value.discussion.job.status)) events.push({
+  for(const job of value.work_progress?.filter(job=>job.kind==="discussion") || [])events.push({id:`discussion-progress-job-${job.id}`,at:job.created_at,speaker:"assistant",content:"",work:job});
+  if (!value.work_progress?.some(job=>job.kind==="discussion") && value.discussion?.mode === "discussion" && value.discussion.job && ["QUEUED","RUNNING"].includes(value.discussion.job.status)) events.push({
     id:`discussion-progress-${value.discussion.revision}`,at:value.discussion.job.created_at,speaker:"assistant",content:"",discussion:true,
-    label:value.discussion.job.status === "RUNNING" ? "The assistant is replying…" : value.discussion.job.waiting_reason ? "Waiting for the selected AI connection." : "In queue",
+    work:{...value.discussion.job,kind:"discussion",waiting_causes:[],phases:[]},
   });
   events.sort((left, right) => (left.sortAt ?? new Date(left.at).getTime()) - (right.sortAt ?? new Date(right.at).getTime()));
 
@@ -88,15 +102,16 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     <div className="conversation-toolbar">
       <div className="conversation-metadata"><span><Folder size={17} aria-hidden="true" />{t("Business conversation")}</span><time dateTime={value.created_at}><CalendarDays size={17} aria-hidden="true" />{new Date(value.created_at).toLocaleString(dateLocale)}</time><span role="status" className="badge conversation-state" data-state={value.status}>{t(resultStates[value.result_state || ""] || statuses[value.status] || value.status)}</span></div>
     </div>
-    <ol className="conversation-messages">
+    <ol className="conversation-messages" ref={list}>
       {events.map(event => <li key={event.id} className={`conversation-message conversation-${event.speaker}`} data-message={event.id}>
         {event.speaker === "assistant" && <div className="conversation-avatar conversation-brand-avatar" aria-hidden="true"><Sparkles size={25} /></div>}
         <article className="conversation-bubble">
-          {!event.run && <header className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-            {value.discussion?.enabled && event.speaker === "assistant" && <strong className="text-sm">{instanceName}</strong>}
+          {<header className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            {event.speaker === "assistant" && <strong className="text-sm">{instanceName}</strong>}
             <time dateTime={event.at} className="ml-auto text-xs muted">{new Date(event.at).toLocaleString(dateLocale)}</time>
           </header>}
-          {event.run && <InvestigationProgress run={event.run} />}
+          {event.run && <InvestigationProgress run={event.run} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
+          {event.work&&<DiscussionProgress job={event.work} unavailable={trackingUnavailable}/>}
           {event.label && <p className="mb-2 flex items-center gap-2 text-xs font-medium text-primary">{event.discussion && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>}{t(event.label)}{event.version ? ` · v${event.version}` : ""}</p>}
           {event.content && (event.version || event.markdown ? <div className="conversation-answer break-words text-sm leading-7"><SafeMarkdown roleMentions>{event.content}</SafeMarkdown></div> : <p className="conversation-message-text whitespace-pre-wrap break-words text-sm leading-7">{event.speaker === "assistant" ? <RoleMentions>{event.content}</RoleMentions> : event.content}</p>)}
           {event.child && <Link className="mt-3 inline-block text-sm text-primary underline" href={`/analyses/${event.child}`}>{t("Open linked change")}</Link>}
@@ -112,7 +127,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
       </li>)}
     </ol>
     <div className={`conversation-reply ${pending ? "conversation-pending conversation-assistant" : ""}`}>
-      {pending && <><div className="conversation-avatar conversation-brand-avatar" aria-hidden="true"><Sparkles size={25} /></div><header className="conversation-pending-author">{value.discussion?.enabled && <strong>{instanceName}</strong>}{pendingMessage && <time dateTime={pendingMessage.created_at}>{new Date(pendingMessage.created_at).toLocaleString(dateLocale)}</time>}</header></>}
+      {pending && <><div className="conversation-avatar conversation-brand-avatar" aria-hidden="true"><Sparkles size={25} /></div><header className="conversation-pending-author"><strong>{instanceName}</strong>{pendingMessage && <time dateTime={pendingMessage.created_at}>{new Date(pendingMessage.created_at).toLocaleString(dateLocale)}</time>}</header></>}
       <div className="conversation-reply-content">{reply}</div>
     </div>
     {controls && <div className="flex flex-wrap gap-2">{controls}</div>}
@@ -130,7 +145,7 @@ export function conversationAnswer(result:ResultVersion) {
 const stageLabels:Record<string,string>={done:"Completed",running:"In progress",waiting:"Upcoming",blocked:"AI unavailable",clarification:"Clarification requested",error:"Technical failure",cancelled:"Analysis cancelled",unknown:"Stage completion not recorded"};
 const causeLabels:Record<string,string>={quota:"Quota exhausted",busy:"Assistant busy",connection_missing:"No authenticated connection",model_unavailable:"Model unavailable",unavailable:"Unavailable"};
 
-function InvestigationProgress({run}:{run:Run}) {
+function InvestigationProgress({run,work,unavailable=false}:{run:Run;work?:WorkExecution;unavailable?:boolean}) {
   const {t}=useI18n();
   const snapshot=run.execution;
   const status=snapshot?.status || run.status;
@@ -145,22 +160,21 @@ function InvestigationProgress({run}:{run:Run}) {
   const waiting=status === "QUEUED" && !!snapshot?.waiting_reason;
   const clarification=status === "NEEDS_CLARIFICATION";
   const subtitle=drafting && waiting ? "The three stages have finished. The final response will be drafted when an assistant is available." : drafting && active ? "The three stages have finished. The final response is being prepared." : clarification ? "A business clarification is needed before continuing." : waiting ? current === "counter_analyst" ? "The counter-analysis will resume when an assistant is available." : current === "verifier" ? "Verification will resume when an assistant is available." : "The analysis will resume when an assistant is available." : active ? current === "counter_analyst" ? "Counter-analysis in progress…" : current === "verifier" ? "Verification in progress…" : "Investigation in progress…" : terminal && allDone ? "All three stages have finished." : "";
-  const StatusIcon=active ? LoaderCircle : waiting ? Clock3 : clarification ? MessageCircle : terminal && allDone ? CheckCircle2 : CircleHelp;
   const headline=status === "NEEDS_CLARIFICATION" ? "Needs clarification" : status === "ERROR" ? "Analysis interrupted" : status === "CANCELLED" ? "Analysis cancelled" : terminal ? allDone ? "Investigation finished" : "Investigation finished · verification incomplete" : status === "QUEUED" ? snapshot?.waiting_reason ? "Waiting for an AI resource" : "In queue" : current === "counter_analyst" ? "Counter-analysis in progress…" : current === "verifier" ? "Verification in progress…" : "Analysis in progress";
-  return <details className="investigation-progress" data-cycle={run.number || "pending"}>
-    <summary><StatusIcon size={20} className={active ? "investigation-active animate-spin motion-reduce:animate-none" : clarification ? "investigation-attention" : terminal && allDone ? "text-emerald-600 dark:text-emerald-400" : "muted"} aria-hidden="true" /><span className="investigation-heading" role="status"><span>{t(drafting && waiting ? "Final response awaiting an assistant" : drafting && active ? "Preparing final response…" : active ? "Analysis in progress" : waiting ? "Waiting for an available assistant" : headline)}</span>{subtitle && <span className="investigation-subtitle">{t(subtitle)}</span>}</span>{status === "PARTIAL" && <span className="badge">{t("Partial result")}</span>}<ChevronDown size={16} className="investigation-disclosure" aria-hidden="true" /></summary>
-    <div className="investigation-content space-y-4">
+  const observed=work?.phases || [];
+  return <><ProgressDisclosure className="investigation-progress" cycle={run.number || "pending"} active={active} complete={terminal&&allDone} attention={waiting||clarification||status==="ERROR"} partial={status==="PARTIAL"} subtitle={subtitle} startedAt={work?.started_at} unavailable={unavailable&&active}
+    label={drafting&&waiting ? "Final response awaiting an assistant" : drafting&&active ? "Preparing final response…" : active&&observed.some(phase=>phase.active) ? activityLabel(observed) : active ? "Analysis in progress" : waiting ? "Waiting for an available assistant" : headline}>
       <ol className="investigation-stages" aria-label={t("Investigation stages")}>{stages.map(stage=>{
         const causes = !drafting && stage.role === current && stage.status === "blocked" ? snapshot?.waiting_causes || [] : [];
         const label = causes.length === 1 ? causeLabels[causes[0]] || "Unavailable" : stageLabels[stage.status] || "Unknown";
         const Icon=stage.status === "done" ? CheckCircle2 : stage.status === "running" ? LoaderCircle : stage.status === "waiting" ? Circle : stage.status === "clarification" ? MessageCircle : stage.status === "error" ? AlertCircle : Clock3;
         return <li key={stage.role} data-stage={stage.role} data-stage-status={stage.status}>
-          <Icon size={18} className={stage.status === "running" ? "animate-spin motion-reduce:animate-none" : ""} aria-hidden="true" />
+          <Icon size={18} className={stage.status === "running" && !unavailable ? "animate-spin motion-reduce:animate-none" : ""} aria-hidden="true" />
           <span className="investigation-role">{t(roleLabels[stage.role] || stage.role)}</span><span className="investigation-stage-state muted">{t(label)}</span>
           {causes.length > 1 && <ul className="investigation-stage-causes space-y-1 text-xs">{causes.map(cause=><li key={cause}>{t(causeLabels[cause] || "Unavailable")}</li>)}</ul>}
+          {!!observed.filter(phase=>phase.role===stage.role).length&&<details className="work-role-steps"><summary>{t("Work steps")}</summary><WorkSteps phases={observed.filter(phase=>phase.role===stage.role)} unavailable={unavailable}/></details>}
         </li>;
       })}</ol>
       {drafting && waiting && !!snapshot?.waiting_causes?.length && <ul className="text-xs muted">{snapshot.waiting_causes.filter(cause=>cause !== "unavailable").map(cause=><li key={cause}>{t(causeLabels[cause] || "Unavailable")}</li>)}</ul>}
-    </div>
-  </details>;
+  </ProgressDisclosure><ResponsePreview phases={observed}/></>;
 }

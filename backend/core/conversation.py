@@ -8,7 +8,7 @@ from .sensitive_data import configured_secrets, redact
 def waiting_causes(role):
     """Read observed eligibility without probing providers or changing quota state."""
     from .models import AIConnection, AIModel
-    from .providers import model_pool_exhausted, quota_exhausted, quota_group
+    from .providers import group_unavailable, model_pool_exhausted, quota_exhausted, quota_group
 
     connections = [item for item in AIConnection.objects.filter(enabled=True).select_related("identity") if role in item.roles]
     if not connections:
@@ -26,6 +26,8 @@ def waiting_causes(role):
         elif "QUOTA_EXHAUSTED" in statuses or any(quota_exhausted(member) for member in group) or (identity and model_pool_exhausted(item, identity)):
             reasons.add("quota")
         elif "BUSY" in statuses:
+            if identity and not item.retry_after and not group_unavailable(identity):
+                return []
             reasons.add("busy")
         elif statuses <= {"AVAILABLE", "UNKNOWN"}:
             # A potentially eligible assistant rules out a connection-wide diagnosis.
@@ -73,7 +75,7 @@ def progress_snapshot(run, messages):
         else:
             stage = "waiting"
         stages.append({"role": role, "status": stage})
-    causes = waiting_causes(current) if status == "QUEUED" and reason and current else []
+    causes = (["busy"] if reason == "Waiting for an AI execution slot." else waiting_causes(current)) if status == "QUEUED" and reason and current else []
     return {"status": status, "current_role": current, "checkpoint": checkpoint,
             "waiting_reason": reason, "waiting_causes": causes, "stages": stages,
             "all_stages_done": all(stage["status"] == "done" for stage in stages)}

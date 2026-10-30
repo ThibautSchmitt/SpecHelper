@@ -15,6 +15,72 @@ in its `.env`. Defaults serve port 3000. Compose must support the `!reset` merge
 used by `prepare-storage`; incompatible older versions fail configuration. Linux
 namespace support is required even with Docker Desktop.
 
+## Concurrent conversations and analyses
+
+The current worker is a supervisor: each admitted invocation starts a separate
+`manage.py process_job` subprocess, and the supervisor resumes queue admission
+without waiting for that subprocess to finish. One `worker` container therefore
+supports overlapping jobs; counting worker containers does not measure active
+analysis capacity. The two Gunicorn workers serve HTTP requests independently.
+
+PostgreSQL serializes short admission transactions and claims queued jobs with
+row locks. It does not hold the global admission lock over inference. One
+conversation has one active operation, while different conversations retain
+separate state, frozen resources and native sessions. Deep roles remain sequential
+within each analysis. Quota/resource waiting yields admission to another runnable
+job; it does not reserve future roles.
+
+AI execution slots are shared per detected identity/account group. A discussion
+keeps its own pinned connection and native session, while other conversations may
+use that account simultaneously. Adding connection aliases does not multiply the
+account's slot budget or quotas. Only the ending invocation releases its slot;
+cancelled or interrupted work keeps it until its exact runtime stop is acknowledged.
+
+Deployment settings in `.env` (passed to backend and worker):
+
+| Setting | Default | Scope |
+| --- | --- | --- |
+| `SPECHELPER_AI_ACCOUNT_CONCURRENCY` | 4 | Active invocations across all aliases of one account, bounded to 1–32 |
+| `SPECHELPER_AI_CONCURRENCY` | 8 | Active AI invocations across the instance, bounded to 1–64 |
+
+Discussion turns, deep-analysis checkpoints and library assistants share these
+budgets. Values of `1` retain serialized execution. For ten concurrent discussions
+using one account, both limits must be at least ten, for example:
+
+```dotenv
+SPECHELPER_AI_ACCOUNT_CONCURRENCY=10
+SPECHELPER_AI_CONCURRENCY=10
+```
+
+Apply deployment configuration to both backend and worker. These are application
+ceilings, not a claim that a subscription accepts that many simultaneous calls.
+Observed provider busy/backoff, authentication failure, model-specific exhaustion
+and shared quota windows remain authoritative. Waiting jobs remain queued; no
+provider/model/session switch is introduced. CLI updates wait until every active
+or not-yet-stopped slot has drained.
+
+The default single runtime shares two CPUs, 2 GiB of memory and a 256-process limit
+across invocations. Keep those resources in mind before increasing concurrency;
+worker replicas alone do not add provider capacity or runtime memory.
+`SPECHELPER_CONCURRENCY` is a different setting: it limits concurrent HTTP requests
+per access actor, not background AI executions.
+
+Validation on 2026-10-30 uses real PostgreSQL locks and controlled provider calls:
+account aliases share their atomic cap, a separate instance cap spans accounts,
+and independent discussions can overlap on one account with distinct sessions,
+workspaces and human context. The discussion test includes ten simultaneous calls
+when configured for ten. Runtime sandbox probes separately validate real Linux
+process overlap, read-only sources and exact-attempt cancellation without calling
+a live model. Subscription throughput is not established by these fixtures.
+Final checks for this change: 1,376 backend tests passed with 26 environment-dependent
+skips; 20 PostgreSQL concurrency tests passed. Ruff, Django system/migration checks,
+TypeScript and the production frontend build passed. The deployed worker reports
+the default 4 account slots / 8 instance slots. A live-provider smoke was attempted,
+but both configured connections reported exhausted quotas before any synthetic
+conversation or inference was created.
+Browser-owner conversation isolation does not supply individual human accounts;
+see [ownership and historical compatibility](analysis.md#ownership-and-historical-compatibility).
+
 ## Upgrade and recovery
 
 Review [CHANGELOG](../CHANGELOG.md), coordinate backups and wait for active work.

@@ -123,7 +123,23 @@ export type ResultVersion = {
   context_snapshot?: ContextSnapshot;
   context_usage?: ContextUsage[];
 };
+export type WorkPhase = {
+  id:string; attempt_id:string; role:string; checkpoint:string; sequence:number;
+  activity:string; preview:string; seen_at:string; closed:boolean; active:boolean;
+  events:{id:string; operation:string; state:"running"|"done"|"error"|"unknown"; observed_at:string}[];
+};
+export type WorkExecution = {
+  id:number; kind:"discussion"|"analysis"; status:string; revision?:number; run_number?:number;
+  created_at:string; started_at?:string|null; finished_at?:string|null;
+  waiting_reason:string; waiting_causes:string[]; phases:WorkPhase[];
+};
+export type WorkUpdate = {
+  progress_token:string; progress_cursor:string; work_progress:WorkExecution[]; unchanged?:boolean;
+};
 export type RequestDetail = RequestItem & {
+  progress_token?:string;
+  progress_cursor?:string;
+  work_progress?:WorkExecution[];
   discussion?: {
     enabled: boolean; mode: "discussion" | "analysis"; revision: number;
     has_new_messages: boolean; connection_id?: number;

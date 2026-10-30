@@ -2,6 +2,7 @@ import logging
 import time
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -60,7 +61,7 @@ def fail_analysis(job, message):
 
 
 def claim_job():
-    from .providers import reserve_for_job
+    from .providers import capacity_reservations, reserve_for_job
 
     with transaction.atomic():
         # Serialize admission, not execution; maintenance drains running invocations.
@@ -69,14 +70,20 @@ def claim_job():
         jobs = Job.objects.filter(status="QUEUED").order_by("created_at", "id")
         maintenance = Job.objects.filter(kind="cli_update", status__in=["QUEUED", "RUNNING"]).order_by("created_at", "id").first()
         if maintenance:
-            if Job.objects.filter(status="RUNNING").exists() or ConnectionAttempt.objects.filter(status__in=["STARTING", "AWAITING_USER"], expires_at__gt=timezone.now()).exists():
+            if Job.objects.filter(status="RUNNING").exists() or capacity_reservations() or ConnectionAttempt.objects.filter(status__in=["STARTING", "AWAITING_USER"], expires_at__gt=timezone.now()).exists():
                 return None
             jobs = jobs.filter(pk=maintenance.pk)
         from django.db import connection
 
         if connection.features.has_select_for_update_skip_locked:
             jobs = jobs.select_for_update(skip_locked=True)
+        capacity_full = len(capacity_reservations()) >= settings.AI_CONCURRENCY
         for job in jobs.iterator(chunk_size=100):
+            if job.kind in {"analysis", "discussion", "library_assistant"} and capacity_full:
+                if job.payload.get("waiting_reason") != "Waiting for an AI execution slot.":
+                    job.payload = {**job.payload, "waiting_reason": "Waiting for an AI execution slot."}
+                    job.save(update_fields=["payload"])
+                continue
             from .step_execution import is_incremental, reserve_step, upgrade_pending
 
             if job.payload.get("requires_step_upgrade"):
@@ -120,17 +127,17 @@ def recover_stale_jobs():
             fail(job, "The discussion was interrupted. Retry with a new session; history is preserved.")
             if not stop_failed_attempt(job):
                 continue
-            release_connections(job.payload.get("connection_ids", []))
+            release_connections(job.payload.get("connection_ids", []), job=job)
             continue
         if job.kind == "library_assistant":
             from .library_assistant import fail_job
 
             fail_job(job, "Worker interrupted; assistant work unfinished.")
-            release_connections(job.payload.get("connection_ids", []))
+            release_connections(job.payload.get("connection_ids", []), job=job)
             continue
         if job.kind == "analysis":
             fail_analysis(job, "Worker interrupted; analysis unfinished.")
-            release_connections(job.payload.get("connection_ids", []))
+            release_connections(job.payload.get("connection_ids", []), job=job)
             continue
         else:
             from .models import Environment
@@ -180,7 +187,7 @@ def perform_job(job, attempt_id=None):
                 except ProviderUnavailable as unavailable:
                     job.refresh_from_db()
                     attempted.update(job.payload.get("connection_ids", []))
-                    release_connections(job.payload.get("connection_ids", []))
+                    release_connections(job.payload.get("connection_ids", []), job=job)
                     if attempt + 1 < max_attempts and reserve_for_job(job, exclude=attempted):
                         continue
                     # Provider waiting is queue time, not a failed business analysis.
@@ -283,7 +290,7 @@ def perform_job(job, attempt_id=None):
 
                 can_release = stop_failed_attempt(job)
             if can_release:
-                release_connections(job.payload.get("connection_ids", []))
+                release_connections(job.payload.get("connection_ids", []), job=job)
                 if job.kind == "discussion":
                     job.payload["connection_ids"] = []
                     job.save(update_fields=["payload"])

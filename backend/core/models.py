@@ -329,6 +329,7 @@ class Job(models.Model):
     finished_at = models.DateTimeField(null=True)
     error = models.TextField(blank=True)
     payload = models.JSONField(default=dict)
+    progress = models.JSONField(default=dict)
 
 
 class CLITool(models.Model):

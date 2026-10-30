@@ -103,6 +103,21 @@ def test_first_turn_uses_one_assistant_without_a_verified_cycle(client, environm
     assert not row.business_decisions.exists()
 
 
+def test_supervisor_restart_recovers_a_completed_jobs_residual_slot(client, environment):
+    from core.providers import capacity_reservations, recover_orphaned_leases
+
+    value = create(client, environment)
+    launch(client, value)
+    job = claim_job()
+    assert len(capacity_reservations()) == 1
+    # Simulate interruption after the terminal commit, before the supervisor cleanup.
+    Job.objects.filter(pk=job.pk).update(status="DONE")
+    recover_orphaned_leases()
+    job.refresh_from_db()
+    assert not job.payload["connection_ids"] and not job.payload["capacity_reserved"]
+    assert not capacity_reservations()
+
+
 def test_followups_and_reopening_resume_same_native_session(client, environment, native):
     value = create(client, environment)
     launch(client, value)

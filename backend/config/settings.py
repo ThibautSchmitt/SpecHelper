@@ -69,6 +69,9 @@ ACCESS_LOGIN_RATE = max(1, min(30, int(os.environ.get("SPECHELPER_LOGIN_RATE", "
 ACCESS_READ_RATE = max(30, min(10000, int(os.environ.get("SPECHELPER_READ_RATE", "600"))))
 ACCESS_WRITE_RATE = max(10, min(1000, int(os.environ.get("SPECHELPER_WRITE_RATE", "120"))))
 ACCESS_CONCURRENCY = max(1, min(64, int(os.environ.get("SPECHELPER_CONCURRENCY", "16"))))
+# Background AI invocations share quotas, but keep independent conversation sessions.
+AI_ACCOUNT_CONCURRENCY = max(1, min(32, int(os.environ.get("SPECHELPER_AI_ACCOUNT_CONCURRENCY", "4"))))
+AI_CONCURRENCY = max(1, min(64, int(os.environ.get("SPECHELPER_AI_CONCURRENCY", "8"))))
 ACCESS_LEASE_SECONDS = 90
 ACCESS_MAX_REQUEST_BYTES = 26 * 1024 * 1024
 SECURITY_AUDIT_RETENTION_DAYS = max(

@@ -399,8 +399,9 @@ def test_full_worker_flow_runs_three_families_with_frozen_sources_and_independen
 
 
 def test_shared_antigravity_account_reserves_one_step_and_preserves_other_waiting_job(
-    environment
+    environment, settings
 ):
+    settings.AI_ACCOUNT_CONCURRENCY = 1
     AIConnection.objects.all().update(enabled=False)
     first = assistant()
     second = assistant(identity=first.identity)
@@ -421,7 +422,7 @@ def test_shared_antigravity_account_reserves_one_step_and_preserves_other_waitin
     complete_invocation(claimed, claimed.payload["attempt_id"])
     next_job = claim_job()
     assert next_job.target == str(requests[1].pk)
-    release_connections(next_job.payload["connection_ids"])
+    release_connections(next_job.payload["connection_ids"], job=next_job)
 
 
 def test_antigravity_global_skills_need_no_assignments_and_preserve_legacy_revisions():

@@ -136,7 +136,7 @@ def assign_role(request, run, role, *, exclude=()):
     list(AIConnection.objects.select_for_update().order_by("id"))
     if run.job_id:
         run.job.refresh_from_db()
-        release_connections(run.job.payload.get("connection_ids", []))
+        release_connections(run.job.payload.get("connection_ids", []), job=run.job)
     previous_roles = PUBLIC_ROLES[: PUBLIC_ROLES.index(role)]
     sessions = state.setdefault("sessions", {})
     prior = [AISession.objects.get(pk=sessions[r]) for r in previous_roles if r in sessions]
@@ -198,6 +198,7 @@ def assign_role(request, run, role, *, exclude=()):
         run.job.payload = {
             **run.job.payload,
             "connection_ids": [connection.pk],
+            "capacity_reserved": True,
             "current_role": role,
             "waiting_reason": "",
             "current_assignment": state["assignments"][-1],

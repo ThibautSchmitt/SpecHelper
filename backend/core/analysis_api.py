@@ -239,6 +239,17 @@ def get_analysis(request, analysis_id: UUID):
     return request_dict(value, full=True)
 
 
+@router.get("/analyses/{analysis_id}/progress")
+def get_progress(request, analysis_id: UUID, cursor: str = ""):
+    from .work_progress import snapshot
+
+    value = get_object_or_404(Request.objects.only("id", "status", "error", "updated_at"), pk=analysis_id)
+    current = snapshot(value)
+    if cursor == current["progress_cursor"]:
+        return {"unchanged": True, "progress_cursor": cursor}
+    return current
+
+
 @router.post("/analyses/{analysis_id}/need")
 def update_analysis_need(request, analysis_id: UUID, payload: NeedRevisionIn):
     from .business_decisions import response_for

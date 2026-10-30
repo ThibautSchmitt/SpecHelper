@@ -41,7 +41,7 @@ for(const language of ["en","fr"] as const) {
   await setup(page,language,()=>current);
   await page.goto(`/analyses/${id}`);
   await expect(page.locator('legend .conversation-role-mention')).toHaveAttribute('data-role','counter_analyst');
-  await expect(page.locator('.conversation-pending-author strong')).toHaveCount(0);
+  await expect(page.locator('.conversation-pending-author strong')).toHaveText('Acme');
   current={...current,status:'PARTIAL',questions:[],latest_version:{...source._version,explanation:{title:'Conclusion',summary:summary+' Code identifier: `Analyst`.',business_explanation:'Code identifier: `Analyst`. General analysts are not role mentions.'}},versions:[{number:1,status:'PARTIAL',created_at:source._version.created_at}]};
   const final=page.locator('[data-message="result-1"]');
   await expect(final.locator('.conversation-role-mention')).toHaveCount(3);
@@ -50,7 +50,7 @@ for(const language of ["en","fr"] as const) {
   if(language === 'fr')expect(t('Verifier')).toBe('Validateur');
   await expect(final.locator('code')).toHaveText('Analyst');
   await expect(page.locator('.conversation-user .conversation-role-mention')).toHaveCount(0);
-  await expect(final.locator('header strong')).toHaveCount(0);
+  await expect(final.locator('header strong')).toHaveText('Acme');
  });
  test(`individual reports are optional downloads outside the ticket in ${language}`,async({page})=>{
   const source=dossier();
@@ -127,7 +127,7 @@ for(const language of ["en","fr"] as const) {
    await page.goto(`/analyses/${id}`);
    const thread=page.getByRole("region",{name:t("Business conversation"),exact:true});
    await expect(page.getByRole("button",{name:t("Show roles"),exact:true})).toHaveCount(0);
-   await expect(page.locator(".conversation-pending-author strong")).toHaveCount(0);
+   await expect(page.locator(".conversation-pending-author strong")).toHaveText("Acme");
    await expect(page.locator(".conversation-pending-author [data-role]")).toHaveCount(0);
    await expect(page.locator(".conversation-brand-avatar")).toHaveCount(2);
    const icons=await page.locator('.conversation-brand-avatar').evaluateAll(nodes=>nodes.map(node=>({border:getComputedStyle(node).borderTopWidth,background:getComputedStyle(node).backgroundColor,shadow:getComputedStyle(node).boxShadow})));
@@ -136,7 +136,7 @@ for(const language of ["en","fr"] as const) {
    const progress=thread.locator('[data-cycle="1"]');
    await expect(thread.locator(".investigation-progress")).toHaveCount(1);
    await expect(thread.locator('.conversation-user .conversation-avatar')).toHaveCount(0);
-   await expect(thread.locator('header strong')).toHaveCount(0);
+   await expect(thread.locator('header strong')).toHaveText(['Acme','Acme']);
    await page.screenshot({path:`../.local/single-assistant-compact-${language}-${theme}-${info.project.name}.png`,fullPage:true});
    await progress.locator(":scope > summary").click();
    const handle=await progress.elementHandle();
@@ -200,7 +200,7 @@ for(const language of ["en","fr"] as const) {
   current.messages[1].attribution={run_number:1,public_role:"analyst",provider:"codex",source:"recorded_history"};
   await setup(page,language,()=>current);
   await page.goto(`/analyses/${id}`);
-  await expect(page.locator(".conversation-pending-author strong")).toHaveCount(0);
+  await expect(page.locator(".conversation-pending-author strong")).toHaveText("Acme");
   await expect(page.locator(".conversation-pending-author")).not.toContainText("ChatGPT");
   await expect(page.locator(".conversation-question-details")).toHaveCount(0);
  });

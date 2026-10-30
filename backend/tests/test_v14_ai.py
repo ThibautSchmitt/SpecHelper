@@ -55,7 +55,8 @@ def test_n_configurations_share_identity_quota_and_default_order():
     assert public(preferred)["usage"] == "UNKNOWN"
 
 
-def test_separate_logins_reliable_account_key_share_quota_and_capacity(environment):
+def test_separate_logins_reliable_account_key_share_quota_and_capacity(environment, settings):
+    settings.AI_ACCOUNT_CONCURRENCY = 1
     first, second = configuration("First"), configuration("Same actual account")
     for item in (first, second):
         observe(item, {"status": "CONNECTED", "account_key": "a" * 64})

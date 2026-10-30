@@ -23,8 +23,9 @@ review and explicit connector action.
 
 The assistant appears with the application's star icon and configured instance
 name. The thread retains Markdown responses, attachments and concise results.
-One expandable progress message per deep cycle uses recorded stage states; the
-ordinary discussion shows only its own reply/queue state. Material limitations of
+One expandable progress message per execution shows observed work and its real
+state; deep cycles retain their three recorded role states. See
+[observed work and provider differences](work-progress.md). Material limitations of
 a partial deep result remain visible. Detailed reports, exact provenance and the
 optional **See the AI review** disclosure stay under **Analysis report**. Role
 downloads are never attached automatically to tickets.
@@ -251,14 +252,17 @@ excludes it by default. An optional external file annex follows the separate
 ## Execution contract
 
 Requests and Questions use one persistent queue. Scheduling operates at the next
-ready invocation, allowing different jobs to use different available AI connections
+ready invocation, allowing different jobs to share available account execution slots
 while each job remains strictly sequential. The mandatory public roles remain
 Analyst, Counter-analyst and Verifier; requirement clarification, source inspection,
 focused checks and final writing are checkpoints within that workflow.
 
 ## Step execution and capacity
 
-Each invocation has a persistent execution attempt and its own reservation. The
+Each invocation has a persistent execution attempt and its own slot reservation.
+Several conversations can use one account concurrently, within the shared account
+and instance limits in [deployment settings](operations.md#concurrent-conversations-and-analyses).
+A conversation still has one active operation and isolated native sessions. The
 scheduler chooses the oldest runnable job with a compatible connection, considering
 allowed roles, actual availability, known shared account/quota capacity and model
 family preferences. Waiting jobs do not reserve future roles or prevent another

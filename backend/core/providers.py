@@ -5,7 +5,9 @@ import re
 import uuid
 from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import AIConnection, AIIdentity, AISession, Job, Request
@@ -210,10 +212,37 @@ def group_windows(identities):
     return windows
 
 
-def group_unavailable(identity):
+def capacity_reservations():
+    """Jobs are the existing durable leases, including unacknowledged cancellations."""
+    return [
+        (pk, set(ids))
+        for pk, ids in Job.objects.filter(
+            kind__in=["analysis", "discussion", "library_assistant"]
+        ).filter(
+            Q(status__in=["RUNNING", "CANCELLED"]) | Q(payload__capacity_reserved=True)
+        ).values_list("pk", "payload__connection_ids")
+        if ids
+    ]
+
+
+def group_load(identity, reservations=None):
+    group = list(quota_group(identity))
+    connections = set(AIConnection.objects.filter(identity__in=group).values_list("pk", flat=True))
+    reservations = capacity_reservations() if reservations is None else reservations
+    return group, sum(bool(connections & ids) for _, ids in reservations)
+
+
+def group_unavailable(identity, reservations=None):
+    group, used = group_load(identity, reservations)
+    if used >= settings.AI_ACCOUNT_CONCURRENCY:
+        return True
     return any(
-        item.availability not in {"AVAILABLE", "UNKNOWN"} or quota_exhausted(item)
-        for item in quota_group(identity)
+        quota_exhausted(item)
+        or (
+            item.availability not in {"AVAILABLE", "UNKNOWN"}
+            and not (item.availability == "BUSY" and item.retry_after is None and used > 0)
+        )
+        for item in group
     )
 
 
@@ -246,6 +275,7 @@ def model_pool_exhausted(connection, identity):
 
 def candidates(exclude=(), preferred=None):
     values = []
+    reservations = capacity_reservations()
     for connection in (
         AIConnection.objects.filter(enabled=True).exclude(pk__in=exclude).select_related("identity")
     ):
@@ -259,12 +289,10 @@ def candidates(exclude=(), preferred=None):
         identity = identity_for(connection)
         if connection.status != "CONNECTED" or identity.status != "CONNECTED":
             continue
-        if connection.availability not in {"AVAILABLE", "UNKNOWN"} or identity.availability not in {
-            "AVAILABLE",
-            "UNKNOWN",
-        }:
+        local_busy = connection.availability == "BUSY" and connection.retry_after is None
+        if connection.availability not in {"AVAILABLE", "UNKNOWN"} and not local_busy:
             continue
-        if not group_unavailable(identity) and not model_pool_exhausted(connection, identity):
+        if not group_unavailable(identity, reservations) and not model_pool_exhausted(connection, identity):
             values.append(connection)
     return sorted(
         values,
@@ -280,6 +308,12 @@ def public(connection):
     if quota_exhausted(identity):
         availability = "QUOTA_EXHAUSTED"
     group = list(quota_group(identity))
+    _, used = group_load(identity)
+    if availability in {"AVAILABLE", "UNKNOWN", "BUSY"}:
+        if used >= settings.AI_ACCOUNT_CONCURRENCY:
+            availability = "BUSY"
+        elif availability == "BUSY" and used and not connection.retry_after and not identity.retry_after:
+            availability = "AVAILABLE"
     exhausted = next(
         (item for item in group if item.availability == "QUOTA_EXHAUSTED" or quota_exhausted(item)),
         None,
@@ -311,6 +345,8 @@ def public(connection):
         "account": identity.account,
         "status": identity.status,
         "availability": availability,
+        "active_executions": used,
+        "max_parallel_executions": settings.AI_ACCOUNT_CONCURRENCY,
         "enabled": connection.enabled,
         "checked_at": identity.checked_at,
         "quota_windows": group_windows(group),
@@ -350,6 +386,12 @@ def observe(connection, value):
     # Authentication health does not establish that an exhausted quota recovered.
     if rejected_key:
         changes["availability"] = "AUTH_ERROR"
+    elif identity.availability == "BUSY" and identity.retry_after and identity.retry_after > timezone.now():
+        # Authentication/quota metadata cannot dismiss an observed provider backoff.
+        pass
+    elif identity.availability == "BUSY" and identity.retry_after is None and group_load(identity)[1]:
+        # Keep the administrative in-use guard while public scheduling exposes spare slots.
+        pass
     elif identity.availability != "QUOTA_EXHAUSTED" and not quota_exhausted(identity):
         changes["availability"] = "AVAILABLE" if connected else "UNKNOWN"
     AIIdentity.objects.filter(pk=identity.pk).update(**changes)
@@ -466,27 +508,41 @@ def mark_failure(connection_id, kind, retry_seconds=None, quota_windows=None):
     ).update(**{key: value for key, value in changes.items() if key != "quota_windows"})
 
 
-def release_connections(ids):
+@transaction.atomic
+def release_connections(ids, *, job=None):
     identities = [
         pk
         for connection in AIConnection.objects.filter(pk__in=ids)
         for pk in quota_group(identity_for(connection)).values_list("pk", flat=True)
     ]
-    AIIdentity.objects.filter(
-        pk__in=identities, availability="BUSY", retry_after__isnull=True
-    ).update(availability="AVAILABLE")
-    AIConnection.objects.filter(
-        identity_id__in=identities, availability="BUSY", retry_after__isnull=True
-    ).update(availability="AVAILABLE")
+    # Serialize completion with admission and other releases for the same account.
+    # Otherwise two simultaneous completions can both retain each other's old BUSY flag.
+    list(AIIdentity.objects.select_for_update().filter(pk__in=identities).order_by("pk"))
+    if job is not None:
+        # Clear only this invocation's lease. Other conversations may still use the account.
+        job.payload = {**job.payload, "connection_ids": [], "capacity_reserved": False}
+        job.save(update_fields=["payload"])
+    reservations = capacity_reservations()
+    for identity in AIIdentity.objects.filter(pk__in=identities):
+        _, used = group_load(identity, reservations)
+        if used:
+            continue
+        AIIdentity.objects.filter(pk=identity.pk, availability="BUSY", retry_after__isnull=True).update(availability="AVAILABLE")
+        AIConnection.objects.filter(identity=identity, availability="BUSY", retry_after__isnull=True).update(availability="AVAILABLE")
 
 
 def recover_orphaned_leases():
+    # A supervisor restart can occur after the terminal commit but before final cleanup.
+    # DONE is committed only after the invocation returned; uncertain cancellations stay held.
+    for job in Job.objects.filter(
+        kind__in=["analysis", "library_assistant", "discussion"],
+        status="DONE", payload__capacity_reserved=True,
+    ):
+        release_connections(job.payload.get("connection_ids", []), job=job)
     active = {
         pk
-        for payload in Job.objects.filter(
-            kind__in=["analysis", "library_assistant", "discussion"], status__in=["RUNNING", "CANCELLED"]
-        ).values_list("payload", flat=True)
-        for pk in payload.get("connection_ids", [])
+        for _, ids in capacity_reservations()
+        for pk in ids
     }
     active_identity_ids = {
         identity_id
@@ -645,6 +701,7 @@ def reserve_for_job(job, exclude=()):
     job.payload = {
         **job.payload,
         "connection_ids": [c.pk for c in selected],
+        "capacity_reserved": True,
         "assignments": [
             {
                 "connection_id": c.pk,

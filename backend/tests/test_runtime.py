@@ -247,3 +247,63 @@ def test_missing_codex_session_error_is_recoverable_without_raw_diagnostics(runt
     assert response.status_code == 200
     assert response.json()["failure"]["kind"] == "SESSION_UNAVAILABLE"
     assert "private-session-details" not in response.text
+
+
+@pytest.mark.parametrize("provider", ["codex", "claude"])
+def test_streamed_runtime_reads_real_captured_events_and_keeps_final_contract(runtime, provider):
+    client, payload, _ = runtime
+    native_id = str(uuid.uuid4())
+    credentials = server.CREDENTIALS / provider
+    credentials.mkdir(exist_ok=True)
+    if provider == "claude":
+        (credentials / ".credentials.json").write_text(json.dumps({"claudeAiOauth": {"accessToken": "synthetic-oauth-fixture"}}))
+    commands = []
+
+    class Process:
+        returncode = 0
+
+        def __init__(self, command, **kwargs):
+            commands.append(command)
+            self.stream = kwargs["stdout"]
+            self.session = Path(command[command.index("--bind") + 1])
+
+        def communicate(self, *args, **kwargs):
+            answer = {"message": "A scoped answer"}
+            if provider == "claude":
+                events = [
+                    {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "read-1", "name": "Read", "input": {"file_path": "/private/source"}}]}},
+                    {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "read-1", "content": "PRIVATE SOURCE"}]}},
+                    {"type": "result", "structured_output": answer, "session_id": native_id},
+                ]
+            else:
+                (self.session / "result.json").write_text(json.dumps(answer))
+                events = [
+                    {"type": "thread.started", "thread_id": native_id},
+                    {"type": "item.completed", "item": {"id": "read-1", "type": "command_execution", "command": "cat /private/source", "exit_code": 0, "aggregated_output": "PRIVATE SOURCE"}},
+                    {"type": "item.completed", "item": {"id": "reply", "type": "agent_message", "text": json.dumps(answer)}},
+                ]
+            self.stream.write(("\n".join(json.dumps(event) for event in events) + "\n").encode())
+            self.stream.flush()
+            return None, None
+
+    with patch("runtime.server.subprocess.Popen", Process):
+        response = client.post("/run", json={**payload, "agent": provider, "attempt_id": str(uuid.uuid4()), "stream_events": True, "preview_field": "message"}, headers={"Authorization": "Bearer test-control-secret"})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    frames = [json.loads(line) for line in response.text.splitlines()]
+    assert frames[-1]["type"] == "result"
+    assert frames[-1]["result"]["output"] == {"message": "A scoped answer"}
+    assert frames[-1]["result"]["session_id"] == native_id
+    progress = [frame for frame in frames if frame["type"] == "progress"]
+    assert progress and progress[-1]["events"][-1]["state"] == "done"
+    assert progress[-1]["events"][-1]["operation"] == "read"
+    assert "PRIVATE SOURCE" not in json.dumps(progress) and "/private/source" not in json.dumps(progress)
+    if provider == "claude":
+        assert commands[0][commands[0].index("--output-format") + 1] == "stream-json"
+        assert "--include-partial-messages" in commands[0]
+
+
+def test_streaming_requires_an_exact_execution_attempt(runtime):
+    client, payload, _ = runtime
+    response = client.post("/run", json={**payload, "stream_events": True}, headers={"Authorization": "Bearer test-control-secret"})
+    assert response.status_code == 422

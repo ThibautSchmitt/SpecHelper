@@ -100,8 +100,9 @@ def test_provider_failure_falls_back_without_reusing_another_provider_session(
 
 
 def test_queue_capacity_is_reserved_and_released_between_distinct_requests(
-    environment, storage, bundle, code_report
+    environment, storage, bundle, code_report, settings
 ):
+    settings.AI_ACCOUNT_CONCURRENCY = 1
     requests = [
         Request.objects.create(environment=environment, need=f"Export active records {i}")
         for i in range(2)

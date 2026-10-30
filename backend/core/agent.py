@@ -179,23 +179,63 @@ def runtime_call(path, payload=None, timeout=15):
                 logging.getLogger(__name__).warning("Post-invocation quota metadata could not be saved")
 
     try:
-        with httpx.Client(timeout=timeout) as client:
-            response = client.request(
-                "POST" if payload is not None else "GET",
-                settings.RUNTIME_URL + path,
-                json=payload,
-                headers={"Authorization": "Bearer " + settings.RUNTIME_TOKEN},
-            )
-        if response.status_code != 200:
-            retain_metadata({"quota_status": {"state": "error"}})
-            raise ValueError("The AI runtime is unavailable or rejected the request")
-        try:
-            result = response.json()
-            if path == "/run" and not isinstance(result, dict):
-                raise ValueError("Invalid runtime response")
-        except ValueError as error:
-            retain_metadata({"quota_status": {"state": "error"}})
-            raise ValueError("The AI runtime returned an invalid response") from error
+        recorder = None
+        if path == "/run" and payload and payload.get("attempt_id"):
+            from .work_progress import Recorder
+
+            recorder = Recorder.for_payload(payload)
+        if recorder:
+            wire = {**payload, "stream_events": True, "preview_field": recorder.preview_field(payload)}
+            result = None
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    with client.stream("POST", settings.RUNTIME_URL + path, json=wire,
+                        headers={"Authorization": "Bearer " + settings.RUNTIME_TOKEN}) as response:
+                        if response.status_code != 200:
+                            raise ValueError("The AI runtime is unavailable or rejected the request")
+                        if not response.headers.get("content-type", "").startswith("application/x-ndjson"):
+                            # An older runtime can still complete the ordinary JSON contract.
+                            response.read()
+                            result = response.json()
+                        else:
+                            for line in response.iter_lines():
+                                if len(line) > 8 * 1024 * 1024:
+                                    raise ValueError("Invalid runtime event")
+                                event = json.loads(line)
+                                if not isinstance(event, dict):
+                                    raise ValueError("Invalid runtime event")
+                                if event.get("type") == "result":
+                                    result = event.get("result")
+                                    break
+                                recorder.receive(event)
+                if not isinstance(result, dict):
+                    raise ValueError("The AI runtime returned an invalid response")
+                recorder.flush(closed=True, interrupted=bool(result.get("failure") or result.get("cancelled") or result.get("timed_out")))
+            except Exception as error:
+                recorder.flush(closed=True, interrupted=True)
+                if not isinstance(error, httpx.HTTPError):
+                    retain_metadata({"quota_status": {"state": "error"}})
+                raise
+        else:
+            result = None
+        if not recorder:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.request(
+                    "POST" if payload is not None else "GET",
+                    settings.RUNTIME_URL + path,
+                    json=payload,
+                    headers={"Authorization": "Bearer " + settings.RUNTIME_TOKEN},
+                )
+            if response.status_code != 200:
+                retain_metadata({"quota_status": {"state": "error"}})
+                raise ValueError("The AI runtime is unavailable or rejected the request")
+            try:
+                result = response.json()
+                if path == "/run" and not isinstance(result, dict):
+                    raise ValueError("Invalid runtime response")
+            except ValueError as error:
+                retain_metadata({"quota_status": {"state": "error"}})
+                raise ValueError("The AI runtime returned an invalid response") from error
         retain_metadata(result)
         if path == "/run" and result.get("failure") and not result.get("timed_out"):
             failure = result["failure"]

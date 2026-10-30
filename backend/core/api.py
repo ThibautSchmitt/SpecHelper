@@ -227,6 +227,9 @@ def request_dict(value, full=False):
         "updated_at": value.updated_at,
     }
     if full:
+        from .work_progress import snapshot as progress_snapshot_for_request
+
+        result.update(progress_snapshot_for_request(value))
         from .need_revisions import revision_state
 
         result.update(revision_state(value))

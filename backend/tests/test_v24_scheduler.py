@@ -66,7 +66,9 @@ def response(payload, output=None):
 
 
 @pytest.fixture
-def prepared(environment, storage):
+def prepared(environment, storage, settings):
+    # Retain the explicitly serialized deployment profile in historical lease tests.
+    settings.AI_ACCOUNT_CONCURRENCY = 1
     AIConnection.objects.exclude(pk=1).update(enabled=False)
     identity = AIIdentity.objects.create(
         agent="codex", credential_id=uuid.uuid4(), status="CONNECTED", availability="AVAILABLE"
@@ -148,9 +150,13 @@ def invoke(job, storage, output=None):
     return calls
 
 
-def test_two_jobs_really_overlap_on_distinct_compatible_connections(prepared):
+@pytest.mark.parametrize("shared_account", [False, True])
+def test_two_jobs_really_overlap_on_compatible_accounts(prepared, settings, shared_account):
     environment, storage, source = prepared
-    assistant()
+    if shared_account:
+        settings.AI_ACCOUNT_CONCURRENCY = 2
+    else:
+        assistant()
     environment.context_instructions = "FIRST_ENVIRONMENT_FACTS_ONLY"
     environment.save(update_fields=["context_instructions"])
     other_environment = Environment.objects.create(
@@ -203,9 +209,10 @@ def test_two_jobs_really_overlap_on_distinct_compatible_connections(prepared):
             active = list(StepExecution.objects.filter(status="RUNNING"))
             assert len(active) == 2
             assert len({step.job_id for step in active}) == 2
-            assert len({step.connection_id for step in active}) == 2
+            assert len({step.connection_id for step in active}) == (1 if shared_account else 2)
+            assert len({payload["context_id"] for payload in calls.values()}) == 2
             assert {step.public_role for step in active} == {"analyst"}
-            assert {item["agent"] for item in calls.values()} == {"codex", "claude"}
+            assert {item["agent"] for item in calls.values()} == ({"codex"} if shared_account else {"codex", "claude"})
             for current, other in ((first, second), (second, first)):
                 payload = calls[str(current.pk)]
                 assert payload["workspace"] == str(workspaces[str(current.pk)])
@@ -275,6 +282,121 @@ def test_same_account_aliases_do_not_multiply_parallel_capacity(prepared):
     ) == {"BUSY"}
     second.refresh_from_db()
     assert second.status == "QUEUED" and not second.executions.filter(status="RUNNING").exists()
+
+
+def test_parallel_account_slots_are_atomic_shared_by_aliases_and_released_individually(prepared, settings):
+    from core.providers import capacity_reservations, public, release_connections
+
+    settings.AI_ACCOUNT_CONCURRENCY = 3
+    settings.AI_CONCURRENCY = 5
+    environment, _, _ = prepared
+    original = AIConnection.objects.get(pk=1)
+    AIIdentity.objects.filter(pk=original.identity_id).update(account_key="shared-fixture-account")
+    alias = assistant("codex", account_key="shared-fixture-account")
+    for index in range(6):
+        start(environment, f"Inspect application behavior {index}.")
+    barrier = threading.Barrier(7)
+
+    def claim():
+        barrier.wait(15)
+        value = claim_job()
+        return value.pk if value else None
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(in_thread, claim) for _ in range(6)]
+        barrier.wait(15)
+        claimed = [future.result(15) for future in futures]
+    ids = [pk for pk in claimed if pk]
+    assert len(ids) == len(set(ids)) == 3
+    assert len(capacity_reservations()) == 3
+    assert public(original)["active_executions"] == public(alias)["active_executions"] == 3
+    assert public(alias)["availability"] == "BUSY"
+    assert StepExecution.objects.filter(status="RUNNING").count() == 3
+    assert len(set(StepExecution.objects.filter(status="RUNNING").values_list("session__context_id", flat=True))) == 3
+    # A stopped invocation frees one slot, not every alias/account reservation.
+    job = Job.objects.get(pk=ids[0])
+    release_connections(job.payload["connection_ids"], job=job)
+    assert public(original)["active_executions"] == 2
+    assert public(original)["availability"] == "AVAILABLE"
+    assert len(capacity_reservations()) == 2
+    assert claim_job() is not None
+    assert claim_job() is None
+
+
+def test_global_slots_span_accounts_and_retain_unacknowledged_cancellation(prepared, settings):
+    from core.providers import capacity_reservations, public
+
+    settings.AI_ACCOUNT_CONCURRENCY = 4
+    settings.AI_CONCURRENCY = 2
+    environment, _, _ = prepared
+    original = AIConnection.objects.get(pk=1)
+    other = assistant()
+    first, _ = start(environment)
+    start(environment, "Explain a different component.")
+    start(environment, "Explain a third component.")
+    one, two = claim_job(), claim_job()
+    assert one and two and len(capacity_reservations()) == 2
+    assert claim_job() is None  # Even another unused account cannot bypass the instance cap.
+    assert public(other)["availability"] == "AVAILABLE"
+    attempts = cancel_request(first.pk)
+    assert attempts
+    with patch("core.agent.runtime_call", return_value={"stopped": False}):
+        assert not acknowledge_cancellation(one)
+    assert len(capacity_reservations()) == 2 and claim_job() is None
+    with patch("core.agent.runtime_call", return_value={"stopped": True}):
+        assert acknowledge_cancellation(one)
+    assert len(capacity_reservations()) == 1
+    assert public(original)["active_executions"] == 1
+    assert claim_job() is not None
+
+
+def test_upstream_busy_and_quota_remain_authoritative_with_spare_local_slots(prepared, settings):
+    from core.providers import candidates, mark_failure, observe, release_connections
+
+    settings.AI_ACCOUNT_CONCURRENCY = 4
+    environment, _, _ = prepared
+    start(environment)
+    start(environment, "Explain a different component.")
+    one, two = claim_job(), claim_job()
+    original = AIConnection.objects.get(pk=1)
+    mark_failure(original.pk, "BUSY", 60)
+    observe(original, {"status": "CONNECTED"})
+    assert not candidates()  # Successful auth is not a provider concurrency permit.
+    release_connections(one.payload["connection_ids"], job=one)
+    assert not candidates()
+    mark_failure(original.pk, "QUOTA_EXHAUSTED")
+    release_connections(two.payload["connection_ids"], job=two)
+    assert not candidates()
+    original.refresh_from_db()
+    assert original.availability == "QUOTA_EXHAUSTED"
+
+
+def test_account_editing_and_cli_updates_wait_for_every_active_slot(prepared, settings, client):
+    from core.providers import observe, public
+
+    settings.AI_ACCOUNT_CONCURRENCY = 4
+    environment, _, _ = prepared
+    one_request, _ = start(environment)
+    two_request, _ = start(environment, "Explain another part of the application.")
+    one, two = claim_job(), claim_job()
+    connection = AIConnection.objects.get(pk=1)
+    observe(connection, {"status": "CONNECTED"})
+    assert public(connection)["availability"] == "AVAILABLE"  # Spare execution slots.
+    # Admin changes are still forbidden even if asynchronous health cleared BUSY.
+    AIIdentity.objects.filter(pk=connection.identity_id).update(availability="AVAILABLE")
+    AIConnection.objects.filter(pk=connection.pk).update(availability="AVAILABLE")
+    response = client.put(f"/api/ai-connections/{connection.pk}", {"name": "Changed", "agent": "codex"}, content_type="application/json")
+    assert response.status_code == 409
+    cancel_request(one_request.pk)
+    cancel_request(two_request.pk)
+    maintenance = Job.objects.create(kind="cli_update", target="codex")
+    assert not Job.objects.filter(status="RUNNING").exists()
+    assert claim_job() is None  # Runtime stop is still unacknowledged for both slots.
+    with patch("core.agent.runtime_call", return_value={"stopped": True}):
+        assert acknowledge_cancellation(one)
+        assert claim_job() is None
+        assert acknowledge_cancellation(two)
+    assert claim_job().pk == maintenance.pk
 
 
 def test_role_limits_and_oldest_compatible_order_bypass_a_blocked_head(prepared):
