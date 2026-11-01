@@ -1,5 +1,13 @@
 # Architecture
 
+Ticket preparation is stored in the conversation's existing discussion state,
+separately from immutable result versions and destination-specific publication
+drafts. Reading or saving a preparation draft does not enqueue work. Optimistic
+guards cover both draft and conversation revisions. An explicit deep-analysis
+request can pin the saved proposal revision into the job and frozen context;
+its content is an unverified investigation input, not a confirmed decision.
+Publication still uses the existing connector, preview and evidence checks.
+
 SpecHelper separates conversational exploration from independently checked analysis.
 Both use the same conversation history and authorized resources. This describes the
 implemented reference deployment, not a proposed architecture.
@@ -45,8 +53,11 @@ The application persists the visible history independently of native CLI storage
 Continuation depends on retained session files, provider support and matching execution
 configuration. A missing/invalid session triggers explicit recovery with bounded saved
 context and a new native session. The application does not call this an unchanged
-session or silently switch providers. Session directories and ownership are scoped
+session or silently switch providers. Session directories and execution contexts are scoped
 to the conversation and environment; there is no shared cross-conversation memory.
+The UI retains recorded connection/model/reasoning history. A user-confirmed transfer
+after quota exhaustion creates a new native session with bounded saved context; it
+does not migrate the provider's private session state. See [Usage](usage.md#start-a-discussion).
 
 **Launch deep analysis** captures a versioned need and resource baseline. Human
 statements and confirmed decisions are distinguished from exploratory AI hypotheses.
@@ -103,6 +114,11 @@ A turn receives an immediate acknowledgment before the CLI's first event. Each e
 updates one expandable progress element. Deep analysis adds the real role states.
 Selected user-facing response prefixes can appear as drafts pending validation; an
 incomplete JSON object is never rendered as a final answer.
+Terminal cycles stay anchored to their recorded cycle/step timestamps rather than
+following later discussion inputs. Reopening the page preserves that ordering.
+Persistent Antigravity turns require a native `finish` completion after the current
+input. A cached structured result without that completion is rejected and is not
+shown as a draft or saved as a new reply. Equal response text alone is not an error.
 
 The worker/runtime exchange structured execution observations. The browser uses narrow,
 cursor-based polling, normally every two seconds during active work and ten seconds
@@ -139,8 +155,11 @@ templates, attachments and uncertain-write reconciliation have their own validat
 
 ## Trust boundaries and implementation pointers
 
-New conversations use browser-cookie ownership; legacy shared records remain shared.
-This is not individual-account authentication or tenant administration. Access settings,
+Analyses and activity are shared across browsers after instance access checks. Browser
+cookies provide attribution, not per-conversation authorization. Native sessions belong
+to a conversation; row locks and revision guards serialize its operations. Distinct
+conversations and deep-analysis roles retain separate contexts. This is not
+individual-account authentication or tenant administration. Access settings,
 AI connections and deployment administrators remain trusted. The runtime supervisor
 needs namespace privileges; its analysis children run as a separate non-root identity
 with restricted mounts, network access and capabilities. See [SECURITY](../SECURITY.md)
@@ -149,8 +168,11 @@ for the complete boundaries and residual risks.
 | Area | Source |
 | --- | --- |
 | API and data | [backend/core](../backend/core) |
-| Discussion ownership | [discussion_access.py](../backend/core/discussion_access.py) |
+| Shared conversation access and browser attribution | [discussion_access.py](../backend/core/discussion_access.py) |
 | Persistent discussion | [discussion.py](../backend/core/discussion.py) |
+| Explicit discussion transfer and AI history | [discussion_continuation.py](../backend/core/discussion_continuation.py) |
+| Built-in procedures and mandatory instructions | [builtin_skills.py](../backend/core/builtin_skills.py), [native_policy.py](../backend/core/native_policy.py) |
+| Background environment branch checks | [branch_checks.py](../backend/core/branch_checks.py) |
 | Queue supervision | [management commands](../backend/core/management/commands) |
 | CLI adapters and sandbox | [runtime](../runtime) |
 | Conversation and progress UI | [frontend/src](../frontend/src) |

@@ -98,6 +98,11 @@ copy when upgrading a team installation. Source commits or pushes alone do not
 upgrade running containers. Use the in-application CLI update action for detected
 CLI releases; it drains active work before replacement and reports uncertain outcomes.
 
+The migrations preserve existing analyses and configuration. `0046` adds environment
+branch-check metadata; `0047` consolidates the built-in skills, retains immutable
+revisions and remaps current references. Customized definitions are preserved for
+review rather than discarded. Historical execution snapshots are not rewritten.
+
 ## Backups and recovery
 
 Back up application PostgreSQL and the matching named volumes:
@@ -128,6 +133,8 @@ uncertain ticket delivery at the external destination before retrying any write.
 | CLI starts but source tools fail | Check namespace/seccomp support, runtime memory/PID limits and logs. Preserve `init: true` so child processes are reaped. |
 | Model absent after refresh | Refresh reads the installed CLI catalogue. Check the displayed CLI version and explicit update action; no model list is invented. |
 | Session cannot resume | Keep the application history. The UI reports a replacement session rather than silently claiming native continuity. |
+| A previous reply appears for a new question | A persistent Antigravity turn must report a new native completion. Use **Retry** if the turn reports an outdated response; this recovers the pending question with saved context. Report a recurring failure with its time and provider, without credentials or private transcripts. |
+| Analyses or Activity differ between browsers | Confirm both browsers use the same instance address and have instance access. Histories are shared; the browser attribution cookie is not a private workspace. |
 | Publication response was lost | Use the existing-publication verification action and inspect the destination; do not blindly submit again. |
 
 Read [Security testing](security-testing.md) for isolated probes and

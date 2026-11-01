@@ -2,8 +2,8 @@
 
 This retained record describes its original source/deployment review only. It is
 not a statement that the current application or another host passed the same tests.
-In particular, its shared-access observations predate browser ownership for new
-conversations. Use [SECURITY](../../SECURITY.md) for current boundaries and
+Its access findings do not establish the current shared-browser or conversation-session
+behavior. Use [SECURITY](../../SECURITY.md) for current boundaries and
 [Security testing](../security-testing.md) for maintained checks.
 
 The original report and revisions remain in Git history. The preserved test outcomes

@@ -6,7 +6,7 @@ with SpecHelper or the name configured for the instance, not separate provider s
 
 ## Start a discussion
 
-1. Open **Analyses → New analysis** and select a synchronized environment.
+1. Open **Analyses → New analysis** and select an up-to-date environment.
 2. Describe what you want to understand or change. Attach only necessary, authorized files.
 3. Start the discussion and add questions, corrections or useful examples.
 
@@ -15,27 +15,67 @@ factual questions. It does not automatically launch independent reviews after ea
 message, and its responses are exploratory rather than verified conclusions.
 
 The assistant keeps its selected provider, model and native session where supported.
-Reloading or reopening in the same browser preserves the application history. If
+Reloading or reopening in another authorized browser preserves the application history. If
 native resumption becomes impossible, the application reports a new session and
 reconstructs bounded context from saved messages instead of claiming unchanged continuity.
 A configuration change requires explicit session recovery; no silent account switch occurs.
 
-New conversations belong to their original browser-owner cookie. Keep that browser
-profile; clearing cookies or switching browser does not establish the same identity.
-Older shared analyses remain visible under shared-instance access. There is no
-individual-account recovery or private organization tenancy; see [SECURITY](../SECURITY.md).
+If a turn fails, use **Retry** after checking the reported cause. This explicitly
+starts a new native session with saved, bounded context; it does not change the selected
+connection on its own. With an empty composer, your pending message is reused rather
+than appended again. Explicit configuration changes remain visible in the AI history.
+Antigravity must finalize the current turn before its structured response is accepted.
+An old cached response without a new completion is shown as a failure, not as the
+answer to your new question. Confirmed invalid replies are excluded from recovery
+context while their original records are retained for traceability.
+
+Below the analysis title, the discussion shows its selected AI connection, model and
+reasoning setting. These are recorded session values, not replacements taken from
+subsequent settings edits. When the provider reports an actual model for a default
+selection, that observed model can be displayed.
+An **AI history** line retains previous connections with their recorded model and
+reasoning settings. The current connection is identified separately; repeated native
+session restarts with the same configuration do not add duplicate entries.
+
+If its quota is exhausted, **Continue the analysis with…** opens a list of currently
+available Analyst connections. Choose a connection and inspect its model and reasoning
+before selecting **Continue**. Leaving the selection or choosing **Cancel** keeps the
+original connection and pending request. SpecHelper never transfers it automatically.
+Availability and the selected configuration are checked again on confirmation.
+
+A confirmed change starts a new native session, even for another ChatGPT account.
+The recorded history and frozen project context are provided for recovery; private
+native session state is not migrated. Previous AI replies remain unverified hypotheses
+and may need reinvestigation. The conversation records the change. A pending message
+is retried once without being appended again; a finished discussion waits for the next
+user message. An active execution must finish or stop before a transfer is possible.
+
+Analyses, messages and the Activity panel are shared across authorized browsers.
+The same conversation resumes its own AI session when another team member continues it.
+A conversation accepts one active operation at a time; refresh before sending if another
+browser has already changed it. There are no private user spaces or organization tenants;
+see [SECURITY](../SECURITY.md).
 
 ## Follow the work
 
-An accepted turn shows an immediate acknowledgment, followed by a single expandable
-progress element. Expand it to inspect observed work such as source searches or file
-reads. No detailed action is invented when the provider sends no usable event; a
+The conversation, message composer and analysis/ticket actions share one card.
+An accepted turn shows an immediate acknowledgment, followed by a single progress
+element. Consecutive identical finished operations are grouped with a count; failures
+remain separate from successes. When detailed events exist, expand it to inspect source
+searches, file reads, Git history or command execution. Without a recognizable action,
+only the operation's real state is shown. No empty disclosure is shown for a discussion
+without tool events.
+No detailed action is invented when the provider sends no usable event; a
 quiet active invocation remains a neutral processing state with observed elapsed time.
 
 During deep analysis, the same element exposes the three roles and their real states.
+Role names use the same colored tags as **AI connections**; their execution states
+remain separate labels beside the tags.
 Future roles have no invented work steps. A green check records a completed operation,
 not proof that every conclusion is correct. Waiting for capacity, quota exhaustion,
 clarification, interruption and technical failure remain distinct.
+Completed, interrupted and cancelled analyses stay at their place in the conversation;
+later discussion messages do not move their progress elements.
 
 Response text appears progressively when the provider exposes an eligible user-facing
 field. A draft is labelled pending validation. Codex can deliver message text only at
@@ -46,6 +86,8 @@ Private reasoning, raw commands and tool output are not conversation messages.
 The view follows new text while you are at the bottom and lets you read older messages
 without pulling you back down. Recorded observations survive reloads. A lost tracking
 connection is shown explicitly; it is not treated as proof that the model failed.
+The conversation header shows the request date and last message date; individual
+messages do not repeat dates or assistant/user identity headers.
 
 **Activity** is closed by default and remembers its state. Its badge counts clarifications
 and actionable errors, not running analyses. The drawer layout adapts to smaller screens.
@@ -104,11 +146,29 @@ the source result and its original scope.
 
 ## Prepare and publish a ticket
 
-Choose **Prepare a ticket** or the available evolution action. Before an initial
-verified result, this requires deep analysis. Discussion alone cannot publish a ticket.
-A partial result may be prepared as a draft, but a new external publication requires
-completed mandatory checks and non-blocking verified evidence. Changing the need
-requires reassessment before an earlier result can be published.
+**Prepare a ticket** opens an editable draft in the conversation. It never starts
+the three roles or publishes anything. You can save, copy or download the draft
+without an analysis, after an interruption or with incomplete checks; it remains
+explicitly unverified in those cases. Saved drafts are shared with the conversation
+and reject conflicting edits from another browser.
+
+When an analysis result exists, preparation reuses its findings and records its
+version and scope. Later user messages appear separately as unverified requests;
+the conversational assistant's hypotheses are not promoted to verified findings.
+Indicate whether the later exchanges concern the same need, a minor clarification
+or a significant change. This assessment does not certify a proposed solution.
+You can keep preparing immediately, or explicitly choose **Update analysis**.
+That action saves and freezes the edited proposal as an unverified input for a
+new independent cycle. Opening, editing or saving the draft never triggers it.
+
+The preparation draft is separate from destination-specific publication drafts.
+External publication retains the existing change-analysis workflow and requires
+completed mandatory checks and non-blocking verified evidence. Question-only
+conversations and incomplete analyses can still save and export their preparation
+drafts. **Prepare a change** retains the existing linked-evolution path for a
+question result; its source question and evidence remain available.
+Changing the verified need requires reassessment before an earlier result
+can be published. Editing a ticket does not independently verify those edits.
 
 Select an enabled, verified connection associated with the environment, then a
 destination accessible with that account. Multiple accounts of the same provider
@@ -116,7 +176,10 @@ remain separate choices. An unavailable account stays visible but cannot be sele
 a failure never silently switches accounts. If none is associated, follow the link
 to the environment’s **Publication destinations** configuration. Choose the
 standard concise format or a real destination template, complete mandatory fields,
-edit the draft and inspect the preview. Draft edits persist separately from the
+edit the draft and inspect the preview. **Use prepared draft** explicitly copies
+the saved conversation draft into the destination preview, including its verification
+notice and source limitations; it never replaces a saved publication draft silently.
+Draft edits persist separately from the
 immutable result and reject stale concurrent changes. Publication happens only after
 an explicit **Create ticket** confirmation; no agent publishes on your behalf.
 

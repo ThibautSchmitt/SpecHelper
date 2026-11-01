@@ -16,7 +16,7 @@ do not infer present scanner results from a dated report.
 | Semgrep | Local production-code rules, including executable input, shell execution, unsafe deserialization, TLS bypass, untrusted HTML and browser secret storage |
 | pip-audit and npm audit | Frozen Python and frontend dependency graphs, including development dependencies |
 | Trivy | Infrastructure definitions and actual built images, raw package/secret inventories and reviewed applicability |
-| Application tests | Authentication, browser ownership, cookies/CSRF, uploads, rendering, read-only access and runtime boundaries |
+| Application tests | Instance authentication, shared browser visibility, conversation locking, cookies/CSRF, uploads, rendering, read-only access and runtime boundaries |
 | OWASP ZAP | Authenticated disposable baseline; bounded active scan on its scheduled/manual path |
 
 Scanner jobs retain reports independently. Failed/missing scanner outcomes are not

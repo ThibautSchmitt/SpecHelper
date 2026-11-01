@@ -7,6 +7,64 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Ticket preparation without automatic verification
+
+- Open an editable, persistent ticket draft directly from any unified conversation,
+  including those without a result or with interrupted/partial analysis.
+- Reuse the selected source result and distinguish later user requests and proposed
+  corrections as unverified. Preserve source limitations in exports and publication
+  previews; never promote discussion hypotheses or scope choices to verified facts.
+- Save, copy and export without queuing agents. An explicit analysis update freezes
+  the saved draft revision for independent investigation; existing results stay immutable.
+- Keep connector publication checks and explicit confirmation. Copy a prepared draft
+  into a destination preview only on request, preserving saved destination drafts.
+
+### Shared conversations and reliable continuation
+
+- Share analyses, Activity and conversation sessions across authorized browsers;
+  keep signed browser attribution, instance access checks and revision guards.
+- Record AI connection, model and reasoning history below the title. Offer an
+  explicit available-account choice after quota exhaustion, with a new native
+  session and saved context; never silently transfer a discussion.
+- Keep completed/interrupted analysis progress at its chronological position,
+  including historical failures without a recorded cycle end. Record terminal
+  timestamps for failed checkpoints while keeping resource waits open.
+- Match Antigravity tool lifecycles by native step index and classify observed
+  reads, searches, Git and commands. Group repeated operations without merging
+  failures with successes or inventing work.
+- Require native completion of each persistent Antigravity turn before accepting
+  or previewing structured output. Reject cached previous answers as explicit
+  retryable failures; retain invalidated records and exclude them from recovery.
+- Normalize redundant serialized reply envelopes without altering explicit JSON
+  requests, code examples or the stored original history.
+- Keep the conversation, composer and actions in one card, with request/last-message
+  metadata and compact progress. Reuse AI-connection role tags in the analysis stages.
+  Use **Retry** for explicit session recovery.
+
+### Built-in skills and adaptive answers
+
+- Supply four maintained procedures: Code and source exploration, Document analysis,
+  Impact analysis and Data protection. Retain custom skills and historical revisions.
+- Reject built-in skill changes through legacy analysis-option routes as well as
+  the current library API; custom extension flags remain supported.
+- Keep safety, source reliability and adaptive communication in mandatory native
+  instructions, independently of optional skill loading. Explicit technical, Git,
+  data and mixed requests receive their requested details within allowed access.
+- Harden minimized SQL previews against sensitive aliases and expressions,
+  including CTE/subquery projections, while retaining useful counts and permitted
+  non-sensitive details. This is not comprehensive personal-data classification.
+- Migrations 0046 and 0047 add branch observations and consolidate skills without
+  rewriting frozen analysis histories or discarding customized definitions.
+
+### Environment updates
+
+- Check remote references periodically without changing selected environment
+  commits. Show observed commit lag and support updates of a single repository.
+- Use green **Up to date**, yellow **Partially up to date** and red **Update needed**
+  tags consistently; unavailable/stale observations remain unverified.
+- Preserve existing analysis baselines and backend update audit records while
+  removing the redundant environment update-history panel from the interface.
+
 ### Antigravity tool updates
 
 - Validate the selected installed Antigravity release instead of requiring the
@@ -19,7 +77,7 @@ retains superseded implementation reports. This changelog alone retains release 
 - Open Git, publication, environment and custom library editors in their own cards;
   a second click on Edit collapses the form without saving.
 - Use Cancel and Save as editor actions; save environment changes directly,
-  with Synchronize, Edit and Delete restored to the top right of each card.
+  with Edit and a compact Update/Delete action menu at the top right of each card.
 - Align section titles, muted descriptions and add actions; keep orchestration's
   configuration separate and place the exhausted-quota badge just before Edit.
 - Remove the redundant analysis-type filter buttons from the analyses list.

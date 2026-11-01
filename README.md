@@ -15,14 +15,24 @@ limits. The French interface calls the final role **Validateur**.
 
 - Continue discussions through native Codex, Claude Code or Antigravity sessions
   when the provider can resume them; recover explicitly when a session is lost.
+- Keep the recorded AI/model history and explicitly choose another available
+  connection if the selected assistant has exhausted its quota.
 - Read authorized Git repositories, attachments and environment reference documents.
+- Check environment branches for available updates and update one repository or
+  the whole environment without changing earlier analyses' frozen references.
 - Optionally inspect a business PostgreSQL database through restricted read-only access.
 - Follow observed work, answer clarifications and inspect a concise result or detailed report.
-- Prepare and edit tickets for GitHub Issues, GitLab Issues, Jira Cloud or GLPI,
-  then explicitly confirm publication. Reports, original files and `goal.md` are optional deliverables.
+- Prepare, save and export a ticket draft without launching verification. Reuse
+  existing findings, keep later proposals explicitly unverified and choose whether
+  to update the analysis. Publish eligible change results to GitHub Issues, GitLab
+  Issues, Jira Cloud or GLPI after an explicit confirmation. Reports, original
+  files and `goal.md` are optional deliverables.
 
 SpecHelper does not modify source code or business databases. Independent checks
 help expose uncertainty; they do not guarantee that every AI conclusion is correct.
+Four built-in skills support source exploration, documents, impact analysis and data
+protection. Responses adapt to the question: functional explanations by default,
+with code, Git history or authorized data when explicitly requested.
 
 ## Quick start
 
@@ -48,7 +58,7 @@ Open <http://localhost:3000>. Select **Administration** at the bottom left:
 2. Under **AI & Agents → Connections**, connect an eligible AI account and select
    its model. Use **Orchestration** to check coverage of all three analysis roles.
 3. Under **Environments**, select repositories and branches/tags, optionally add a
-   read-only PostgreSQL connection and reference documents, then synchronize.
+   read-only PostgreSQL connection and reference documents, then update the environment.
 4. Open **Analyses → New analysis**, select the environment and describe your need.
    Start the discussion; launch deep analysis when you want independent verification.
 
@@ -58,10 +68,10 @@ interface and generated deliverables support English and French.
 
 ## Team access and practical limits
 
-Remote deployment requires shared instance authentication and HTTPS. New
-conversations are isolated by a signed browser-owner cookie; older shared analyses
-remain shared. There are no individual human accounts or organization tenants.
-Keep the original browser profile to reopen its private conversations. Read
+Remote deployment requires shared instance authentication and HTTPS. Analyses,
+conversation history and activity are shared across authorized browsers of the instance.
+There are no individual human accounts or organization tenants. Each conversation
+keeps its own AI session, independently of the browser used to open it. Read
 [SECURITY.md](SECURITY.md) before exposing an instance or sending sensitive data.
 
 Several conversations can use one account simultaneously: the default ceilings

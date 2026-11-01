@@ -1,5 +1,11 @@
 # Development
 
+Ticket preparation regressions cover opening and saving without queuing agents,
+reuse of a pinned result, unverified later proposals, concurrent edits and explicit
+analysis of an immutable draft snapshot. Frontend coverage checks the same choices
+in English and French. Existing publication tests retain the independent-check
+and human-confirmation gates.
+
 Start with [CONTRIBUTING](../CONTRIBUTING.md) for contribution and documentation rules.
 Use fictional data and separate development storage. Never run mutating fixtures,
 active scans or publication tests against a team instance.
@@ -59,6 +65,12 @@ uv run pytest -q
 Most tests use fake provider transports or synthetic responses and need no AI account.
 A passing mocked pipeline proves its tested orchestration contract, not model accuracy,
 subscription availability or live CLI compatibility.
+
+Conversation regressions cover cross-browser access, native-session recovery,
+explicit account transfer, terminal timeline ordering and refusal of cached
+Antigravity results without a completion for the current turn. A text-identical
+answer is not rejected when the new turn genuinely completed. Keep invalid-response
+fixtures out of recovered context while retaining their original records for audit.
 
 Concurrency and read-only database probes need disposable PostgreSQL. The primary test
 application database must also be PostgreSQL for real row-lock tests; the optional

@@ -9,7 +9,7 @@ Use the add button at the right of a section heading to create a connection,
 environment or skill. **Edit** opens the form inside the selected item's card;
 select **Edit** again or **Cancel** to discard unsaved changes and collapse it.
 Editors use **Cancel** and **Save**. Saving an environment applies its changes
-directly; synchronization is scheduled only when its resources change.
+directly; an update is scheduled only when its resources change.
 Orchestration has its own configuration card and no add button.
 
 ## Git sources and environments
@@ -26,17 +26,40 @@ this clears cached project discovery and the previous account/test status.
 For connections referenced by an environment or analysis history, add a new
 connection instead of changing the server of existing repository references.
 
-Create an environment under **Configured environments**:
+Open **Environments → Configured environments**; the page heading is **Environments**:
 
 1. Give it a useful name such as Development or Staging.
 2. Select repositories from the saved Git connections and choose their branches/tags.
 3. Optionally select a saved PostgreSQL connection.
-4. Synchronize and check the recorded outcome and last synchronization time.
+4. Update and check the recorded outcome and last update time.
 
 Connections are reusable across environments. Repository rows retain their selected
-connection and reference. Synchronization records Git SHAs; subsequent analysis
+connection and reference. Updating an environment records Git SHAs; subsequent analysis
 uses a frozen baseline rather than a branch that can move during investigation.
 Git updates are performed by the source service, never by an analysis agent.
+
+Environment cards keep **Edit** and a **…** menu at the top right; the menu contains
+**Update** (all repositories) and **Delete**. The worker checks remote branch
+heads about every five minutes, with at most two environment checks running at once.
+Checks fetch into the shared Git cache without updating the environment's selected
+commits. Each branch shows its last observed state, including the number of commits
+behind, and offers an update button when a change is available. The button updates
+only that repository; it does not merge or push changes to the remote.
+
+| Environment tag | Meaning | Color |
+| --- | --- | --- |
+| **Up to date** | All configured repositories match their last checked remote reference | Green |
+| **Partially up to date** | Some repositories are current and others need an update | Yellow |
+| **Update needed** | No configured repository is current | Red |
+
+These states describe the latest successful remote observations. Missing branches,
+failed access and observations older than fifteen minutes show an unverified state
+instead of claiming the branches are up to date. Hover a branch state to see its check time.
+Queued/running updates and update errors take priority in the card tag.
+Updates preserve the frozen commits and workspaces of existing analyses.
+
+Saved context text is used automatically when nonempty; clear the field to omit it
+from future analyses. Existing frozen analysis contexts retain their original content.
 
 An environment can also hold optional factual context, terminology, public-reference
 hints and reference documents. Expand **Environment context** to manage them.
@@ -160,6 +183,15 @@ failures are not bypassed to obtain a completed label.
 
 **AI & Agents → Skills** separates maintained built-ins from custom procedures:
 
+- **Code and source exploration** finds relevant components, callers, conventions,
+  project references and Git history at the frozen references. Optional indexes are
+  navigation hints; actual inspected sources provide the evidence.
+- **Document analysis** reads relevant supported attachments and reference documents,
+  separating visible facts, interpretation and unreadable content.
+- **Impact analysis** examines dependencies and consequences and proposes the smallest
+  relevant change. It does not authorize source edits.
+- **Data protection** minimizes personal/confidential information while allowing
+  necessary, authorized detailed consultations. It is not a GDPR certification.
 - Built-ins are read-only and automatically discoverable when their required tools are allowed.
 - Custom skills can be created, generated with assistance, imported, edited, disabled,
   restored and exported. Changes create immutable revisions; imported/restored drafts
@@ -167,6 +199,23 @@ failures are not bypassed to obtain a completed label.
 - Assistants see a lightweight registry and load useful contents on demand. A discovered
   skill is not necessarily read. Recorded file access proves access, not comprehension.
 - Skills and per-connection instructions cannot grant tools, network access or write permissions.
+
+The same read-only skill files are exposed inside the isolated Codex, Claude Code and
+Antigravity CLI sessions. SpecHelper supplies a lightweight registry; the assistant
+reads a procedure when needed. This does not depend on a provider-specific skill loader.
+Resumed sessions receive the current registry. Remembered built-in paths redirect to
+their current replacement without claiming the old instructions were loaded. Historical
+analysis snapshots and immutable skill revisions retain their original content.
+
+Communication rules apply even without skills: functional questions receive functional
+answers; explicit requests for files, code, Git history or permitted database results
+receive those details directly. Mixed questions cover each requested aspect. Additional
+technical proofs remain available in the report, and material uncertainty stays visible.
+Database permissions, SQL validation, read-only transactions, masking and volume/time
+limits are enforced separately from these instructions. An explicit request does not
+override those controls. Sensitive-name detection and alias tracking are conservative
+protections, not a complete personal-data classifier; use database views and grants to
+restrict the information that the configured reader can access.
 
 For advanced deployments, `SPECHELPER_ANALYSIS_POLICY_FILE` can name a read-only
 UTF-8 policy file mounted into both backend and worker. It is bounded and validated;
@@ -186,7 +235,7 @@ Under **Environments**, **Publication destinations** selects zero, one or severa
 catalogue connections. The selector is available during creation and editing; the
 current associations are also shown on each environment. One connection may be used
 by several environments and several accounts of one provider may share an environment.
-Changing only these associations does not resynchronize Git or rerun an analysis.
+Changing only these associations does not update Git or rerun an analysis.
 
 A connection authenticates an external account. A destination is a repository,
 project, entity or other accessible target. Choose the effective connection and

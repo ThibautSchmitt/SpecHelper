@@ -1,9 +1,10 @@
 # Security
 
 SpecHelper is intended for a trusted team and trusted deployment administrators.
-New conversations are isolated by a signed browser-owner cookie. Historical shared
-records remain shared. This is not individual-user authentication, organization tenancy
-or a role-based administrative boundary. Instance settings and AI connections are shared.
+Analyses, conversation history and activity are shared by everyone authorized to access
+the instance, including existing records created with browser ownership metadata.
+This is not individual-user authentication, organization tenancy or a role-based
+administrative boundary. Instance settings and AI connections are shared.
 
 ## Deployment and access
 
@@ -25,11 +26,14 @@ access. Sessions use HttpOnly, SameSite Strict cookies and Secure under HTTPS. H
 Origin and CSRF checks remain required, including local operation. Password changes
 invalidate access sessions. `SPECHELPER_SESSION_SECONDS` accepts 300–86400 seconds;
 the default is eight hours. These access sessions differ from browser conversation
-ownership and native AI sessions.
+attribution and native AI sessions.
 
-New conversation ownership uses a separate signed HttpOnly cookie. Clearing it or
-changing browser does not establish the same owner; there is no human-account recovery.
-Do not rely on it to protect shared administration from an untrusted team member.
+A separate signed HttpOnly cookie provides pseudonymous browser attribution only.
+It does not restrict analysis visibility. Clearing it or switching browsers preserves
+access to shared histories and the conversation’s native AI session. One active operation
+per conversation and revision checks prevent conflicting submissions. Distinct conversations
+and deep-analysis roles retain separate AI contexts. Do not expose this shared instance
+to people who should not see its analyses or administration.
 Consult [Installation](docs/installation.md) before changing the reference network or
 storage layout.
 
@@ -99,6 +103,12 @@ Business PostgreSQL requires a dedicated reader: no superuser, ownership, write 
 CREATE privileges. Runtime queries use read-only transactions, SQL validation, a
 five-second statement bound and limited results. No database snapshot is implied by
 capturing a connection. Do not grant writes to bypass a failed connection test.
+
+Agent-facing previews contain at most 20 minimized rows. Sensitive field names and
+their SQL projection aliases, including CTE/subquery aliases, are masked; useful
+counts and permitted non-sensitive details remain available. This is conservative
+name-based protection, not semantic detection of every personal fact. Restrict the
+reader's database grants and views to the data the instance may disclose.
 
 Uploads are bounded by type, signature and size, including DOCX container inspection.
 Supported originals are limited to 25 MB each; environment context accepts at most
