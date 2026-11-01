@@ -42,9 +42,25 @@ for(const language of ['en','fr'] as const){
   await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language,primary_color:'#168e95'}}));
   await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
   await page.goto(`/analyses/${id}`);
-  await expect(page.getByRole('button',{name:t('Resume with a new session'),exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:t('Retry'),exact:true})).toBeVisible();
   await expect(page.locator('[role="alert"]').filter({hasText:t(error)})).toHaveText(t(error));
   await expect(page.locator('.investigation-progress')).toHaveCount(0);
+ });
+ test(`confirmed stale replies remain identifiable without replaying their content in ${language}`,async({page})=>{
+  const error='The assistant returned a previous response without completing this turn. Retry; your messages are preserved.';
+  const source=dossier();const value:any={...source,status:'ERROR',error,messages:[...source.messages,
+   {id:3,role:'assistant',kind:'discussion_reply',content:'CACHED_STALE_REPLY',created_at:later,data:{response_status:'stale'}},
+  ],discussion:{...source.discussion,job:{...source.discussion.job,status:'ERROR',error}}};
+  await page.route('**/api/**',route=>route.fulfill({json:[]}));
+  await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
+  await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
+  await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
+  await page.goto(`/analyses/${id}`);
+  await expect(page.locator('[data-message="message-3"]')).toContainText(t('Response interrupted'));
+  await expect(page.locator('[data-message="message-2"]')).toContainText('A discussion answer.');
+  await expect(page.locator('.analysis-conversation')).not.toContainText('CACHED_STALE_REPLY');
+  await expect(page.getByRole('button',{name:t('Retry'),exact:true})).toBeVisible();
+  await expect(page.locator('[role="alert"]').filter({hasText:t(error)})).toHaveText(t(error));
  });
  test(`configuration change offers explicit restart with the unsent message in ${language}`,async({page})=>{
   let value:any=dossier();let attempts=0;
@@ -63,7 +79,7 @@ for(const language of ['en','fr'] as const){
   await page.getByLabel(t('Your message'),{exact:true}).fill('Please clarify.');
   await page.getByRole('button',{name:t('Send message'),exact:true}).click();
   await expect(page.getByLabel(t('Your message'),{exact:true})).toHaveValue('Please clarify.');
-  await page.getByRole('button',{name:t('Resume with a new session'),exact:true}).click();
+  await page.getByRole('button',{name:t('Retry'),exact:true}).click();
   expect(attempts).toBe(2);
  });
  test(`single conversation continues after reload and deep analysis in ${language}`,async({page})=>{
@@ -74,7 +90,7 @@ for(const language of ['en','fr'] as const){
   await page.route('**/api/ai-connections',route=>route.fulfill({json:[{id:1,name:'ChatGPT',agent:'codex',model:'fixture-model',enabled:true,roles:['analyst','counter_analyst','verifier']}]}));
   await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
   await page.route(`**/api/analyses/${id}/discussion`,async route=>{
-   const body=route.request().postDataJSON();expect(body.expected_revision).toBe(value.discussion.revision);expect(body).not.toHaveProperty('expected_version');
+   const body=route.request().postDataJSON();expect(body.expected_revision).toBe(value.discussion.revision);expect(body).not.toHaveProperty('expected_version');expect(body).not.toHaveProperty('connection_id');
    turns++;
    value={...value,status:'QUEUED',result_state:'queued',messages:[...value.messages,{id:10+turns,role:'user',kind:'discussion',content:body.message,created_at:later}],discussion:{...value.discussion,mode:'discussion',revision:value.discussion.revision+1,has_new_messages:true,job:{id:2,status:'RUNNING',created_at:later,error:'',waiting_reason:''}}};
    await route.fulfill({json:value});
@@ -85,7 +101,9 @@ for(const language of ['en','fr'] as const){
    await route.fulfill({json:value});
   });
   await page.goto(`/analyses/${id}`);
-  await expect(page.locator('.conversation-assistant header strong')).toHaveText('Team Assistant');
+  await expect(page.locator('.conversation-assistant header')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:t('Change assistant'),exact:true})).toHaveCount(0);
+  await expect(page.locator('#discussion-assistant')).toHaveCount(0);
   await expect(page.locator('.conversation-answer table')).toBeVisible();
   await expect(page.locator('.investigation-progress')).toHaveCount(0);
   await expect(page.locator('#analysis-report')).toHaveCount(0);
@@ -115,14 +133,22 @@ for(const language of ['en','fr'] as const){
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  });
 
- test(`ticket request requires explicit deep launch and cancellation preserves input in ${language}`,async({page})=>{
+ test(`ticket preparation opens a saved draft before an explicit deep launch in ${language}`,async({page})=>{
   let value:any=dossier();let launches=0;
+  let draft:any={revision:0,discussion_revision:1,source_version:null,source_verified:false,analysis_state:'none',verified_scope:'',limitations:[],has_new_messages:false,scope_choice:'unknown',update_recommended:true,title:'Contract dates',body:'Prevent inconsistent dates.',markdown:'# Contract dates\n\n> Unverified draft\n\nPrevent inconsistent dates.',publication_available:false,publication_allowed:false};
   await page.route('**/api/**',route=>route.fulfill({json:[]}));
   await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
   await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language,primary_color:'#168e95'}}));
   await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
+  await page.route(`**/api/analyses/${id}/ticket-preparation`,route=>{
+   if(route.request().method()==='PUT'){
+    const payload=route.request().postDataJSON();expect(payload.expected_revision).toBe(draft.revision);
+    draft={...draft,revision:draft.revision+1,title:payload.title,body:payload.body};
+   }
+   return route.fulfill({json:draft});
+  });
   await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{
-   expect(route.request().postDataJSON()).toEqual({expected_revision:1,intent:'change'});launches++;
+   expect(route.request().postDataJSON()).toEqual({expected_revision:1,intent:'change',preparation_revision:1});launches++;
    value={...value,workflow:'request',status:'QUEUED',discussion:{...value.discussion,mode:'analysis'}};
    return route.fulfill({json:value});
   });
@@ -130,9 +156,49 @@ for(const language of ['en','fr'] as const){
   await page.goto(`/analyses/${id}`);
   await expect(page.locator('#analysis-report')).toHaveCount(0);
   await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
+  const preparation=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
+  await expect(preparation).toBeVisible();
+  await expect(preparation).toContainText(t('No deep analysis yet.'));
+  expect(launches).toBe(0);
+  await preparation.getByLabel(t('Ticket description'),{exact:true}).fill('Reject inconsistent dates with a message.');
+  await preparation.getByRole('button',{name:t('Save'),exact:true}).click();
+  await expect(preparation).toContainText(t('Ticket draft saved.'));
+  expect(launches).toBe(0);
+  await preparation.getByRole('button',{name:t('Cancel'),exact:true}).click();
+  await page.reload();
+  await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
+  await expect(preparation.getByLabel(t('Ticket description'),{exact:true})).toHaveValue('Reject inconsistent dates with a message.');
+  await preparation.getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
   expect(launches).toBe(1);
-  await page.getByRole('button',{name:t('Cancel'),exact:true}).click();
+  await expect(preparation).not.toBeVisible();
+  await page.locator('.conversation-reply').getByRole('button',{name:t('Cancel'),exact:true}).click();
   await expect(page.getByLabel(t('Your message'),{exact:true})).toBeEnabled();
   await expect(page.getByText('Explain benefit behavior.',{exact:true})).toBeVisible();
  });
+
+ for(const state of ['complete','partial','interrupted'] as const){
+  test(`ticket preparation reuses ${state} analysis without relaunching in ${language}`,async({page})=>{
+   const source=dossier();let launches=0;
+   const value:any={...source,status:state==='complete'?'DISCUSSING':state==='partial'?'PARTIAL':'ERROR'};
+   let draft:any={revision:0,discussion_revision:1,source_version:1,source_verified:state==='complete',analysis_state:state,verified_scope:'Explain the cause of inconsistent dates.',limitations:state==='partial'?['Runtime checks were not completed.']:[],has_new_messages:true,scope_choice:'unknown',update_recommended:true,title:'Reject inconsistent dates',body:'## Findings\n\nIndependent date updates.\n\n## Additional request — unverified\n\nShow an error.',markdown:'Unverified proposals',publication_available:false,publication_allowed:false};
+   await page.route('**/api/**',route=>route.fulfill({json:[]}));
+   await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
+   await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
+   await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
+   await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{launches++;return route.fulfill({json:value});});
+   await page.route(`**/api/analyses/${id}/ticket-preparation`,route=>{
+    if(route.request().method()==='PUT'){const payload=route.request().postDataJSON();draft={...draft,revision:1,scope_choice:payload.scope_choice};}
+    return route.fulfill({json:draft});
+   });
+   await page.goto(`/analyses/${id}`);
+   await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
+   const preparation=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
+   await expect(preparation.getByLabel(t('Ticket description'),{exact:true})).toContainText('Show an error.');
+   await preparation.getByLabel(t('Changes since the analysis'),{exact:true}).selectOption('clarified');
+   await preparation.getByRole('button',{name:t('Save'),exact:true}).click();
+   await expect(preparation).toContainText(t('Ticket draft saved.'));
+   await expect(preparation.getByRole('button',{name:t('Update analysis'),exact:true})).toBeVisible();
+   expect(launches).toBe(0);
+  });
+ }
 }

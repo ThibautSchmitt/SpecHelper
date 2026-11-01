@@ -78,7 +78,10 @@ def claim_job():
         if connection.features.has_select_for_update_skip_locked:
             jobs = jobs.select_for_update(skip_locked=True)
         capacity_full = len(capacity_reservations()) >= settings.AI_CONCURRENCY
+        branch_checks_full = Job.objects.filter(kind="branch_check", status="RUNNING").count() >= 2
         for job in jobs.iterator(chunk_size=100):
+            if job.kind == "branch_check" and branch_checks_full:
+                continue
             if job.kind in {"analysis", "discussion", "library_assistant"} and capacity_full:
                 if job.payload.get("waiting_reason") != "Waiting for an AI execution slot.":
                     job.payload = {**job.payload, "waiting_reason": "Waiting for an AI execution slot."}
@@ -115,6 +118,7 @@ def recover_stale_jobs():
             started_at__lt=timezone.now() - timedelta(seconds=310),
         )
         | Q(kind="sync", started_at__lt=timezone.now() - timedelta(seconds=1210))
+        | Q(kind="branch_check", started_at__lt=timezone.now() - timedelta(seconds=310))
     )
     for job in stale:
         from .step_execution import is_incremental
@@ -139,11 +143,11 @@ def recover_stale_jobs():
             fail_analysis(job, "Worker interrupted; analysis unfinished.")
             release_connections(job.payload.get("connection_ids", []), job=job)
             continue
-        else:
+        elif job.kind == "sync":
             from .models import Environment
 
             Environment.objects.filter(pk=job.target).update(
-                status="ERROR", error="Synchronization interrupted"
+                status="ERROR", error="Update interrupted"
             )
         Job.objects.filter(pk=job.pk, status="RUNNING").update(
             status="ERROR", error="Worker interrupted", finished_at=timezone.now()
@@ -164,6 +168,10 @@ def perform_job(job, attempt_id=None):
             run_job(job)
         elif job.kind == "sync":
             sync_environment(int(job.target), job.payload.get("changed_repositories"))
+        elif job.kind == "branch_check":
+            from .branch_checks import check_environment
+
+            check_environment(int(job.target))
         elif job.kind == "cli_update":
             from .cli_maintenance import perform_update
             perform_update(job)
@@ -224,7 +232,9 @@ def perform_job(job, attempt_id=None):
                 if changed:
                     Request.objects.filter(pk=job.target).update(status="QUEUED")
         else:
-            fail(job, "The discussion response failed. Your messages are preserved; retry with a new session.")
+            fail(job, "The assistant returned a previous response without completing this turn. Retry; your messages are preserved."
+                if unavailable.kind == "STALE_RESPONSE"
+                else "The discussion response failed. Your messages are preserved; retry with a new session.")
     except RoleUnavailable as wait:
         Job.objects.filter(pk=job.pk).update(
             status="QUEUED", started_at=None, finished_at=None, error=wait.reason
@@ -247,12 +257,14 @@ def perform_job(job, attempt_id=None):
             if isinstance(exc, UpdateUncertain):
                 return
             message = str(exc) if isinstance(exc, ValueError) else "CLI update interrupted. Check the displayed version and retry."
+        elif job.kind == "branch_check":
+            message = "Branch verification interrupted. It will be retried automatically."
         elif job.kind == "sync":
             from .models import Environment
 
             message = (
                 Environment.objects.filter(pk=job.target).values_list("error", flat=True).first()
-                or "Synchronization interrupted. Check connections and selected versions."
+                or "Update interrupted. Check connections and selected versions."
             )
         else:
             from .analysis_flow import FlowError

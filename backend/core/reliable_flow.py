@@ -349,8 +349,10 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
             "verifier",
             "writer",
             QuestionOutput if self.is_question else ArtifactOutput,
-            "Write the final business-facing explanation or concise ticket and detailed goal "
+            "Write the final explanation adapted to the user's actual request or concise ticket and detailed goal "
             "using only the independently verified report and confirmed user decisions. "
+            "For explanations, put the complete user-facing answer in answer.response, including "
+            "explicitly requested code, Git history or authorized data, not only business prose. "
             "State checked conditions, exceptions and unresolved unknowns. Do not restate an "
             "unverified universal assertion as fact. Keep observed historical anomalies distinct "
             "from current permitted behavior. Use PARTIAL when verified_report.blocking=true. "

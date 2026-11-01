@@ -1,5 +1,6 @@
+from .builtin_skills import PROFILES, SKILLS
 from .models import AgentProfile, SkillDefinition
-from .presets_v23 import PROFILES, SKILLS
+from .skill_metadata import BUILTIN_CAPABILITIES
 
 
 def ensure_catalogue():
@@ -7,9 +8,15 @@ def ensure_catalogue():
         PROFILES
     ) and SkillDefinition.objects.filter(pk__in=SKILLS).count() == len(SKILLS):
         return
-    for slug, (name, instructions) in SKILLS.items():
+    for slug, (name, objective, instructions) in SKILLS.items():
         SkillDefinition.objects.get_or_create(
-            slug=slug, defaults={"name": name, "instructions": instructions}
+            slug=slug,
+            defaults={
+                "name": name,
+                "objective": objective,
+                "instructions": instructions,
+                "required_capabilities": sorted(BUILTIN_CAPABILITIES[slug]),
+            },
         )
     for slug, data in PROFILES.items():
         profile, created = AgentProfile.objects.get_or_create(

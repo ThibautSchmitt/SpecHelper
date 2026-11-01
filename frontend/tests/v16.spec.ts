@@ -2,6 +2,7 @@ import { test, expect } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 async function base(page: Page, language = "en") {
+  await page.route("**/api/orchestration-settings", r => r.fulfill({ json: { reliability_protocol: "2.3" } }));
   await page.route("**/api/settings", r => r.fulfill({ json: { name: "SpecHelper", primary_color: "#2563eb", short_label: "", allow_confrontation: true, language } }));
   await page.route("**/api/connections", r => r.fulfill({ json: { github: { status: "CONNECTED" }, ais: [], databases: [] } }));
   await page.route("**/api/system", r => r.fulfill({ json: { jobs: [] } }));
@@ -21,6 +22,7 @@ test("environment instructions and durable documents can be changed independentl
     if (request.method() === "PUT") {
       const body = request.postDataJSON();
       expect(body.expected_revision).toBe(value.revision);
+      expect(body).not.toHaveProperty("instructions_enabled");
       value = { ...value, ...body, revision: value.revision + 1 };
     } else if (request.method() === "POST") {
       expect(request.headers()["content-type"]).toContain("multipart/form-data");
@@ -42,9 +44,9 @@ test("environment instructions and durable documents can be changed independentl
   await expect(page.getByLabel("Short environment instructions")).toHaveValue("Review the active implementation");
   await page.getByLabel("Short environment instructions").fill("Check Java and Python source references.");
   await expect(page.getByLabel("Add reference document")).toBeDisabled();
-  await page.getByLabel("Use environment instructions", { exact: true }).uncheck();
-  await page.getByRole("button", { name: "Save context instructions" }).click();
-  await expect(page.getByLabel("Use environment instructions", { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel("Use environment instructions", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByLabel("Short environment instructions")).toHaveValue("Check Java and Python source references.");
   await page.getByLabel("Add reference document").setInputFiles({ name: "architecture.md", mimeType: "text/markdown", buffer: Buffer.from("The Java API calls the Python worker.") });
   await page.getByText("Text preview", { exact: true }).click();
   await expect(page.getByText("The Java API calls the Python worker.", { exact: true })).toBeVisible();
@@ -77,7 +79,7 @@ test("French context form shows unreadable files and recovers from stale revisio
   await expect(page.getByText("Ce format n’est pas lisible par l’agent. Remplacez-le par un document pris en charge.", { exact: true })).toBeVisible();
   const instructions = page.getByLabel("Instructions courtes de l’environnement");
   await instructions.fill("Local draft");
-  await page.getByRole("button", { name: "Enregistrer les instructions du contexte" }).click();
+  await page.getByRole("button", { name: "Enregistrer" }).click();
   await expect(instructions).toHaveValue("Local draft");
   await page.getByRole("button", { name: "Recharger le contexte" }).click();
   await expect(instructions).toHaveValue("Saved elsewhere");

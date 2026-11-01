@@ -138,6 +138,47 @@ def test_followups_and_reopening_resume_same_native_session(client, environment,
     assert not AnalysisRun.objects.exists()
 
 
+def test_recovery_preserves_valid_history_and_excludes_a_confirmed_stale_response(environment):
+    row = Request.objects.create(environment=environment, need="An initial question.")
+    valid = RequestMessage.objects.create(request=row, role="assistant", kind="discussion_reply", content="A valid earlier response.")
+    invalid = RequestMessage.objects.create(request=row, role="assistant", kind="discussion_reply", content="CACHED_STALE_REPLY", data={"response_status":"stale"})
+    latest = RequestMessage.objects.create(request=row, role="user", kind="discussion", content="A different question.")
+    recovered = discussion.recovery_messages(row, latest.pk)
+    assert "CACHED_STALE_REPLY" not in json.dumps(recovered)
+    assert valid.content in json.dumps(recovered) and latest.content in json.dumps(recovered)
+    assert row.messages.get(pk=invalid.pk).content == "CACHED_STALE_REPLY"
+
+
+def test_stale_cli_response_is_an_error_without_replaying_or_replacing_the_session(
+    client, environment, native, monkeypatch
+):
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    session = AISession.objects.get()
+    original_context, original_native = session.context_id, session.runtime_id
+    assert turn(client, value, 1, message="Explain a different component.").status_code == 200
+
+    def stale(path, payload=None, **kwargs):
+        if path == "/runs/cancel":
+            return {"stopped": True}
+        assert payload["session_id"] == original_native
+        raise ProviderUnavailable("STALE_RESPONSE")
+
+    monkeypatch.setattr(discussion, "runtime_call", stale)
+    job = claim_job()
+    perform_job(job)
+    job.refresh_from_db()
+    row = Request.objects.get(pk=value["id"])
+    session.refresh_from_db()
+    assert job.status == row.status == "ERROR"
+    assert "without completing this turn" in row.error
+    assert row.messages.filter(kind="discussion_reply").count() == 1
+    assert row.messages.filter(role="user").count() == 2
+    assert session.context_id == original_context and session.runtime_id == original_native
+    assert not AnalysisRun.objects.exists()
+
+
 def test_missing_native_session_recovers_explicitly_with_saved_history(
     client, environment, native, monkeypatch
 ):
@@ -239,30 +280,201 @@ def test_no_silent_switch_on_quota_or_configuration_change(client, environment, 
     assert Job.objects.latest("id").payload["assignment"]["connection_id"] == chosen.pk
 
 
-def test_browser_owners_and_environments_do_not_share_sessions_or_private_records(
+def test_browsers_share_conversations_and_activity_but_distinct_requests_keep_sessions(
     client, environment, native
 ):
     value = create(client, environment)
     launch(client, value)
     finish()
+    row = Request.objects.get(pk=value["id"])
+    # Existing browser-private rows become visible without rewriting stored data.
+    row.discussion_state["private"] = True
+    row.save(update_fields=["discussion_state"])
     stranger = Client()
-    assert stranger.get(f"/api/analyses/{value['id']}").status_code == 404
-    assert (
-        stranger.post(
-            f"/api/analyses/{value['id']}/discussion",
-            {"message": "Another user", "expected_revision": 1},
-            content_type="application/json",
-        ).status_code
-        == 404
-    )
-    assert stranger.get("/api/analyses").json()["total"] == 0
-    assert stranger.get("/api/questions").json() == []
-    assert stranger.get("/api/queue").json() == []
+    detail = stranger.get(f"/api/analyses/{value['id']}")
+    assert detail.status_code == 200
+    assert stranger.get("/api/analyses").json()["total"] == 1
+    assert len(stranger.get("/api/questions").json()) == 1
+    assert stranger.get("/api/analyses/overview").json()["recent"][0]["id"] == value["id"]
+    response = turn(stranger, value, 1, message="A follow-up from another browser")
+    assert response.status_code == 200, response.content
+    assert client.get("/api/queue").json() == stranger.get("/api/queue").json()
+    assert len(stranger.get("/api/queue").json()) == 1
+    # A stale browser cannot append another turn while one is active.
+    assert turn(client, value, 1).status_code == 409
+    finish()
+    assert native[0]["session_id"] is None
+    assert native[1]["session_id"] == AISession.objects.get(request=row).runtime_id
+    assert native[0]["context_id"] == native[1]["context_id"]
+    assert turn(client, value, 2).status_code == 200
+    finish()
+    assert native[2]["session_id"] == native[1]["session_id"]
     second = create(stranger, environment)
     launch(stranger, second)
     finish()
-    assert native[0]["context_id"] != native[1]["context_id"]
-    assert native[0]["request_id"] != native[1]["request_id"]
+    assert native[0]["context_id"] != native[3]["context_id"]
+    assert native[0]["request_id"] != native[3]["request_id"]
+
+
+def test_historical_browser_session_is_resumed_after_cookie_change(client, environment, native):
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    row = Request.objects.get(pk=value["id"])
+    row.discussion_state.pop("session_pk")
+    row.discussion_state["private"] = True
+    row.save(update_fields=["discussion_state"])
+    browser = Client()
+    assert turn(browser, value, 1).status_code == 200
+    finish()
+    assert native[0]["context_id"] == native[1]["context_id"]
+    assert AISession.objects.filter(request=row).count() == 1
+
+
+@pytest.mark.parametrize("provider", ["antigravity", "codex"])
+@pytest.mark.parametrize("answered", [False, True])
+def test_explicit_quota_transfer_preserves_pending_turn_and_uses_fresh_session(
+    client, environment, native, provider, answered
+):
+    from core.models import AIIdentity
+
+    source = AIConnection.objects.get(pk=1)
+    source.name, source.model, source.reasoning_effort = "Original ChatGPT", "original-model", "low"
+    source.save()
+    value = create(client, environment)
+    launch(client, value)
+    if answered:
+        finish()
+        assert turn(client, value, 1, message="Please inspect the exception too.").status_code == 200
+    old_job = Job.objects.latest("id")
+    original_session = AISession.objects.get(pk=old_job.payload["session_pk"])
+    revision = Request.objects.get(pk=value["id"]).discussion_state["revision"]
+    mark_failure(source.pk, "QUOTA_EXHAUSTED")
+    identity = AIIdentity.objects.create(agent=provider, credential_id=uuid4(),
+        status="CONNECTED", availability="AVAILABLE", account_key="another-account")
+    target = AIConnection.objects.create(name="Available alternative", agent=provider,
+        identity=identity, model="target-model", reasoning_effort="ultra" if provider == "codex" else "",
+        status="CONNECTED", availability="AVAILABLE", roles=["analyst"])
+    before_messages = list(RequestMessage.objects.filter(request_id=value["id"], role="user").values_list("content", flat=True))
+    assert claim_job() is None  # Availability never silently reassigns a discussion.
+    detail = client.get(f"/api/analyses/{value['id']}").json()
+    assert detail["discussion"]["assistant"]["model"] == "original-model"
+    assert detail["discussion"]["assistant"]["reasoning_effort"] == "low"
+    choices = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()
+    choice = next(item for item in choices["options"] if item["connection_id"] == target.pk)
+    response = client.post(f"/api/analyses/{value['id']}/discussion/continue-with",
+        {"connection_id": target.pk, "configuration_token": choice["configuration_token"], "expected_revision": revision},
+        content_type="application/json")
+    assert response.status_code == 200, response.content
+    assert response.json()["discussion"]["assistant"]["model"] == target.model
+    history = response.json()["discussion"]["assistant_history"]
+    assert [(item["model"],item["reasoning_effort"],item["current"]) for item in history] == [
+        ("original-model","low",False),(target.model,target.reasoning_effort,True),
+    ]
+    old_job.refresh_from_db()
+    assert old_job.status == "CANCELLED"
+    new_job = Job.objects.latest("id")
+    assert new_job.payload["snapshot"] == old_job.payload["snapshot"]
+    assert new_job.payload["message_id"] == old_job.payload["message_id"]
+    fresh = AISession.objects.get(pk=new_job.payload["session_pk"])
+    assert fresh.context_id != original_session.context_id and not fresh.runtime_id
+    assert list(RequestMessage.objects.filter(request_id=value["id"], role="user").values_list("content", flat=True)) == before_messages
+    assert RequestMessage.objects.filter(request_id=value["id"], kind="session_notice", data__native_session_transferred=False).count() == 1
+    finish()
+    assert native[-1]["session_id"] is None
+    assert native[-1]["model"] == target.model
+    assert native[-1]["reasoning_effort"] == target.reasoning_effort
+    assert "recovery" in native[-1]["prompt"] and "unverified" in native[-1]["prompt"]
+    assert not AnalysisRun.objects.exists()
+    # A stale second browser cannot repeat the transfer.
+    duplicate = client.post(f"/api/analyses/{value['id']}/discussion/continue-with",
+        {"connection_id": target.pk, "configuration_token": choice["configuration_token"], "expected_revision": revision}, content_type="application/json")
+    assert duplicate.status_code == 409
+
+
+@pytest.mark.parametrize("change", ["quota", "model", "reasoning", "role", "running"])
+def test_quota_transfer_revalidates_choice_and_never_interrupts_running_work(client, environment, native, change):
+    from core.models import AIIdentity
+
+    value = create(client, environment)
+    launch(client, value)
+    mark_failure(1, "QUOTA_EXHAUSTED")
+    identity = AIIdentity.objects.create(agent="codex", credential_id=uuid4(), status="CONNECTED", availability="AVAILABLE")
+    target = AIConnection.objects.create(name="Second account", agent="codex", identity=identity,
+        model="another-model", reasoning_effort="low", roles=["analyst"], status="CONNECTED", availability="AVAILABLE")
+    options = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()
+    choice = next(item for item in options["options"] if item["connection_id"] == target.pk)
+    original_job = Job.objects.latest("id")
+    if change == "quota":
+        mark_failure(target.pk, "QUOTA_EXHAUSTED")
+    elif change == "model":
+        target.model = "changed-model"
+        target.save()
+    elif change == "reasoning":
+        target.reasoning_effort = "ultra"
+        target.save()
+    elif change == "role":
+        target.roles = ["verifier"]
+        target.save()
+    else:
+        original_job.status = "RUNNING"
+        original_job.save()
+    response = client.post(f"/api/analyses/{value['id']}/discussion/continue-with",
+        {"connection_id": target.pk, "configuration_token": choice["configuration_token"], "expected_revision": 1}, content_type="application/json")
+    assert response.status_code == 409, response.content
+    original_job.refresh_from_db()
+    assert original_job.status == ("RUNNING" if change == "running" else "QUEUED")
+    assert AISession.objects.count() == 1
+
+
+def test_header_preserves_recorded_model_and_effort_after_settings_change(client, environment, native):
+    source = AIConnection.objects.get(pk=1)
+    source.model, source.reasoning_effort = "recorded-model", "low"
+    source.save()
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    source.model, source.reasoning_effort = "new-settings-model", "ultra"
+    source.save()
+    data = client.get(f"/api/analyses/{value['id']}").json()["discussion"]["assistant"]
+    assert data["model"] == "recorded-model" and data["reasoning_effort"] == "low"
+
+
+def test_completed_discussion_can_select_new_session_without_repeating_an_answer(client, environment, native):
+    from core.models import AIIdentity
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    mark_failure(1, "QUOTA_EXHAUSTED")
+    target = AIConnection.objects.create(agent="claude", name="Claude", status="CONNECTED", availability="AVAILABLE",
+        identity=AIIdentity.objects.create(agent="claude", credential_id=uuid4(), status="CONNECTED", availability="AVAILABLE"))
+    choice = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()["options"][0]
+    response = client.post(f"/api/analyses/{value['id']}/discussion/continue-with", {
+        "connection_id":target.pk,"configuration_token":choice["configuration_token"],"expected_revision":1,
+    }, content_type="application/json")
+    assert response.status_code == 200, response.content
+    assert Job.objects.count() == 1 and len(native) == 1
+    assert response.json()["status"] == "DISCUSSING"
+    assert turn(client, value, 2).status_code == 200
+    finish()
+    assert native[-1]["session_id"] is None and native[-1]["agent"] == "claude"
+
+
+def test_wrapped_reply_is_saved_and_exposed_as_text_without_mutating_old_records(client, environment, native, monkeypatch):
+    value = create(client, environment)
+    launch(client, value)
+    envelope = json.dumps({"message":"Bonjour ! Le message est bien reçu."},ensure_ascii=False)
+    monkeypatch.setattr(discussion,"runtime_call",lambda *args,**kwargs:{"session_id":str(uuid4()),"output":{"message":envelope}})
+    finish()
+    message = RequestMessage.objects.filter(request_id=value["id"],kind="discussion_reply").get()
+    assert message.content == "Bonjour ! Le message est bien reçu."
+    message.content = envelope  # A reply stored before this correction.
+    message.save(update_fields=["content"])
+    detail = client.get(f"/api/analyses/{value['id']}").json()
+    assert next(row for row in detail["messages"] if row["id"] == message.pk)["content"] == "Bonjour ! Le message est bien reçu."
+    message.refresh_from_db()
+    assert message.content == envelope
 
 
 def test_deep_analysis_freezes_human_context_and_uses_distinct_role_sessions(
@@ -445,7 +657,7 @@ def test_resource_wait_has_same_state_in_list_detail_and_activity(client, enviro
     assert len(cards) == 1 and cards[0]["queue_state"] == "WAITING_AI"
 
 
-def test_linked_evolution_inherits_private_conversation_owner(client, environment):
+def test_linked_evolution_is_shared_across_authorized_browsers(client, environment):
     value = create(client, environment)
     row = Request.objects.get(pk=value["id"])
     ResultVersion.objects.create(
@@ -459,11 +671,10 @@ def test_linked_evolution_inherits_private_conversation_owner(client, environmen
     }
     endpoint = f"/api/questions/{value['id']}/requests"
     stranger = Client()
-    assert stranger.post(endpoint, payload, content_type="application/json").status_code == 404
     response = client.post(endpoint, payload, content_type="application/json")
     assert response.status_code == 201, response.content
     child = response.json()
-    assert stranger.get(f"/api/analyses/{child['id']}").status_code == 404
+    assert stranger.get(f"/api/analyses/{child['id']}").status_code == 200
     assert client.get(f"/api/analyses/{child['id']}").status_code == 200
 
 

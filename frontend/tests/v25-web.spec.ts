@@ -25,9 +25,7 @@ function configuration(revision = 1, references: { url: string; note: string }[]
 }
 async function contextPanel(page: Page, language: "en" | "fr") {
   const t = (key: string) => dictionary(language, key);
-  await page.goto("/admin");
-  await page.getByRole("button", { name: t("Sources & environments"), exact: true }).click();
-  await page.getByRole("button", { name: t("Environments"), exact: true }).click();
+  await page.goto("/admin?tab=environments");
   await page.getByText(t("Environment context"), { exact: true }).click();
   return page.locator("details").filter({ has: page.locator("summary").filter({ hasText: new RegExp(`^${t("Environment context")}$`) }) });
 }
@@ -56,6 +54,7 @@ for (const language of ["en", "fr"] as const) {
       return route.fulfill({ json: current });
     });
     let context = await contextPanel(page, language);
+    await expect(context.getByRole("checkbox", { name: t("Use business context"), exact: true })).toHaveCount(0);
     const references = context.getByRole("region", { name: t("Official reference sources"), exact: true });
     await references.getByRole("button", { name: t("Add official reference"), exact: true }).click();
     await references.getByLabel(t("Reference URL or domain"), { exact: true }).fill(urls[0]);
@@ -64,7 +63,8 @@ for (const language of ["en", "fr"] as const) {
     await references.getByLabel(t("Reference URL or domain"), { exact: true }).nth(1).fill("www.legifrance.gouv.fr");
     await references.getByLabel(t("Reference note"), { exact: true }).nth(1).fill("Check the effective text and jurisdiction.");
     await context.getByRole("button", { name: t("Save business context"), exact: true }).click();
-    await expect.poll(() => saves[0]).toMatchObject({ expected_revision: 1, instructions: "Archived contracts are retained for audit.", instructions_enabled: true, official_references: [{ url: urls[0], note: "Public service guidance; verify applicability to the request." }, { url: "www.legifrance.gouv.fr", note: "Check the effective text and jurisdiction." }] });
+    await expect.poll(() => saves[0]).toMatchObject({ expected_revision: 1, instructions: "Archived contracts are retained for audit.", official_references: [{ url: urls[0], note: "Public service guidance; verify applicability to the request." }, { url: "www.legifrance.gouv.fr", note: "Check the effective text and jurisdiction." }] });
+    expect(saves[0]).not.toHaveProperty("instructions_enabled");
     await expect(context.getByRole("status")).toContainText(t("Environment context saved. Existing analyses remain unchanged."));
     await expect(references.getByLabel(t("Reference URL or domain"), { exact: true }).nth(1)).toHaveValue(urls[1]);
     await page.reload(); context = await contextPanel(page, language);

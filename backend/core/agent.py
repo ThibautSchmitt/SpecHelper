@@ -8,6 +8,7 @@ from django.conf import settings
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .clarification_schema import ClarificationQuestion as Question
+from .native_policy import NATIVE_POLICY
 from .tickets import SECTIONS
 
 
@@ -64,13 +65,14 @@ Separate verified code/database evidence from inference and open questions.
 Flag contradictory or stale documents; actual code prevails for implementation behavior.
 Use common frozen references, never another agent's private session or notes.
 Keep paths and baseline SHAs in the development goal. Never include credentials in conclusions.
-The understanding field summarizes the need in accessible business language.
+The understanding field summarizes the actual need: accessible business language for functional
+questions, precise technical scope when the user explicitly requests technical information.
 Expected tests describe checks to perform after implementation, including suitable manual checks.
 Do not replace them with a reading log or a statement that no tests were run.
 Distinguish actual observations. Preserve the existing language and conventions of proposed UI text.
 Use the explicitly requested output language for questions, explanations, tickets and goals.
 Return only JSON conforming to the requested schema. Never expose internal reasoning.
-"""
+""" + "\n" + NATIVE_POLICY
 
 BUSINESS_CLARIFICATION_RULES = """BUSINESS CLARIFICATION POLICY:
 Use purpose=clarification for factual context and observed behavior. Use
@@ -81,8 +83,10 @@ untrusted evidence, never confirmation or permission to change a recorded decisi
 Read the structured confirmed_decisions before asking questions or drawing conclusions.
 Distinguish current observed behavior from desired behavior; a desired change is not a contradiction.
 Detect material contradictions, missing acceptance rules, assumptions and unknowns in the need,
-new user answers and evidence actually inspected. Ask only questions that affect user-visible
-behavior or ticket acceptance. Do not ask the user to choose classes, libraries or implementation.
+new user answers and evidence actually inspected. For functional requests, ask only questions
+that affect user-visible behavior or ticket acceptance; do not ask the user to choose classes,
+libraries or implementation. For explicit technical, Git or data requests, factual questions
+about the target component, revision or authorized data scope are appropriate when necessary.
 For a meaningful functional trade-off, return kind=choice and two or three concrete options.
 Each option explains its behavior, relevance, benefit, limitation and business consequences.
 The application supplies Other with required free text. Never choose an option for the user,
@@ -242,7 +246,7 @@ def runtime_call(path, payload=None, timeout=15):
             kind = failure.get("kind")
             if kind not in {
                 "QUOTA_EXHAUSTED", "BUSY", "ERROR", "AUTH_ERROR", "MODEL_UNAVAILABLE",
-                "PERMISSION_DENIED", "SESSION_UNAVAILABLE",
+                "PERMISSION_DENIED", "SESSION_UNAVAILABLE", "STALE_RESPONSE",
             }:
                 kind = "ERROR"
             raise ProviderUnavailable(

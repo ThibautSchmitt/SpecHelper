@@ -58,7 +58,7 @@ def create_analysis(request, payload: AnalysisIn):
     value = Request.objects.create(
         environment=environment, environment_name_snapshot=environment.name if environment else "",
         need=need, workflow="question", intent_mode="auto", analysis_protocol="2.4", category=payload.category,
-        discussion_state={"enabled": True, "owner": actor(request), "private": True, "revision": 0, "mode": "discussion"},
+        discussion_state={"enabled": True, "owner": actor(request), "private": False, "revision": 0, "mode": "discussion"},
         confrontation=automatic_comparison(options), language=options.language,
     )
     RequestMessage.objects.create(request=value, role="user", kind="need", content=need)

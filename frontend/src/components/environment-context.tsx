@@ -14,7 +14,7 @@ type Resource = {
   preview_truncated?: boolean; agent_readable: boolean;
 };
 type Configuration = {
-  instructions: string; instructions_enabled: boolean; revision: number;
+  instructions: string; revision: number;
   max_files: number; max_file_size: number; resources: Resource[];
   official_references?: { url: string; note: string }[];
 };
@@ -23,7 +23,6 @@ export function EnvironmentContext({ environmentId, factualOnly = false }: { env
   const { t, dateLocale } = useI18n();
   const [value, setValue] = useState<Configuration | null>(null);
   const [instructions, setInstructions] = useState("");
-  const [enabled, setEnabled] = useState(true);
   const [references, setReferences] = useState<{ url: string; note: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -33,7 +32,6 @@ export function EnvironmentContext({ environmentId, factualOnly = false }: { env
   function receive(next: Configuration) {
     setValue(next);
     setInstructions(next.instructions);
-    setEnabled(next.instructions_enabled);
     setReferences(next.official_references || []);
   }
   async function task(action: () => Promise<Configuration>, saved = true) {
@@ -50,7 +48,7 @@ export function EnvironmentContext({ environmentId, factualOnly = false }: { env
     await task(() => api<Configuration>(`${endpoint}/resources${resource ? `/${resource.id}/versions` : ""}`, { method: "POST", body: data }));
     if (upload.current) upload.current.value = "";
   }
-  const dirty = !!value && (instructions !== value.instructions || enabled !== value.instructions_enabled || JSON.stringify(references) !== JSON.stringify(value.official_references || []));
+  const dirty = !!value && (instructions !== value.instructions || JSON.stringify(references) !== JSON.stringify(value.official_references || []));
   function toggleResource(resource: Resource, nextEnabled: boolean) {
     if (!value) return;
     const previous = value;
@@ -68,13 +66,12 @@ export function EnvironmentContext({ environmentId, factualOnly = false }: { env
     {error && <p role="alert" className="mt-3 text-sm text-red-700">{t(error)} <Button variant="ghost" size="sm" disabled={busy} onClick={() => task(() => api<Configuration>(endpoint), false)}>{t("Reload context")}</Button></p>}
     {notice && <p role="status" className="mt-3 text-sm text-green-700">{notice}</p>}
     {!value ? <p role="status" className="mt-3 text-sm">{t("Loading context…")}</p> : <fieldset disabled={busy} className="min-w-0 space-y-4">
-      <form onSubmit={(event) => { event.preventDefault(); void task(() => send<Configuration>(endpoint, { instructions, instructions_enabled: enabled, official_references: references, expected_revision: value.revision }, "PUT")); }}>
+      <form onSubmit={(event) => { event.preventDefault(); void task(() => send<Configuration>(endpoint, { instructions, official_references: references, expected_revision: value.revision }, "PUT")); }}>
         <div className="field">
           <label htmlFor={`context-instructions-${environmentId}`}>{t(factualOnly ? "Business terminology and factual context" : "Short environment instructions")}</label>
           <Textarea id={`context-instructions-${environmentId}`} value={instructions} maxLength={4000} onChange={(event) => setInstructions(event.target.value)} aria-describedby={`context-secret-note-${environmentId}`} />
           <p id={`context-secret-note-${environmentId}`} className="mt-2 text-xs muted">{t("Keep credentials in the secure Git and database configuration. Never enter passwords or tokens here.")}</p>
         </div>
-        <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{t(factualOnly ? "Use business context" : "Use environment instructions")}</label>
         <section className="mt-4 space-y-3" aria-label={t("Official reference sources")}>
           <h4 className="text-sm font-medium">{t("Official reference sources")}</h4>
           <p className="text-xs muted">{t("Optional public URLs or domains and applicability notes. These are starting points, not an exclusive list or assistant instructions.")}</p>

@@ -248,6 +248,86 @@ def test_antigravity_uses_observed_steps_and_never_relabels_model_text_as_work()
     assert "PRIVATE" not in json.dumps(frames) and "/private" not in json.dumps(frames)
 
 
+@pytest.mark.parametrize("completed", [False, True])
+def test_antigravity_draft_does_not_replay_cached_output_without_a_new_finish(completed):
+    frames = []
+    observer = Observer("antigravity", frames.append, "message", require_fresh_output=True)
+    observer.event({"event": "step_update", "step_update": {
+        "step_type": "user_input", "step_index": 5, "state": "DONE",
+    }})
+    if completed:
+        observer.event({"event": "step_update", "step_update": {
+            "step_type": "finish", "step_index": 8, "state": "DONE",
+        }})
+    observer.event({"event": "result", "result": {"structured_output": {"message": "Visible reply"}}})
+    assert [frame["preview"] for frame in frames if frame["preview"]] == (["Visible reply"] if completed else [])
+
+
+def test_native_antigravity_indexes_pair_lifecycles_and_classify_commands():
+    frames = []
+    observer = Observer("antigravity", frames.append)
+    for index, command, operation in [
+        (0, "rg private-needle /private/project", "search"),
+        (1, "sed -n '1,40p' /private/source.py", "read"),
+        (2, "git -C /private/project log -1", "git"),
+    ]:
+        for state in ("RUNNING", "DONE", "DONE"):
+            observer.event(
+                {
+                    "event": "step_update",
+                    "step_update": {
+                        "step_index": index,
+                        "step_type": "tool",
+                        "state": state,
+                        "tool_name": "run_command",
+                        "tool_info": {
+                            "parameters": {"CommandLine": command},
+                            "output": "PRIVATE SOURCE" if state == "DONE" else "",
+                        },
+                    },
+                }
+            )
+        assert frames[-1]["events"][-1]["operation"] == operation
+    assert len(frames[-1]["events"]) == 3
+    assert observer.sequence == 6
+    assert all(event["state"] == "done" for event in frames[-1]["events"])
+    assert all(
+        marker not in json.dumps(frames) for marker in ("PRIVATE", "private-needle", "/private")
+    )
+
+
+@pytest.mark.parametrize(
+    "name,operation",
+    [
+        ("view_file", "read"),
+        ("view_code_item", "read"),
+        ("grep_search", "search"),
+        ("find_by_name", "search"),
+        ("list_dir", "search"),
+        ("search_web", "reference"),
+        ("unrecognized_tool", "tool"),
+    ],
+)
+def test_antigravity_tool_aliases_do_not_export_arguments(name, operation):
+    frames = []
+    observer = Observer("antigravity", frames.append)
+    observer.event(
+        {
+            "event": "step_update",
+            "step_update": {
+                "step_index": 0,
+                "step_type": "tool",
+                "state": "ERROR",
+                "tool_name": name,
+                "tool_info": {"parameters": {"path": "/private/data"}},
+            },
+        }
+    )
+    assert frames[-1]["events"][0]["operation"] == operation
+    assert frames[-1]["events"][0]["state"] == "error"
+    assert "/private" not in json.dumps(frames)
+
+
 def test_partial_credentials_never_appear_in_released_prefixes():
     secret = uuid4().hex
     for length in range(1, len(secret)):
@@ -304,7 +384,7 @@ def frame(sequence=1, preview=""):
     }
 
 
-def test_history_cursor_and_ownership_without_loading_the_conversation(client, environment):
+def test_history_cursor_and_shared_visibility_without_loading_the_conversation(client, environment):
     value, job, payload = prepared(client, environment)
     recorder = Recorder.for_payload(payload)
     before = snapshot(value)
@@ -332,7 +412,9 @@ def test_history_cursor_and_ownership_without_loading_the_conversation(client, e
         "unchanged": True,
         "progress_cursor": cursor,
     }
-    assert Client().get(endpoint).status_code == 404
+    # Browsers share analyses within the trusted instance; attribution cookies
+    # are not an ownership boundary.
+    assert Client().get(endpoint).json()["work_progress"][0]["phases"][0]["events"]
     reopened = Client()
     reopened.cookies = client.cookies.copy()
     assert reopened.get(endpoint).json()["work_progress"][0]["phases"][0]["events"]

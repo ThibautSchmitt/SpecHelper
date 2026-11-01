@@ -13,7 +13,8 @@ from django.db.models import Max
 from django.utils import timezone
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .models import AIConnection, Job, StepExecution
+from .discussion_output import message_text
+from .models import AIConnection, Job, RequestMessage, StepExecution
 from .progress_text import safe_prefix
 from .sensitive_data import configured_secrets, redact
 
@@ -166,6 +167,7 @@ def snapshot(value):
             "finished_at",
             "progress",
             "payload__revision",
+            "payload__message_id",
             "payload__waiting_reason",
             "payload__current_role",
             "payload__next_checkpoint",
@@ -174,9 +176,14 @@ def snapshot(value):
         )[:50]
     )
     jobs = []
+    user_texts = dict(RequestMessage.objects.filter(
+        request=value, pk__in=[row["payload__message_id"] for row in rows if row["kind"] == "discussion" and row["payload__message_id"]]
+    ).values_list("id", "content"))
     for row in reversed(rows):
         phases = copy.deepcopy(row["progress"].get("phases", []))
         for phase in phases:
+            if row["kind"] == "discussion":
+                phase["preview"] = message_text(phase.get("preview", ""), value.need + "\n" + user_texts.get(row["payload__message_id"], ""), partial=True)
             phase["active"] = (
                 row["status"] == "RUNNING" and not phase.get("closed") and phase is phases[-1]
             )

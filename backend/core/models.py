@@ -131,6 +131,7 @@ class Environment(models.Model):
     synced_at = models.DateTimeField(null=True)
     revision = models.PositiveIntegerField(default=1)
     retired_worktrees = models.JSONField(default=list)
+    next_git_check_at = models.DateTimeField(default=timezone.now)
     context_instructions = models.TextField(blank=True)
     instructions_enabled = models.BooleanField(default=True)
     context_revision = models.PositiveIntegerField(default=1)
@@ -188,6 +189,7 @@ class EnvironmentRepository(models.Model):
     branch = models.CharField(max_length=255)
     sha = models.CharField(max_length=40, blank=True)
     workspace = models.TextField(blank=True)
+    git_status = models.JSONField(default=dict)
 
     class Meta:
         constraints = [

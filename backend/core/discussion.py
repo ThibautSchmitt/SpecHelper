@@ -34,6 +34,14 @@ class DeepIn(Schema):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
     intent: str = Field(default="auto", pattern=r"^(auto|change)$")
+    preparation_revision: int | None = Field(default=None, ge=1)
+
+
+class ContinueIn(Schema):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    connection_id: int = Field(gt=0)
+    configuration_token: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class Reply(BaseModel):
@@ -42,6 +50,7 @@ class Reply(BaseModel):
 
 
 def describe(value):
+    from .discussion_continuation import assistant, history
     state = value.discussion_state
     if not state.get("enabled"):
         return None
@@ -53,6 +62,8 @@ def describe(value):
         "revision": revision,
         "has_new_messages": revision > state.get("analyzed_revision", -1),
         "connection_id": state.get("connection_id"),
+        "assistant": assistant(value, job),
+        "assistant_history": history(value, job),
         "job": {
             "id": job.pk,
             "status": job.status,
@@ -89,7 +100,7 @@ def pin_environment(value):
 
     environment = value.environment
     if environment is None or environment.status != "READY":
-        raise HttpError(409, "The environment must be synchronized")
+        raise HttpError(409, "The environment must be updated")
     repos = list(environment.repositories.all())
     if not repos or any(not re.fullmatch(r"[a-f0-9]{40}", r.sha) for r in repos):
         raise HttpError(409, "The environment baseline is incomplete")
@@ -136,7 +147,15 @@ def enqueue(value_id, payload, browser_actor, *, initial=False):
     else:
         text = safe_text(value.need)
     owner_sessions = state.setdefault("sessions", {})
-    previous = AISession.objects.filter(pk=owner_sessions.get(browser_actor), request=value).first()
+    session_pk = state.get("session_pk")
+    if not session_pk:
+        # Reuse the last conversational session on historical browser-owned
+        # records. Its native context already contains the last accepted reply.
+        latest_reply = value.messages.filter(kind="discussion_reply").order_by("-id").first()
+        session_pk = (latest_reply.data.get("session_pk") if latest_reply else None) or (
+            owner_sessions.get(state.get("owner")) or owner_sessions.get(browser_actor)
+        )
+    previous = AISession.objects.filter(pk=session_pk, request=value, role__startswith="d-").first()
     connection_id = payload.connection_id or (
         previous.connection_id if previous else state.get("connection_id")
     )
@@ -189,7 +208,7 @@ def enqueue(value_id, payload, browser_actor, *, initial=False):
     if payload.restart_session or changed:
         session = AISession.objects.create(
             request=value,
-            role="d-" + browser_actor[:16],
+            role="d-shared",
             connection=connection,
             agent=connection.agent,
             model_snapshot=connection.model,
@@ -198,8 +217,9 @@ def enqueue(value_id, payload, browser_actor, *, initial=False):
             identity_snapshot=identity_for(connection).pk,
         )
     else:
-        session = previous or bind_session(value, connection, "d-" + browser_actor[:16])
+        session = previous or bind_session(value, connection, "d-shared")
     owner_sessions[browser_actor] = session.pk
+    state["session_pk"] = session.pk
     if not initial and not retry:
         RequestMessage.objects.create(
             request=value,
@@ -245,6 +265,21 @@ def notice(value, text):
     )
 
 
+@router.get("/analyses/{analysis_id}/discussion/continuation-options")
+def continuation_options(request, analysis_id: uuid.UUID):
+    from .discussion_continuation import options
+
+    return options(get_object_or_404(Request, pk=analysis_id))
+
+
+@router.post("/analyses/{analysis_id}/discussion/continue-with")
+def continue_with_assistant(request, analysis_id: uuid.UUID, payload: ContinueIn):
+    from .api import request_dict
+    from .discussion_continuation import continue_with
+
+    return request_dict(continue_with(analysis_id, payload, actor(request)), full=True)
+
+
 def reserve(job):
     from .library_assistant import reserve_job
 
@@ -260,8 +295,16 @@ def reserve(job):
 def recovery_messages(value, until):
     """Only recovery sends history; ordinary native continuations send the new turn."""
     messages = list(
-        value.messages.filter(id__lte=until).exclude(kind="error").values("role", "kind", "content")
+        value.messages.filter(id__lte=until).exclude(kind="error").values("role", "kind", "content", "data")
     )
+    messages = [
+        {key: message[key] for key in ("role", "kind", "content")}
+        for message in messages
+        if not (message["role"] == "assistant" and message["data"].get("response_status") == "stale")
+    ]
+    from .discussion_output import normalize_messages
+
+    normalize_messages(messages, value.need)
     retained, size = [], 0
     for message in reversed(messages):
         if size + len(message["content"]) > 100000:
@@ -317,7 +360,6 @@ def run_job(job, caller=None):
             {"version_id": r["version_id"], "path": r["relative_path"], "sha256": r["sha256"]}
             for r in context["resources"]
         ]
-    skills = catalog(session.connection)
     secrets = configured_secrets()
     message = value.messages.get(pk=job.payload["message_id"])
     latest = value.versions.order_by("-number").first()
@@ -343,10 +385,17 @@ def run_job(job, caller=None):
         "unverified hypotheses. Do not claim to have performed three-role review. Never create or "
         "publish a ticket, goal or change any resource. Never turn a factual clarification into a "
         "normative business decision. The user can explicitly launch deep analysis separately. "
-        "Return the Markdown response in message, as JSON matching the schema. No private reasoning."
+        "Return the Markdown response in message, as JSON matching the schema. "
+        "Do not serialize another reply envelope inside message. When the user requests JSON "
+        "data or a JSON example, include it as a fenced json code block inside the Markdown message. "
+        "No private reasoning."
     )
     db = frozen.get("dossier", {}).get("database", {})
     database = parameters(DatabaseConnection.objects.get(pk=db["id"])) if db.get("id") else None
+    skills = catalog(session.connection, has_database=bool(database), available_capabilities={
+        "read_sources", "read_attachments", "read_web", "structured_output",
+        *({"read_database"} if database else set()),
+    })
     native = session.runtime_id or None
     for attempt in range(2):
         if not live(job):
@@ -422,6 +471,9 @@ def run_job(job, caller=None):
         if result.get("timed_out"):
             raise TimeoutError("Discussion response interrupted")
         output = Reply.model_validate(redact(result.get("output"), secrets))
+        from .discussion_output import message_text
+
+        output.message = message_text(output.message, value.need + "\n" + message.content)
         # A successful conversational response must carry a real resumable identity.
         native_result = str(uuid.UUID(result.get("session_id") or ""))
         with transaction.atomic():
@@ -612,6 +664,15 @@ def deepen(request, analysis_id: uuid.UUID, payload: DeepIn):
         raise HttpError(409, "The conversation changed. Refresh before starting deep analysis.")
     if value.validated_version:
         raise HttpError(409, "Reopen the validated request before starting another analysis.")
+    proposal = None
+    if payload.preparation_revision is not None:
+        draft = state.get("ticket_preparation", {})
+        if (draft.get("revision") != payload.preparation_revision
+                or draft.get("discussion_revision") != state.get("revision", 0)):
+            raise HttpError(409, "The ticket draft changed. Reload it before starting deep analysis.")
+        proposal = {key: draft.get(key) for key in ("revision", "source_version", "title", "body")}
+        proposal["verification_status"] = "unverified"
+        proposal["user_message_id_at_submission"] = value.messages.filter(role="user").order_by("-id").values_list("id", flat=True).first()
     if payload.intent == "change" and not value.versions.exists():
         value.workflow, value.intent_mode = "request", "explicit"
     pin_environment(value)
@@ -619,7 +680,7 @@ def deepen(request, analysis_id: uuid.UUID, payload: DeepIn):
     state.update(enabled=True, mode="analysis", analyzed_revision=state.get("revision", 0))
     value.discussion_state = state
     value.save()
-    value = queue_run(value)
+    value = queue_run(value, ticket_proposal=proposal)
     return request_dict(value, full=True)
 
 

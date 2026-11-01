@@ -115,7 +115,7 @@ for (const language of ["fr", "en"] as const) {
     await page.screenshot({ path: `../.local/reference-tests/ai-${language}-${info.project.name}.png`, fullPage: true, animations: "disabled" });
     await navigation.getByRole("button", { name: t("Environments"), exact: true }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(t("Environments"));
-    await expect(page.getByText(t("Synchronized"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("Up to date"), { exact: true })).toBeVisible();
     await expectThemeParity(page, [".environment-card", '.environment-card .badge[data-state="READY"]']);
     await navigation.getByRole("button", { name: t("Appearance"), exact: true }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(t("Settings"));

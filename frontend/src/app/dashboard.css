@@ -186,8 +186,6 @@ body { background: radial-gradient(ellipse at 30% 0%, var(--dashboard-glow), tra
 .summary-action { display: block; text-align: left; width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--button-radius); margin-top: 16px; color: var(--primary-ink); background: var(--dashboard-glow); }
 @media(max-width:767px) { .dashboard .sidebar-assistant-link { padding: 8px 3px; gap: 3px; justify-content: center; } .dashboard .sidebar-assistant-link .connection-dot { position: absolute; width: 5px; height: 5px; right: 3px; top: 3px; } .sidebar-assistant-link > svg:not(.queue-provider-logo) { display: none; } }
 
-.environment-card .badge[data-state=READY] { background: var(--environment-ready-soft); color: var(--environment-ready-ink); }
-
 .analysis-filters label { margin-bottom: 0; }
 .analysis-filters label:nth-child(2), .analysis-filters label:nth-child(3) { min-width: 155px; }
 .analysis-filters .analysis-search-submit { width: 40px; padding: 0; flex-shrink: 0; }
@@ -208,7 +206,6 @@ body { background: radial-gradient(ellipse at 30% 0%, var(--dashboard-glow), tra
 .orchestration-role-card[data-role=verifier] h4 > svg { color: var(--connection-verifier); }
 @media (max-width: 1023px) { .orchestration-role-grid { grid-template-columns: minmax(0, 1fr); } }
 .coverage-state[data-role-state=covered] { color: var(--success); border-color: color-mix(in srgb, var(--success) 30%, transparent); background: var(--success-soft); }
-.coverage-state[data-role-state=waiting] { color: var(--waiting); background: var(--waiting-soft); }
 .coverage-state[data-role-state=missing] { color: var(--danger); background: var(--danger-soft); }
 
 

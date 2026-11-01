@@ -57,7 +57,7 @@ def test_unready_environment_is_rejected(environment):
     environment.status = "SYNCING"
     environment.save()
     request = Request.objects.create(environment=environment, need="Export contracts")
-    with pytest.raises(HttpError, match="synchronized"):
+    with pytest.raises(HttpError, match="updated"):
         enqueue_analysis(request.id)
     assert not Job.objects.exists()
 

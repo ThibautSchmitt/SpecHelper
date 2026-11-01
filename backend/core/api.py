@@ -109,6 +109,10 @@ class EnvironmentDeleteIn(Schema):
     expected_revision: int = Field(ge=1)
 
 
+class BranchSyncIn(Schema):
+    expected_revision: int = Field(ge=1)
+
+
 class RequestIn(Schema):
     environment_id: int | None = None
     need: str = Field(min_length=1, max_length=30000)
@@ -177,9 +181,11 @@ def settings_dict():
 
 
 def environment_dict(environment):
+    from .branch_checks import describe, summary
     from .git_sources import repository_snapshot
     from .ticket_publication import connector_dict
     connections = list(environment.publication_connections.all())
+    repositories = list(environment.repositories.select_related("git_repository__connection"))
 
     return {
         "id": environment.id,
@@ -188,13 +194,15 @@ def environment_dict(environment):
         "revision": environment.revision,
         "error": environment.error,
         "synced_at": environment.synced_at,
+        "git_sync_status": summary(repositories),
+        "git_check_running": Job.objects.filter(kind="branch_check", target=str(environment.pk), status__in=["QUEUED", "RUNNING"]).exists(),
         "database_id": environment.database_id,
         "database_name": environment.database.name if environment.database_id else None,
         "publication_connection_ids": [item.pk for item in connections],
         "publication_connections": [connector_dict(item) for item in connections],
         "repositories": [
-            {"id": repo.pk, **repository_snapshot(repo)}
-            for repo in environment.repositories.select_related("git_repository__connection")
+            {"id": repo.pk, **repository_snapshot(repo), "git_status": describe(repo)}
+            for repo in repositories
         ],
     }
 
@@ -324,8 +332,10 @@ def request_dict(value, full=False):
         )
         from .analysis_states import result_state
         from .conversation import attribute_messages, progress_snapshot, role_reviews
+        from .discussion_output import normalize_messages
         from .models import PublishedTicket
 
+        normalize_messages(result["messages"], value.need)
         attribute_messages(result["messages"], result["analysis_runs"])
         for run in result["analysis_runs"]:
             run["execution"] = progress_snapshot(run, result["messages"])
@@ -633,18 +643,13 @@ def synchronization_history(request, environment_id: int):
 
 
 @api.post("/environments/{environment_id}/sync")
-@transaction.atomic
 def sync(request, environment_id: int):
-    environment = get_object_or_404(Environment.objects.select_for_update(), pk=environment_id)
-    if Job.objects.filter(
-        kind="sync", target=str(environment.id), status__in=["QUEUED", "RUNNING"]
-    ).exists():
-        raise HttpError(409, "Synchronization is already running")
-    Job.objects.create(kind="sync", target=str(environment.id))
-    environment.status = "PENDING"
-    environment.error = ""
-    environment.save(update_fields=["status", "error"])
-    return {"status": "QUEUED"}
+    return environment_actions.queue_sync(environment_id)
+
+
+@api.post("/environments/{environment_id}/repositories/{repository_id}/sync")
+def sync_branch(request, environment_id: int, repository_id: int, payload: BranchSyncIn):
+    return environment_actions.queue_sync(environment_id, repository_id, payload.expected_revision)
 
 
 @api.patch("/environments/{environment_id}")
@@ -873,10 +878,13 @@ def get_analysis_options(request):
 @api.patch("/analysis-options")
 @transaction.atomic
 def set_analysis_options(request, payload: AnalysisOptionsIn):
+    from .builtin_skills import built_in
     from .catalogue import ensure_catalogue
     from .library import preserve, record
 
     ensure_catalogue()
+    if any(built_in(slug) for slug in payload.skills):
+        raise HttpError(409, "Built-in skills are maintained by SpecHelper. Create a custom skill instead.")
     for model, values in ((AgentProfile, payload.agents), (SkillDefinition, payload.skills)):
         if set(values) - set(model.objects.values_list("slug", flat=True)):
             raise HttpError(422, "Unknown analysis option.")

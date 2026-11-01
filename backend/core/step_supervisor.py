@@ -114,7 +114,7 @@ def poll_processes():
                 else:
                     Job.objects.filter(pk=job_id, status="RUNNING").update(
                         status="ERROR",
-                        error="Synchronization process interrupted",
+                        error="Update process interrupted",
                         finished_at=timezone.now(),
                     )
             release_connections(job.payload.get("connection_ids", []), job=job)

@@ -5,7 +5,7 @@
 .conversation-title-edit { margin-left: 8px; vertical-align: middle; opacity: .65; }
 .conversation-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
 .conversation-metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; font-size: 13px; color: var(--muted-foreground); }
-.conversation-metadata > span, .conversation-metadata time { display: inline-flex; align-items: center; gap: 10px; }
+.conversation-metadata > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .conversation-role-toggle { flex-shrink: 0; gap: 12px; padding: 14px 18px; height: auto; }
 .conversation-role-toggle[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
 .conversation-messages { display: flex; flex-direction: column; gap: 16px; padding: 0; list-style: none; }
@@ -16,9 +16,6 @@
 [data-theme="dark"] .conversation-assistant[data-speaker-role="analyst"] { --speaker-color: #a78bfa; }
 [data-theme="dark"] .conversation-assistant[data-speaker-role="counter_analyst"] { --speaker-color: #ffb52e; }
 [data-theme="dark"] .conversation-assistant[data-speaker-role="verifier"] { --speaker-color: #00d7d4; }
-.conversation-avatar { display: grid; place-items: center; width: 54px; height: 54px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius: 50%; color: var(--primary-ink, var(--primary)); background: color-mix(in srgb, var(--primary) 5%, var(--card)); }
-.conversation-avatar .queue-provider-logo { width: 36px; height: 36px; margin: 0; }
-.conversation-avatar.conversation-brand-avatar { width: 32px; height: 38px; border: 0; border-radius: 0; background: transparent; color: var(--foreground); box-shadow: none; }
 .conversation-question-details { margin-top: 12px; font-size: 11px; color: var(--muted-foreground); }
 .conversation-question-details > summary { cursor: pointer; }
 .investigation-progress { width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: transparent; }
@@ -43,9 +40,10 @@
 .investigation-attention, .investigation-stages [data-stage-status="blocked"] > svg, .investigation-stages [data-stage-status="clarification"] > svg { color: var(--waiting); }
 .investigation-stages [data-stage-status="error"] > svg { color: var(--danger); }
 .work-progress { border: 0; border-radius: 0; background: transparent; padding: 2px 0; min-width: 0; width: 100%; }
-.work-progress > summary { display: flex; align-items: center; gap: 10px; list-style: none; cursor: pointer; font-size: 14px; min-height: 30px; }
+.work-progress > summary, .work-progress-static { display: flex; align-items: center; gap: 10px; list-style: none; font-size: 14px; min-height: 30px; }
+.work-progress > summary { cursor: pointer; }
 .work-progress > summary::-webkit-details-marker { display: none; }
-.work-progress > summary > svg { flex-shrink: 0; }
+.work-progress > summary > svg, .work-progress-static > svg { flex-shrink: 0; }
 .work-progress > summary:focus-visible, .work-role-steps > summary:focus-visible, .work-older > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 3px; }
 .work-progress:not([open]) .investigation-subtitle { display: none; }
 .work-progress[open] > summary .investigation-disclosure { transform: rotate(180deg); }
@@ -61,14 +59,9 @@
 .work-response-preview { padding-top: 12px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .work-response-preview :is(pre,table) { max-width: 100%; overflow-x: auto; }
 .conversation-bubble { min-width: 0; flex: 1; padding: 6px 0 2px; }
-.conversation-assistant .conversation-bubble > header { min-height: 38px; gap: 14px; }
-.conversation-assistant header strong, .conversation-pending-author strong { font-size: 18px; font-weight: 600; }
-.conversation-assistant header time { margin-left: 4px; font-size: 12px; }
-.conversation-assistant .badge[data-role], .conversation-pending-author .badge { color: var(--speaker-color); background: color-mix(in srgb, var(--speaker-color) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--speaker-color) 70%, var(--border)); padding: 6px 14px; font-size: 12px; }
-.conversation-assistant .conversation-message-text { border-left: 2px solid var(--speaker-color); padding-left: 16px; margin-left: -2px; font-size: 15px; line-height: 1.55; }
-.conversation-assistant + .conversation-assistant { padding-top: 22px; border-top: 1px solid var(--border); }
+.conversation-assistant .badge[data-role] { color: var(--speaker-color); background: color-mix(in srgb, var(--speaker-color) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--speaker-color) 70%, var(--border)); padding: 6px 14px; font-size: 12px; }
+.conversation-assistant .conversation-message-text { font-size: 15px; line-height: 1.55; }
 .conversation-user { margin-left: auto; width: min(570px, 76%); max-width: 76%; flex-direction: row-reverse; }
-.conversation-user .conversation-avatar { color: var(--primary-ink, var(--primary)); }
 .conversation-user .conversation-bubble { border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius: 14px; padding: 12px 16px; background: color-mix(in srgb, var(--primary) 5%, var(--card)); }
 .conversation-user .conversation-message-text { font-size: 15px; }
 .conversation-answer { font-size: 15px; line-height: 1.55; }
@@ -82,12 +75,7 @@
 .analysis-conversation .conversation-role-mention[data-role="verifier"] { --role-ink: var(--connection-verifier); }
 .conversation-progress, .conversation-review { margin-top: 16px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--card) 65%, transparent); }
 .conversation-reply { margin-top: 16px; }
-.conversation-pending { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 16px; row-gap: 10px; }
-.conversation-pending > .conversation-avatar { grid-row: 1 / 3; }
-.conversation-pending-author { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; min-height: 44px; }
-.conversation-pending-author time { font-size: 12px; color: var(--muted-foreground); }
-.conversation-pending .conversation-reply-content { grid-column: 2; border-left: 2px solid var(--speaker-color); padding-left: 16px; }
-.analysis-conversation .conversation-pending .conversation-clarification { padding: 0; border: 0; box-shadow: none; background: transparent; }
+.analysis-conversation .conversation-clarification { padding: 0; border: 0; box-shadow: none; background: transparent; }
 .conversation-clarification > h2 { display: none; }
 .conversation-clarification > form { margin-top: 0; }
 .conversation-clarification form > section { padding: 0; border: 0; }
@@ -116,15 +104,8 @@
   .conversation-metadata { gap: 10px 16px; font-size: 11px; }
   .conversation-role-toggle { padding: 8px 12px; margin-left: auto; }
   .conversation-message { gap: 8px; }
-  .conversation-avatar { width: 36px; height: 36px; }
-  .conversation-avatar .queue-provider-logo { width: 26px; height: 26px; }
   .conversation-user { width: 94%; max-width: 94%; }
   .conversation-user .conversation-bubble { padding: 12px; min-width: 0; }
-  .conversation-user header time { width: 100%; margin-left: 0; }
-  .conversation-assistant .conversation-bubble > header { gap: 8px; }
-  .conversation-assistant header strong, .conversation-pending-author strong { font-size: 15px; }
-  .conversation-pending { grid-template-columns: 32px minmax(0, 1fr); gap: 8px; }
-  .conversation-pending-author { gap: 8px; }
   .conversation-compose-form { gap: 8px; }
   .conversation-send-hint, .conversation-compose-icon { display: none; }
   .conversation-report-summary { gap: 10px; }
@@ -1013,6 +994,13 @@ summary:focus-visible {
 .badge:is([data-state="ERROR"], [data-state="FAILED"]) {
   color: var(--danger);
   background: var(--danger-soft);
+}
+.badge.environment-update-badge[data-state="PARTIAL"] {
+  color: #854d0e;
+  background: color-mix(in srgb, #eab308 14%, var(--card));
+}
+[data-theme="dark"] .badge.environment-update-badge[data-state="PARTIAL"] {
+  color: #facc15;
 }
 [data-theme="dark"] :is(.text-red-700, .text-red-800) {
   color: var(--danger);

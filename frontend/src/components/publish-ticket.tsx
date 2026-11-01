@@ -112,9 +112,13 @@ function remember(key: string, payload: Payload | null) {
 export function PublishTicket({
   requestId,
   version,
+  triggerLabel = "Prepare ticket",
+  preparedDraft,
 }: {
   requestId: string;
   version: number;
+  triggerLabel?: string;
+  preparedDraft?: { title: string; body: string };
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -484,7 +488,7 @@ export function PublishTicket({
           dialog.current?.showModal();
         }}
       >
-        {t("Prepare ticket")}
+        {t(triggerLabel)}
       </Button>
       <dialog
         ref={dialog}
@@ -712,6 +716,7 @@ export function PublishTicket({
             )}
             {preview && (
               <fieldset disabled={busy}>
+                {preparedDraft && <div className="mt-4 space-y-2"><p className="text-sm muted">{t("The prepared draft includes unverified proposals. Publication does not verify your edits.")}</p><Button type="button" variant="outline" onClick={() => { setTitle(preparedDraft.title); setBody(preparedDraft.body); setDirty(true); }}>{t("Use prepared draft")}</Button></div>}
                 {preview.notice && (
                   <p className="mt-4 rounded border bg-muted p-3 text-sm">
                     {t(preview.notice)}

@@ -20,7 +20,7 @@ def upload(environment, content=b"Architecture reference", filename="architectur
     )
 
 
-def test_instruction_toggle_and_revision_guards(environment, storage):
+def test_context_text_is_used_automatically_and_revisions_stay_guarded(environment, storage):
     value = context.update_instructions(environment.id, "Preserve API compatibility.", True, 1)
     assert value["revision"] == 2
     assert value["resources"] == []
@@ -31,8 +31,38 @@ def test_instruction_toggle_and_revision_guards(environment, storage):
     assert before["instructions"]["text"] == "Preserve API compatibility."
     context.update_instructions(environment.id, "Changed", False, 2)
     after = context.snapshot_environment(environment)
-    assert after["instructions"]["text"] == ""
+    assert after["instructions"]["text"] == "Changed"
+    assert after["instructions"]["enabled"] is True
     assert before["instructions"]["text"] == "Preserve API compatibility."
+    context.update_instructions(environment.id, " \n ", True, 3)
+    assert context.snapshot_environment(environment)["instructions"]["text"] == ""
+    assert context.snapshot_environment(environment)["instructions"]["enabled"] is False
+
+
+def test_existing_text_is_used_despite_legacy_switch_and_old_snapshots_are_preserved(environment, storage):
+    from core.scope_service import environment_context
+
+    environment.context_instructions = "Contracts are retained for audit."
+    environment.instructions_enabled = False
+    environment.save()
+    assert context.describe(environment)["instructions_enabled"] is True
+    assert context.snapshot_environment(environment)["instructions"]["text"] == environment.context_instructions
+    assert environment_context(environment)["context_instructions"] == environment.context_instructions
+    frozen = {"instructions": {"text": "", "enabled": False}, "resources": []}
+    request = Request.objects.create(environment=environment, need="Explain retention.")
+    assert context.freeze_context(request, reuse=frozen)["instructions"] == frozen["instructions"]
+
+
+def test_context_api_accepts_text_without_enable_switch(client, environment):
+    prefix = f"/api/environments/{environment.pk}/context"
+    response = client.put(prefix, data={"instructions": "Shared business terminology.", "expected_revision": 1}, content_type="application/json")
+    assert response.status_code == 200
+    assert response.json()["instructions_enabled"] is True
+    environment.refresh_from_db()
+    assert environment.instructions_enabled is True
+    response = client.put(prefix, data={"instructions": "", "expected_revision": 2}, content_type="application/json")
+    assert response.status_code == 200
+    assert response.json()["instructions_enabled"] is False
 
 
 def test_replacement_keeps_frozen_versions_and_environment_deletion(environment, storage, tmp_path):

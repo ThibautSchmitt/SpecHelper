@@ -50,7 +50,7 @@ test("settings have one bottom access point and exactly four nonduplicated secti
   await page.getByRole("button", { name: "Roles and orchestration", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Independent counter-analysis", { exact: true })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "Save analysis settings", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Instance name", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Theme", exact: true })).toHaveCount(0);
   await tabs.getByRole("button", { name: "Sources & environments", exact: true }).click();

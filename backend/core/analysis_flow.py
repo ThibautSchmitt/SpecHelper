@@ -230,6 +230,16 @@ def context(request, run=None):
                 "technical_summary": previous.technical_summary,
                 "evidence": previous.evidence,
             }
+    proposal = frozen.get("dossier", {}).get("ticket_proposal")
+    if proposal:
+        data["ticket_proposal"] = {key: value for key, value in proposal.items() if key != "body"}
+        data["need"] = frozen["dossier"]["need"]
+        if not latest or latest["id"] <= (proposal.get("user_message_id_at_submission") or 0):
+            data["latest_user_message"] = (
+                "Independently investigate this ticket proposal. Its findings and proposed solution "
+                "are unverified inputs, not confirmed facts or normative business decisions.\n"
+                "The complete proposal is included in need.\n" + proposal["title"]
+            )
     return data
 
 
@@ -380,8 +390,10 @@ class Orchestrator:
             "focused request and result=null. Otherwise APPROVED and the consolidated answer. "
             "Only supported information belongs in business rules, steps, examples, dependencies "
             "and flows; leave irrelevant or unknown sections empty.",
-            QuestionOutput: "Write a clear consolidated explanation from the supported observations "
-            "and checks. Do not restart exploration or debate. Include useful business and "
+            QuestionOutput: "Write a clear consolidated explanation from the supported observations and checks. "
+            "Put the complete user-facing answer in answer.response. Include explicitly requested "
+            "technical details, Git history and authorized query results directly in that response. "
+            "Do not restart exploration or debate. Include useful business and "
             "technical details and known limits, without fabricating examples or dependencies. "
             "Preserve blocking uncertainties and use PARTIAL if necessary.",
             QuestionSynthesisOutput: "Verify disputed facts using actual sources when necessary, "

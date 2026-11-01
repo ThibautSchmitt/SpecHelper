@@ -38,7 +38,7 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: dossier() }));
     await page.goto(`/analyses/${id}`);
     await expect(page.getByRole("link", { name: t("All analyses"), exact: true })).toBeVisible();
-    await expect(page.getByRole("region", { name: t("Business conversation"), exact: true })).toContainText("Explain the export.");
+    await expect(page.getByRole("region", { name: t("Conversation"), exact: true })).toContainText("Explain the export.");
     await page.getByRole("button", { name: t("Analysis report"), exact: true }).click();
     const diagram = page.locator("summary").filter({ hasText: /^Contract export$/ }).locator("..");
     await page.locator("summary").filter({ hasText: /^Contract export$/ }).click();

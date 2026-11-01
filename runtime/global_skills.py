@@ -108,6 +108,28 @@ class SkillResources:
                     str(source),
                     "/skills/" + relative,
                 ]
+            occupied = {relative for _, _, relative in self.resources}
+            for value in self.definitions:
+                aliases = value.get("legacy_paths", [])
+                if not isinstance(aliases, list) or len(aliases) > 128:
+                    raise ValueError("Invalid legacy skill paths")
+                for relative in aliases:
+                    if not isinstance(relative, str) or not re.fullmatch(
+                        r"[a-z0-9]+(?:-[a-z0-9]+)*/v[1-9][0-9]*\.md", relative
+                    ) or len(relative) > 80 or relative in occupied:
+                        raise ValueError("Invalid or conflicting legacy skill path")
+                    occupied.add(relative)
+                    target = f"/skills/{value['slug']}/v{value['version']}.md"
+                    source = root / f"redirect-{len(occupied)}.md"
+                    source.write_text(
+                        "# Retired skill reference\n\nThis path is a compatibility redirect, "
+                        f"not the historical procedure. Read the current replacement at {target}.\n"
+                    )
+                    source.chmod(0o444)
+                    self.mounts += ["--dir", "/skills/" + relative.split("/")[0],
+                                    "--ro-bind", str(source), "/skills/" + relative]
+                    # Reading a redirect does not claim the replacement was loaded.
+                    self.resources.append(("redirect:" + relative, source, relative))
             self.reads = ResourceReads(self.resources)
             return self
         except Exception:

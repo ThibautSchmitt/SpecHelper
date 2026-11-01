@@ -75,7 +75,7 @@ test("late settings reads cannot overwrite a saved instance identity", async ({
       .fill("Saved team identity");
     await page.getByLabel("Primary color", { exact: true }).fill("#7c3aed");
     await page
-      .getByRole("button", { name: "Save settings", exact: true })
+      .getByRole("button", { name: "Save", exact: true })
       .click();
     await expect(page.getByRole("status")).toContainText("saved");
     await expect(

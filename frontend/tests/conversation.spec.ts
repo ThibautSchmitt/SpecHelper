@@ -33,6 +33,50 @@ async function setup(page:Page,language:"en"|"fr",read:()=>unknown,name="Acme",t
 
 for(const language of ["en","fr"] as const) {
  const t=(key:string)=>translate(key,language);
+ test(`explicit technical and data answer stays visible in the conversation in ${language}`,async({page})=>{
+  const source=dossier();
+  const response="The rule is implemented in `benefits/dates.py`, in `calculate_dates()`.\n\n```python\nend = start + duration\n```\n\n| Record | Status |\n| --- | --- |\n| 7 | active |\n\nOnly one authorized record was inspected.";
+  const current={...source,status:"PARTIAL",questions:[],latest_version:{...source._version,explanation:{...source._version.explanation,response}},versions:[{number:1,status:"PARTIAL",created_at:source._version.created_at}]};
+  await setup(page,language,()=>current);
+  await page.goto(`/analyses/${id}`);
+  const thread=page.getByRole("region",{name:t("Conversation"),exact:true});
+  await expect(thread.getByText("benefits/dates.py",{exact:true})).toBeVisible();
+  await expect(thread.getByText("calculate_dates()",{exact:true})).toBeVisible();
+  await expect(thread.locator("pre")).toContainText("end = start + duration");
+  await expect(thread.getByRole("table")).toContainText("active");
+  await expect(thread).toContainText("Only one authorized record was inspected.");
+  await expect(thread).not.toContainText(source._version.explanation.summary);
+ });
+
+ test(`conversation dates follow real messages without repeated authors or timestamps in ${language}`,async({page})=>{
+  const source=dossier();
+  let current:any={...source,updated_at:"2026-10-28T12:00:00Z",analysis_runs:[{...source.analysis_runs[0],started_at:"2026-10-28T11:00:00Z"}]};
+  await setup(page,language,()=>current);
+  await page.goto(`/analyses/${id}`);
+  const thread=page.getByRole("region",{name:t("Conversation"),exact:true});
+  const metadata=thread.locator(".conversation-metadata");
+  await expect(metadata.locator("dt")).toHaveText([t("Request date:"),t("Last message:")]);
+  await expect(metadata.locator("time").first()).toHaveAttribute("datetime",at);
+  await expect(metadata.locator("time").last()).toHaveAttribute("datetime",later);
+  await expect(thread.locator("time")).toHaveCount(2);
+  await expect(thread.locator("header, .conversation-avatar, .conversation-pending-author")).toHaveCount(0);
+  await expect(thread).not.toContainText("Acme");
+  await expect(thread).not.toContainText(t("Business conversation"));
+  current={...current,status:"PARTIAL",questions:[],latest_version:source._version,versions:[{number:1,status:"PARTIAL",created_at:source._version.created_at}]};
+  await expect(metadata.locator("time").last()).toHaveAttribute("datetime",source._version.created_at);
+  const last="2026-10-28T10:09:00Z";
+  current={...current,messages:[...source.messages,
+    {id:4,role:"assistant",kind:"discussion_reply",content:"A clear answer without a repeated author.",created_at:last},
+    {id:3,role:"user",kind:"discussion",content:"One more question.",created_at:"2026-10-28T10:08:00Z"},
+  ]};
+  await expect(metadata.locator("time").last()).toHaveAttribute("datetime",last);
+  await expect(thread.locator('[data-message="message-4"]')).toHaveText("A clear answer without a repeated author.");
+  await page.reload();
+  await expect(metadata.locator("time").first()).toHaveAttribute("datetime",at);
+  await expect(metadata.locator("time").last()).toHaveAttribute("datetime",last);
+  await expect(thread.locator("time")).toHaveCount(2);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ });
  test(`explicit role mentions use tags without adding speakers in ${language}`,async({page})=>{
   const source=dossier();
   const question=language === 'fr' ? 'Le Contre-analyste a une question : cet écran est-il concerné ?' : 'The Counter-analyst has a question: is this screen affected?';
@@ -41,7 +85,7 @@ for(const language of ["en","fr"] as const) {
   await setup(page,language,()=>current);
   await page.goto(`/analyses/${id}`);
   await expect(page.locator('legend .conversation-role-mention')).toHaveAttribute('data-role','counter_analyst');
-  await expect(page.locator('.conversation-pending-author strong')).toHaveText('Acme');
+  await expect(page.locator('.conversation-pending-author')).toHaveCount(0);
   current={...current,status:'PARTIAL',questions:[],latest_version:{...source._version,explanation:{title:'Conclusion',summary:summary+' Code identifier: `Analyst`.',business_explanation:'Code identifier: `Analyst`. General analysts are not role mentions.'}},versions:[{number:1,status:'PARTIAL',created_at:source._version.created_at}]};
   const final=page.locator('[data-message="result-1"]');
   await expect(final.locator('.conversation-role-mention')).toHaveCount(3);
@@ -50,7 +94,7 @@ for(const language of ["en","fr"] as const) {
   if(language === 'fr')expect(t('Verifier')).toBe('Validateur');
   await expect(final.locator('code')).toHaveText('Analyst');
   await expect(page.locator('.conversation-user .conversation-role-mention')).toHaveCount(0);
-  await expect(final.locator('header strong')).toHaveText('Acme');
+  await expect(final.locator('header')).toHaveCount(0);
  });
  test(`individual reports are optional downloads outside the ticket in ${language}`,async({page})=>{
   const source=dossier();
@@ -106,7 +150,7 @@ for(const language of ["en","fr"] as const) {
   await expect(page.getByRole("button",{name:t("Delete analysis"),exact:true})).toBeDisabled();
  });
  for(const theme of ["light","dark"]) {
-  test(`one named assistant and one live progress per cycle in ${language} ${theme}`,async({page},info)=>{
+  test(`one conversation and one live progress per cycle in ${language} ${theme}`,async({page},info)=>{
    const source=dossier();
    const acceptedVersion={...source._version,explanation:{...source._version.explanation,business_explanation:"The accepted comparison found a **boundary case**. An additional data check is required."}};
    let current:any={...source,analysis_runs:[{...source.analysis_runs[0],started_at:"2026-10-28T10:00:01Z",execution:execution("NEEDS_CLARIFICATION","counter_analyst",["done","clarification","waiting"])}]};
@@ -125,18 +169,16 @@ for(const language of ["en","fr"] as const) {
     return route.fulfill({json:current});
    });
    await page.goto(`/analyses/${id}`);
-   const thread=page.getByRole("region",{name:t("Business conversation"),exact:true});
+   const thread=page.getByRole("region",{name:t("Conversation"),exact:true});
    await expect(page.getByRole("button",{name:t("Show roles"),exact:true})).toHaveCount(0);
-   await expect(page.locator(".conversation-pending-author strong")).toHaveText("Acme");
+   await expect(page.locator(".conversation-pending-author")).toHaveCount(0);
    await expect(page.locator(".conversation-pending-author [data-role]")).toHaveCount(0);
-   await expect(page.locator(".conversation-brand-avatar")).toHaveCount(2);
-   const icons=await page.locator('.conversation-brand-avatar').evaluateAll(nodes=>nodes.map(node=>({border:getComputedStyle(node).borderTopWidth,background:getComputedStyle(node).backgroundColor,shadow:getComputedStyle(node).boxShadow})));
-   expect(icons.every(icon=>icon.border === "0px" && icon.background === "rgba(0, 0, 0, 0)" && icon.shadow === "none")).toBe(true);
+   await expect(page.locator(".conversation-brand-avatar")).toHaveCount(0);
    await expect(thread.locator("legend").filter({hasText:/^Which screen is affected\?$/})).toHaveCount(1);
    const progress=thread.locator('[data-cycle="1"]');
    await expect(thread.locator(".investigation-progress")).toHaveCount(1);
    await expect(thread.locator('.conversation-user .conversation-avatar')).toHaveCount(0);
-   await expect(thread.locator('header strong')).toHaveText(['Acme','Acme']);
+   await expect(thread.locator('header')).toHaveCount(0);
    await page.screenshot({path:`../.local/single-assistant-compact-${language}-${theme}-${info.project.name}.png`,fullPage:true});
    await progress.locator(":scope > summary").click();
    const handle=await progress.elementHandle();
@@ -200,14 +242,14 @@ for(const language of ["en","fr"] as const) {
   current.messages[1].attribution={run_number:1,public_role:"analyst",provider:"codex",source:"recorded_history"};
   await setup(page,language,()=>current);
   await page.goto(`/analyses/${id}`);
-  await expect(page.locator(".conversation-pending-author strong")).toHaveText("Acme");
-  await expect(page.locator(".conversation-pending-author")).not.toContainText("ChatGPT");
+  await expect(page.locator(".conversation-pending-author")).toHaveCount(0);
+  await expect(page.locator(".analysis-conversation")).not.toContainText("ChatGPT");
   await expect(page.locator(".conversation-question-details")).toHaveCount(0);
  });
  test(`unknown historical progress does not become complete in ${language}`,async({page})=>{
   const source=dossier();const current:any={...source,status:"PARTIAL",messages:[],questions:[],conversation:[{questions:[{id:"screen",question:"Which screen is affected?"}],answers:{screen:"In the benefit dossier."}}],latest_version:source._version,versions:[{number:1,status:"PARTIAL",created_at:later}],analysis_runs:[{number:1,status:"PARTIAL",steps:[],execution:execution("PARTIAL","verifier",["done","done","unknown"])}]};
   await setup(page,language,()=>current,"SpecHelper");await page.goto(`/analyses/${id}`);
-  const thread=page.getByRole("region",{name:t("Business conversation"),exact:true});
+  const thread=page.getByRole("region",{name:t("Conversation"),exact:true});
   await expect(thread.getByText("In the benefit dossier.",{exact:true})).toBeVisible();
   const progress=thread.locator('[data-cycle="1"]');
   await expect(progress.locator(":scope > summary")).toContainText(t("Investigation finished · verification incomplete"));

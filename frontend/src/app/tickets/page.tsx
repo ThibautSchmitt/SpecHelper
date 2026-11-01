@@ -492,8 +492,8 @@ export default function TicketsPage() {
                     {t("Created")}: {date(detail.created_at)}
                   </p>
                 </section>
-                <section aria-label={t("Publication and synchronization")}>
-                  <h3>{t("Publication and synchronization")}</h3>
+                <section aria-label={t("Publication and updates")}>
+                  <h3>{t("Publication and updates")}</h3>
                   <p className="mt-2 text-sm">
                     {t(publicationStatuses[detail.status] || detail.status)}
                   </p>

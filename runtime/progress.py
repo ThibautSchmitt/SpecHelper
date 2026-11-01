@@ -41,12 +41,22 @@ def tool_operation(name, arguments=None):
         "Read": "read",
         "read_file": "read",
         "read_text_file": "read",
+        "view_file": "read",
+        "view_file_outline": "read",
+        "view_code_item": "read",
         "Grep": "search",
         "Glob": "search",
         "list_directory": "search",
+        "list_dir": "search",
+        "grep_search": "search",
+        "find_by_name": "search",
+        "search_in_file": "search",
+        "codebase_search": "search",
         "search_files": "search",
         "WebFetch": "reference",
         "WebSearch": "reference",
+        "search_web": "reference",
+        "read_url_content": "reference",
         "update_plan": "plan",
         "TodoWrite": "plan",
     }.get(name, "tool")
@@ -112,10 +122,15 @@ def string_field(text, path):
 class Observer:
     """Normalize only documented public tool lifecycles and selected response fields."""
 
-    def __init__(self, provider, emit, preview_field=""):
+    def __init__(self, provider, emit, preview_field="", *, require_fresh_output=False):
         self.provider, self.emit, self.preview_field = provider, emit, preview_field
         self.events, self.sequence, self.activity = [], 0, "preparing"
         self.preview, self.buffer, self.blocks, self.seen = "", "", {}, set()
+        self.completion = None
+        if provider == "antigravity" and require_fresh_output:
+            from .antigravity import TurnCompletion
+
+            self.completion = TurnCompletion()
 
     def snapshot(self):
         self.sequence += 1
@@ -264,6 +279,8 @@ class Observer:
         elif self.provider == "antigravity":
             if value.get("event") == "step_update":
                 step = value.get("step_update", {})
+                if self.completion:
+                    self.completion.observe(step)
                 if step.get("step_type") == "tool" and step.get("tool_name"):
                     state = {
                         "RUNNING": "running",
@@ -272,12 +289,20 @@ class Observer:
                         "FAILED": "error",
                     }.get(step.get("state"))
                     identifier = step.get("step_id", step.get("id"))
+                    # Native Antigravity streams identify tool lifecycles by index.
+                    # Index zero is valid; RUNNING and DONE share the same index.
+                    index = step.get("step_index")
+                    if not identifier and type(index) is int and index >= 0:
+                        identifier = f"step-index-{index}"
+                    info = step.get("tool_info")
+                    operation = tool_operation(
+                        step["tool_name"],
+                        info.get("parameters") if isinstance(info, dict) else None,
+                    )
                     if identifier:
                         self.operation(
                             identifier,
-                            tool_operation(
-                                step["tool_name"], step.get("tool_info", {}).get("parameters")
-                            ),
+                            operation,
                             state,
                         )
                     else:
@@ -287,9 +312,10 @@ class Observer:
                         ).hexdigest()
                         if len(self.seen) < 4096 and signature not in self.seen:
                             self.seen.add(signature)
-                            self.operation(signature, tool_operation(step["tool_name"]), state)
+                            self.operation(signature, operation, state)
             elif value.get("event") == "result":
-                self.response(json.dumps(value.get("result", {}).get("structured_output", {})))
+                if self.completion is None or self.completion.finished:
+                    self.response(json.dumps(value.get("result", {}).get("structured_output", {})))
 
 
 class Tail:

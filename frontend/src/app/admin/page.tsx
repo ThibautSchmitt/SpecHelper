@@ -2,7 +2,7 @@
 import { useI18n } from "@/lib/i18n";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { GitBranch, Plug, Paintbrush, RefreshCw, Settings, Database, Plus } from "lucide-react";
+import { GitBranch, Plug, Paintbrush, Settings, Database, Plus } from "lucide-react";
 import { ThemeControl } from "@/components/theme-control";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,8 +25,8 @@ import {
   type DatabaseConnection,
 } from "@/components/database-connections";
 import { EnvironmentActions } from "@/components/environment-actions";
+import { EnvironmentBranchStatus, EnvironmentSyncBadge } from "@/components/environment-branch-status";
 import { EnvironmentContext } from "@/components/environment-context";
-import { EnvironmentSyncHistory } from "@/components/environment-sync-history";
 import { api, send, statuses, type Environment } from "@/lib/api";
 
 type Connections = {
@@ -216,6 +216,10 @@ function AdminPanel() {
                     value={e}
                     databases={connections?.databases || []}
                     disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
+                    onSynchronize={() => action(
+                      () => send(`/environments/${e.id}/sync`),
+                      t("Update scheduled."),
+                    )}
                     onChanged={async (message) => {
                       await refresh();
                       setNotice(message);
@@ -225,29 +229,13 @@ function AdminPanel() {
               <div className="flex flex-wrap justify-between gap-3">
                 <div className="title-tags">
                   <h2 className="flex items-center gap-2"><Database size={22} className="environment-logo" aria-hidden="true" />{e.name}</h2>
-                  <span className="badge" data-state={e.status}>
-                    {t(({ READY: "Synchronized", PENDING: "Synchronization queued", SYNCING: "Synchronizing", ERROR: "Synchronization failed" } as Record<string, string>)[e.status] || statuses[e.status] || e.status)}
-                  </span>
+                  <EnvironmentSyncBadge value={e} />
                 </div>
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-2" data-environment-actions>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
-                    onClick={() =>
-                      action(
-                        () => send(`/environments/${e.id}/sync`),
-                        t("Synchronization scheduled."),
-                      )
-                    }
-                  >
-                    <RefreshCw size={14} />
-                    {t("Synchronize")}
-                  </Button>
                   {actions}
                 </div>
               </div>
-              {e.synced_at && <p className="mt-2 text-xs muted">{t("Last synchronization")}: {new Date(e.synced_at).toLocaleString(dateLocale)}</p>}
+              {e.synced_at && <p className="mt-2 text-xs muted">{t("Last update")}: {new Date(e.synced_at).toLocaleString(dateLocale)}</p>}
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="muted">
@@ -276,7 +264,12 @@ function AdminPanel() {
                             </small>
                           )}
                         </td>
-                        <td className="pr-4">{r.branch}</td>
+                        <td className="pr-4"><EnvironmentBranchStatus environment={e} repository={r}
+                          disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
+                          onUpdate={() => action(
+                            () => send(`/environments/${e.id}/repositories/${r.id}/sync`, { expected_revision: e.revision }),
+                            t("Update scheduled."),
+                          )} /></td>
                         <td>
                           <code title={r.sha}>{r.sha.slice(0, 10) || "—"}</code>
                         </td>
@@ -289,11 +282,10 @@ function AdminPanel() {
                 {t("Database:")} {e.database_name || t("None")}
               </p>
               {e.error && (
-                <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("Synchronization failed")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{e.error}</pre></details>
+                <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("Update failed")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{t(e.error)}</pre></details>
               )}
               <PublicationConnectionsSummary values={e.publication_connections || []} />
               <EnvironmentContext environmentId={e.id} factualOnly={protocol === "2.4"} />
-              <EnvironmentSyncHistory environmentId={e.id} />
               {protocol !== "2.4" && <EnvironmentLibrary environmentId={e.id} />}
                     </>}
                   </EnvironmentActions>
@@ -324,7 +316,7 @@ function AdminPanel() {
                   setEnvName("");
                   setPublicationConnections([]);
                   setSelection([{ repository: "", branch: "" }]);
-                }, t("Environment created. Synchronization in progress."));
+                }, t("Environment created. Update in progress."));
               }}
             >
               <div className="field">

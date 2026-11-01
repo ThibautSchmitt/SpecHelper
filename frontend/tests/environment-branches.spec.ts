@@ -1,0 +1,79 @@
+import { expect, test } from "./fixtures";
+import fr from "../src/locales/fr.json";
+
+for (const language of ["en", "fr"] as const) {
+  const t = (key: string) => language === "fr" ? (fr as Record<string, string>)[key] || key : key;
+  test(`remote branch status and targeted update in ${language}`, async ({ page }) => {
+    await page.addInitScript(theme => localStorage.setItem("spechelper-theme", theme), language === "fr" ? "dark" : "light");
+    await page.route("**/api/**", route => route.fulfill({ json: [] }));
+    await page.route("**/api/access/session", route => route.fulfill({ json: { mode: "local", authenticated: true } }));
+    await page.route("**/api/settings", route => route.fulfill({ json: { name: "SpecHelper", language } }));
+    await page.route("**/api/connections", route => route.fulfill({ json: { ais: [], databases: [], github: { status: "DISCONNECTED" } } }));
+    await page.route("**/api/orchestration-settings", route => route.fulfill({ json: { reliability_protocol: "2.4" } }));
+    let environment = {
+      id: 1, name: "Staging", revision: 4, status: "READY", error: "", database_id: null, database_name: null,
+      git_sync_status: "PARTIAL", git_check_running: false,
+      repositories: [
+        { id: 11, repository: "team/api", branch: "main", sha: "a".repeat(40), git_status: { status: "BEHIND", behind: 1 } },
+        { id: 12, repository: "team/web", branch: "release/2026.11/long-branch", sha: "b".repeat(40), git_status: { status: "CURRENT", behind: 0 } },
+      ],
+    };
+    await page.route("**/api/environments", route => route.fulfill({ json: [environment] }));
+    const writes: { url: string; payload: unknown }[] = [];
+    await page.route("**/api/environments/1/repositories/*/sync", route => {
+      writes.push({ url: new URL(route.request().url()).pathname, payload: route.request().postDataJSON() });
+      environment = { ...environment, status: "PENDING" };
+      return route.fulfill({ json: { status: "QUEUED" } });
+    });
+    await page.goto("/admin?tab=environments");
+    const card = page.locator(".environment-card");
+    const tag = card.locator(".title-tags .badge");
+    await expect(tag).toHaveText(t("Partially up to date"));
+    await expect(tag).toHaveAttribute("data-state", "PARTIAL");
+    await expect(tag).toHaveCSS("color", language === "fr" ? "rgb(250, 204, 21)" : "rgb(133, 77, 14)");
+    const rows = card.getByRole("row");
+    await expect(rows.filter({ hasText: "team/api" })).toContainText(t("1 commit behind"));
+    await expect(rows.filter({ hasText: "team/web" })).toContainText(t("Up to date"));
+    await expect(card.getByRole("button", { name: /team\/web/ })).toHaveCount(0);
+    await card.getByRole("button", { name: t("Update {repository} · {branch}").replace("{repository}", "team/api").replace("{branch}", "main"), exact: true }).click();
+    await expect(tag).toHaveText(t("Update scheduled"));
+    await expect(card.getByRole("button", { name: /team\/api/ })).toBeDisabled();
+    expect(writes).toEqual([{ url: "/api/environments/1/repositories/11/sync", payload: { expected_revision: 4 } }]);
+    environment = { ...environment, status: "READY", git_sync_status: "SYNCED", repositories: environment.repositories.map(repo => ({ ...repo, git_status: { status: "CURRENT", behind: 0 } })) };
+    await expect(tag).toHaveText(t("Up to date"), { timeout: 10000 });
+    const success = await tag.evaluate(element => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--success)";
+      probe.style.backgroundColor = "var(--success-soft)";
+      element.append(probe);
+      const result = { color: getComputedStyle(probe).color, background: getComputedStyle(probe).backgroundColor };
+      probe.remove();
+      return result;
+    });
+    await expect(tag).toHaveCSS("color", success.color);
+    await expect(tag).toHaveCSS("background-color", success.background);
+    await expect(card.getByRole("button", { name: /team\/api/ })).toHaveCount(0);
+    environment = { ...environment, git_sync_status: "OUTDATED", repositories: environment.repositories.map(repo => ({ ...repo, git_status: { status: "BEHIND", behind: 3 } })) };
+    await expect(tag).toHaveText(t("Update needed"), { timeout: 10000 });
+    const danger = await tag.evaluate(element => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--danger)";
+      element.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    });
+    await expect(tag).toHaveCSS("color", danger);
+    await expect(rows.filter({ hasText: "team/api" })).toContainText(t("{count} commits behind").replace("{count}", "3"));
+    const positions = await card.locator("[data-branch-update-row] button").evaluateAll(elements => elements.map(element => element.getBoundingClientRect().x));
+    expect(positions).toHaveLength(2);
+    expect(Math.abs(positions[0] - positions[1])).toBeLessThan(1);
+    await expect(page.locator("body")).not.toContainText(/synchronis|synchroniz/i);
+    environment = { ...environment, git_sync_status: "UNKNOWN", repositories: environment.repositories.map(repo => ({ ...repo, git_status: { status: "MISSING", behind: 0 } })) };
+    await expect(tag).toHaveText(t("Branch status not verified"), { timeout: 10000 });
+    await expect(rows.filter({ hasText: "team/api" })).toContainText(t("Remote branch not found"));
+    await expect(card.getByRole("button", { name: /team\/api/ })).toHaveCount(0);
+    expect(writes).toHaveLength(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}

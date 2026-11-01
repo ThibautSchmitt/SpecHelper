@@ -9,6 +9,12 @@ test("environment: changes, conflict and confirmed deletion", async ({
   await page.route("**/api/connections", route => route.fulfill({ json: { ais: [], databases: [], github: { status: "DISCONNECTED" } } }));
   await page.route("**/api/orchestration-settings", route => route.fulfill({ json: { reliability_protocol: "2.4" } }));
   let writes = 0;
+  let synchronizations = 0;
+  await page.route("**/api/environments/998/sync", route => {
+    expect(route.request().method()).toBe("POST");
+    synchronizations++;
+    return route.fulfill({ json: { status: "PENDING" } });
+  });
   let stale = true;
   let environment = {
     id: 998,
@@ -56,6 +62,12 @@ test("environment: changes, conflict and confirmed deletion", async ({
   });
   await page.goto("/admin");
   await page.getByRole("button", { name: "Environments", exact: true }).click();
+  const menu = page.locator(".environment-card details.action-menu");
+  await page.getByLabel("More actions for Interface validation", { exact: true }).click();
+  await menu.getByRole("button", { name: "Update", exact: true }).click();
+  await expect.poll(() => synchronizations).toBe(1);
+  await expect(menu).not.toHaveAttribute("open", "");
+  expect(writes).toBe(0);
   await page
     .getByRole("button", { name: "Edit Interface validation", exact: true })
     .click();
@@ -70,6 +82,7 @@ test("environment: changes, conflict and confirmed deletion", async ({
   await expect(editor.getByLabel("Environment name", { exact: true })).toHaveValue("Renamed validation");
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await expect(editor).not.toBeVisible();
+  await page.getByLabel("More actions for Renamed validation", { exact: true }).click();
   await page
     .getByRole("button", { name: "Delete Renamed validation", exact: true })
     .click();

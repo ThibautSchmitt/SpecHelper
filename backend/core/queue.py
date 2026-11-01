@@ -182,7 +182,7 @@ def snapshot():
     )
     visible = Job.objects.filter(
         pk=Subquery(latest_analysis.values("pk")[:1])
-    ).exclude(kind__in=["cli_update", "discussion"]).exclude(kind="analysis", target__in=[
+    ).exclude(kind__in=["cli_update", "discussion", "branch_check"]).exclude(kind="analysis", target__in=[
         str(pk) for pk in Request.all_objects.filter(deleted_at__isnull=False).values_list("pk", flat=True)
     ])
     jobs = list(visible.filter(status__in=["RUNNING", "QUEUED"]).order_by("created_at", "id"))
@@ -273,9 +273,9 @@ def snapshot():
         elif job.status == "QUEUED":
             stage = "Waiting for a worker"
         elif job.status == "DONE":
-            stage = "Analysis completed" if job.kind == "analysis" else "Synchronization completed"
+            stage = "Analysis completed" if job.kind == "analysis" else "Update completed"
         elif job.kind == "sync" and job.status == "RUNNING":
-            stage = "Synchronizing repositories"
+            stage = "Updating repositories"
         if job.kind == "library_assistant":
             stage = {
                 "RUNNING": "Testing the draft in a sandbox"
@@ -330,7 +330,7 @@ def snapshot():
                 ),
                 "stage": stage,
                 "pause_reason": "A business answer is needed." if paused else "",
-                "executor_name": "Git synchronization" if job.kind == "sync" else None,
+                "executor_name": "Git update" if job.kind == "sync" else None,
                 "request_id": str(item.pk) if item else None,
                 "environment_id": environment.pk if environment else None,
                 "title": analysis_title(item)
@@ -350,7 +350,7 @@ def snapshot():
                     else "Library generation"
                 )
                 if job.kind == "library_assistant"
-                else "Synchronization",
+                else "Environment update",
                 "agent": (", ".join(provider_names) or None)
                 if job.kind in {"analysis", "library_assistant"} and job.status != "QUEUED"
                 else None,

@@ -119,8 +119,8 @@ def test_sync_and_failures_have_truthful_executor_and_public_reason(client, envi
         payload={"connection_ids": [1], "assignments": [{"agent": "codex"}]},
     )
     value = client.get("/api/queue").json()[0]
-    assert value["executor_name"] == "Git synchronization" and value["assignments"] == []
-    assert value["agent"] is None and value["stage"] == "Synchronizing repositories"
+    assert value["executor_name"] == "Git update" and value["assignments"] == []
+    assert value["agent"] is None and value["stage"] == "Updating repositories"
     Job.objects.filter(pk=job.pk).update(
         status="ERROR", error="The Git server is unavailable.", finished_at=timezone.now()
     )

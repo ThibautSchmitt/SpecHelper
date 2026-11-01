@@ -2,7 +2,7 @@
 import { useI18n } from "@/lib/i18n";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, send, type Environment } from "@/lib/api";
@@ -21,6 +21,7 @@ export function EnvironmentActions({
   databases,
   disabled,
   onChanged,
+  onSynchronize,
   children,
 }: {
   children: (actions: ReactNode) => ReactNode;
@@ -28,6 +29,7 @@ export function EnvironmentActions({
   databases: Database[];
   disabled: boolean;
   onChanged: (message: string) => Promise<void>;
+  onSynchronize: () => void;
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -234,16 +236,38 @@ export function EnvironmentActions({
         <Pencil size={14} />
         {t("Edit")}
       </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={disabled || busy}
-        onClick={() => open("delete")}
-        aria-label={t("Delete {name}", { name: value.name })}
-      >
-        <Trash2 size={14} />
-        {t("Delete")}
-      </Button>
+      <details className="action-menu" onKeyDown={event => {
+        if (event.key === "Escape") {
+          event.currentTarget.open = false;
+          event.currentTarget.querySelector("summary")?.focus();
+        }
+      }}>
+        <summary aria-label={t("More actions for {name}", { name: value.name })}>⋯</summary>
+        <div className="action-menu-items" onClick={event => {
+          if (event.target instanceof Element && event.target.closest("button")) {
+            const menu = event.currentTarget.closest("details");
+            if (menu) {
+              menu.open = false;
+              menu.querySelector("summary")?.focus();
+            }
+          }
+        }}>
+          <Button type="button" variant="ghost" size="sm" disabled={disabled || busy} onClick={onSynchronize}>
+            <RefreshCw size={16} aria-hidden="true" />{t("Update")}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled || busy}
+            onClick={() => open("delete")}
+            aria-label={t("Delete {name}", { name: value.name })}
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            {t("Delete")}
+          </Button>
+        </div>
+      </details>
       </>)}
       {mode === "edit" && <section
         id={`environment-editor-${value.id}`}

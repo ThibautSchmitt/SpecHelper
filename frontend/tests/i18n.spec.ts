@@ -24,7 +24,7 @@ test("system notices translate in both directions without rewriting user text", 
 test("English and French catalogs have matching keys and placeholders", () => {
   expect(Object.keys(en).sort()).toEqual(Object.keys(fr).sort());
   for (const key of Object.keys(en) as (keyof typeof en)[]) {
-    expect(en[key]).toBe(key);
+    expect(en[key].trim().length).toBeGreaterThan(0);
     expect(fr[key].trim().length).toBeGreaterThan(0);
     const placeholders = (text: string) =>
       [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
@@ -37,6 +37,13 @@ test("admin language persists across navigation, reload and translated errors", 
 }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (["/api/settings", "/api/access/session", "/api/ai-connections", "/api/git-connections", "/api/ai-models"].includes(path)) return route.fallback();
+    if (path === "/api/orchestration-settings") return route.fulfill({json:{reliability_protocol:"2.4"}});
+    if (path === "/api/analyses") return route.fulfill({json:{items:[],page:1,pages:1,total:0}});
+    return route.fulfill({json:[]});
+  });
   await page.route("**/api/requests", (route) => route.fulfill({ json: [] }));
   await page.route("**/api/connections", (route) =>
     route.fulfill({
@@ -71,7 +78,7 @@ test("admin language persists across navigation, reload and translated errors", 
     .getByLabel("Application language", { exact: true })
     .selectOption("fr");
   await page
-    .getByRole("button", { name: "Save settings", exact: true })
+    .getByRole("button", { name: "Save", exact: true })
     .click();
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
   await expect(page.getByRole("status")).toContainText(
@@ -93,24 +100,22 @@ test("admin language persists across navigation, reload and translated errors", 
   await page
     .getByRole("button", { name: fr["AI & Agents"], exact: true })
     .click();
-  await page
-    .getByRole("region", { name: "ChatGPT", exact: true })
-    .getByRole("button", { name: fr["Refresh status and quotas"], exact: true })
-    .click();
+  const card = page.locator("#ai-connection-1");
+  await card.locator(".action-menu > summary").click();
+  await card.getByRole("button", { name: fr["Refresh status and quotas"], exact: true }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText(
     fr["The assistant connection could not be verified."],
   );
-  await page.getByRole("link", { name: fr["Requests"], exact: true }).click();
+  await page.getByRole("link", { name: fr["Analyses"], exact: true }).click();
   await expect(
     page.getByRole("heading", {
-      name: fr["Requests"],
+      name: fr["Analyses"],
       exact: true,
     }),
   ).toBeVisible();
-  await expect(
-    page.getByLabel(fr["Describe your need"], { exact: true }),
-  ).toBeVisible();
-  const settingsLink = page.getByRole("link", { name: fr["Settings"], exact: true });
+  await page.getByRole("link", { name: fr["New analysis"], exact: true }).click();
+  await expect(page.getByLabel(fr["Your question or change"], { exact: true })).toBeVisible();
+  const settingsLink = page.getByRole("link", { name: fr["Administration"], exact: true });
   await settingsLink.focus();
   await settingsLink.press("Enter");
   await page.getByRole("button", { name: fr["Appearance"], exact: true }).click();

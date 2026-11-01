@@ -48,7 +48,7 @@ for (const language of ["en", "fr"] as const) {
     let tests = 0;
     await page.route("**/api/ticket-connectors/1/test", route => { tests++; rows = rows.map(row => ({ ...row, status: "CONNECTED", checked_at: new Date().toISOString() })); return route.fulfill({ json: rows[0] }); });
     await page.goto("/admin?tab=environments");
-    await expect(page.getByText(t("Synchronized"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("Up to date"), { exact: true })).toBeVisible();
     await page.getByRole("button", { name: t("Edit {name}").replace("{name}", "Production"), exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByLabel(t("Database"), { exact: true })).toHaveValue("7");

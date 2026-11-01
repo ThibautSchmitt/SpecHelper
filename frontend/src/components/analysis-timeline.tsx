@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, type ReactNode } from "react";
-import { Sparkles, Folder, CalendarDays, ChevronDown, LoaderCircle, CheckCircle2, Clock3, CircleHelp, AlertCircle, Circle, MessageCircle } from "lucide-react";
+import { ChevronDown, LoaderCircle, CheckCircle2, Clock3, CircleHelp, AlertCircle, Circle, MessageCircle } from "lucide-react";
 import { SafeMarkdown } from "@/components/safe-markdown";
 import { RoleMentions } from "@/components/role-mentions";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { type RequestDetail, type ResultVersion, type WorkExecution } from "@/lib/api";
 import { activityLabel, DiscussionProgress, ProgressDisclosure, ResponsePreview, WorkSteps } from "@/components/work-progress";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels } from "@/lib/orchestration";
-import { useInstanceName } from "@/lib/instance";
 
 type Run = NonNullable<RequestDetail["analysis_runs"]>[number];
 
@@ -29,7 +29,6 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   trackingUnavailable?:boolean;
 }) {
   const { t, dateLocale } = useI18n();
-  const instanceName = useInstanceName();
   const runs = value.analysis_runs || [];
   const working = ["QUEUED", "UNDERSTANDING", "ANALYZING", "REVIEWING", "GENERATING_TICKET", "GENERATING_RESULT", "CONTINUING_CONVERSATION"].includes(value.status);
   const pending = value.status === "NEEDS_CLARIFICATION";
@@ -55,10 +54,11 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     return message.id !== pendingMessage?.id;
   }).map(message => {
     const answers = message.data?.answers;
+    const stale=message.role === "assistant" && message.kind === "discussion_reply" && message.data?.response_status === "stale";
     return { id: `message-${message.id}`, at: message.created_at,
       speaker: message.role === "user" ? "user" : "assistant",
-      content: answers && typeof answers === "object" ? Object.values(answers).filter(item => typeof item === "string").join("\n\n") : message.content,
-      label: message.kind === "need_revision" ? "Need updated" : undefined,
+      content: stale ? "" : answers && typeof answers === "object" ? Object.values(answers).filter(item => typeof item === "string").join("\n\n") : message.content,
+      label: stale ? "Response interrupted" : message.kind === "need_revision" ? "Need updated" : undefined,
       markdown: message.kind === "discussion_reply",
       child: typeof message.data?.child_id === "string" ? message.data.child_id : undefined };
   });
@@ -88,9 +88,18 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   for (const run of runs) {
     const at=run.started_at || run.steps.find(step=>step.started_at)?.started_at || value.created_at;
     const start=new Date(at).getTime();
-    const end=run.finished_at ? new Date(run.finished_at).getTime() : run.number === Math.max(...runs.map(run=>run.number)) ? Infinity : start;
+    const terminal=["READY","PARTIAL","ERROR","CANCELLED"].includes(run.execution?.status || run.status);
+    const active=!terminal && run.number === Math.max(...runs.map(run=>run.number)) && value.discussion?.mode !== "discussion" && (working || pending);
+    const work=value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===run.number);
+    // Older failed cycles sometimes have no finished_at. Their recorded steps
+    // still bound the cycle; later discussion messages must never move it.
+    const recordedEnd=Math.max(start,...[
+      run.finished_at,work?.finished_at,
+      ...run.steps.flatMap(step=>[step.started_at,step.finished_at]),
+    ].filter((stamp):stamp is string=>!!stamp).map(stamp=>Date.parse(stamp)).filter(Number.isFinite));
+    const end=active ? Infinity : recordedEnd;
     const latestInput=Math.max(start,...events.filter(event=>event.speaker === "user").map(event=>new Date(event.at).getTime()).filter(time=>time >= start && time <= end));
-    // Position resumed work after its input; keep actual timestamps unchanged.
+    // Only the active cycle follows resumed input. Closed cycles stay in history.
     events.push({id:`progress-${run.number}`,at,sortAt:latestInput + 1,speaker:"assistant",content:"",run});
   }
   if (!runs.length && (working || pending) && value.discussion?.mode !== "discussion") events.push({id:"progress-pending",at:value.created_at,sortAt:Math.max(new Date(value.created_at).getTime(),...events.filter(event=>event.speaker === "user").map(event=>new Date(event.at).getTime()))+1,speaker:"assistant",content:"",run:{number:0,status:value.status,steps:[]}});
@@ -100,19 +109,21 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     work:{...value.discussion.job,kind:"discussion",waiting_causes:[],phases:[]},
   });
   events.sort((left, right) => (left.sortAt ?? new Date(left.at).getTime()) - (right.sortAt ?? new Date(right.at).getTime()));
+  const lastMessageAt = [
+    ...events.filter(event => !event.run && !event.work && !event.discussion).map(event => event.at),
+    ...(pendingMessage ? [pendingMessage.created_at] : []),
+  ].reduce((latest, at) => Date.parse(at) > Date.parse(latest) ? at : latest, value.created_at);
 
-  return <section className="analysis-conversation" aria-label={t("Business conversation")}>
+  return <Card className="analysis-conversation" aria-label={t("Conversation")}>
     <div className="conversation-toolbar">
-      <div className="conversation-metadata"><span><Folder size={17} aria-hidden="true" />{t("Business conversation")}</span><time dateTime={value.created_at}><CalendarDays size={17} aria-hidden="true" />{new Date(value.created_at).toLocaleString(dateLocale)}</time></div>
+      <dl className="conversation-metadata">
+        <div><dt>{t("Request date:")}</dt><dd><time dateTime={value.created_at}>{new Date(value.created_at).toLocaleString(dateLocale)}</time></dd></div>
+        <div><dt>{t("Last message:")}</dt><dd><time dateTime={lastMessageAt}>{new Date(lastMessageAt).toLocaleString(dateLocale)}</time></dd></div>
+      </dl>
     </div>
     <ol className="conversation-messages" ref={list}>
       {events.map(event => <li key={event.id} className={`conversation-message conversation-${event.speaker}`} data-message={event.id}>
-        {event.speaker === "assistant" && <div className="conversation-avatar conversation-brand-avatar" aria-hidden="true"><Sparkles size={25} /></div>}
         <article className="conversation-bubble">
-          {<header className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-            {event.speaker === "assistant" && <strong className="text-sm">{instanceName}</strong>}
-            <time dateTime={event.at} className="ml-auto text-xs muted">{new Date(event.at).toLocaleString(dateLocale)}</time>
-          </header>}
           {event.run && <InvestigationProgress run={event.run} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
           {event.work&&<DiscussionProgress job={event.work} unavailable={trackingUnavailable}/>}
           {event.label && <p className="mb-2 flex items-center gap-2 text-xs font-medium text-primary">{event.discussion && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>}{t(event.label)}{event.version ? ` · v${event.version}` : ""}</p>}
@@ -129,17 +140,16 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
         </article>
       </li>)}
     </ol>
-    <div className={`conversation-reply ${pending ? "conversation-pending conversation-assistant" : ""}`}>
-      {pending && <><div className="conversation-avatar conversation-brand-avatar" aria-hidden="true"><Sparkles size={25} /></div><header className="conversation-pending-author"><strong>{instanceName}</strong>{pendingMessage && <time dateTime={pendingMessage.created_at}>{new Date(pendingMessage.created_at).toLocaleString(dateLocale)}</time>}</header></>}
+    <div className="conversation-reply">
       <div className="conversation-reply-content">{reply}</div>
     </div>
     {controls && <div className="flex flex-wrap gap-2">{controls}</div>}
-  </section>;
+  </Card>;
 }
 
 export function conversationAnswer(result:ResultVersion) {
   // Display the accepted synthesis, never a concatenation of preliminary agent reports.
-  const summary=result.explanation?.summary || result.ticket?.proposed_solution || result.ticket?.context;
+  const summary=result.explanation?.response || result.explanation?.summary || result.ticket?.proposed_solution || result.ticket?.context;
   if (typeof summary === "string" && summary.trim()) return summary.trim();
   const explanation = result.explanation?.business_explanation;
   return typeof explanation === "string" ? explanation.trim() : "";
@@ -173,7 +183,7 @@ function InvestigationProgress({run,work,unavailable=false}:{run:Run;work?:WorkE
         const Icon=stage.status === "done" ? CheckCircle2 : stage.status === "running" ? LoaderCircle : stage.status === "waiting" ? Circle : stage.status === "clarification" ? MessageCircle : stage.status === "error" ? AlertCircle : Clock3;
         return <li key={stage.role} data-stage={stage.role} data-stage-status={stage.status}>
           <Icon size={18} className={stage.status === "running" && !unavailable ? "animate-spin motion-reduce:animate-none" : ""} aria-hidden="true" />
-          <span className="investigation-role">{t(roleLabels[stage.role] || stage.role)}</span><span className="investigation-stage-state muted">{t(label)}</span>
+          <span className="investigation-role"><span className="badge connection-tag connection-role-tag" data-role={stage.role}>{t(roleLabels[stage.role] || stage.role)}</span></span><span className="investigation-stage-state muted">{t(label)}</span>
           {causes.length > 1 && <ul className="investigation-stage-causes space-y-1 text-xs">{causes.map(cause=><li key={cause}>{t(causeLabels[cause] || "Unavailable")}</li>)}</ul>}
           {!!observed.filter(phase=>phase.role===stage.role).length&&<details className="work-role-steps"><summary>{t("Work steps")}</summary><WorkSteps phases={observed.filter(phase=>phase.role===stage.role)} unavailable={unavailable}/></details>}
         </li>;

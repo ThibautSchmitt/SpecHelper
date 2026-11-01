@@ -103,6 +103,23 @@ def test_login_rotates_session_and_csrf_and_logout_revokes(protected):
     assert protected.get("/api/settings").status_code == 401
 
 
+def test_independently_authenticated_browsers_share_legacy_owned_analyses(protected):
+    assert login(protected).status_code == 200
+    other = Client(enforce_csrf_checks=True)
+    assert login(other).status_code == 200
+    assert protected.cookies["spechelper_session"].value != other.cookies["spechelper_session"].value
+    assert protected.cookies["spechelper_conversation_owner"].value != other.cookies["spechelper_conversation_owner"].value
+    row = Request.objects.create(need="Shared analysis", discussion_state={
+        "private": True, "owner": "legacy-browser-only", "enabled": True,
+    })
+    for browser in (protected, other):
+        assert browser.get(f"/api/analyses/{row.pk}").status_code == 200
+        assert browser.get("/api/analyses").json()["total"] == 1
+        assert browser.get("/api/analyses/overview").json()["recent"][0]["id"] == str(row.pk)
+    assert protected.get("/api/queue").json() == other.get("/api/queue").json()
+    assert Client().get(f"/api/analyses/{row.pk}").status_code == 401
+
+
 def test_https_cookie_secure_and_expiration_and_credential_rotation(protected, settings):
     settings.ACCESS_REQUIRE_HTTPS = True
     assert protected.get("/api/settings").status_code == 403

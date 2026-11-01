@@ -294,7 +294,7 @@ def test_real_git_sources_from_different_stacks_use_the_same_context_contract(
         assert (project / source).read_text() == content
         assert (project / manifest).is_file()
         assert "SKILL tryton-coog" not in payload["prompt"]
-        assert "SKILL project-conventions" in payload["prompt"]
+        assert "SKILL codebase-navigation" in payload["prompt"]
         seen.append(payload)
         return {
             "output": assessment()

@@ -135,6 +135,30 @@ def test_stream_preserves_actual_conversation_model_and_permission_metadata():
     assert "quota_windows" not in result
 
 
+@pytest.mark.parametrize("steps,accepted", [
+    ([], False),
+    ([("user_input", 0, "DONE")], False),
+    ([("user_input", 0, "DONE"), ("finish", 1, "ACTIVE")], False),
+    ([("user_input", 0, "DONE"), ("finish", 1, "ERROR")], False),
+    ([("finish", 1, "DONE"), ("user_input", 2, "DONE")], False),
+    ([("user_input", 4, "DONE"), ("finish", 3, "DONE")], False),
+    ([("user_input", 0, "DONE"), ("finish", 1, "DONE")], True),
+])
+def test_resumed_cli_output_requires_observed_completion_of_the_current_turn(steps, accepted):
+    events = stream(output={"message": "An identical reply can be legitimate."})
+    events[1:1] = [{"event": "step_update", "step_update": {
+        "conversation_id": events[0]["conversation_id"],
+        "step_type": kind, "step_index": index, "state": state,
+    }} for kind, index, state in steps]
+    result = parse_run(encode(events), require_fresh_output=True)
+    if accepted:
+        assert result["output"] == {"message": "An identical reply can be legitimate."}
+    else:
+        assert result["failure"] == {"kind": "STALE_RESPONSE"}
+        assert "output" not in result
+        assert "session_id" not in result
+
+
 def test_only_observed_nonnegative_integer_usage_survives():
     events = stream()
     events[-1]["result"]["usage"] = {

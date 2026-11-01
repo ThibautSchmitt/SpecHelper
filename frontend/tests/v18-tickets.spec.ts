@@ -303,7 +303,7 @@ test("French ticket filters, detail and publication metadata are translated", as
   ).toBeVisible();
   await expect(
     selected.getByRole("heading", {
-      name: "Publication et synchronisation",
+      name: "Publication et mises à jour",
       exact: true,
     }),
   ).toBeVisible();

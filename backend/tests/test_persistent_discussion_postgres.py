@@ -30,7 +30,6 @@ def competing(client, environment, operations):
     )
     assert response.status_code == 201, response.content
     value = response.json()
-    cookies = client.cookies.copy()
     barrier = threading.Barrier(2)
 
     def submit(operation):
@@ -40,7 +39,6 @@ def competing(client, environment, operations):
                 cursor.execute("SET lock_timeout = '5s'")
                 cursor.execute("SET statement_timeout = '10s'")
             browser = Client()
-            browser.cookies = cookies.copy()
             barrier.wait(timeout=5)
             endpoint, payload = operation
             return browser.post(
@@ -76,6 +74,39 @@ def test_deep_launch_racing_with_discussion_cannot_start_both(client, environmen
             ("deep-analyze", {"expected_revision": 0}),
         ],
     )
+
+
+def test_two_browsers_cannot_transfer_the_same_pending_turn_twice(client, environment, storage):
+    from core.models import AIConnection, AIIdentity
+    from core.providers import mark_failure
+
+    value = client.post("/api/analyses", {"environment_id": environment.pk,
+        "need": "Explain the SQL export."}, content_type="application/json").json()
+    assert client.post(f"/api/analyses/{value['id']}/analyze").status_code == 200
+    mark_failure(1, "QUOTA_EXHAUSTED")
+    identity = AIIdentity.objects.create(agent="antigravity", credential_id=uuid.uuid4(),
+        status="CONNECTED", availability="AVAILABLE")
+    target = AIConnection.objects.create(agent="antigravity", identity=identity,
+        status="CONNECTED", availability="AVAILABLE", roles=["analyst"])
+    choice = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()["options"][0]
+    barrier = threading.Barrier(2)
+
+    def submit(_):
+        close_old_connections()
+        try:
+            barrier.wait(timeout=5)
+            return Client().post(f"/api/analyses/{value['id']}/discussion/continue-with", {
+                "expected_revision":1,"connection_id":target.pk,"configuration_token":choice["configuration_token"],
+            }, content_type="application/json").status_code
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        assert sorted(executor.map(submit, range(2))) == [200, 409]
+    assert Job.objects.filter(status="QUEUED", target=value["id"]).count() == 1
+    assert Job.objects.filter(status="CANCELLED", target=value["id"]).count() == 1
+    assert AISession.objects.filter(request_id=value["id"]).count() == 2
+    assert Request.objects.get(pk=value["id"]).messages.filter(role="user").count() == 1
 
 
 @pytest.mark.parametrize("parallel", [2, 10])

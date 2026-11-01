@@ -103,6 +103,36 @@ class PublicationIn(PublicationDraftIn):
         return value
 
 
+class TicketPreparationIn(StrictSchema):
+    expected_revision: int = Field(ge=0)
+    expected_discussion_revision: int = Field(ge=0)
+    source_version: int | None = Field(default=None, ge=1)
+    scope_choice: Literal["unknown", "covered", "clarified", "changed"] = "unknown"
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(max_length=30000)
+
+    @field_validator("title")
+    @classmethod
+    def plain_title(cls, value):
+        if not value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("Enter a nonempty single-line ticket title.")
+        return value.strip()
+
+
+@router.get("/analyses/{analysis_id}/ticket-preparation")
+def ticket_preparation(request, analysis_id: UUID):
+    from .ticket_preparation import snapshot
+
+    return snapshot(get_object_or_404(Request, pk=analysis_id, deleted_at__isnull=True))
+
+
+@router.put("/analyses/{analysis_id}/ticket-preparation")
+def save_ticket_preparation(request, analysis_id: UUID, payload: TicketPreparationIn):
+    from .ticket_preparation import save
+
+    return save(analysis_id, payload)
+
+
 def connector_values(payload, existing=None):
     values = payload.model_dump(exclude={"secret", "app_token", "environment_id"})
     if payload.environment_id is not None:

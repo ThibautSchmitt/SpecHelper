@@ -192,7 +192,7 @@ export function TaskQueue() {
           : job.kind === "discussion" && state === "RUNNING" ? "The assistant is replying…"
           : job.analysis_state && resultStates[job.analysis_state] ? resultStates[job.analysis_state]
           : state === "DONE" && resultState === "partial" ? "Partial result"
-          : state === "DONE" ? "Completed" : state === "CANCELLED" ? "Cancelled" : job.kind === "sync" ? "Synchronizing" : job.kind === "publication" ? "Publishing ticket" : "Analysis in progress";
+          : state === "DONE" ? "Completed" : state === "CANCELLED" ? "Cancelled" : job.kind === "sync" ? "Updating" : job.kind === "publication" ? "Publishing ticket" : "Analysis in progress";
         const waiting = clarification ? waitingDuration(job.clarification_since || job.finished_at, now)
           : ["QUEUED", "WAITING_AI"].includes(state) ? waitingDuration(job.queued_since || (!job.started_at ? job.created_at : null), now) : null;
         const active = job.kind === "analysis" ? job.active_analysis_seconds

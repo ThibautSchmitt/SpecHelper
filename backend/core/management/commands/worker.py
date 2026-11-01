@@ -18,7 +18,16 @@ class Command(BaseCommand):
 
             start_gateway()
         self.stdout.write("SpecHelper worker ready")
+        next_git_check = 0
         while True:
             close_old_connections()
+            if time.monotonic() >= next_git_check:
+                from core.branch_checks import schedule_due
+
+                try:
+                    schedule_due()
+                except Exception:
+                    self.stderr.write("Branch check scheduling unavailable; retrying shortly.")
+                next_git_check = time.monotonic() + 30
             if not work_once():
                 time.sleep(0.5)

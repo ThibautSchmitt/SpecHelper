@@ -185,14 +185,14 @@ test("mixed Git sources preserve fork identity, reset dependent selections and r
     ),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Create environment", exact: true }),
+    page.getByRole("button", { name: "Save", exact: true }),
   ).toBeDisabled();
   await page.locator("#new-source-2-connection").selectOption("20");
   await page.locator("#new-source-2-repository").selectOption("201");
   await expect(page.locator("#new-source-2-branch option")).toHaveCount(3);
   await page.locator("#new-source-2-branch").selectOption("main");
   await page
-    .getByRole("button", { name: "Create environment", exact: true })
+    .getByRole("button", { name: "Save", exact: true })
     .click();
   await expect.poll(() => saved).not.toBeNull();
   expect(saved).toEqual({

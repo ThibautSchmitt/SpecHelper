@@ -181,7 +181,7 @@ for (const reduced of [false, true])
     ).toBe(true);
   });
 
-test("synchronization and publication show their real executor without an AI assignment", async ({
+test("environment updates and publication use their own activity labels", async ({
   page,
 }) => {
   await setup(page);
@@ -190,8 +190,8 @@ test("synchronization and publication show their real executor without an AI ass
       json: [
         job(7, "RUNNING", {
           kind: "sync",
-          executor_name: "Git synchronization",
-          stage: "Synchronizing repositories",
+          executor_name: "Git update",
+          stage: "Updating repositories",
         }),
         job(8, "RUNNING", {
           kind: "publication",
@@ -202,13 +202,11 @@ test("synchronization and publication show their real executor without an AI ass
     }),
   );
   await page.goto("/questions");
-  const queue = await openQueue(page, test.info().project.name === "mobile");
-  await expect(queue.locator('[data-job="7"]')).toContainText(
-    "Git synchronization · No AI execution",
-  );
-  await expect(queue.locator('[data-job="8"]')).toContainText(
-    "Company tracker · No AI execution",
-  );
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  const queue = page.getByRole(test.info().project.name === "mobile" ? "dialog" : "complementary", { name: "Activity", exact: true });
+  await expect(queue.locator('[data-job="7"]')).toContainText("Updating");
+  await expect(queue.locator('[data-job="8"]')).toContainText("Publishing ticket");
+  await expect(queue).not.toContainText(/synchronis|synchroniz/i);
   await expect(queue.getByText("AI not assigned", { exact: true })).toHaveCount(
     0,
   );

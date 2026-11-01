@@ -29,8 +29,7 @@ def environment_context(environment):
         return None
     return {
         "name": environment.name,
-        "context_instructions": environment.context_instructions
-        if environment.instructions_enabled else "",
+        "context_instructions": environment.context_instructions.strip(),
         "official_references": environment.official_references,
         "repository_names": list(environment.repositories.values_list("repository", flat=True)),
     }

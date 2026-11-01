@@ -40,7 +40,9 @@ def test_real_role_and_transaction_enforcement(readonly_config):
     result = query(readonly_config, "SELECT id, name FROM fixture.contracts")
     assert result["rows"] == [(1, "Active")]
     # Remove client transaction protection: PostgreSQL grants must still refuse writes.
-    unrestricted_transaction = {key: value for key, value in readonly_config.items() if key != "options"}
+    unrestricted_transaction = {
+        key: value for key, value in readonly_config.items() if key != "options"
+    }
     with psycopg.connect(**unrestricted_transaction) as db:
         db.read_only = False
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
@@ -62,7 +64,9 @@ def test_real_role_and_transaction_enforcement(readonly_config):
     with psycopg.connect(DSN, autocommit=True) as db:
         db.execute("REVOKE UPDATE(name) ON fixture.contracts FROM fixture_reader")
         db.execute("REVOKE UPDATE ON fixture.contracts FROM fixture_reader")
-        db.execute("INSERT INTO fixture.contracts SELECT value, 'Fixture' FROM generate_series(2,205) value")
+        db.execute(
+            "INSERT INTO fixture.contracts SELECT value, 'Fixture' FROM generate_series(2,205) value"
+        )
     bounded = query(readonly_config, "SELECT id FROM fixture.contracts ORDER BY id")
     assert len(bounded["rows"]) == 200 and bounded["truncated"]
 
@@ -71,6 +75,7 @@ def test_real_role_and_transaction_enforcement(readonly_config):
         db.execute("GRANT UPDATE(name) ON fixture.contracts TO fixture_reader")
     with pytest.raises(ValueError, match="write"):
         query(readonly_config, "SELECT * FROM fixture.contracts")
+
     with psycopg.connect(DSN, autocommit=True) as db:
         db.execute("REVOKE UPDATE(name) ON fixture.contracts FROM fixture_reader")
         db.execute("GRANT CREATE ON SCHEMA fixture TO fixture_reader")
@@ -81,6 +86,35 @@ def test_real_role_and_transaction_enforcement(readonly_config):
         db.execute("REVOKE CREATE ON SCHEMA fixture FROM fixture_reader")
     with pytest.raises(ValueError, match="write"):
         query(readonly_config, "SELECT * FROM fixture.contracts")
+
+
+def test_real_minimized_gateway_keeps_details_and_masks_aliases(readonly_config):
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute("CREATE TABLE fixture.people (person_id int, email text, status text)")
+        db.execute("INSERT INTO fixture.people VALUES (42, 'fictitious@example.test', 'active')")
+        db.execute("GRANT SELECT ON fixture.people TO fixture_reader")
+    assert query(readonly_config, "SELECT status FROM fixture.people", minimize=True)["rows"] == [
+        ["active"]
+    ]
+    assert query(
+        readonly_config, "SELECT count(person_id) AS total FROM fixture.people", minimize=True
+    )["rows"] == [[1]]
+    metadata = query(
+        readonly_config,
+        "SELECT column_name FROM information_schema.columns WHERE table_schema='fixture' AND table_name='people' ORDER BY ordinal_position",
+        minimize=True,
+    )
+    assert metadata["rows"] == [["person_id"], ["email"], ["status"]]
+    for sql in (
+        "SELECT person_id AS reference FROM fixture.people",
+        "SELECT upper(email) AS value FROM fixture.people",
+        "SELECT person_id AS column_name FROM fixture.people",
+        "WITH q(x) AS (SELECT email FROM fixture.people) SELECT x FROM q",
+    ):
+        result = query(readonly_config, sql, minimize=True)
+        assert result["rows"] == [["[REDACTED]"]] and result["redacted"]
+    with pytest.raises(ValueError):
+        query(readonly_config, "DELETE FROM fixture.people", minimize=True)
 
 
 @pytest.mark.django_db

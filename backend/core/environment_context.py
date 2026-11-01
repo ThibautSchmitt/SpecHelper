@@ -88,7 +88,7 @@ def describe(environment):
     resources = environment.context_resources.filter(removed=False).prefetch_related("versions")
     return {
         "instructions": environment.context_instructions,
-        "instructions_enabled": environment.instructions_enabled,
+        "instructions_enabled": bool(environment.context_instructions.strip()),
         "revision": environment.context_revision,
         "official_references": environment.official_references,
         "max_files": MAX_FILES,
@@ -130,7 +130,8 @@ def update_instructions(
         raise HttpError(422, "Context instructions must contain at most 4000 text characters.")
     reject_credentials(instructions)
     environment.context_instructions = instructions
-    environment.instructions_enabled = enabled
+    # The legacy enable flag is accepted for older clients; saved text is always used.
+    environment.instructions_enabled = bool(instructions.strip())
     if official_references is not None:
         from .official_sources import validate_references
 
@@ -237,7 +238,7 @@ def edit_resource(
 @transaction.atomic
 def snapshot_environment(environment):
     environment = Environment.objects.select_for_update().get(pk=environment.pk)
-    instructions = environment.context_instructions if environment.instructions_enabled else ""
+    instructions = environment.context_instructions if environment.context_instructions.strip() else ""
     resources = []
     for resource in environment.context_resources.filter(enabled=True, removed=False).order_by(
         "id"
@@ -256,7 +257,7 @@ def snapshot_environment(environment):
         },
         "instructions": {
             "text": instructions,
-            "enabled": environment.instructions_enabled,
+            "enabled": bool(instructions),
             "sha256": hashlib.sha256(instructions.encode()).hexdigest(),
         },
         "resources": resources,
@@ -308,6 +309,13 @@ def freeze_context(request, run=None, reuse=None):
     if request.discussion_state.get("enabled"):
         snapshot["dossier"]["discussion_revision"] = request.discussion_state.get("revision", 0)
         snapshot["dossier"]["user_messages"] = list(request.messages.filter(role="user").values("id", "kind", "content"))
+    proposal = run.job.payload.get("ticket_proposal") if run and run.job_id else None
+    if proposal:
+        snapshot["dossier"]["ticket_proposal"] = copy.deepcopy(proposal)
+        snapshot["dossier"]["need"] += (
+            "\n\nTicket proposal submitted for independent verification (unverified):\n"
+            + proposal["title"] + "\n" + proposal["body"]
+        )
     snapshot = redact(snapshot, configured_secrets())
     snapshot.pop("sha256", None)
     snapshot["sha256"] = hashlib.sha256(

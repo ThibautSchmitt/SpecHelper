@@ -356,10 +356,13 @@ def wait_or_retry(job, attempt_id, message, failed=False):
     release_connections(job.payload.get("connection_ids", []), job=job)
     job.status = "ERROR" if failed else "QUEUED"
     job.error = message
+    job.finished_at = step.finished_at if failed else None
     job.payload.update(connection_ids=[], waiting_reason=message)
-    job.save(update_fields=["status", "error", "payload"])
+    job.save(update_fields=["status", "error", "finished_at", "payload"])
     close_step_history(job, attempt_id, "ERROR" if failed else "INTERRUPTED")
-    AnalysisRun.objects.filter(job=job).update(status=job.status, error=message)
+    AnalysisRun.objects.filter(job=job).update(
+        status=job.status, error=message, finished_at=job.finished_at
+    )
     Request.objects.filter(pk=job.target).update(status=job.status, error=message if failed else "")
 
 

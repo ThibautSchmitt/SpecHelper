@@ -4,6 +4,7 @@ import re
 import unicodedata
 
 BUILTIN_CAPABILITIES = {
+    "data-protection": set(),
     "attachment-analysis": {"read_attachments"},
     "codebase-navigation": {"read_sources"},
     "git-history-analysis": {"read_sources"},

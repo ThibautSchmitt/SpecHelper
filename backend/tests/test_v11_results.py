@@ -113,11 +113,8 @@ def test_profiles_and_skills_are_available_but_not_editable_by_agents(client):
     skills = client.get("/api/skills").json()
     assert {
         "codebase-navigation",
-        "git-history-analysis",
         "impact-analysis",
-        "minimal-change",
-        "postgres-readonly-analysis",
         "attachment-analysis",
-        "project-conventions",
-    } <= {s["slug"] for s in skills}
+        "data-protection",
+    } == {s["slug"] for s in skills}
     assert client.post("/api/agents", data="{}", content_type="application/json").status_code == 405

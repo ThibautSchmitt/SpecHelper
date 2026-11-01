@@ -34,6 +34,10 @@ def test_public_retry_reuses_the_failed_checkpoint_and_rejects_duplicate_clicks(
     frozen = copy.deepcopy(claimed.analysis_run.context_snapshot)
     if state == "ERROR":
         wait_or_retry(claimed, before.attempt_id, "Technical interruption", failed=True)
+        claimed.refresh_from_db()
+        before.refresh_from_db()
+        assert claimed.finished_at == before.finished_at
+        assert claimed.analysis_run.finished_at == before.finished_at
     else:
         cancel_request(request.pk)
         with patch("core.agent.runtime_call", return_value={"stopped": True}):
@@ -47,10 +51,28 @@ def test_public_retry_reuses_the_failed_checkpoint_and_rejects_duplicate_clicks(
     resumed = claim_job()
     after = resumed.executions.get()
     assert resumed.pk == claimed.pk and resumed.analysis_run.pk == claimed.analysis_run.pk
+    assert resumed.finished_at is None and resumed.analysis_run.finished_at is None
     assert resumed.analysis_run.context_snapshot == frozen
     assert after.checkpoint == before.checkpoint
     assert after.attempt_id != before.attempt_id
     assert after.session.context_id != before.session.context_id
+
+
+def test_waiting_for_ai_resources_keeps_the_cycle_open(environment):
+    from core.step_execution import wait_or_retry
+
+    request = Request.objects.create(
+        environment=environment, analysis_protocol="2.4", need="Explain the selected scope."
+    )
+    enqueue_analysis(request.pk)
+    job = claim_job()
+    step = job.executions.get()
+    wait_or_retry(job, step.attempt_id, "Waiting for an available AI resource.")
+    job.refresh_from_db()
+    step.refresh_from_db()
+    assert job.status == "QUEUED" and job.finished_at is None
+    assert job.analysis_run.finished_at is None
+    assert step.finished_at is not None
 
 
 def mark_pending():

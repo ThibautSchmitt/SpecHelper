@@ -58,7 +58,7 @@ def mutation_lock(environment_id):
             yield
     except BlockingIOError as exc:
         raise HttpError(
-            409, "Synchronization is still using this environment. Try again afterwards."
+            409, "An update is still using this environment. Try again afterwards."
         ) from exc
 
 
@@ -66,7 +66,7 @@ def writable(environment, expected_revision):
     if environment.revision != expected_revision:
         raise HttpError(409, "The environment has changed. Refresh the page before confirming.")
     if Job.objects.filter(kind="sync", target=str(environment.id), status="RUNNING").exists():
-        raise HttpError(409, "Wait for the current synchronization to finish.")
+        raise HttpError(409, "Wait for the current update to finish.")
 
 
 @transaction.atomic
@@ -75,7 +75,7 @@ def update(environment_id, payload):
         environment = get_object_or_404(Environment.objects.select_for_update(), pk=environment_id)
         writable(environment, payload.expected_revision)
         if Job.objects.filter(kind="sync", target=str(environment.id), status="QUEUED").exists():
-            raise HttpError(409, "Synchronization is already scheduled.")
+            raise HttpError(409, "An update is already scheduled.")
         validate(payload, environment_id)
         Request.objects.filter(environment=environment, environment_name_snapshot="").update(
             environment_name_snapshot=environment.name
@@ -116,7 +116,8 @@ def update(environment_id, payload):
                 repo.branch = selection.branch
                 repo.git_repository_id = getattr(selection, "git_repository_id", None)
                 repo.sha = ""
-                repo.save(update_fields=["branch", "sha", "git_repository"])
+                repo.git_status = {}
+                repo.save(update_fields=["branch", "sha", "git_repository", "git_status"])
                 changed.append(name)
         environment.name = payload.name
         environment.database_id = payload.database_id
@@ -163,5 +164,22 @@ def delete(environment_id, confirmation):
         Request.objects.filter(environment=environment, environment_name_snapshot="").update(
             environment_name_snapshot=environment.name
         )
-        Job.objects.filter(kind="sync", target=str(environment.id)).delete()
+        Job.objects.filter(kind__in=["sync", "branch_check"], target=str(environment.id)).delete()
         environment.delete()
+
+
+@transaction.atomic
+def queue_sync(environment_id, repository_id=None, expected_revision=None):
+    environment = get_object_or_404(Environment.objects.select_for_update(), pk=environment_id)
+    if expected_revision is not None and environment.revision != expected_revision:
+        raise HttpError(409, "The environment has changed. Refresh the page before confirming.")
+    if Job.objects.filter(kind="sync", target=str(environment_id), status__in=["QUEUED", "RUNNING"]).exists():
+        raise HttpError(409, "An update is already running")
+    payload = {}
+    if repository_id is not None:
+        repo = get_object_or_404(EnvironmentRepository, pk=repository_id, environment=environment)
+        payload["changed_repositories"] = [repo.repository]
+    Job.objects.create(kind="sync", target=str(environment_id), payload=payload)
+    environment.status, environment.error = "PENDING", ""
+    environment.save(update_fields=["status", "error"])
+    return {"status": "QUEUED"}

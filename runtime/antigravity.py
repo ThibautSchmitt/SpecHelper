@@ -299,7 +299,28 @@ def _conversation(value):
         return None
 
 
-def parse_run(stdout, stderr=b"", returncode=0, *, timed_out=False, expected_model=""):
+class TurnCompletion:
+    """Recognize completion after this invocation's input, never cached CLI output."""
+
+    def __init__(self):
+        self.input_index = None
+        self.finished = False
+
+    def observe(self, step):
+        index = step.get("step_index")
+        if type(index) is not int or index < 0 or step.get("state") != "DONE":
+            return
+        if step.get("step_type") == "user_input":
+            self.input_index, self.finished = index, False
+        elif (
+            step.get("step_type") == "finish"
+            and self.input_index is not None
+            and index > self.input_index
+        ):
+            self.finished = True
+
+
+def parse_run(stdout, stderr=b"", returncode=0, *, timed_out=False, expected_model="", require_fresh_output=False):
     """Require one valid terminal result, preserving safe tool-limit observations.
 
     Exit zero alone is insufficient. Soft permission refusals retain usable output
@@ -319,6 +340,7 @@ def parse_run(stdout, stderr=b"", returncode=0, *, timed_out=False, expected_mod
     conversation, selected_model = None, ""
     permissions = {}
     malformed, init_count = False, 0
+    completion = TurnCompletion()
     lines = stdout.splitlines()
     if len(lines) > MAX_EVENTS:
         return {"failure": {"kind": "ERROR"}}
@@ -372,6 +394,7 @@ def parse_run(stdout, stderr=b"", returncode=0, *, timed_out=False, expected_mod
                 ]
             events.append({"event": "init"})
         elif kind == "step_update":
+            completion.observe(detail)
             item = {"event": "step_update"}
             for key in ("state", "step_type", "tool_name"):
                 value = detail.get(key)
@@ -418,6 +441,8 @@ def parse_run(stdout, stderr=b"", returncode=0, *, timed_out=False, expected_mod
         if denied and failure["kind"] == "ERROR":
             failure = {"kind": "PERMISSION_DENIED"}
         return {**result, "failure": failure}
+    if require_fresh_output and not completion.finished:
+        return {**result, "failure": {"kind": "STALE_RESPONSE"}}
     result.update(
         output=terminal["structured_output"], session_id=conversation,
         model=selected_model or expected_model or "runtime-default",

@@ -51,6 +51,8 @@ export type Environment = {
   status: string;
   error: string;
   synced_at?: string | null;
+  git_sync_status?: "SYNCED" | "PARTIAL" | "OUTDATED" | "UNKNOWN";
+  git_check_running?: boolean;
   database_id: number | null;
   database_name: string | null;
   repositories: {
@@ -65,6 +67,13 @@ export type Environment = {
     parent?: { path: string; url: string } | null;
     branch: string;
     sha: string;
+    git_status?: {
+      status: string;
+      checked_at?: string;
+      behind?: number;
+      ahead?: number;
+      remote_sha?: string;
+    };
   }[];
 };
 export type ScopeAssessment = {
@@ -80,6 +89,10 @@ export type ScopeAssessment = {
 export function scopeNeedsContext(assessment?: ScopeAssessment | null) {
   return assessment?.status === "OUT_OF_SCOPE" || assessment?.status === "NEEDS_CLARIFICATION";
 }
+export type ConversationAssistant = {
+  connection_id: number | null; name: string; agent: string; model: string;
+  reasoning_effort: string; availability: string;
+};
 export type RequestItem = {
   id: string;
   need: string;
@@ -146,6 +159,8 @@ export type RequestDetail = RequestItem & {
   discussion?: {
     enabled: boolean; mode: "discussion" | "analysis"; revision: number;
     has_new_messages: boolean; connection_id?: number;
+    assistant?: ConversationAssistant | null;
+    assistant_history?: (Omit<ConversationAssistant, "availability"> & {current:boolean;used:boolean})[];
     job?: {id:number; status:string; created_at:string; error:string; waiting_reason:string} | null;
   } | null;
   analysis_protocol?: string;
@@ -279,7 +294,7 @@ export const statuses: Record<string, string> = {
   PARTIAL: "Partial result",
   ERROR: "Interrupted",
   PENDING: "Queued",
-  SYNCING: "Synchronizing",
+  SYNCING: "Updating",
   CONNECTED: "Connected",
   AVAILABLE: "Available",
   BUSY: "Busy",

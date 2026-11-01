@@ -206,7 +206,13 @@ def test_persistent_conversation_resumes_in_its_own_readonly_context(runtime, mo
             if provider == "claude":
                 return json.dumps({"structured_output": output, "session_id": native_id}).encode(), None
             if provider == "antigravity":
-                events = [{"event": "init", "conversation_id": native_id, "init": {"permission_mode": "request-review", "model": "fixture-model", "tools": []}}, {"event": "result", "result": {"conversation_id": native_id, "status": "SUCCESS", "structured_output": output}}]
+                index = len(commands) * 2
+                events = [
+                    {"event": "init", "conversation_id": native_id, "init": {"permission_mode": "request-review", "model": "fixture-model", "tools": []}},
+                    {"event": "step_update", "step_update": {"conversation_id": native_id, "step_index": index, "step_type": "user_input", "state": "DONE"}},
+                    {"event": "step_update", "step_update": {"conversation_id": native_id, "step_index": index + 1, "step_type": "finish", "state": "DONE"}},
+                    {"event": "result", "result": {"conversation_id": native_id, "status": "SUCCESS", "structured_output": output}},
+                ]
                 return ("\n".join(json.dumps(e) for e in events) + "\n").encode(), None
             (self.session / "result.json").write_text(json.dumps(output))
             return json.dumps({"type": "thread.started", "thread_id": native_id}).encode(), None

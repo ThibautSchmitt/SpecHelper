@@ -88,7 +88,7 @@ def mirror_path(repository):
     return settings.DATA_DIR / "git-cache" / owner / (name + ".git")
 
 
-def fetch(repository):
+def fetch(repository, timeout=600):
     source = source_for(repository)
     mirror = mirror_path(repository)
     mirror.parent.mkdir(parents=True, exist_ok=True)
@@ -120,7 +120,7 @@ def fetch(repository):
     )
     try:
         if not mirror.exists():
-            run("clone", "--mirror", "--", url, mirror, env=env, timeout=600)
+            run("clone", "--mirror", "--", url, mirror, env=env, timeout=timeout)
         else:
             # Use the validated URL, independently of mutable origin configuration.
             run(
@@ -131,7 +131,7 @@ def fetch(repository):
                 url,
                 "+refs/heads/*:refs/heads/*",
                 env=env,
-                timeout=600,
+                timeout=timeout,
             )
     except (ValueError, subprocess.TimeoutExpired):
         connection = (
@@ -144,7 +144,7 @@ def fetch(repository):
 
             fail_connection(
                 connection,
-                "Git synchronization failed: check authentication and read permissions.",
+                "Git update failed: check authentication and read permissions.",
             )
         raise
     return mirror
@@ -208,6 +208,7 @@ def sync_environment(environment_id, changed_repositories=None):
         environment = Environment.objects.get(pk=environment_id)
         Environment.objects.filter(pk=environment_id).update(status="SYNCING", error="")
         resolved = []
+        refreshed = set()
         try:
             for repo in environment.repositories.all().order_by("id"):
                 with lock(repo.repository):
@@ -223,6 +224,7 @@ def sync_environment(environment_id, changed_repositories=None):
                     )
                     sha = repo.sha
                     if changed:
+                        refreshed.add(repo.pk)
                         if repo.sha:
                             run(
                                 "--git-dir",
@@ -272,7 +274,11 @@ def sync_environment(environment_id, changed_repositories=None):
             with transaction.atomic():
                 for repo, sha, workspace in resolved:
                     repo.sha, repo.workspace = sha, workspace
-                    repo.save(update_fields=["sha", "workspace"])
+                    if repo.pk in refreshed:
+                        from .branch_checks import observation
+
+                        repo.git_status = observation(repo, "CURRENT", remote_sha=sha, ahead=0, behind=0)
+                    repo.save(update_fields=["sha", "workspace", "git_status"])
                 Environment.objects.filter(pk=environment_id).update(
                     status="READY", error="", synced_at=timezone.now(), retired_worktrees=[]
                 )
@@ -280,9 +286,9 @@ def sync_environment(environment_id, changed_repositories=None):
             Environment.objects.filter(pk=environment_id).update(
                 status="ERROR",
                 error=(
-                    "Project download exceeded ten minutes. Retry synchronization."
+                    "Project download exceeded ten minutes. Retry the update."
                     if isinstance(exc, subprocess.TimeoutExpired)
-                    else "Synchronization failed: check connections and branches."
+                    else "Update failed: check connections and branches."
                 ),
             )
             raise

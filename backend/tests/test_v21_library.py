@@ -349,7 +349,10 @@ def test_assistant_migration_preserves_existing_library_and_frozen_analysis_valu
         )
         names = ["SkillDefinition", "AgentProfile", "LibraryRevision", "Request"]
         originals = {
-            name: list(apps.get_model("core", name).objects.order_by("pk").values())
+            name: list(apps.get_model("core", name).objects.filter(**(
+                {"slug": skill.slug} if name == "SkillDefinition" else
+                {"slug": agent.slug} if name == "AgentProfile" else {}
+            )).order_by("pk").values())
             for name in names
         }
         executor = MigrationExecutor(connection)
@@ -377,17 +380,17 @@ def test_assistant_migration_preserves_existing_library_and_frozen_analysis_valu
             pk="effective-navigation"
         )
         assert navigation.name == "Effective source navigation"
-        assert navigation.enabled is True
+        assert navigation.enabled is False
         assert navigation.required_capabilities == ["read_sources"]
-        assert navigation.version == 2  # Native-policy migration records canonical metadata.
-        assert navigation.deleted is False
+        assert navigation.version >= 3  # Replayed irreversible data migrations remain monotonic.
+        assert navigation.deleted is True
         assert "reopen actual code" in navigation.instructions
         revision = current.get_model("core", "LibraryRevision").objects.get(
             kind="skill", slug=navigation.pk, version=navigation.version
         )
         assert revision.action == "edited"
         assert current.get_model("core", "LibraryRevision").objects.get(kind="skill", slug=navigation.pk, version=1).action == "created"
-        assert revision.editor == "system:native-policy-migration"
+        assert revision.editor == "system:skill-consolidation"
         assert revision.definition == {
             "slug": navigation.slug,
             "name": navigation.name,

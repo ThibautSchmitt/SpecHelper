@@ -58,9 +58,10 @@ def test_integrated_skills_are_read_only_but_custom_skills_remain_editable(clien
 
 def test_native_skill_applicability_tracks_real_tools_without_database_false_dependencies():
     registry = {item["slug"]: item for item in catalog(SimpleNamespace(agent="codex"))["registry"]}
-    assert registry["minimal-change"]["applicable"]
+    assert registry["impact-analysis"]["applicable"]
     assert registry["codebase-navigation"]["applicable"]
-    assert not registry["postgres-readonly-analysis"]["applicable"]
+    assert registry["data-protection"]["applicable"]
+    assert "postgres-readonly-analysis" not in registry
 
 
 def test_migration_preserves_custom_guidance_and_modified_skill_revisions():

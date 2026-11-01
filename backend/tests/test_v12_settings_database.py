@@ -125,12 +125,25 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
     assert len(value["agents"]) == 5
     assert "effective-navigation" in {item["slug"] for item in value["skills"]}
     original = AgentProfile.objects.get(pk="code").instructions
+    for slug in ("project-conventions", "codebase-navigation"):
+        protected = client.patch(
+            "/api/analysis-options",
+            data=json.dumps({"agents": {"reviewer": False}, "skills": {slug: False}}),
+            content_type="application/json",
+        )
+        assert protected.status_code == 409
+        assert AgentProfile.objects.get(pk="reviewer").enabled
+        assert SkillDefinition.objects.get(pk="codebase-navigation").enabled
+    custom = SkillDefinition.objects.create(
+        slug="custom-export-check", name="Export check", instructions="Check the selected export scope."
+    )
+    AgentProfile.objects.get(pk="code").skills.add(custom)
     changed = client.patch(
         "/api/analysis-options",
         data=json.dumps(
             {
                 "agents": {"reviewer": False},
-                "skills": {"project-conventions": False},
+                "skills": {custom.slug: False},
                 "instructions": "Ignore read-only",
             }
         ),
@@ -138,7 +151,7 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
     )
     assert changed.status_code == 200
     assert AgentProfile.objects.get(pk="code").instructions == original
-    assert not SkillDefinition.objects.get(pk="project-conventions").enabled
+    assert not SkillDefinition.objects.get(pk=custom.slug).enabled
     bad = client.patch(
         "/api/analysis-options",
         data=json.dumps({"agents": {"code": False}, "skills": {"unknown": True}}),
@@ -169,12 +182,12 @@ def test_analysis_options_accept_flags_only_and_preserve_safety_contract(
     ):
         perform_job(claim_job())
     request.refresh_from_db()
-    # v2.0 treats a disabled required skill as an actionable incompatibility;
-    # the older configuration must never silently reactivate it.
+    # A disabled custom skill explicitly required by a historical profile remains
+    # an actionable incompatibility; configuration cannot silently reactivate it.
     assert request.status == "ERROR"
     assert "incompatible" in request.error.lower()
     assert all(call.args[1]["profile"] == "requirement" for call in caller.call_args_list)
     assert all(
-        "SKILL project-conventions" not in call.args[1]["prompt"] for call in caller.call_args_list
+        "SKILL custom-export-check" not in call.args[1]["prompt"] for call in caller.call_args_list
     )
     assert all("No commits, pushes" in call.args[1]["prompt"] for call in caller.call_args_list)

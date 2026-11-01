@@ -26,7 +26,7 @@ test("administration, theme and business navigation", async ({ page }) => {
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
   await page.getByLabel("Instance name").fill("SpecHelper — Validation");
   await page.getByLabel("Primary color", { exact: true }).fill("#7c3aed");
-  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("status")).toContainText("saved");
   await expect(
     page.getByRole("link", { name: "SpecHelper — Validation" }),

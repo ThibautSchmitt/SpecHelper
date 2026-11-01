@@ -1,10 +1,9 @@
-"""Browser-scoped conversation ownership without introducing application accounts."""
+"""Pseudonymous browser attribution inside a shared, access-controlled instance."""
 
 import hashlib
 import uuid
 
 from django.core import signing
-from django.db.models import Q
 
 COOKIE = "spechelper_conversation_owner"
 SALT = "spechelper.conversation-owner.v1"
@@ -28,8 +27,9 @@ def actor(request):
 
 
 def visible(request, queryset):
-    return queryset.filter(
-        ~Q(discussion_state__has_key="private")
-        | Q(discussion_state__private=False)
-        | Q(discussion_state__owner=actor(request))
-    )
+    """Instance access is checked by middleware; browser cookies do not hide records.
+
+    Retain legacy ownership metadata for history without treating it as an access
+    boundary. The instance is shared by its authorized visitors, not multi-tenant.
+    """
+    return queryset

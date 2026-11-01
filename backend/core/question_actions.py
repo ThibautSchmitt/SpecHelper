@@ -235,8 +235,7 @@ def create_request(
         workflow="request",
         analysis_protocol="2.4",
         source_question_version=version,
-        discussion_state={"private": True, "owner": parent.discussion_state["owner"]}
-        if parent.discussion_state.get("private") else {},
+        discussion_state={},
         environment=environment,
         environment_name_snapshot=environment.name if environment else "",
         need=need.strip(),

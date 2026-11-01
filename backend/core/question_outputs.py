@@ -81,6 +81,13 @@ class QuestionReference(StrictModel):
 class QuestionAnswer(StrictModel):
     title: str = Field(min_length=1, max_length=200)
     summary: Text
+    response: str = Field(default="", max_length=16000, description=(
+        "The complete Markdown answer displayed directly in the conversation. Adapt to the "
+        "actual request: functional by default; include explicitly requested verified files, "
+        "functions, code, Git history and authorized query results directly here, including "
+        "all requested aspects of mixed questions and essential limitations. Keep additional "
+        "unrequested technical evidence in the report fields. Never invent or hide access failures."
+    ))
     business_explanation: str = Field(default="", max_length=12000)
     technical_explanation: str = Field(default="", max_length=16000)
     verified_facts: Items = Field(default_factory=list)
@@ -193,7 +200,7 @@ def _render(answer, baseline, kind, language):
     if kind not in sections:
         raise ValueError("Unsupported documentation format")
     values = answer.model_dump()
-    lines = ["# " + answer.title, "", answer.summary, ""]
+    lines = ["# " + answer.title, "", answer.response or answer.summary, ""]
     if answer.business_summary:
         lines += [summary_markdown(answer.business_summary.model_dump(), language)]
     for key, label in sections[kind] + COMMON_SECTIONS:

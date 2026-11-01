@@ -17,7 +17,7 @@ router = Router(tags=["Environment context"])
 class InstructionsIn(Schema):
     model_config = ConfigDict(extra="forbid")
     instructions: str = Field(max_length=4000)
-    instructions_enabled: bool
+    instructions_enabled: bool | None = None
     expected_revision: int = Field(ge=1)
     official_references: list[dict] | None = Field(default=None, max_length=12)
 

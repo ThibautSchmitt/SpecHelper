@@ -436,7 +436,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
             {t(kind === "agent" ? "Add agent" : "Add skill")}
           </Button>
         </div>
-        <p className="mt-2 text-sm muted">{t(kind === "skill" ? "All active compatible skills are discoverable automatically. Each assistant loads only the skills useful for its current mission." : "One shared library, reusable across environments and supported assistants.")}</p>
+        <p className="mt-2 text-sm muted">{t(kind === "skill" ? "These skills are used automatically when relevant and authorized. Each assistant reads only the instructions it needs." : "One shared library, reusable across environments and supported assistants.")}</p>
       </header>
       <div className="flex flex-wrap gap-2">
           <Button
@@ -638,21 +638,21 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
             <div className="min-w-0 flex-1">
               <div className="title-tags"><h3 className="break-words">
                 {item.built_in ? t(item.name) : item.name}{" "}
-                <span className="text-xs muted">v{item.version}</span>
+                {!item.built_in && <span className="text-xs muted">v{item.version}</span>}
               </h3>
                 {kind === "skill" && <span className="badge">{t(item.built_in ? "Built-in" : "Custom")}</span>}
               </div>
               <p className="mt-1 text-sm muted break-words">
                 {item.built_in ? t(item.objective || item.name) : item.objective || item.name}
               </p>
-              <p className="mt-2 text-xs muted">
+              {!item.built_in && <p className="mt-2 text-xs muted">
                 {t(item.enabled ? "Active" : "Inactive")} ·{" "}
                 {kind === "agent" && item.compatibility.length
                   ? item.compatibility
                       .map(assistantName)
                       .join(", ")
                   : t("All supported assistants")}
-              </p>
+              </p>}
             </div>
             <div className="connection-actions">
               {!item.built_in && <Button
@@ -675,7 +675,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
               >
                 <Pencil size={16} aria-hidden="true" />{t("Edit")}
               </Button>}
-              <details className="action-menu" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+              {!item.built_in && <details className="action-menu" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
                 <summary aria-label={t("More actions for {name}", { name: item.name })}>⋯</summary>
                 <div className="action-menu-items" onClick={event => { if (event.target instanceof Element && event.target.closest("button")) { const menu = event.currentTarget.closest("details"); if (menu) { menu.open = false; menu.querySelector("summary")?.focus(); } } }}>
               <Button
@@ -773,10 +773,10 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
               </Button>}
 
                 </div>
-              </details>
+              </details>}
             </div>
           </div>
-          {item.built_in && <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium">{t("View instructions")}</summary><p className="mt-3 text-xs muted">{t("Maintained by SpecHelper and available automatically when the required tools are authorized.")}</p><pre className="mt-3 whitespace-pre-wrap break-words font-sans text-xs muted">{item.instructions}</pre></details>}
+          {item.built_in && <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium">{t("View instructions")}</summary><pre className="mt-3 whitespace-pre-wrap break-words font-sans text-xs muted">{item.instructions}</pre></details>}
           {editing === item.slug && definitionForm}
         </article>
         </Fragment>

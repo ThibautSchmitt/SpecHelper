@@ -110,14 +110,9 @@ class AccessMiddleware(MiddlewareMixin):
                 return response
         match = re.match(r"^/api/(?:analyses|requests|questions)/([0-9a-fA-F-]{36})(?:/|$)", request.path)
         if match:
-            from .models import Request
-
             try:
-                identifier = uuid.UUID(match[1])
+                uuid.UUID(match[1])
             except ValueError:
-                return public_response({"detail": "Not found"}, 404)
-            state = Request.all_objects.filter(pk=identifier).values_list("discussion_state", flat=True).first()
-            if state and state.get("private") and state.get("owner") != request.discussion_actor:
                 return public_response({"detail": "Not found"}, 404)
         return None
 

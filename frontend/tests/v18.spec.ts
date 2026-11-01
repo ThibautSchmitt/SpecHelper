@@ -287,7 +287,7 @@ test("settings alone controls independent counter-analysis and color preferences
   await page
     .getByRole("button", { name: "Choose primary color #0f766e", exact: true })
     .click();
-  await page.getByRole("button", { name: "Save settings", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Instance settings saved.");
   await page
     .getByRole("navigation", { name: "Administration", exact: true })
@@ -298,7 +298,7 @@ test("settings alone controls independent counter-analysis and color preferences
     .getByLabel("Independent counter-analysis", { exact: true })
     .uncheck();
   await page
-    .getByRole("button", { name: "Save analysis settings", exact: true })
+    .getByRole("button", { name: "Save", exact: true })
     .click();
   await expect.poll(() => writes.at(-1)?.allow_confrontation).toBe(false);
   expect(writes.at(-1)).not.toHaveProperty("primary_color");

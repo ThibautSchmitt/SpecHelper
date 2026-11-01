@@ -10,10 +10,10 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 from pydantic import ConfigDict, Field, ValidationError, field_validator
 
+from .builtin_skills import SKILLS, built_in, canonical_skill
 from .catalogue import ensure_catalogue
 from .environment_context import reject_credentials
 from .models import AgentProfile, AIConnection, Environment, LibraryRevision, SkillDefinition
-from .presets_v23 import SKILLS
 from .skill_metadata import CAPABILITIES, normalize_skill
 
 router = Router(tags=["Agent and skill library"])
@@ -127,7 +127,9 @@ def validate_definition(payload, kind):
     known = set(
         SkillDefinition.objects.filter(enabled=True, deleted=False).values_list("slug", flat=True)
     )
-    if len(set(payload.skills)) != len(payload.skills) or not set(payload.skills) <= known:
+    mapped = list(dict.fromkeys(canonical_skill(slug) for slug in payload.skills))
+    payload.skills = mapped
+    if not set(payload.skills) <= known:
         raise HttpError(422, "Select active library skills only once.")
     for text in (
         payload.slug,
@@ -236,7 +238,7 @@ def check_definition(kind, raw):
 def save_definition(kind, payload, slug=None, editor="administrator", action_name=None):
     ensure_catalogue()
     model = model_for(kind)
-    if kind == "skill" and (slug or payload.slug) in SKILLS:
+    if kind == "skill" and built_in(slug or payload.slug):
         raise HttpError(409, "Built-in skills are maintained by SpecHelper. Create a custom skill instead.")
     validate_definition(payload, kind)
     if kind == "skill":
@@ -349,7 +351,7 @@ def export_definition(request, kind: str, slug: str):
 @router.post("/library/{kind}/{slug}/restore")
 @transaction.atomic
 def restore_definition(request, kind: str, slug: str, payload: RestoreIn):
-    if kind == "skill" and slug in SKILLS:
+    if kind == "skill" and built_in(slug):
         raise HttpError(409, "Built-in skills are maintained by SpecHelper. Create a custom skill instead.")
     item = get_object_or_404(model_for(kind).objects.select_for_update(), pk=slug, deleted=False)
     if item.version != payload.expected_version:
@@ -382,7 +384,7 @@ def versions(request, kind: str, slug: str):
 @router.delete("/library/{kind}/{slug}")
 @transaction.atomic
 def delete_definition(request, kind: str, slug: str, expected_version: int):
-    if kind == "skill" and slug in SKILLS:
+    if kind == "skill" and built_in(slug):
         raise HttpError(409, "Built-in skills are maintained by SpecHelper. Create a custom skill instead.")
     item = get_object_or_404(model_for(kind).objects.select_for_update(), pk=slug, deleted=False)
     if item.version != expected_version:
@@ -479,7 +481,7 @@ def snapshot(environment=None, protocol="legacy"):
             .order_by("slug")
         )
         if chosen.get(key) is not None:
-            rows = rows.filter(pk__in=chosen[key])
+            rows = rows.filter(pk__in=[canonical_skill(slug) if kind == "skill" else slug for slug in chosen[key]])
         for item in rows:
             preserve(item, kind)
             result[key].append(definition(item, kind))
@@ -519,9 +521,13 @@ def effective(library, connection, internal_roles, config, has_database=False):
     provider = connection.agent if connection else "codex"
     selected = {item["slug"]: item for item in library["agents"]}
     skills = {item["slug"]: item for item in library["skills"]}
-    active = set(config["default_skills"]) & skills.keys()
+    def resolve(slug):
+        return slug if slug in skills else canonical_skill(slug)
+
+    active = {resolve(slug) for slug in config["default_skills"]} & skills.keys()
     if connection:
         for slug, enabled in connection.skill_overrides.items():
+            slug = resolve(slug)
             if enabled and slug in skills:
                 active.add(slug)
             elif enabled:
@@ -566,6 +572,7 @@ def effective(library, connection, internal_roles, config, has_database=False):
             continue
         append(agent, "AGENT")
         for skill in agent.get("skills", []):
+            skill = resolve(skill)
             if skill == "postgres-readonly-analysis" and not has_database:
                 continue
             if skill not in skills:

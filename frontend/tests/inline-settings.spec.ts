@@ -23,6 +23,26 @@ async function setup(page: Page, language: "en" | "fr") {
 
 for (const language of ["en", "fr"] as const) {
   const t = (key: string) => translate(key, language);
+  test(`role coverage stays covered when configured accounts have exhausted quotas in ${language}`, async ({ page }) => {
+    await setup(page, language);
+    await page.goto("/admin?tab=ai-agents&section=connections");
+    const summary = page.getByRole("complementary", { name: t("Analysis configuration"), exact: true });
+    const badges = summary.locator(".coverage-state");
+    await expect(badges).toHaveText([t("Covered"), t("Covered"), t("Covered")]);
+    await expect(summary.locator('[data-role-state="covered"]')).toHaveCount(3);
+    await expect(page.locator(".connection-quota-exhausted")).toBeVisible();
+    await page.route("**/api/orchestration-settings", route => route.fulfill({ json: {
+      reliability_protocol: "2.4", role_coverage: { complete: false, roles: {
+        analyst: { configured: [1], available: [] },
+        counter_analyst: { configured: [1], available: [] },
+        verifier: { configured: [], available: [] },
+      } },
+    } }));
+    await page.evaluate(() => window.dispatchEvent(new Event("connections-updated")));
+    await expect(badges).toHaveText([t("Covered"), t("Covered"), t("Not covered")]);
+    await expect(summary.locator('[data-role-state="missing"]')).toHaveCount(1);
+  });
+
   test(`settings headings keep add actions on the right and quota next to Edit in ${language}`, async ({ page }) => {
     test.setTimeout(90_000);
     await setup(page, language);

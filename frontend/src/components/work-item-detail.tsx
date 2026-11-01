@@ -2,6 +2,7 @@
 import { BusinessClarification, BusinessDecisions, BusinessOverview } from "@/components/business-clarification";
 import { QuestionResult } from "@/components/question-result";
 import { PublishTicket } from "@/components/publish-ticket";
+import { TicketPreparation } from "@/components/ticket-preparation";
 import { AnalysisContext } from "@/components/analysis-context";
 import { AnalysisEvidence } from "@/components/analysis-evidence";
 import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
@@ -12,6 +13,7 @@ import { ScopeAssessmentPanel } from "@/components/scope-assessment";
 import { NeedEditor } from "@/components/need-editor";
 import { AnalysisConversation, conversationAnswer } from "@/components/analysis-timeline";
 import { DiscussionComposer } from "@/components/discussion-composer";
+import { ConversationAssistantControl } from "@/components/conversation-assistant";
 import { AnalysisDiagrams } from "@/components/analysis-diagrams";
 import { useI18n } from "@/lib/i18n";
 import { modelFamilyDiversity, roleLabels, warningMessage } from "@/lib/orchestration";
@@ -367,6 +369,7 @@ function RequestContent({
             {!editingTitle && <Button id="edit-analysis-title" className="conversation-title-edit" aria-label={t("Edit title")} type="button" size="sm" variant="ghost" disabled={titleLocked} title={titleLocked ? t("Wait for the analysis to finish before renaming it.") : t("Edit title")} onClick={() => { setTitleDraft(value.title || value.need.split("\n")[0]); setEditingTitle(true); }}><Pencil size={14} aria-hidden="true" /></Button>}
             <span role="status" className="badge conversation-state" data-state={value.status}>{t(resultStates[value.result_state || ""] || statuses[value.status] || value.status)}</span>
           </div>
+          <ConversationAssistantControl value={value} onUpdated={setValue} />
           {editingTitle && <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={async event => {
             event.preventDefault(); setBusy(true); setError("");
             try { const renamed = await send<{ title: string }>(`/analyses/${value.id}/title`, { title: titleDraft }, "PATCH"); setValue({ ...value, title: renamed.title }); setEditingTitle(false); requestAnimationFrame(() => document.getElementById("edit-analysis-title")?.focus()); window.dispatchEvent(new Event("queue-updated")); }
@@ -392,11 +395,12 @@ function RequestContent({
         reply={conversationReply} onSelectVersion={selectConversationVersion}
         actions={<>
           <Button variant="outline" size="sm" onClick={openReport}>{t("Analysis report")}</Button>
-          {!isQuestion && result && !value.conclusions_stale && <PublishTicket requestId={id} version={result.number} />}
+          {!unified && !value.discussion?.enabled && !isQuestion && result && !value.conclusions_stale && <PublishTicket requestId={id} version={result.number} />}
           {isQuestion && result && !value.conclusions_stale && <Button asChild size="sm"><Link href={`/analyses?new=1&from_question=${id}&version=${result.number}`}>{t("Prepare a change")}</Link></Button>}
           <Button variant="ghost" size="sm" onClick={copyAnswer}><Copy size={14} aria-hidden="true" />{t(copied ? "Copied!" : "Copy answer")}</Button>
         </>}
         controls={<>
+          {(unified || value.discussion?.enabled) && <TicketPreparation value={value} onUpdated={updated => { setValue(updated); setSelectedNumber(null); setSelectedVersion(null); }}/ >}
           {!unified && !value.discussion?.enabled && value.analysis_protocol === "2.4" && active.includes(value.status) && <AnalysisCancelButton requestId={id} workflow={isQuestion ? "question" : "request"} onCancelled={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} />}
           {!unified && !value.discussion?.enabled && value.analysis_protocol === "2.4" && ["ERROR","CANCELLED"].includes(value.status) && <AnalysisRetryButton requestId={id} workflow={isQuestion ? "question" : "request"} onRetried={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} />}
         </>}

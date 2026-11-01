@@ -85,7 +85,15 @@ for (const language of ["en", "fr"] as const) {
     const card = page.locator(".environment-card");
     await expect(page.getByRole("region", { name: t("Environments"), exact: true }).getByRole("heading", { name: t("Environments"), exact: true })).toBeVisible();
     const actions = card.locator("[data-environment-actions]");
-    await expect(actions.getByRole("button")).toHaveText([t("Synchronize"), t("Edit"), t("Delete")]);
+    await expect(actions.getByRole("button")).toHaveText([t("Edit")]);
+    const menu = actions.locator("details.action-menu");
+    const more = actions.getByLabel(t("More actions for {name}").replace("{name}", "Staging"), { exact: true });
+    await more.click();
+    await expect(menu.getByRole("button")).toHaveText([t("Update"), t("Delete")]);
+    await menu.getByRole("button", { name: t("Update"), exact: true }).focus();
+    await page.keyboard.press("Escape");
+    await expect(menu).not.toHaveAttribute("open", "");
+    await expect(more).toBeFocused();
     expect((await actions.boundingBox())!.y).toBeLessThan((await card.getByRole("table").boundingBox())!.y);
     await card.getByRole("button", { name: t("Edit {name}").replace("{name}", "Staging"), exact: true }).click();
     await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -109,7 +117,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(summary.getByRole("listitem")).toHaveCount(3);
   });
 
-  test(`publication explicitly selects an account and destination in ${language}`, async ({ page }) => {
+  for (const prepared of [false, true]) test(`publication explicitly selects an account and destination ${prepared ? 'with a prepared draft' : 'from a legacy result'} in ${language}`, async ({ page }) => {
     await setup(page, language);
     const endpoint = `/api/requests/${id}/versions/1`;
     const version = { id: "version-1", number: 1, status: "READY", created_at: stamp, ticket: { title: "Verified change" }, markdown: "# Verified change", evidence: { blocking: false, claims: [], limitations: [], database: { status: "not_configured", limitations: [], checks: [] } } };
@@ -117,6 +125,13 @@ for (const language of ["en", "fr"] as const) {
       environment_id: 1, environment_name: "Staging", created_at: stamp, baseline: [], database: {}, questions: [], conversation: [], progress: [], attachments: [], error: "", messages: [],
       versions: [{ number: 1, status: "READY", created_at: stamp }], latest_version: version };
     await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: detail }));
+    await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: detail }));
+    await page.route(`**/api/analyses/${id}/ticket-preparation`, route => route.fulfill({ json: {
+      revision:1,discussion_revision:0,source_version:1,source_verified:true,analysis_state:'complete',
+      verified_scope:'Investigate date anomalies.',limitations:[],has_new_messages:true,scope_choice:'clarified',
+      title:'Prepared correction',body:'Reject invalid periods.',markdown:'> Later proposals remain unverified.\n\nReject invalid periods.',
+      publication_available:true,publication_allowed:true,
+    } }));
     let submitted: any;
     const selectedAccounts: string[] = [];
     await page.route(`**${endpoint}/publications`, route => {
@@ -133,8 +148,11 @@ for (const language of ["en", "fr"] as const) {
       template_id: "", issue_type: "", fields: [], values: {}, labels: [], assignees: [], templates: [], issue_types: [], defaults: {},
       revision: "metadata-4", format: "markdown", publication_allowed: true, publication_blockers: [], available_attachments: [], selected_attachments: [],
     } }));
-    await page.goto(`/requests/${id}`);
-    await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
+    await page.goto(`/${prepared ? 'analyses' : 'requests'}/${id}`);
+    if(prepared){
+      await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
+      await page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true}).getByRole('button',{name:t('Publish ticket'),exact:true}).click();
+    }else await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
     const account = dialog.getByLabel(t("Publication connection"), { exact: true });
     await expect(account).toHaveValue("");
@@ -147,9 +165,15 @@ for (const language of ["en", "fr"] as const) {
     await expect(project).toHaveValue("");
     await project.selectOption("OTHER");
     await expect(dialog.getByLabel(t("Ticket description"), { exact: true })).toHaveValue("Short verified description");
+    if(prepared){
+      await dialog.getByRole('button',{name:t('Use prepared draft'),exact:true}).click();
+      await expect(dialog.getByLabel(t('Ticket title'),{exact:true})).toHaveValue('Prepared correction');
+      await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toContainText('Later proposals remain unverified.');
+    }
     expect(submitted).toBeUndefined();
     await dialog.getByRole("button", { name: t("Create ticket"), exact: true }).click();
     await expect.poll(() => submitted).toMatchObject({ connector_id: 4, project: "OTHER", confirmed: true });
+    if(prepared)expect(submitted.body).toContain('Later proposals remain unverified.');
     expect(selectedAccounts).toEqual(["4"]);
   });
 }

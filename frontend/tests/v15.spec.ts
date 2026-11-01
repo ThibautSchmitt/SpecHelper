@@ -94,7 +94,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
     .fill("Check file references");
   await page.getByLabel("Evidence review", { exact: true }).check();
   await page
-    .getByRole("button", { name: "Save analysis settings" })
+    .getByRole("button", { name: "Save" })
     .click();
   await expect
     .poll(() => settingsBody)
