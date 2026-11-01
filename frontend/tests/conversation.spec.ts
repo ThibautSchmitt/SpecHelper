@@ -38,6 +38,8 @@ for(const language of ["en","fr"] as const) {
   const q1=`sql-${'a'.repeat(32)}-${'b'.repeat(12)}`,q2=`sql-${'c'.repeat(32)}-${'d'.repeat(12)}`,literal=`sql-${'e'.repeat(32)}-${'f'.repeat(12)}`;
   const response=`Recorded counts. Source: \`${q1}\` and ${q2}.\n\n| Playlist | Channel | Tracks |\n| :--- | :--- | ---: |\n| \`PL${'x'.repeat(60)}\` | \`987654321012345678\` | 1 428 |\n| \`PL_fixture_two\` | \`987654321098765432\` | 292 |\n| **Total** | | **1 720** |\n\nLiteral code example:\n\n\`\`\`text\n${literal}\n\`\`\``;
   const checks=[q1,q2].map((query_id,index)=>({query_id,sql:`SELECT ${index+1} AS recorded_count;`,status:'checked',checked_at:at,row_count:1,truncated:false,rows_exposed:1}));
+  checks.push({query_id:`sql-${'1'.repeat(32)}-${'2'.repeat(12)}`,sql:'REJECTED_QUERY_SHOULD_NOT_APPEAR',status:'rejected',checked_at:at,row_count:0,truncated:false,rows_exposed:0});
+  checks.push({query_id:`sql-${'3'.repeat(32)}-${'4'.repeat(12)}`,sql:'UNAVAILABLE_QUERY_SHOULD_NOT_APPEAR',status:'unavailable',checked_at:at,row_count:0,truncated:false,rows_exposed:0});
   const current={...source,status:'DISCUSSING',questions:[],analysis_runs:[],discussion:{enabled:true,mode:'discussion',revision:1,has_new_messages:true},messages:[source.messages[0],{id:3,role:'assistant',kind:'discussion_reply',content:response,created_at:later,data:{observations:{database_checks:checks}}}]};
   await setup(page,language,()=>current,'Acme',theme);
   let sourceReads=0;
@@ -65,6 +67,10 @@ for(const language of ["en","fr"] as const) {
   const sources=answer.locator('.source-details');
   await expect(sources).toHaveAttribute('open','');
   await expect(sources.locator('.source-record')).toHaveCount(5);
+  await expect(sources).not.toContainText('REJECTED_QUERY_SHOULD_NOT_APPEAR');
+  await expect(sources).not.toContainText('UNAVAILABLE_QUERY_SHOULD_NOT_APPEAR');
+  await expect(sources).not.toContainText(t('Consulted on'));
+  await expect(sources).not.toContainText(t('Technical reference'));
   await expect(sources.locator('pre').filter({hasText:'SELECT 1 AS recorded_count;'})).toBeVisible();
   await sources.locator('.source-record > summary').filter({hasText:'rules.py'}).click();
   await expect(sources.locator('pre').filter({hasText:'CHECKED = True'})).toBeVisible();

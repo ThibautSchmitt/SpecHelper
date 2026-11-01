@@ -148,7 +148,9 @@ the source result and its original scope.
 
 In a response, **Sources and checks** expands the recorded evidence without
 rerunning an agent or a database query. Short **SQL check** references open the
-corresponding executed SQL and its date, row count and result-limit notice.
+corresponding executed SQL, row count and result-limit notice.
+Rejected or unavailable SQL attempts stay in diagnostics rather than the source
+disclosure. Consultation dates and internal technical receipt IDs are not shown there.
 Code references use the frozen Git blob and cited lines, never the latest branch
 or an active agent's worktree. Web references show retained page text or an exact
 recorded quotation. Documents show the retained version, a text preview when

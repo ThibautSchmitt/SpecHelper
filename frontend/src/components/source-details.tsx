@@ -13,7 +13,7 @@ type Source = Partial<SQLReceipt> & {
 const labels={sql:"Database check",git:"Source code",web:"Web reference",document:"Document"};
 
 export function SourceDetails({url,checks,referenceIds,selected,onSelect}:{url?:string;checks:SQLReceipt[];referenceIds:string[];selected:string[];onSelect:Dispatch<SetStateAction<string[]>>}){
-  const {t,dateLocale}=useI18n();
+  const {t}=useI18n();
   const [open,setOpen]=useState(false);
   const [attempt,setAttempt]=useState(0);
   const [sources,setSources]=useState<Source[]>([]);
@@ -28,9 +28,10 @@ export function SourceDetails({url,checks,referenceIds,selected,onSelect}:{url?:
     api<{sources:Source[]}>(url).then(result=>{if(alive){setSources(Array.isArray(result.sources)?result.sources:[]);setLoaded(true);setLoading(false);}}).catch(failure=>{if(alive){setError((failure as Error).message);setLoading(false);}});
     return()=>{alive=false;};
   },[open,loaded,url,attempt]);
-  const records=[...sources];
-  for(const check of checks)if(!records.some(source=>source.id===check.query_id))records.push({...check,id:check.query_id,kind:"sql"});
-  for(const id of referenceIds)if(!records.some(source=>source.id===id))records.push({id,kind:"sql",note:"The database-check record is unavailable."});
+  const unsuccessful=new Set([...sources.filter(source=>source.kind==='sql'&&(source.status==='rejected'||source.status==='unavailable')).map(source=>source.id),...checks.filter(check=>check.status==='rejected'||check.status==='unavailable').map(check=>check.query_id)]);
+  const records=sources.filter(source=>!unsuccessful.has(source.id));
+  for(const check of checks)if(!unsuccessful.has(check.query_id)&&!records.some(source=>source.id===check.query_id))records.push({...check,id:check.query_id,kind:"sql"});
+  for(const id of referenceIds)if(!unsuccessful.has(id)&&!records.some(source=>source.id===id))records.push({id,kind:"sql",note:"The database-check record is unavailable."});
   function safeLink(value?:string){return value&&(/^https:\/\//i.test(value)||value.startsWith("/api/")&&!value.startsWith("//"))?value:undefined;}
   return <details className="source-details" open={open} onToggle={event=>{if(event.target!==event.currentTarget)return;setOpen(event.currentTarget.open);if(!event.currentTarget.open)onSelect([]);}}>
     <summary><ChevronDown size={15} aria-hidden="true"/>{t("Sources and checks")}</summary>
@@ -48,12 +49,10 @@ export function SourceDetails({url,checks,referenceIds,selected,onSelect}:{url?:
           {source.repository&&<p className="text-xs break-all">{source.repository} · {source.commit}</p>}
           {source.line_start&&<p className="text-xs muted">{t("Lines {start}–{end}",{start:source.line_start,end:source.line_end||source.line_start})}</p>}
           {source.version&&<p className="text-xs muted">{t("Version")} {source.version}</p>}
-          {source.checked_at&&!Number.isNaN(Date.parse(source.checked_at))&&<p className="text-xs muted">{t(source.status==='rejected'?'Rejected':source.status==='unavailable'?'Unavailable':'Consulted on')} · {new Date(source.checked_at).toLocaleString(dateLocale)}</p>}
           {safeLink(source.url)&&<a className="text-xs underline break-all" href={safeLink(source.url)} rel="noopener noreferrer" referrerPolicy="no-referrer">{source.kind==='document'?t("Download source document"):source.url}</a>}
           {(source.sql||source.excerpt)&&<pre><code>{source.sql||source.excerpt}</code></pre>}
           {typeof source.row_count==='number'&&<p className="text-xs muted">{t("Returned rows: {count}",{count:source.row_count})}{source.truncated?` · ${t("Result limited")}`:""}</p>}
           {source.note&&<p className="text-xs muted">{t(source.note)}</p>}
-          {source.kind==='sql'&&<details className="text-xs muted"><summary className="cursor-pointer">{t("Technical reference")}</summary><code className="break-all">{source.id}</code></details>}
         </div>
       </details>)}
     </div>}
