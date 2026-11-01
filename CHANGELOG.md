@@ -7,6 +7,15 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Readable tables and expandable sources
+
+- Use shared Markdown table spacing, borders and local horizontal scrolling.
+- Replace opaque inline SQL receipt references with short expandable labels.
+  Show saved SQL, frozen code, retained web text and versioned document previews
+  under a small source disclosure; keep unavailable or approximate excerpts explicit.
+- Resolve code against immutable Git objects without moving an active workspace,
+  and never rerun a business query or agent when inspecting evidence.
+
 ### Ticket preparation without automatic verification
 
 - Select a conversation subject, reuse its actual discussion/code findings even

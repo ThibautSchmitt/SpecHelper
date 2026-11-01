@@ -144,6 +144,19 @@ do not rewrite or retroactively verify that earlier result. Launch another deep 
 when the changed need or new evidence requires verification. A linked evolution keeps
 the source result and its original scope.
 
+## Inspect sources
+
+In a response, **Sources and checks** expands the recorded evidence without
+rerunning an agent or a database query. Short **SQL check** references open the
+corresponding executed SQL and its date, row count and result-limit notice.
+Code references use the frozen Git blob and cited lines, never the latest branch
+or an active agent's worktree. Web references show retained page text or an exact
+recorded quotation. Documents show the retained version, a text preview when
+available and a source download. A preview is distinguished from an exact cited
+passage; missing excerpts remain explicitly unavailable. Source content is treated
+as text, never executed. Tables have shared cell spacing, borders and their own
+horizontal scrolling when needed on a small screen.
+
 ## Prepare and publish a ticket
 
 **Prepare a ticket** opens an editable draft in the conversation. It never starts

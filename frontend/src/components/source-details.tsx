@@ -1,0 +1,61 @@
+"use client";
+
+import {useEffect,useState,type Dispatch,type SetStateAction} from "react";
+import {ChevronDown,LoaderCircle} from "lucide-react";
+import {api} from "@/lib/api";
+import {useI18n} from "@/lib/i18n";
+import type {SQLReceipt} from "@/lib/analysis-evidence";
+
+type Source = Partial<SQLReceipt> & {
+  id:string;kind:"sql"|"git"|"web"|"document";number?:number;title?:string;url?:string;
+  excerpt?:string;note?:string;repository?:string;commit?:string;line_start?:number;line_end?:number;version?:number;
+};
+const labels={sql:"Database check",git:"Source code",web:"Web reference",document:"Document"};
+
+export function SourceDetails({url,checks,referenceIds,selected,onSelect}:{url?:string;checks:SQLReceipt[];referenceIds:string[];selected:string[];onSelect:Dispatch<SetStateAction<string[]>>}){
+  const {t,dateLocale}=useI18n();
+  const [open,setOpen]=useState(false);
+  const [attempt,setAttempt]=useState(0);
+  const [sources,setSources]=useState<Source[]>([]);
+  const [loaded,setLoaded]=useState(false);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  useEffect(()=>{if(selected.length)setOpen(true);},[selected]);
+  useEffect(()=>{setLoaded(false);setSources([]);setError("");},[url]);
+  useEffect(()=>{
+    if(!open||loaded||!url)return;
+    let alive=true;setLoading(true);setError("");
+    api<{sources:Source[]}>(url).then(result=>{if(alive){setSources(Array.isArray(result.sources)?result.sources:[]);setLoaded(true);setLoading(false);}}).catch(failure=>{if(alive){setError((failure as Error).message);setLoading(false);}});
+    return()=>{alive=false;};
+  },[open,loaded,url,attempt]);
+  const records=[...sources];
+  for(const check of checks)if(!records.some(source=>source.id===check.query_id))records.push({...check,id:check.query_id,kind:"sql"});
+  for(const id of referenceIds)if(!records.some(source=>source.id===id))records.push({id,kind:"sql",note:"The database-check record is unavailable."});
+  function safeLink(value?:string){return value&&(/^https:\/\//i.test(value)||value.startsWith("/api/")&&!value.startsWith("//"))?value:undefined;}
+  return <details className="source-details" open={open} onToggle={event=>{if(event.target!==event.currentTarget)return;setOpen(event.currentTarget.open);if(!event.currentTarget.open)onSelect([]);}}>
+    <summary><ChevronDown size={15} aria-hidden="true"/>{t("Sources and checks")}</summary>
+    {open&&<div className="source-details-content">
+      {loading&&<p role="status" className="flex items-center gap-2 text-xs muted"><LoaderCircle size={14} className="animate-spin" aria-hidden="true"/>{t("Loading…")}</p>}
+      {error&&<p role="alert" className="text-xs">{t(error)} <button type="button" className="underline" onClick={()=>setAttempt(current=>current+1)}>{t("Retry")}</button></p>}
+      {!loading&&!error&&!records.length&&<p className="text-xs muted">{t("No source details were recorded for this answer.")}</p>}
+      {records.map((source,index)=><details className="source-record" key={source.id} open={selected.includes(source.id)} onToggle={event=>{
+        if(event.target!==event.currentTarget)return;
+        if(event.currentTarget.open)onSelect(current=>current.includes(source.id)?current:[...current,source.id]);
+        else onSelect(current=>current.includes(source.id)?current.filter(id=>id!==source.id):current);
+      }}>
+        <summary><ChevronDown size={14} aria-hidden="true"/><span>{source.kind==='sql'?t("SQL check {number}",{number:referenceIds.includes(source.id)?referenceIds.indexOf(source.id)+1:source.number||index+1}):t(labels[source.kind])}{source.title?` · ${source.title}`:""}</span></summary>
+        <div className="source-record-content">
+          {source.repository&&<p className="text-xs break-all">{source.repository} · {source.commit}</p>}
+          {source.line_start&&<p className="text-xs muted">{t("Lines {start}–{end}",{start:source.line_start,end:source.line_end||source.line_start})}</p>}
+          {source.version&&<p className="text-xs muted">{t("Version")} {source.version}</p>}
+          {source.checked_at&&!Number.isNaN(Date.parse(source.checked_at))&&<p className="text-xs muted">{t(source.status==='rejected'?'Rejected':source.status==='unavailable'?'Unavailable':'Consulted on')} · {new Date(source.checked_at).toLocaleString(dateLocale)}</p>}
+          {safeLink(source.url)&&<a className="text-xs underline break-all" href={safeLink(source.url)} rel="noopener noreferrer" referrerPolicy="no-referrer">{source.kind==='document'?t("Download source document"):source.url}</a>}
+          {(source.sql||source.excerpt)&&<pre><code>{source.sql||source.excerpt}</code></pre>}
+          {typeof source.row_count==='number'&&<p className="text-xs muted">{t("Returned rows: {count}",{count:source.row_count})}{source.truncated?` · ${t("Result limited")}`:""}</p>}
+          {source.note&&<p className="text-xs muted">{t(source.note)}</p>}
+          {source.kind==='sql'&&<details className="text-xs muted"><summary className="cursor-pointer">{t("Technical reference")}</summary><code className="break-all">{source.id}</code></details>}
+        </div>
+      </details>)}
+    </div>}
+  </details>;
+}

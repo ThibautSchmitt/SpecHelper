@@ -11,8 +11,10 @@ import { type RequestDetail, type ResultVersion, type WorkExecution } from "@/li
 import { activityLabel, DiscussionProgress, ProgressDisclosure, ResponsePreview, WorkSteps } from "@/components/work-progress";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels } from "@/lib/orchestration";
+import type { SQLReceipt } from "@/lib/analysis-evidence";
 
 type Run = NonNullable<RequestDetail["analysis_runs"]>[number];
+const requestsSqlIds=(text:string)=>/\bquery[_ -]?(?:ids?|identifiers?)\b|\b(?:sql|receipt)\s+(?:ids?|identifiers?)\b|\b(?:ids?|identifiants?)\s+(?:techniques?\s+|internes?\s+)?(?:des?\s+|de la\s+|du\s+)?requ[eê]tes?\b|\bsql-[a-f\d]{32}-[a-f\d]{12}\b/i.test(text);
 
 type Event = {
   id: string; at: string; speaker: "user" | "assistant"; content: string; label?: string;
@@ -21,6 +23,9 @@ type Event = {
   markdown?: boolean;
   discussion?: boolean;
   work?: WorkExecution;
+  sqlChecks?: SQLReceipt[];
+  sourcesUrl?:string;
+  compactSqlReferences?:boolean;
 };
 
 export function AnalysisConversation({ value, result, reply, actions, controls, onSelectVersion, trackingUnavailable=false }: {
@@ -48,18 +53,25 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   },[value.id]);
   const lastClarification = messages.filter(message => ["questions", "clarification"].includes(message.kind)).at(-1);
   const pendingMessage = pending && lastClarification?.content === value.questions.map(question=>question.question).join("\n") ? lastClarification : undefined;
+  let latestUserText=value.need;
   const events: Event[] = messages.filter(message => {
     if (["result", "decision_revision", "error"].includes(message.kind)) return false;
     // Pending questions appear once, together with their real answer controls.
     return message.id !== pendingMessage?.id;
   }).map(message => {
     const answers = message.data?.answers;
+    if(message.role==='user')latestUserText=message.content;
     const stale=message.role === "assistant" && message.kind === "discussion_reply" && message.data?.response_status === "stale";
+    const observations=message.data?.observations as {database_checks?:SQLReceipt[];web_checks?:unknown[];context_usage?:unknown[]}|undefined;
+    const checks=Array.isArray(observations?.database_checks)?observations.database_checks.filter(check=>check&&typeof check.query_id==="string"&&typeof check.sql==="string"):[];
     return { id: `message-${message.id}`, at: message.created_at,
       speaker: message.role === "user" ? "user" : "assistant",
       content: stale ? "" : answers && typeof answers === "object" ? Object.values(answers).filter(item => typeof item === "string").join("\n\n") : message.content,
       label: stale ? "Response interrupted" : message.kind === "need_revision" ? "Need updated" : undefined,
       markdown: message.kind === "discussion_reply",
+      sqlChecks: checks,
+      compactSqlReferences:!requestsSqlIds(latestUserText),
+      sourcesUrl:message.role==='assistant'&&(checks.length||observations?.web_checks?.length||observations?.context_usage?.length||/`[^`\n]+\.(?:py|tsx?|jsx?|java|go|rs|md|pdf|docx|txt|ya?ml|xml|json)(?::\d+(?:[-–]\d+)?)?`/i.test(message.content))?`/analyses/${value.id}/messages/${message.id}/sources`:undefined,
       child: typeof message.data?.child_id === "string" ? message.data.child_id : undefined };
   });
   if (!messages.some(message => message.kind === "need")) events.unshift({ id: "original", at: value.created_at,
@@ -80,7 +92,10 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     const displayed = version.number === result?.number ? result : version.number === value.latest_version?.number ? value.latest_version : null;
     const summary = displayed ? conversationAnswer(displayed) : message?.data?.summary;
     events.push({ id: `result-${version.number}`, at: version.created_at, speaker: "assistant", version: version.number,
-      content: typeof summary === "string" ? summary : "", label: version.status === "PARTIAL" || version.status === "ERROR" || displayed?.evidence?.blocking ? "Partial result" : "Result available" });
+      content: typeof summary === "string" ? summary : "", sqlChecks: displayed?.evidence?.database?.checks,
+      compactSqlReferences:!requestsSqlIds(value.need),
+      sourcesUrl:displayed?.evidence?.claims?.some(claim=>claim.sources?.length)||displayed?.evidence?.database?.checks?.length||displayed?.context_usage?.some(usage=>usage.status==='observed')?`/analyses/${value.id}/versions/${version.number}/sources`:undefined,
+      label: version.status === "PARTIAL" || version.status === "ERROR" || displayed?.evidence?.blocking ? "Partial result" : "Result available" });
   }
   for (const publication of value.publications || []) events.push({ id:`publication-${publication.id}`, at:publication.created_at, speaker:"assistant", content:publication.title,
     label:publication.status === "PUBLISHED" ? "Ticket published" : publication.status === "ERROR" ? "Ticket publication failed" : "Ticket publication not confirmed",
@@ -127,7 +142,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
           {event.run && <InvestigationProgress run={event.run} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
           {event.work&&<DiscussionProgress job={event.work} unavailable={trackingUnavailable}/>}
           {event.label && <p className="mb-2 flex items-center gap-2 text-xs font-medium text-primary">{event.discussion && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>}{t(event.label)}{event.version ? ` · v${event.version}` : ""}</p>}
-          {event.content && (event.version || event.markdown ? <div className="conversation-answer break-words text-sm leading-7"><SafeMarkdown roleMentions>{event.content}</SafeMarkdown></div> : <p className="conversation-message-text whitespace-pre-wrap break-words text-sm leading-7">{event.speaker === "assistant" ? <RoleMentions>{event.content}</RoleMentions> : event.content}</p>)}
+          {event.content && (event.version || event.markdown ? <div className="conversation-answer break-words text-sm leading-7"><SafeMarkdown roleMentions compactSqlReferences={event.compactSqlReferences!==false} sqlChecks={event.sqlChecks} sourcesUrl={event.sourcesUrl}>{event.content}</SafeMarkdown></div> : <p className="conversation-message-text whitespace-pre-wrap break-words text-sm leading-7">{event.speaker === "assistant" ? <RoleMentions>{event.content}</RoleMentions> : event.content}</p>)}
           {event.child && <Link className="mt-3 inline-block text-sm text-primary underline" href={`/analyses/${event.child}`}>{t("Open linked change")}</Link>}
           {event.url && <a className="mt-3 inline-block text-sm text-primary underline" href={event.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{t("Open published ticket")}</a>}
           {event.version && event.version !== result?.number && <Button variant="ghost" size="sm" className="mt-3" onClick={()=>onSelectVersion?.(event.version!)}>{t("Read result version {number}", {number:event.version})}</Button>}

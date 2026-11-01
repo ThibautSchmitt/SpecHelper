@@ -33,6 +33,79 @@ async function setup(page:Page,language:"en"|"fr",read:()=>unknown,name="Acme",t
 
 for(const language of ["en","fr"] as const) {
  const t=(key:string)=>translate(key,language);
+ for(const theme of ['light','dark'])test(`database tables and source disclosures remain readable in ${language} ${theme}`,async({page},info)=>{
+  const source=dossier();
+  const q1=`sql-${'a'.repeat(32)}-${'b'.repeat(12)}`,q2=`sql-${'c'.repeat(32)}-${'d'.repeat(12)}`,literal=`sql-${'e'.repeat(32)}-${'f'.repeat(12)}`;
+  const response=`Recorded counts. Source: \`${q1}\` and ${q2}.\n\n| Playlist | Channel | Tracks |\n| :--- | :--- | ---: |\n| \`PL${'x'.repeat(60)}\` | \`987654321012345678\` | 1 428 |\n| \`PL_fixture_two\` | \`987654321098765432\` | 292 |\n| **Total** | | **1 720** |\n\nLiteral code example:\n\n\`\`\`text\n${literal}\n\`\`\``;
+  const checks=[q1,q2].map((query_id,index)=>({query_id,sql:`SELECT ${index+1} AS recorded_count;`,status:'checked',checked_at:at,row_count:1,truncated:false,rows_exposed:1}));
+  const current={...source,status:'DISCUSSING',questions:[],analysis_runs:[],discussion:{enabled:true,mode:'discussion',revision:1,has_new_messages:true},messages:[source.messages[0],{id:3,role:'assistant',kind:'discussion_reply',content:response,created_at:later,data:{observations:{database_checks:checks}}}]};
+  await setup(page,language,()=>current,'Acme',theme);
+  let sourceReads=0;
+  await page.route(`**/api/analyses/${id}/messages/3/sources`,route=>{sourceReads++;return route.fulfill({json:{sources:[
+   ...checks.map((check,index)=>({...check,id:check.query_id,kind:'sql',number:index+1})),
+   {id:'git-fixture',kind:'git',title:'rules.py',repository:'fixture/project',commit:'a'.repeat(40),line_start:2,line_end:3,excerpt:'FIRST = 1\nCHECKED = True'},
+   {id:'web-fixture',kind:'web',title:'Public reference',url:'https://example.org/reference',excerpt:'The exact recorded passage. <script>window.sourceInjected=true</script>'},
+   {id:'doc-fixture',kind:'document',title:'rules.md',version:1,url:'/api/doc-fixture/download',excerpt:'Frozen document passage',note:'Preview from the retained document; the exact passage used was not recorded.'},
+  ]}});});
+  await page.goto(`/analyses/${id}`);
+  const answer=page.locator('[data-message="message-3"]');
+  const table=answer.locator('.safe-markdown-table');
+  await expect(table.getByRole('row')).toHaveCount(4);
+  await expect(table.locator('tbody tr').first().locator('td').first()).toHaveCSS('padding-left','14px');
+  await expect(table.locator('tbody tr').first().locator('td').last()).toHaveCSS('text-align','right');
+  await expect(table).toContainText('1 428');
+  await expect(table).toContainText('1 720');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  if(info.project.name==='mobile')expect(await table.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(true);
+  expect(sourceReads).toBe(0);
+  const first=answer.locator('button.sql-reference-link').filter({hasText:t('SQL check {number}').replace('{number}','1')});
+  await first.focus();await first.press('Enter');
+  await expect(first).toHaveAttribute('aria-expanded','true');
+  await expect(first).toBeFocused();
+  const sources=answer.locator('.source-details');
+  await expect(sources).toHaveAttribute('open','');
+  await expect(sources.locator('.source-record')).toHaveCount(5);
+  await expect(sources.locator('pre').filter({hasText:'SELECT 1 AS recorded_count;'})).toBeVisible();
+  await sources.locator('.source-record > summary').filter({hasText:'rules.py'}).click();
+  await expect(sources.locator('pre').filter({hasText:'CHECKED = True'})).toBeVisible();
+  await sources.locator('.source-record > summary').filter({hasText:'Public reference'}).click();
+  await expect(sources.locator('pre').filter({hasText:'The exact recorded passage.'})).toBeVisible();
+  await sources.locator('.source-record > summary').filter({hasText:'rules.md'}).click();
+  await expect(sources.locator('pre').filter({hasText:'Frozen document passage'})).toBeVisible();
+  expect(await page.evaluate(()=>('sourceInjected' in window))).toBe(false);
+  await expect(answer.locator('pre > code').filter({hasText:literal})).toHaveText(literal);
+  await expect(answer.locator('button.sql-reference-link')).toHaveCount(2);
+  await expect(sources.getByRole('link',{name:t('Download source document'),exact:true})).toHaveAttribute('href','/api/doc-fixture/download');
+  expect(sourceReads).toBe(1);
+  await sources.locator(':scope > summary').click();
+  await expect(first).toHaveAttribute('aria-expanded','false');
+  await sources.locator(':scope > summary').click();
+  expect(sourceReads).toBe(1);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ });
+
+ test(`missing SQL receipts stay unavailable rather than fabricated in ${language}`,async({page})=>{
+  const source=dossier(),query=`sql-${'9'.repeat(32)}-${'8'.repeat(12)}`;
+  const current={...source,status:'DISCUSSING',questions:[],analysis_runs:[],messages:[source.messages[0],{id:3,role:'assistant',kind:'discussion_reply',content:`Source: \`${query}\`.`,created_at:later}]};
+  await setup(page,language,()=>current);
+  await page.goto(`/analyses/${id}`);
+  const answer=page.locator('[data-message="message-3"]');
+  await answer.locator('button.sql-reference-link').click();
+  await expect(answer).toContainText(t('The database-check record is unavailable.'));
+  await expect(answer.locator('.source-record pre')).toHaveCount(0);
+ });
+
+ test(`explicitly requested SQL identifiers stay directly visible in ${language}`,async({page})=>{
+  const source=dossier(),query=`sql-${'9'.repeat(32)}-${'8'.repeat(12)}`;
+  const question=language==='fr'?'Affiche les identifiants des requêtes SQL.':'Show the query IDs.';
+  const current={...source,status:'DISCUSSING',questions:[],analysis_runs:[],messages:[{...source.messages[0],content:question},{id:3,role:'assistant',kind:'discussion_reply',content:`Identifier: \`${query}\`.`,created_at:later}]};
+  await setup(page,language,()=>current);
+  await page.goto(`/analyses/${id}`);
+  const answer=page.locator('[data-message="message-3"]');
+  await expect(answer.locator('code')).toHaveText(query);
+  await expect(answer.locator('button.sql-reference-link')).toHaveCount(0);
+ });
+
  test(`explicit technical and data answer stays visible in the conversation in ${language}`,async({page})=>{
   const source=dossier();
   const response="The rule is implemented in `benefits/dates.py`, in `calculate_dates()`.\n\n```python\nend = start + duration\n```\n\n| Record | Status |\n| --- | --- |\n| 7 | active |\n\nOnly one authorized record was inspected.";

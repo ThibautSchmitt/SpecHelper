@@ -70,6 +70,28 @@
 .conversation-answer ul { list-style: disc; }
 .conversation-answer ol { list-style: decimal; }
 .conversation-answer a { text-decoration: underline; color: var(--primary-ink, var(--primary)); }
+.safe-markdown-table { display: block; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; margin-block: 12px; }
+.safe-markdown-table:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.safe-markdown-table > table { display: table; width: 100%; min-width: 100%; max-width: none; border-collapse: collapse; font-size: 14px; line-height: 1.5; }
+.safe-markdown-table > table :is(th,td) { padding: 10px 14px; border: 1px solid var(--border); vertical-align: top; text-align: left; overflow-wrap: normal; }
+.safe-markdown-table > table th { background: var(--muted); font-weight: 600; }
+.safe-markdown-table > table td { font-variant-numeric: tabular-nums; }
+.safe-markdown-table > table [align="right"] { text-align: right; }
+.safe-markdown-table > table [align="center"] { text-align: center; }
+.safe-markdown-table > table code { white-space: nowrap; }
+.sql-reference-link { display: inline-flex; align-items: center; gap: 3px; color: var(--primary-ink, var(--primary)); font: inherit; font-style: normal; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.sql-reference-link[aria-expanded="false"] > svg { transform: rotate(-90deg); }
+.sql-reference-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+.source-details { margin-top: 12px; font-size: 13px; }
+.source-details > summary, .source-record > summary { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; list-style: none; color: var(--muted-foreground); }
+.source-details > summary::-webkit-details-marker, .source-record > summary::-webkit-details-marker { display: none; }
+.source-details > summary > svg, .source-record > summary > svg { flex-shrink: 0; margin-top: 3px; transform: rotate(-90deg); }
+.source-details[open] > summary > svg, .source-record[open] > summary > svg { transform: none; }
+.source-details summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 3px; }
+.source-details-content { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.source-record { min-width: 0; border-left: 2px solid var(--border); padding-left: 10px; }
+.source-record-content { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.source-record-content pre { max-width: 100%; overflow-x: auto; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--muted); font-size: 12px; line-height: 1.6; }
 .analysis-conversation .conversation-role-mention[data-role] { --role-ink: var(--connection-analyst); padding: 1px 7px; border: 0; font-size: .8em; line-height: 1.6; vertical-align: baseline; color: var(--role-ink); background: color-mix(in srgb, var(--role-ink) 12%, var(--card)); }
 .analysis-conversation .conversation-role-mention[data-role="counter_analyst"] { --role-ink: var(--connection-counter); }
 .analysis-conversation .conversation-role-mention[data-role="verifier"] { --role-ink: var(--connection-verifier); }
@@ -469,16 +491,6 @@ dialog::backdrop {
   text-decoration: underline;
   color: var(--primary-ink, var(--primary));
 }
-.markdown-preview table {
-  border-collapse: collapse;
-  display: block;
-  overflow: auto;
-}
-.markdown-preview th,
-.markdown-preview td {
-  border: 1px solid var(--border);
-  padding: 6px;
-}
 @media (max-width: 1279px) {
   .dashboard {
     grid-template-columns: 190px minmax(0, 1fr);
@@ -581,17 +593,6 @@ dialog::backdrop {
 .question-markdown a {
   color: var(--primary-ink);
   text-decoration: underline;
-}
-.question-markdown table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
-}
-.question-markdown th,
-.question-markdown td {
-  border: 1px solid var(--border);
-  padding: 0.5rem;
 }
 .question-markdown blockquote {
   border-left: 3px solid var(--border);

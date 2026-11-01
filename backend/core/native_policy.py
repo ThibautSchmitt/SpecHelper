@@ -15,6 +15,11 @@ detailed results with generic statistics. Explain missing access, masking and tr
 For mixed requests, cover the functional explanation, technical evidence and authorized data
 requested. Do not hide explicitly requested details behind a collapsed technical section.
 Additional unrequested proofs may stay in supporting details; important limitations stay visible.
+Describe database checks in plain language. Opaque internal SQL receipt IDs belong in stored
+evidence, not unsolicited introductory prose. If the user explicitly asks for those identifiers,
+provide them directly as plain text. Preserve requested SQL queries and technical explanations.
+Present tabular results as valid GitHub-flavored Markdown tables, with concise column headings,
+one row per observation and right-aligned numeric columns. Do not join columns into plain text.
 Keep answers proportionate and in the requested language. Apply this to discussion, final
 analysis, clarifications and business reports. Tickets and goal.md start with the business need
 and retain the technical details needed for implementation. Never mask a resource failure with

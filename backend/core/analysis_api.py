@@ -28,6 +28,21 @@ from .models import (
 from .need_revisions import NeedRevisionIn
 
 router = Router(tags=["Analyses"])
+
+
+@router.get("/analyses/{analysis_id}/messages/{message_id}/sources")
+def discussion_sources(request, analysis_id: UUID, message_id: int):
+    from .conversation_sources import message_sources
+
+    return message_sources(analysis_id, message_id)
+
+
+@router.get("/analyses/{analysis_id}/versions/{number}/sources")
+def result_sources(request, analysis_id: UUID, number: int):
+    from .conversation_sources import version_sources
+
+    return version_sources(analysis_id, number)
+
 ACTIVE_STATUSES = [
     status for status in Request.Status.values
     if status not in {"DRAFT", "DISCUSSING", "NEEDS_CLARIFICATION", "READY", "PARTIAL", "ERROR", "CANCELLED"}
