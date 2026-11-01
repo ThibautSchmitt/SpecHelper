@@ -9,6 +9,11 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ### Ticket preparation without automatic verification
 
+- Select a conversation subject, reuse its actual discussion/code findings even
+  without a consolidated result, and exclude invalidated replies or other questions.
+  Offer one explicit drafting turn on the selected persistent assistant; preserve
+  evidence labels, source IDs, cancellation and concurrent manual edits.
+
 - Open an editable, persistent ticket draft directly from any unified conversation,
   including those without a result or with interrupted/partial analysis.
 - Reuse the selected source result and distinguish later user requests and proposed

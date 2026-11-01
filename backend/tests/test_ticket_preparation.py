@@ -74,7 +74,7 @@ def test_existing_analysis_reused_but_later_correction_stays_unverified(client, 
     assert draft["source_version"] == 1 and draft["source_verified"]
     assert draft["has_new_messages"] and draft["verified_scope"] == "Find the cause of inconsistent dates."
     assert "Prevent invalid periods" in draft["body"]
-    assert "unverified" in draft["body"] and "UNVERIFIED_ASSISTANT_HYPOTHESIS" not in draft["body"]
+    assert "not independently verified" in draft["body"] and "UNVERIFIED_ASSISTANT_HYPOTHESIS" in draft["body"]
     response = save(client, analysis, draft, scope_choice="clarified")
     assert response.status_code == 200
     assert "have not been independently verified" in response.json()["markdown"]
@@ -154,3 +154,136 @@ def test_stale_draft_revision_cannot_start_analysis(client, analysis):
         "expected_revision": 1, "preparation_revision": saved["revision"],
     }, content_type="application/json")
     assert response.status_code == 409 and not Job.objects.exists()
+
+
+def test_latest_subject_reuses_code_answers_without_merging_separate_questions(client, analysis):
+    earlier = RequestMessage.objects.create(request=analysis, role="user", kind="answer", content="Clarification question\nExplain import batches.", data={"answers": {"a": "Explain import batches."}})
+    RequestMessage.objects.create(request=analysis, role="assistant", kind="discussion_reply", content="BATCH_ONLY_FINDING")
+    latest = RequestMessage.objects.create(request=analysis, role="user", kind="discussion", content="Explain the switch menu.")
+    RequestMessage.objects.create(request=analysis, role="assistant", kind="discussion_reply", content="STALE_BATCH_REPLY", data={"response_status": "stale"})
+    RequestMessage.objects.create(request=analysis, role="assistant", kind="discussion_reply", content="SWITCH_FINDING with source `menu.py:14`.")
+    draft = client.get(endpoint(analysis)).json()
+    assert draft["title"] == latest.content and draft["topic_message_id"] == latest.pk
+    assert "SWITCH_FINDING" in draft["body"] and "menu.py:14" in draft["body"]
+    assert "BATCH_ONLY" not in draft["body"] and "STALE_BATCH" not in draft["body"]
+    assert "Clarification question" not in str(draft["topics"])
+    selected = client.get(endpoint(analysis), {"topic_message_id": earlier.pk}).json()
+    assert "BATCH_ONLY_FINDING" in selected["body"] and "SWITCH_FINDING" not in selected["body"]
+    assert selected["title"] == "Explain import batches."
+    assert not Job.objects.exists()
+
+
+def test_interrupted_run_public_findings_are_available_without_a_result(client, analysis):
+    AnalysisRun.objects.create(request=analysis, number=1, started_at=timezone.now(), status="ERROR", orchestration={"outputs": {
+        "analyst": {"claims": [{"statement": "An import validates the file format.", "sources": []}], "private_reasoning": "NEVER_EXPOSE"},
+    }})
+    draft = client.get(endpoint(analysis)).json()
+    assert "An import validates" in draft["body"] and "incomplete verification" in draft["body"]
+    assert "NEVER_EXPOSE" not in draft["body"] and not draft["source_verified"]
+
+
+def enqueue_draft(client, analysis):
+    draft = client.get(endpoint(analysis)).json()
+    return client.post(endpoint(analysis) + "/generate", {
+        "expected_revision": draft["revision"], "expected_discussion_revision": draft["discussion_revision"],
+        "source_version": draft["source_version"], "topic_message_id": draft["topic_message_id"],
+    }, content_type="application/json")
+
+
+@pytest.fixture
+def drafting_runtime(monkeypatch, storage):
+    def workspace(value):
+        path = storage / "workspaces" / str(value.pk)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    monkeypatch.setattr("core.git.request_workspace", workspace)
+
+
+def test_single_assistant_drafts_from_scoped_sources_and_resumes_its_session(client, analysis, drafting_runtime):
+    import json
+    from uuid import uuid4
+
+    from core.discussion import run_job
+    from core.models import AIConnection
+    from core.providers import bind_session
+
+    question = analysis.messages.get(role="user")
+    reply = RequestMessage.objects.create(request=analysis, role="assistant", kind="discussion_reply", content="The date check is absent in `contracts.py:42`.")
+    existing_session = bind_session(analysis, AIConnection.objects.get(pk=1), "d-shared")
+    existing_session.runtime_id = str(uuid4())
+    existing_session.save()
+    analysis.discussion_state.update(session_pk=existing_session.pk, connection_id=1)
+    analysis.save()
+    response = enqueue_draft(client, analysis)
+    assert response.status_code == 200, response.content
+    job = Job.objects.get()
+    assert job.kind == "discussion" and not AnalysisRun.objects.exists()
+    assert job.payload["ticket_preparation"]["inputs"]["topic"]["id"] == question.pk
+    job.status = "RUNNING"
+    job.save()
+    def runtime(path, payload, **kwargs):
+        assert payload["session_id"] == existing_session.runtime_id
+        assert "Draft a useful" in payload["prompt"]
+        inputs = json.loads(payload["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
+        assert "contracts.py:42" in str(inputs["observations"])
+        assert "title" in payload["schema"]["properties"]
+        return {"session_id": payload["session_id"], "output": {"title": "Investigate inconsistent contract dates", "body": "## Findings\nThe recorded discussion found a missing date check (`contracts.py:42`). Independent verification is incomplete.", "sources": [f"message:{reply.pk}"]}}
+    run_job(job, runtime)
+    job.refresh_from_db()
+    analysis.refresh_from_db()
+    assert job.status == "DONE"
+    draft = client.get(endpoint(analysis)).json()
+    assert draft["title"] == "Investigate inconsistent contract dates"
+    assert "contracts.py:42" in draft["body"] and not draft["source_verified"]
+    assert not analysis.business_decisions.exists() and not ResultVersion.objects.exists()
+    assert AISession.objects.count() == 1
+    assert analysis.discussion_state["ticket_preparation"]["sources"] == [f"message:{reply.pk}"]
+    from core.ticket_preparation import topic_context
+
+    assert [row.pk for row in topic_context(analysis, question.pk)[1]] == [reply.pk]
+
+
+def test_generation_cannot_overwrite_concurrent_manual_edits(client, analysis, drafting_runtime):
+    from uuid import uuid4
+
+    from core.discussion import run_job
+
+    assert enqueue_draft(client, analysis).status_code == 200
+    job = Job.objects.get()
+    job.status = "RUNNING"
+    job.save()
+    def runtime(path, payload, **kwargs):
+        current = client.get(endpoint(analysis)).json()
+        assert save(client, analysis, current, body="Keep my manual edits").status_code == 200
+        return {"session_id": str(uuid4()), "output": {"title": "Generated title", "body": "A generated body", "sources": []}}
+    run_job(job, runtime)
+    job.refresh_from_db()
+    assert job.status == "ERROR" and "preserved" in job.error
+    assert client.get(endpoint(analysis)).json()["body"] == "Keep my manual edits"
+
+
+def test_generation_rejects_foreign_topic_and_unknown_sources(client, analysis, drafting_runtime, environment):
+    from uuid import uuid4
+
+    from core.discussion import run_job
+
+    other = Request.objects.create(environment=environment, need="Unrelated")
+    foreign = RequestMessage.objects.create(request=other, role="user", kind="need", content="Foreign question")
+    assert client.get(endpoint(analysis), {"topic_message_id": foreign.pk}).status_code == 404
+    assert enqueue_draft(client, analysis).status_code == 200
+    job = Job.objects.get()
+    job.status = "RUNNING"
+    job.save()
+    with pytest.raises(ValueError, match="unknown conversation source"):
+        run_job(job, lambda *args, **kwargs: {"session_id":str(uuid4()), "output":{"title":"False source", "body":"Claim", "sources":["message:9999999"]}})
+    assert "ticket_preparation" not in Request.objects.get(pk=analysis.pk).discussion_state
+
+
+def test_cancelled_drafting_does_not_become_an_ordinary_discussion_retry(client, analysis):
+    assert enqueue_draft(client, analysis).status_code == 200
+    assert client.post(f"/api/analyses/{analysis.pk}/discussion/cancel").status_code == 200
+    analysis.refresh_from_db()
+    response = client.post(f"/api/analyses/{analysis.pk}/discussion", {
+        "message":"", "expected_revision":analysis.discussion_state["revision"], "restart_session":True,
+    }, content_type="application/json")
+    assert response.status_code == 409 and "ticket preparation" in response.json()["detail"]

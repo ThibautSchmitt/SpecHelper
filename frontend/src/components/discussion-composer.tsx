@@ -49,7 +49,7 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
       {value.status === "DRAFT" && value.discussion?.enabled && value.discussion.revision === 0 && <Button size="sm" disabled={busy||!!text.trim()||!!files.length} onClick={()=>action("start")}>{t("Start discussion")}</Button>}
       <Button size="sm" variant="outline" disabled={busy || working || !!text.trim() || !!files.length} title={text.trim() || files.length ? t("Send your draft before starting deep analysis.") : undefined} onClick={()=>action("deep")}><Sparkles size={15} aria-hidden="true"/>{t("Launch deep analysis")}</Button>
       {working && <Button size="sm" variant="ghost" disabled={busy} onClick={()=>action("cancel")}><Square size={13} aria-hidden="true"/>{t("Cancel")}</Button>}
-      {(["ERROR","CANCELLED"].includes(value.status) || error === "The selected AI configuration changed. Start a new discussion session explicitly.") && <Button size="sm" variant="outline" disabled={busy} onClick={()=>action("retry")}>{t("Retry")}</Button>}
+      {((["ERROR","CANCELLED"].includes(value.status) && value.discussion?.job?.operation !== "ticket_preparation") || error === "The selected AI configuration changed. Start a new discussion session explicitly.") && <Button size="sm" variant="outline" disabled={busy} onClick={()=>action("retry")}>{t("Retry")}</Button>}
     </div>
   </div>;
 }

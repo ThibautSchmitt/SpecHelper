@@ -152,9 +152,24 @@ without an analysis, after an interruption or with incomplete checks; it remains
 explicitly unverified in those cases. Saved drafts are shared with the conversation
 and reject conflicting edits from another browser.
 
-When an analysis result exists, preparation reuses its findings and records its
-version and scope. Later user messages appear separately as unverified requests;
-the conversational assistant's hypotheses are not promoted to verified findings.
+The most recent user question is selected by default. **Ticket subject** lets you
+choose another question without merging unrelated subjects. The initial draft
+reuses that subject's stored discussion answer, code references and any public
+interim role findings, even if no deep cycle produced a result. Clarification
+answers use the user's answer text rather than copying the assistant's question.
+Invalidated replies are excluded. Saved manual edits are preserved on reopening.
+
+Choose **Write from conversation** for a concise, structured ticket written by the
+conversation's selected assistant. This is a single queued drafting turn, using
+its native session when available and the existing quota/cancellation controls.
+It uses the selected subject, recorded answers, public role reports and relevant
+source results; it does not run the three roles or claim new verification.
+The title and body are saved back into the draft. Concurrent manual edits cannot
+be overwritten by a delayed generated answer. Opening, selecting a subject or
+saving by itself never invokes an AI.
+
+When an analysis result exists, preparation also records its version and scope.
+Discussion findings and later proposals are not promoted to verified findings.
 Indicate whether the later exchanges concern the same need, a minor clarification
 or a significant change. This assessment does not certify a proposed solution.
 You can keep preparing immediately, or explicitly choose **Update analysis**.

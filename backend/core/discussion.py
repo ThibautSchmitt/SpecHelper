@@ -49,6 +49,13 @@ class Reply(BaseModel):
     message: str = Field(min_length=1, max_length=12000)
 
 
+class TicketDraftReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=30000)
+    sources: list[str] = Field(max_length=40)
+
+
 def describe(value):
     from .discussion_continuation import assistant, history
     state = value.discussion_state
@@ -70,6 +77,7 @@ def describe(value):
             "created_at": job.created_at,
             "error": job.error,
             "waiting_reason": job.payload.get("waiting_reason", ""),
+            "operation": "ticket_preparation" if job.payload.get("ticket_preparation") else "discussion",
         }
         if job and job.payload.get("revision") == revision
         else None,
@@ -116,7 +124,7 @@ def pin_environment(value):
 
 
 @transaction.atomic
-def enqueue(value_id, payload, browser_actor, *, initial=False):
+def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None):
     from .library_assistant import connection_snapshot, safe_text
     from .providers import bind_session, candidates
 
@@ -141,6 +149,8 @@ def enqueue(value_id, payload, browser_actor, *, initial=False):
         previous_message = value.messages.filter(role="user").order_by("-id").first()
         if previous_message is None:
             raise HttpError(409, "There is no message to retry.")
+        if previous_message.kind == "ticket_preparation":
+            raise HttpError(409, "Reopen ticket preparation to retry drafting.")
         text = previous_message.content
     elif not initial:
         text = safe_text(payload.message)
@@ -224,7 +234,7 @@ def enqueue(value_id, payload, browser_actor, *, initial=False):
         RequestMessage.objects.create(
             request=value,
             role="user",
-            kind="discussion",
+            kind="ticket_preparation" if preparation else "discussion",
             content=text,
             data={"actor": browser_actor},
         )
@@ -249,6 +259,7 @@ def enqueue(value_id, payload, browser_actor, *, initial=False):
             "connection_ids": [],
             "waiting_reason": "",
             "current_role": "analyst",
+            **({"ticket_preparation": preparation} if preparation else {}),
         },
     )
     return value
@@ -390,6 +401,25 @@ def run_job(job, caller=None):
         "data or a JSON example, include it as a fenced json code block inside the Markdown message. "
         "No private reasoning."
     )
+    preparation = job.payload.get("ticket_preparation")
+    if preparation:
+        data = preparation["inputs"]
+        instructions = (
+            "Draft a useful, concise ticket from the selected conversation subject and recorded observations. "
+            "Use ONLY the supplied inputs, not unrelated questions in native history. Do not explore code again "
+            "or run tools. This is drafting, not independent verification; never claim three-role checks occurred. "
+            "Write a meaningful title and Markdown body: need, existing behavior and relevant findings, "
+            "explicitly requested change (only if one was requested), acceptance criteria only when justified, "
+            "important uncertainties and useful source references. Do not paste the conversation or greeting. "
+            "For an informational question, prepare an investigation/documentation ticket rather than inventing "
+            "a correction. Preserve relevant explicit requests in the editable draft, but discard unrelated "
+            "subjects and do not treat draft claims as evidence. Reuse actual code findings and references; distinguish informal discussion from "
+            "independently verified findings. A failed deep analysis does not erase discussion observations. "
+            "An older result may concern a different scope: check its relevance, do not merge unrelated subjects. "
+            "State missing evidence honestly. Do not invent behavior, files, authors, commits or queries. "
+            "Never reproduce unnecessary personal data, secrets or private reasoning. Sources must list only "
+            "the exact supplied observation IDs actually used. Return title, body and sources matching the schema."
+        )
     db = frozen.get("dossier", {}).get("database", {})
     database = parameters(DatabaseConnection.objects.get(pk=db["id"])) if db.get("id") else None
     skills = catalog(session.connection, has_database=bool(database), available_capabilities={
@@ -403,7 +433,7 @@ def run_job(job, caller=None):
         turn = copy.deepcopy(data)
         if not native:
             turn.update(
-                recovery=recovery_messages(value, message.pk), frozen_project_context=context
+                recovery=[] if preparation else recovery_messages(value, message.pk), frozen_project_context=context
             )
         prompt = redact(
             RULES
@@ -446,7 +476,7 @@ def run_job(job, caller=None):
                     "database": database,
                     "skill_definitions": redact(skills.get("definitions", []), secrets),
                     "prompt": prompt,
-                    "schema": Reply.model_json_schema(),
+                    "schema": (TicketDraftReply if preparation else Reply).model_json_schema(),
                     "timeout": 260,
                 },
                 timeout=270,
@@ -470,10 +500,11 @@ def run_job(job, caller=None):
             return
         if result.get("timed_out"):
             raise TimeoutError("Discussion response interrupted")
-        output = Reply.model_validate(redact(result.get("output"), secrets))
+        output = (TicketDraftReply if preparation else Reply).model_validate(redact(result.get("output"), secrets))
         from .discussion_output import message_text
 
-        output.message = message_text(output.message, value.need + "\n" + message.content)
+        if not preparation:
+            output.message = message_text(output.message, value.need + "\n" + message.content)
         # A successful conversational response must carry a real resumable identity.
         native_result = str(uuid.UUID(result.get("session_id") or ""))
         with transaction.atomic():
@@ -495,6 +526,22 @@ def run_job(job, caller=None):
                     locked,
                     "The provider returned a different native session. The application history is preserved; native continuity could not be confirmed.",
                 )
+            if preparation:
+                from .ticket_preparation import complete_generation
+
+                completed = complete_generation(locked, locked_job, output)
+                locked.status, locked.error = "DISCUSSING", ""
+                locked.save(update_fields=["status", "error", "updated_at"])
+                if completed:
+                    RequestMessage.objects.create(
+                        request=locked, role="assistant", kind="discussion_reply",
+                        content=("Brouillon du ticket préparé : " if locked.language == "fr" else "Ticket draft prepared: ") + output.title,
+                        data={"session_pk":session.pk, "model":result.get("model") or session.model_snapshot,
+                              "verified":False, "ticket_preparation":True,
+                              "draft_revision":locked.discussion_state["ticket_preparation"]["revision"]},
+                    )
+                    Job.objects.filter(pk=job.pk).update(status="DONE", finished_at=timezone.now())
+                return
             RequestMessage.objects.create(
                 request=locked,
                 role="assistant",

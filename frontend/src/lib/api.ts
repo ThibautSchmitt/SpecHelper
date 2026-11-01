@@ -161,7 +161,7 @@ export type RequestDetail = RequestItem & {
     has_new_messages: boolean; connection_id?: number;
     assistant?: ConversationAssistant | null;
     assistant_history?: (Omit<ConversationAssistant, "availability"> & {current:boolean;used:boolean})[];
-    job?: {id:number; status:string; created_at:string; error:string; waiting_reason:string} | null;
+    job?: {id:number; status:string; created_at:string; error:string; waiting_reason:string; operation?:string} | null;
   } | null;
   analysis_protocol?: string;
   evidence?: ReliabilityReport;

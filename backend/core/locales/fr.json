@@ -853,5 +853,17 @@
   "A new analysis result is available. Reload the ticket preparation.": "Un nouveau résultat d’analyse est disponible. Rechargez la préparation du ticket.",
   "An analysis result is required to assess its scope.": "Un résultat d’analyse est nécessaire pour évaluer son périmètre.",
   "The ticket draft changed. Reload it before starting deep analysis.": "Le brouillon du ticket a changé. Rechargez-le avant de lancer l’analyse approfondie.",
-  "Enter a nonempty single-line ticket title.": "Saisissez un titre de ticket non vide sur une seule ligne."
+  "Enter a nonempty single-line ticket title.": "Saisissez un titre de ticket non vide sur une seule ligne.",
+  "Ticket subject": "Sujet du ticket",
+  "Select the question to include. Other subjects remain in the conversation.": "Choisissez la question à reprendre. Les autres sujets restent dans la conversation.",
+  "Recorded discussion findings are available, even without a completed deep analysis.": "Les constats de la discussion sont disponibles, même sans analyse approfondie terminée.",
+  "Write from conversation": "Rédiger depuis la conversation",
+  "Drafting the ticket…": "Rédaction du ticket…",
+  "Cancel drafting": "Annuler la rédaction",
+  "Discard unsaved ticket edits and change the subject?": "Abandonner les modifications non enregistrées du ticket et changer de sujet ?",
+  "Choose a conversation subject before drafting.": "Choisissez un sujet de conversation avant la rédaction.",
+  "The conversation or ticket draft changed. Reload before drafting.": "La conversation ou le brouillon du ticket a changé. Rechargez-le avant la rédaction.",
+  "The selected discussion is too large to draft safely. Choose a narrower subject.": "La discussion sélectionnée est trop volumineuse. Choisissez un sujet plus précis.",
+  "The ticket draft changed during generation. Your edits were preserved.": "Le brouillon du ticket a changé pendant la rédaction. Vos modifications ont été conservées.",
+  "Reopen ticket preparation to retry drafting.": "Rouvrez la préparation du ticket pour réessayer la rédaction."
 }

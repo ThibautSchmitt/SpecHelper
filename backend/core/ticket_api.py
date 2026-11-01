@@ -107,6 +107,7 @@ class TicketPreparationIn(StrictSchema):
     expected_revision: int = Field(ge=0)
     expected_discussion_revision: int = Field(ge=0)
     source_version: int | None = Field(default=None, ge=1)
+    topic_message_id: int | None = Field(default=None, ge=1)
     scope_choice: Literal["unknown", "covered", "clarified", "changed"] = "unknown"
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(max_length=30000)
@@ -120,10 +121,10 @@ class TicketPreparationIn(StrictSchema):
 
 
 @router.get("/analyses/{analysis_id}/ticket-preparation")
-def ticket_preparation(request, analysis_id: UUID):
+def ticket_preparation(request, analysis_id: UUID, topic_message_id: int | None = None):
     from .ticket_preparation import snapshot
 
-    return snapshot(get_object_or_404(Request, pk=analysis_id, deleted_at__isnull=True))
+    return snapshot(get_object_or_404(Request, pk=analysis_id, deleted_at__isnull=True), topic_id=topic_message_id)
 
 
 @router.put("/analyses/{analysis_id}/ticket-preparation")
@@ -131,6 +132,22 @@ def save_ticket_preparation(request, analysis_id: UUID, payload: TicketPreparati
     from .ticket_preparation import save
 
     return save(analysis_id, payload)
+
+
+class TicketDraftGenerationIn(StrictSchema):
+    expected_revision: int = Field(ge=0)
+    expected_discussion_revision: int = Field(ge=0)
+    source_version: int | None = Field(default=None, ge=1)
+    topic_message_id: int = Field(ge=1)
+
+
+@router.post("/analyses/{analysis_id}/ticket-preparation/generate")
+def generate_ticket_preparation(request, analysis_id: UUID, payload: TicketDraftGenerationIn):
+    from .api import request_dict
+    from .discussion_access import actor
+    from .ticket_preparation import generate
+
+    return request_dict(generate(analysis_id, payload, actor(request)), full=True)
 
 
 def connector_values(payload, existing=None):

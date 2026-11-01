@@ -176,6 +176,40 @@ for(const language of ['en','fr'] as const){
   await expect(page.getByText('Explain benefit behavior.',{exact:true})).toBeVisible();
  });
 
+ test(`ticket drafting selects one subject and uses one assistant without deep analysis in ${language}`,async({page})=>{
+  let value:any=dossier();let generations=0,deep=0,polls=0;
+  let draft:any={revision:0,discussion_revision:1,source_version:null,source_verified:false,analysis_state:'interrupted',verified_scope:'',limitations:[],has_new_messages:true,scope_choice:'unknown',title:'Switch question',body:'Recorded switch findings in `menu.py:42`.',markdown:'Unverified draft',publication_available:false,publication_allowed:false,topic_message_id:2,topics:[{id:2,label:'Explain the switch menu.'},{id:1,label:'Explain import batches.'}],discussion_findings_available:true,generation:null};
+  await page.route('**/api/**',route=>route.fulfill({json:[]}));
+  await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
+  await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
+  await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
+  await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{deep++;return route.fulfill({json:value});});
+  await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),route=>{
+   const topic=new URL(route.request().url()).searchParams.get('topic_message_id');
+   if(topic==='1')draft={...draft,topic_message_id:1,title:'Import batches',body:'Recorded batch findings in `import.py:12`.'};
+   if(route.request().method()==='PUT'){const payload=route.request().postDataJSON();draft={...draft,revision:draft.revision+1,title:payload.title,body:payload.body,topic_message_id:payload.topic_message_id};}
+   if(draft.generation?.status==='RUNNING'&&++polls>=2){draft={...draft,revision:draft.revision+1,title:'Document import validation',body:'## Findings\nThe import validates the file (`import.py:12`).\n\n## Limits\nNot independently verified.',generation:{...draft.generation,status:'DONE'}};value={...value,status:'DISCUSSING'};}
+   return route.fulfill({json:draft});
+  });
+  await page.route(`**/api/analyses/${id}/ticket-preparation/generate`,route=>{
+   expect(route.request().postDataJSON()).toMatchObject({topic_message_id:1,expected_revision:1});generations++;
+   draft={...draft,generation:{id:9,status:'RUNNING',error:'',waiting_reason:''}};value={...value,status:'QUEUED'};
+   return route.fulfill({json:value});
+  });
+  await page.goto(`/analyses/${id}`);
+  await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
+  await expect(dialog.getByLabel(t('Ticket subject'),{exact:true})).toHaveValue('2');
+  await dialog.getByLabel(t('Ticket subject'),{exact:true}).selectOption('1');
+  await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toHaveValue('Recorded batch findings in `import.py:12`.');
+  expect(generations).toBe(0);expect(deep).toBe(0);
+  await dialog.getByRole('button',{name:t('Write from conversation'),exact:true}).click();
+  await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toBeDisabled();
+  await expect(dialog.getByLabel(t('Ticket title'),{exact:true})).toHaveValue('Document import validation');
+  await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toContainText('import.py:12');
+  expect(generations).toBe(1);expect(deep).toBe(0);
+ });
+
  for(const state of ['complete','partial','interrupted'] as const){
   test(`ticket preparation reuses ${state} analysis without relaunching in ${language}`,async({page})=>{
    const source=dossier();let launches=0;

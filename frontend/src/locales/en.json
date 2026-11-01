@@ -2199,5 +2199,17 @@
   "A new analysis result is available. Reload the ticket preparation.": "A new analysis result is available. Reload the ticket preparation.",
   "An analysis result is required to assess its scope.": "An analysis result is required to assess its scope.",
   "The ticket draft changed. Reload it before starting deep analysis.": "The ticket draft changed. Reload it before starting deep analysis.",
-  "Enter a nonempty single-line ticket title.": "Enter a nonempty single-line ticket title."
+  "Enter a nonempty single-line ticket title.": "Enter a nonempty single-line ticket title.",
+  "Ticket subject": "Ticket subject",
+  "Select the question to include. Other subjects remain in the conversation.": "Select the question to include. Other subjects remain in the conversation.",
+  "Recorded discussion findings are available, even without a completed deep analysis.": "Recorded discussion findings are available, even without a completed deep analysis.",
+  "Write from conversation": "Write from conversation",
+  "Drafting the ticket…": "Drafting the ticket…",
+  "Cancel drafting": "Cancel drafting",
+  "Discard unsaved ticket edits and change the subject?": "Discard unsaved ticket edits and change the subject?",
+  "Choose a conversation subject before drafting.": "Choose a conversation subject before drafting.",
+  "The conversation or ticket draft changed. Reload before drafting.": "The conversation or ticket draft changed. Reload before drafting.",
+  "The selected discussion is too large to draft safely. Choose a narrower subject.": "The selected discussion is too large to draft safely. Choose a narrower subject.",
+  "The ticket draft changed during generation. Your edits were preserved.": "The ticket draft changed during generation. Your edits were preserved.",
+  "Reopen ticket preparation to retry drafting.": "Reopen ticket preparation to retry drafting."
 }
