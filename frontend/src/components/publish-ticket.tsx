@@ -116,12 +116,14 @@ export function PublishTicket({
   triggerLabel = "Prepare ticket",
   preparedDraft,
   conversationTicketId,
+  onClosed,
 }: {
   requestId: string;
   version: number;
   triggerLabel?: string;
   preparedDraft?: { title: string; body: string };
   conversationTicketId?: string;
+  onClosed?: () => void;
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -483,6 +485,7 @@ export function PublishTicket({
     setConnector("");
     setPending(null);
     setDraftSaveFailed(false);
+    onClosed?.();
   }
   return (
     <>

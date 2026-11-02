@@ -628,6 +628,7 @@ class PublishedTicket(models.Model):
     fields = models.JSONField(default=dict)
     snapshot = models.JSONField(default=dict)
     attachment_delivery = models.JSONField(default=list)
+    attempt_history = models.JSONField(default=list)
     payload_hash = models.CharField(max_length=64)
     external_id = models.CharField(max_length=255, blank=True)
     external_key = models.CharField(max_length=255, blank=True)

@@ -8,6 +8,12 @@ retain the prepared-ticket identity when known. The former selected preparation
 JSON remains mirrored for compatibility, but it is not the identity of every ticket.
 Reading or saving a preparation does not enqueue work. Row locks and revision guards
 prevent stale saves or a delayed drafting response from overwriting another ticket.
+Tickets browsing groups all destinations under their prepared document; legacy
+standalone publications remain readable. Summary states surface unresolved deliveries,
+with each destination's real outcome retained. Reconciliation only searches for the
+original external reference. A retry of a definitively rejected operation records its
+previous outcome in `PublishedTicket.attempt_history` before claiming another attempt.
+Published snapshots remain immutable, including when their source conversation is archived.
 
 SpecHelper separates conversational exploration from independently checked analysis.
 Both use the same conversation history and authorized resources. This describes the

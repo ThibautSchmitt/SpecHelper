@@ -69,11 +69,18 @@ def store(value, draft, ticket=None):
     return ticket
 
 
+def publication_state(publications):
+    occupied = {item.destination for item in publications if item.status != "ERROR"}
+    unresolved = [item for item in publications if item.status != "ERROR" or item.destination not in occupied]
+    return next((status for status in ["UNCERTAIN", "PUBLISHING", "ERROR", "PUBLISHED"]
+                 if any(item.observed_status == status for item in unresolved)), "DRAFT")
+
+
 def summaries(value):
     rows = []
     for ticket in value.conversation_tickets.select_related("source_version").prefetch_related("publications").order_by("created_at", "id"):
         publications = list(ticket.publications.all())
-        state = "PUBLISHED" if any(p.status == "PUBLISHED" for p in publications) else "ERROR" if any(p.status in {"ERROR", "UNCERTAIN"} for p in publications) else "PUBLISHING" if any(p.status == "PUBLISHING" for p in publications) else "DRAFT"
+        state = publication_state(publications)
         rows.append({"id":str(ticket.pk), "title":ticket.draft.get("title", ""), "source_version":ticket.source_version.number if ticket.source_version_id else None,
                      "topic_message_id":ticket.topic_message_id, "revision":ticket.draft.get("revision", 0), "status":state,
                      "created_at":ticket.created_at, "updated_at":ticket.updated_at})

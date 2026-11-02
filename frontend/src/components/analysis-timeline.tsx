@@ -104,7 +104,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
       subject:version.subject,
       label: version.status === "ERROR" ? "Deep analysis interrupted" : version.status === "PARTIAL" || displayed?.evidence?.blocking ? "Deep analysis finished with limits" : "Deep analysis completed" });
   }
-  for(const ticket of value.conversation_tickets || [])events.push({id:`ticket-${ticket.id}`,at:ticket.created_at,speaker:"assistant",content:ticket.title,ticketId:ticket.id,label:ticket.status === "PUBLISHED" ? "Ticket published" : ticket.status === "ERROR" ? "Ticket publication failed" : "Ticket in preparation"});
+  for(const ticket of value.conversation_tickets || [])events.push({id:`ticket-${ticket.id}`,at:ticket.created_at,speaker:"assistant",content:ticket.title,ticketId:ticket.id,label:ticket.status === "PUBLISHED" ? "Ticket published" : ticket.status === "ERROR" ? "Ticket publication failed" : ticket.status === "UNCERTAIN" ? "Publication to verify" : ticket.status === "PUBLISHING" ? "Publication in progress" : "Ticket in preparation"});
   for (const publication of value.publications || []) events.push({ id:`publication-${publication.id}`, at:publication.created_at, speaker:"assistant", content:publication.title,
     label:publication.status === "PUBLISHED" ? "Ticket published" : publication.status === "ERROR" ? "Ticket publication failed" : "Ticket publication not confirmed",
     url:publication.status === "PUBLISHED" && /^https?:\/\//i.test(publication.url) ? publication.url : undefined });
@@ -145,7 +145,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
       </dl>
     </div>
     <ol className="conversation-messages" ref={list}>
-      {events.map(event => <li key={event.id} className={`conversation-message conversation-${event.speaker}`} data-message={event.id}>
+      {events.map(event => <li key={event.id} id={event.id} className={`conversation-message conversation-${event.speaker}`} data-message={event.id}>
         <article className="conversation-bubble">
           {event.run && <InvestigationProgress run={event.run} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
           {event.work&&<DiscussionProgress job={event.work} unavailable={trackingUnavailable}/>}

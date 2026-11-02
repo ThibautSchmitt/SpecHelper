@@ -2342,5 +2342,21 @@
   "Unknown analysis status.": "Unknown analysis status.",
   "Discard unsaved ticket edits?": "Discard unsaved ticket edits?",
   "The AI reached the execution time limit. Completed observations are preserved; retry to resume this step.": "The AI reached the execution time limit. Completed observations are preserved; retry to resume this step.",
-  "Not started": "Not started"
+  "Not started": "Not started",
+  "Drafts and tickets published from your conversations.": "Drafts and tickets published from your conversations.",
+  "Publication in progress": "Publication in progress",
+  "Publication to verify": "Publication to verify",
+  "Title, reference, destination or conversation": "Title, reference, destination or conversation",
+  "No tickets yet. Tickets prepared from your conversations will appear here.": "No tickets yet. Tickets prepared from your conversations will appear here.",
+  "View ticket": "View ticket",
+  "Previous attempts": "Previous attempts",
+  "Submitted content": "Submitted content",
+  "Publications": "Publications",
+  "The external ticket may already exist. Verification will not create another ticket.": "The external ticket may already exist. Verification will not create another ticket.",
+  "Replace the saved ticket content with a new AI draft?": "Replace the saved ticket content with a new AI draft?",
+  "Ticket list": "Ticket list",
+  "Resume": "Resume",
+  "See error": "See error",
+  "Refresh": "Refresh",
+  "Modify": "Modify"
 }

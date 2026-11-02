@@ -6,7 +6,8 @@ from typing import Literal
 from uuid import UUID
 
 from django.db import transaction
-from django.db.models import CharField, Q, Value
+from django.db.models import Case, CharField, Exists, Max, OuterRef, Q, Value, When
+from django.db.models.functions import Coalesce, Greatest
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router, Schema
@@ -20,6 +21,7 @@ from .models import (
     Request,
     ResultVersion,
     TicketConnector,
+    TicketPublicationDraft,
 )
 from .secrets import decrypt, encrypt
 from .ticket_providers import provider_for, render_body
@@ -286,81 +288,286 @@ def list_tickets(
     environment: str = "",
     search: str = "",
     page: int = 1,
-    status: str = "PUBLISHED",
+    status: str = "all",
 ):
     if status not in {"all", "DRAFT", *PublishedTicket.Status.values}:
         raise HttpError(422, "Unknown ticket publication status.")
-    values = PublishedTicket.objects.all().select_related("connector", "version", "request")
-    environments = list(
-        values.order_by("version__environment_name")
-        .values_list("version__environment_name", flat=True)
-        .distinct()
-    )
+    # One internal document per row. Legacy publications without a document stay visible.
+    prepared = ConversationTicket.objects.select_related(
+        "request__environment", "source_version", "topic_message"
+    ).prefetch_related("publications__connector", "publications__version", "publications__request")
+    related = PublishedTicket.objects.filter(conversation_ticket=OuterRef("pk"))
     stale = Q(status="PUBLISHING", updated_at__lt=timezone.now() - timedelta(seconds=90))
-    if status == "UNCERTAIN":
-        values = values.filter(Q(status="UNCERTAIN") | stale)
-    elif status == "PUBLISHING":
-        values = values.filter(status=status).exclude(stale)
-    elif status != "all":
-        values = values.filter(status=status)
-    if platform:
-        values = values.filter(platform=platform)
-    if environment:
-        values = values.filter(version__environment_name=environment)
-    if search:
-        values = values.filter(
-            Q(title__icontains=search[:500])
-            | Q(external_key__icontains=search[:500])
-            | Q(project__icontains=search[:500])
+    prepared = prepared.annotate(
+        uncertain=Exists(related.filter(Q(status="UNCERTAIN") | stale)),
+        publishing=Exists(related.filter(status="PUBLISHING").exclude(stale)),
+        failed=Exists(
+            related.filter(status="ERROR").exclude(
+                destination__in=PublishedTicket.objects.filter(
+                    conversation_ticket=OuterRef("conversation_ticket_id")
+                )
+                .exclude(status="ERROR")
+                .values("destination")
+            )
+        ),
+        published=Exists(related.filter(status="PUBLISHED")),
+    ).annotate(
+        ticket_status=Case(
+            When(uncertain=True, then=Value("UNCERTAIN")),
+            When(publishing=True, then=Value("PUBLISHING")),
+            When(failed=True, then=Value("ERROR")),
+            When(published=True, then=Value("PUBLISHED")),
+            default=Value("DRAFT"),
+            output_field=CharField(),
         )
-    drafts = ConversationTicket.objects.filter(publications__isnull=True).select_related("request__environment", "source_version")
-    if platform or status not in {"all", "DRAFT"}:
-        drafts = drafts.none()
+    )
+    legacy = PublishedTicket.objects.filter(conversation_ticket__isnull=True).select_related(
+        "connector", "version", "request"
+    )
+    environments = sorted(
+        (
+            set(PublishedTicket.objects.values_list("version__environment_name", flat=True))
+            | set(
+                ConversationTicket.objects.values_list(
+                    "request__environment_name_snapshot", flat=True
+                )
+            )
+            | set(ConversationTicket.objects.values_list("request__environment__name", flat=True))
+        )
+        - {None, ""}
+    )
+    if status != "all":
+        prepared = prepared.filter(ticket_status=status)
+        legacy = (
+            legacy.filter(Q(status="UNCERTAIN") | stale)
+            if status == "UNCERTAIN"
+            else legacy.filter(status=status)
+        )
+        if status == "PUBLISHING":
+            legacy = legacy.exclude(stale)
+    if platform:
+        prepared = prepared.filter(publications__platform=platform).distinct()
+        legacy = legacy.filter(platform=platform)
     if environment:
-        drafts = drafts.filter(Q(request__environment_name_snapshot=environment) | Q(request__environment__name=environment))
+        prepared = prepared.filter(
+            Q(request__environment_name_snapshot=environment)
+            | Q(request__environment__name=environment)
+        )
+        legacy = legacy.filter(version__environment_name=environment)
     if search:
-        drafts = drafts.filter(draft__title__icontains=search[:500])
-    # Paginate the two existing kinds together in SQL; load full records only for this page.
-    index = values.order_by().annotate(kind=Value("publication", output_field=CharField())).values("id", "updated_at", "kind").union(
-        drafts.order_by().annotate(kind=Value("preparation", output_field=CharField())).values("id", "updated_at", "kind"),
-    ).order_by("-updated_at", "id")
-    page = max(1, page)
-    size = 25
-    selected = list(index[(page - 1) * size:page * size])
-    publications = {v.pk:v for v in values.filter(pk__in=[r["id"] for r in selected if r["kind"] == "publication"])}
-    preparations = {v.pk:v for v in drafts.filter(pk__in=[r["id"] for r in selected if r["kind"] == "preparation"])}
-    environments = sorted(set(environments) | set(ConversationTicket.objects.values_list("request__environment_name_snapshot", flat=True)))
+        search = search[:500]
+        prepared = prepared.filter(
+            Q(draft__title__icontains=search)
+            | Q(request__display_title__icontains=search)
+            | Q(request__need__icontains=search)
+            | Q(publications__external_key__icontains=search)
+            | Q(publications__external_id__icontains=search)
+            | Q(publications__project__icontains=search)
+        ).distinct()
+        legacy = legacy.filter(
+            Q(title__icontains=search)
+            | Q(external_key__icontains=search)
+            | Q(external_id__icontains=search)
+            | Q(project__icontains=search)
+            | Q(request__display_title__icontains=search)
+            | Q(request__need__icontains=search)
+        )
+    legacy_drafts = (
+        TicketPublicationDraft.objects.filter(conversation_ticket__isnull=True)
+        .select_related("version__request", "connector")
+        .annotate(
+            delivered=Exists(
+                PublishedTicket.objects.filter(
+                    version_id=OuterRef("version_id"),
+                    connector_id=OuterRef("connector_id"),
+                    project=OuterRef("project"),
+                    conversation_ticket__isnull=True,
+                )
+            )
+        )
+        .filter(delivered=False)
+    )
+    if status not in {"all", "DRAFT"}:
+        legacy_drafts = legacy_drafts.none()
+    if platform:
+        legacy_drafts = legacy_drafts.filter(connector__platform=platform)
+    if environment:
+        legacy_drafts = legacy_drafts.filter(version__environment_name=environment)
+    if search:
+        legacy_drafts = legacy_drafts.filter(
+            Q(content__title__icontains=search)
+            | Q(project__icontains=search)
+            | Q(version__request__display_title__icontains=search)
+            | Q(version__request__need__icontains=search)
+        )
+    environments = sorted(
+        set(environments)
+        | set(
+            TicketPublicationDraft.objects.exclude(version__environment_name="").values_list(
+                "version__environment_name", flat=True
+            )
+        )
+    )
+    prepared = prepared.annotate(
+        sort_at=Greatest("updated_at", Coalesce(Max("publications__updated_at"), "updated_at"))
+    )
+    index = (
+        legacy.order_by()
+        .annotate(
+            kind=Value("publication", output_field=CharField()),
+            sort_at=Coalesce("updated_at", "created_at"),
+        )
+        .values("id", "sort_at", "kind")
+        .union(
+            prepared.order_by()
+            .annotate(kind=Value("preparation", output_field=CharField()))
+            .values("id", "sort_at", "kind"),
+            legacy_drafts.order_by()
+            .annotate(
+                kind=Value("publication_draft", output_field=CharField()),
+                sort_at=Coalesce("updated_at", "created_at"),
+            )
+            .values("id", "sort_at", "kind"),
+        )
+        .order_by("-sort_at", "id")
+    )
+    page, size = max(1, page), 25
+    selected = list(index[(page - 1) * size : page * size])
+    publications = {
+        v.pk: v
+        for v in legacy.filter(pk__in=[r["id"] for r in selected if r["kind"] == "publication"])
+    }
+    preparations = {
+        v.pk: v
+        for v in prepared.filter(pk__in=[r["id"] for r in selected if r["kind"] == "preparation"])
+    }
+    destination_drafts = {
+        v.pk: v
+        for v in legacy_drafts.filter(
+            pk__in=[r["id"] for r in selected if r["kind"] == "publication_draft"]
+        )
+    }
     return {
-        "items": [publication_dict(publications[r["id"]]) if r["kind"] == "publication" else preparation_dict(preparations[r["id"]]) for r in selected],
+        "items": [
+            ticket_record(publications[r["id"]])
+            if r["kind"] == "publication"
+            else preparation_dict(preparations[r["id"]])
+            if r["kind"] == "preparation"
+            else destination_draft_dict(destination_drafts[r["id"]])
+            for r in selected
+        ],
         "total": index.count(),
         "page": page,
         "page_size": size,
         "environments": environments,
-        "statuses": ["DRAFT", *PublishedTicket.Status.values],
+        "statuses": ["DRAFT", "PUBLISHING", "PUBLISHED", "ERROR", "UNCERTAIN"],
+    }
+
+
+def ticket_record(value):
+    return {
+        **publication_dict(value),
+        "kind": "publication",
+        "conversation_title": value.request.display_title or value.request.need[:200],
     }
 
 
 def preparation_dict(value):
+    publications = [publication_dict(item) for item in value.publications.all()]
+    from .ticket_preparation import publication_state
+
+    state = publication_state(list(value.publications.all()))
+    updated = max([value.updated_at, *[item["updated_at"] for item in publications]])
     return {
-        "id":str(value.pk), "conversation_ticket_id":str(value.pk), "kind":"preparation",
-        "title":value.draft.get("title", ""), "description":value.draft.get("body", ""),
-        "external_id":"", "external_key":"", "url":"", "platform":"", "project":"", "connector_name":"",
-        "environment_name":value.request.environment_name_snapshot or (value.request.environment.name if value.request.environment_id else ""),
-        "request_id":str(value.request_id), "analysis_deleted":bool(value.request.deleted_at),
-        "version_number":value.source_version.number if value.source_version_id else None,
-        "status":"DRAFT", "created_at":value.created_at, "updated_at":value.updated_at,
-        "error":"", "labels":[], "payload_available":True,
+        "id": str(value.pk),
+        "conversation_ticket_id": str(value.pk),
+        "kind": "preparation",
+        "title": value.draft.get("title", ""),
+        "description": value.draft.get("body", ""),
+        "external_id": "",
+        "external_key": "",
+        "url": "",
+        "platform": "",
+        "project": "",
+        "connector_name": "",
+        "environment_name": value.request.environment_name_snapshot
+        or (value.request.environment.name if value.request.environment_id else ""),
+        "request_id": str(value.request_id),
+        "analysis_deleted": bool(value.request.deleted_at),
+        "conversation_title": value.request.display_title or value.request.need[:200],
+        "topic_message_id": value.topic_message_id,
+        "subject": value.topic_message.content
+        if value.topic_message_id
+        else value.draft.get("title", ""),
+        "version_number": value.source_version.number if value.source_version_id else None,
+        "status": state,
+        "created_at": value.created_at,
+        "updated_at": updated,
+        "error": "",
+        "labels": [],
+        "payload_available": True,
+        "publications": publications,
+        "read_only": any(item["status"] != "ERROR" for item in publications),
+    }
+
+
+def destination_draft_dict(value):
+    return {
+        "id": str(value.pk),
+        "kind": "publication_draft",
+        "title": value.content.get("title", ""),
+        "description": value.content.get("body", ""),
+        "status": "DRAFT",
+        "platform": value.connector.platform,
+        "connector_name": value.connector.name,
+        "project": value.project,
+        "external_id": "",
+        "external_key": "",
+        "url": "",
+        "error": "",
+        "environment_name": value.version.environment_name,
+        "request_id": str(value.version.request_id),
+        "conversation_title": value.version.request.display_title
+        or value.version.request.need[:200],
+        "analysis_deleted": bool(value.version.request.deleted_at),
+        "version_number": value.version.number,
+        "created_at": value.created_at,
+        "updated_at": value.updated_at,
+        "labels": value.content.get("labels", []),
+        "publications": [],
+        "payload_available": True,
     }
 
 
 @router.get("/tickets/{ticket_id}")
 def ticket_detail(request, ticket_id: UUID):
-    value = PublishedTicket.objects.select_related("connector", "version", "request").filter(pk=ticket_id).first()
+    value = (
+        PublishedTicket.objects.select_related("connector", "version", "request")
+        .filter(pk=ticket_id)
+        .first()
+    )
     if value is None:
-        return preparation_dict(get_object_or_404(ConversationTicket.objects.select_related("request__environment", "source_version"), pk=ticket_id))
+        draft = (
+            TicketPublicationDraft.objects.filter(pk=ticket_id, conversation_ticket__isnull=True)
+            .select_related("connector", "version__request")
+            .first()
+        )
+        if draft:
+            return destination_draft_dict(draft)
+    if value is None:
+        return preparation_dict(
+            get_object_or_404(
+                ConversationTicket.objects.select_related(
+                    "request__environment", "source_version", "topic_message"
+                ).prefetch_related(
+                    "publications__connector", "publications__version", "publications__request"
+                ),
+                pk=ticket_id,
+            )
+        )
     labels = value.snapshot.get("labels", [])
     return {
-        **publication_dict(value),
+        **ticket_record(value),
         "description": value.body,
         "labels": [label for label in labels if isinstance(label, str)]
         if isinstance(labels, list)

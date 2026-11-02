@@ -89,6 +89,7 @@ def publication_dict(value):
         "snapshot": value.snapshot,
         "connector_id": value.connector_id,
         "connector_name": value.connector.name,
+        "attempt_history": value.attempt_history,
         "platform": value.platform,
         "project": value.project,
         "environment_name": value.version.environment_name,
@@ -351,6 +352,12 @@ def preview(
         "options_revision": options.get("revision", ""),
     }
     conversation_ticket = publication_ticket(version, presentation.get("conversation_ticket_id"))
+    if conversation_ticket and selected_format == "standard":
+        from .ticket_preparation import snapshot as preparation_snapshot
+
+        prepared = preparation_snapshot(version.request, ticket_id=conversation_ticket.pk)
+        content["title"] = prepared["title"]
+        content["body"] = prepared["markdown"] + ("\n\n" + extra if extra else "")
     existing = TicketPublicationDraft.objects.filter(
         version=version, connector=connector, project=project, conversation_ticket=conversation_ticket
     ).first()
@@ -736,6 +743,12 @@ def publish(version, connector, payload):
                     pk=record.pk, status=record.status, updated_at=record.updated_at
                 ).update(
                     status=PublishedTicket.Status.PUBLISHING,
+                    attempt_history=[*record.attempt_history, {
+                        "status": record.observed_status,
+                        "error": record.error,
+                        "observed_at": record.updated_at.isoformat(),
+                        "finished_at": record.finished_at.isoformat() if record.finished_at else None,
+                    }],
                     updated_at=timezone.now(),
                     error="",
                     finished_at=None,

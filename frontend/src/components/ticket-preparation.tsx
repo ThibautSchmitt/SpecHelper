@@ -29,7 +29,7 @@ const states = {
   in_progress: "Deep analysis is in progress.",
 };
 
-export function TicketPreparation({ value, onUpdated, sourceVersion, ticketId, autoOpen = false, triggerLabel = "Prepare a ticket" }: { value: RequestDetail; onUpdated: (value: RequestDetail) => void; sourceVersion?:number; ticketId?:string; autoOpen?:boolean; triggerLabel?:string }) {
+export function TicketPreparation({ value, onUpdated, sourceVersion, ticketId, autoOpen = false, triggerLabel = "Prepare a ticket", hideTrigger = false, onClosed }: { value: RequestDetail; onUpdated: (value: RequestDetail) => void; sourceVersion?:number; ticketId?:string; autoOpen?:boolean; triggerLabel?:string; hideTrigger?:boolean; onClosed?:()=>void }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const prefix = useId();
@@ -48,6 +48,12 @@ export function TicketPreparation({ value, onUpdated, sourceVersion, ticketId, a
     return endpoint + "?" + query;
   }
   const generating = !!draft?.generation && ["QUEUED","RUNNING"].includes(draft.generation.status);
+  useEffect(()=>{
+    if(!open||!dirty)return;
+    const protect=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
+    window.addEventListener("beforeunload",protect);
+    return()=>window.removeEventListener("beforeunload",protect);
+  },[open,dirty]);
   useEffect(() => {
     if (!open || !generating) return;
     let alive = true;
@@ -97,6 +103,7 @@ export function TicketPreparation({ value, onUpdated, sourceVersion, ticketId, a
     return updated;
   }
   async function action(operation: "save" | "copy" | "download" | "analyze" | "generate" | "cancelDraft") {
+    if(operation === "generate" && draft?.revision && !window.confirm(t("Replace the saved ticket content with a new AI draft?")))return;
     setBusy(true); setError("");
     try {
       if(operation === "cancelDraft"){
@@ -133,8 +140,8 @@ export function TicketPreparation({ value, onUpdated, sourceVersion, ticketId, a
   }
   function allowClose() { return !busy && (!dirty || window.confirm(t("Discard unsaved ticket edits?"))); }
   return <>
-    <Button size="sm" variant="outline" onClick={() => { dialog.current?.showModal(); setOpen(true); void load(); }}><FileText size={15} aria-hidden="true"/>{t(triggerLabel)}</Button>
-    <dialog ref={dialog} className="publication-dialog" aria-labelledby={`ticket-preparation-title-${prefix}`} onClose={()=>setOpen(false)} onCancel={event => { if (!allowClose()) event.preventDefault(); }}>
+    {!hideTrigger && <Button size="sm" variant="outline" onClick={() => { dialog.current?.showModal(); setOpen(true); void load(); }}><FileText size={15} aria-hidden="true"/>{t(triggerLabel)}</Button>}
+    <dialog ref={dialog} className="publication-dialog" aria-labelledby={`ticket-preparation-title-${prefix}`} onClose={()=>{setOpen(false);onClosed?.();}} onCancel={event => { if (!allowClose()) event.preventDefault(); }}>
       <div className="flex items-start justify-between gap-4">
         <h2 id={`ticket-preparation-title-${prefix}`}>{t("Prepare a ticket")}</h2>
         <Button variant="ghost" disabled={busy} onClick={() => {if(allowClose())dialog.current?.close();}}>{t(generating ? "Close" : "Cancel")}</Button>

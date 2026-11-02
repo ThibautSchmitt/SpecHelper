@@ -284,8 +284,14 @@ def test_definitive_rejection_is_safe_and_retryable(publication_context):
     record = publish(version, connector, payload)
     assert record.status == "ERROR"
     assert "fixture-secret" not in record.error
+    original_error = record.error
     provider.create.side_effect = None
-    assert publish(version, connector, payload).status == "PUBLISHED"
+    retried = publish(version, connector, payload)
+    assert retried.status == "PUBLISHED"
+    assert retried.attempt_history[0]["status"] == "ERROR"
+    assert retried.attempt_history[0]["error"] == original_error
+    assert retried.attempt_history[0]["finished_at"]
+    assert "fixture-secret" not in str(retried.attempt_history)
     assert PublishedTicket.objects.count() == 1
 
 
@@ -507,3 +513,24 @@ def test_separate_prepared_tickets_can_publish_to_same_destination(publication_c
     with pytest.raises(Http404):
         preview(unrelated,connector,"42",presentation={"conversation_ticket_id":str(first.pk)})
     assert provider.create.call_count == 2
+
+
+def test_prepared_standard_preview_uses_its_own_subject_and_preserves_destination_edits(publication_context):
+    from core.models import ConversationTicket, TicketPublicationDraft
+
+    version, connector, provider, payload = publication_context
+    version.request.language = "en"
+    version.request.save()
+    ticket = ConversationTicket.objects.create(request=version.request, source_version=version,
+        draft={"title":"A narrower correction", "body":"Keep my acceptance criteria.", "source_version":version.number, "revision":1})
+    selection={"conversation_ticket_id":str(ticket.pk), "ticket_format":"standard"}
+    initial=preview(version,connector,"42",presentation=selection,restore=True)
+    assert initial["title"] == "A narrower correction"
+    assert "Keep my acceptance criteria." in initial["body"]
+    draft=TicketPublicationDraft.objects.get(pk=initial["draft_id"])
+    draft.content={**draft.content,"title":"Destination-specific edit","body":"Preserved target content"}
+    draft.save()
+    restored=preview(version,connector,"42",presentation=selection,restore=True)
+    assert restored["title"] == "Destination-specific edit"
+    assert restored["body"] == "Preserved target content"
+    provider.create.assert_not_called()

@@ -201,8 +201,9 @@ their generated content when the conversation or environment later changes.
 The general conversation action lets you choose a source when several analyses exist,
 or keep an explicitly unverified draft. Each saved ticket has its own identity,
 subject and edits; it does not replace another ticket in the same conversation.
-Reopen it from its timeline entry or **Prepared tickets**. The **Tickets** page also
-lists unpublished preparations and external publication attempts.
+Reopen it from its timeline entry, **Prepared tickets**, or **Resume** in **Tickets**.
+The editor opens directly from Tickets without leaving that page. Rewriting a saved
+document with AI requires confirmation; concurrent edits are rejected rather than overwritten.
 
 **Prepare a ticket** opens an editable draft in the conversation. It never starts
 the three roles or publishes anything. You can save, copy or download the draft
@@ -249,7 +250,9 @@ remain separate choices. An unavailable account stays visible but cannot be sele
 a failure never silently switches accounts. If none is associated, follow the link
 to the environment’s **Publication destinations** configuration. Choose the
 standard concise format or a real destination template, complete mandatory fields,
-edit the draft and inspect the preview. **Use prepared draft** explicitly copies
+edit the draft and inspect the preview. A new standard-format destination starts with
+the selected ticket's content; an already saved destination draft keeps its edits.
+**Use prepared draft** explicitly copies
 the saved conversation draft into the destination preview, including its verification
 notice and source limitations; it never replaces a saved publication draft silently.
 Draft edits persist separately from the
@@ -288,8 +291,25 @@ transfer may resume against an existing issue without creating another issue.
 
 **Home** summarizes mutually exclusive work needing action, work in progress and
 available results. **Analyses** provides search, filters and the conversation history.
-**Tickets** lists confirmed publications and their source analysis/version; failed or
-uncertain attempts remain accessible from the analysis and Activity.
+**Tickets** lists drafts and published documents, with one row per internal ticket.
+Each ticket retains its subject, conversation and optional source analysis, and can
+have several destination-specific publications. Older standalone publications remain
+visible, as do saved destination drafts without an internal document. Resume those
+with their original connection and destination to restore the existing edits.
+Expand a ticket's publications to inspect each account, destination, external
+reference, submitted content, error and earlier attempts. A successful destination
+does not hide another destination's pending, failed or uncertain operation.
+
+Search titles, external references, destinations or source conversation titles/needs.
+The status selector is always close to search; **Filters** exposes platform and
+environment. Pagination appears only when there is more than one page.
+Visible states are **Draft**, **Publication in progress**, **Published**, **Failed**
+and **Publication to verify**. Verification of an uncertain operation uses the original
+publication identity and searches the original destination; it never creates a new
+ticket when the outcome is unknown. Refresh only reads SpecHelper's saved records.
+Archived conversations and their tickets remain consultable. Publication still uses
+the selected external account and requires explicit human confirmation and the existing
+independent checks; no deep analysis starts automatically when preparing a ticket.
 
 You can edit a short analysis title without replacing the original need. The history
 retains messages, need revisions, captured references and result versions.
