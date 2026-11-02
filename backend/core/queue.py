@@ -468,7 +468,7 @@ def snapshot():
     # to the same destination. Uncertain writes always remain visible for recovery.
     latest_publication = PublishedTicket.objects.filter(
         request_id=OuterRef("request_id"), connector_id=OuterRef("connector_id"), project=OuterRef("project")
-    ).order_by("-created_at", "-id")
+    ).filter(Q(conversation_ticket_id=OuterRef("conversation_ticket_id"), conversation_ticket__isnull=False) | Q(conversation_ticket__isnull=True,version_id=OuterRef("version_id"))).order_by("-created_at", "-id")
     current_publications = PublishedTicket.objects.filter(Q(status="UNCERTAIN") | Q(pk=Subquery(latest_publication.values("pk")[:1])))
     publications = list(
         current_publications.filter(status__in=["PUBLISHING", "UNCERTAIN", "ERROR"]).select_related(
@@ -502,7 +502,7 @@ def snapshot():
                 "request_id": str(publication.request_id),
                 "environment_id": publication.request.environment_id,
                 "title": publication.title,
-                "environment_name": publication.version.environment_name,
+                "environment_name": publication.version.environment_name if publication.version_id else publication.request.environment_name_snapshot,
                 "operation": "Ticket publication",
                 "agent": None,
                 "assignments": [],
@@ -522,7 +522,7 @@ def snapshot():
                     if stale
                     else ""
                 ),
-                "href": f"/analyses/{publication.request_id}?version={publication.version.number}",
+                "href": f"/analyses/{publication.request_id}" + (f"?version={publication.version.number}" if publication.version_id else ""),
             }
         )
     for item in Request.objects.select_related("environment").filter(status__in=["DRAFT", "READY", "PARTIAL"], scope_assessment__status__in=["NEEDS_CLARIFICATION", "OUT_OF_SCOPE"]):

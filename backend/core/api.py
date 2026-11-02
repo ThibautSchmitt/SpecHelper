@@ -368,9 +368,11 @@ def request_dict(value, full=False):
             run.pop("job__status", None)
             run.pop("job__payload", None)
 
+        from .ticket_publication import stored_publication_url
         result["publications"] = [
             {"id": str(row.pk), "title": row.title, "status": row.observed_status,
-             "url": row.url if row.status == "PUBLISHED" else "", "version_number": row.version.number,
+             "url": stored_publication_url(row) if row.status == "PUBLISHED" else "", "version_number": row.version.number if row.version_id else None,
+             "platform":row.platform,"external_key":row.external_key or row.external_id,
              "created_at": row.finished_at or row.created_at}
             for row in PublishedTicket.objects.filter(request=value).select_related("version").order_by("created_at", "id")
         ]

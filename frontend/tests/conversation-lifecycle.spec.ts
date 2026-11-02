@@ -82,7 +82,7 @@ for(const language of ['en','fr'] as const){
   for(const n of [1,2]){
    await actions.nth(n-1).click();
    const modal=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
-   await expect(modal.getByLabel(t('Source deep analysis'),{exact:true})).toHaveValue(String(n));
+   await expect(modal.locator("select")).toHaveCount(0);
    await expect(modal.getByLabel(t('Ticket description'),{exact:true})).toHaveValue(n===1?'DATES_PROOF':'ROUNDING_PROOF');
    await modal.getByRole('button',{name:t('Save'),exact:true}).click();
    await expect(modal.getByText(t('Ticket draft saved.'),{exact:true})).toBeVisible();

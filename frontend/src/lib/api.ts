@@ -267,7 +267,7 @@ export type RequestDetail = RequestItem & {
   markdown: string | null;
   latest_version: ResultVersion | null;
   versions: { number: number; created_at: string; status: string; run_number?:number; subject?:string; workflow?:"request"|"question" }[];
-  publications?: { id: string; title: string; status: string; url: string; version_number: number; created_at: string }[];
+  publications?: { id: string; title: string; status: string; url: string; version_number: number | null; created_at: string; platform?:string; external_key?:string }[];
   messages: {
     id: number;
     role: string;

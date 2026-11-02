@@ -52,13 +52,13 @@ def test_first_draft_opens_saves_and_reopens_without_analysis(client, analysis):
     assert response.status_code == 200, response.content
     draft = response.json()
     assert draft["analysis_state"] == "none" and not draft["source_verified"]
-    assert not draft["publication_available"]
+    assert draft["publication_available"]
     response = save(client, analysis, draft, title="Prevent invalid periods", body="Show an error.")
     assert response.status_code == 200, response.content
     assert response.json()["revision"] == 1
     reopened = client.get(endpoint(analysis)).json()
     assert reopened["body"] == "Show an error."
-    assert "Unverified draft" in reopened["markdown"]
+    assert reopened["markdown"] == reopened["body"] and not reopened["ticket_verified"]
     analysis.refresh_from_db()
     assert analysis.workflow == "question" and analysis.status == "DISCUSSING"
     assert analysis.discussion_state["revision"] == 1
@@ -74,10 +74,11 @@ def test_existing_analysis_reused_but_later_correction_stays_unverified(client, 
     assert draft["source_version"] == 1 and draft["source_verified"]
     assert draft["has_new_messages"] and draft["verified_scope"] == "Find the cause of inconsistent dates."
     assert "Prevent invalid periods" in draft["body"]
-    assert "not independently verified" in draft["body"] and "UNVERIFIED_ASSISTANT_HYPOTHESIS" in draft["body"]
+    assert "UNVERIFIED_ASSISTANT_HYPOTHESIS" not in draft["body"]
+    assert draft["discussion_findings_available"]
     response = save(client, analysis, draft, scope_choice="clarified")
     assert response.status_code == 200
-    assert "have not been independently verified" in response.json()["markdown"]
+    assert not response.json()["ticket_verified"]
     version.refresh_from_db()
     assert version.context_snapshot == frozen and version.evidence["claims"][0]["status"] == "supported"
     assert AnalysisRun.objects.count() == 1 and not Job.objects.exists()
@@ -91,10 +92,10 @@ def test_incomplete_or_interrupted_analysis_allows_draft(client, analysis, statu
     else:
         AnalysisRun.objects.create(request=analysis, number=1, status=status)
     draft = client.get(endpoint(analysis)).json()
-    assert not draft["source_verified"] and not draft["publication_allowed"]
+    assert not draft["source_verified"] and draft["publication_allowed"]
     response = save(client, analysis, draft)
     assert response.status_code == 200
-    assert "Unverified draft" in response.json()["markdown"]
+    assert not response.json()["ticket_verified"]
     assert not Job.objects.exists()
 
 
@@ -164,11 +165,12 @@ def test_latest_subject_reuses_code_answers_without_merging_separate_questions(c
     RequestMessage.objects.create(request=analysis, role="assistant", kind="discussion_reply", content="SWITCH_FINDING with source `menu.py:14`.")
     draft = client.get(endpoint(analysis)).json()
     assert draft["title"] == latest.content and draft["topic_message_id"] == latest.pk
-    assert "SWITCH_FINDING" in draft["body"] and "menu.py:14" in draft["body"]
+    assert draft["discussion_findings_available"]
+    assert "SWITCH_FINDING" not in draft["body"] and "menu.py:14" not in draft["body"]
     assert "BATCH_ONLY" not in draft["body"] and "STALE_BATCH" not in draft["body"]
     assert "Clarification question" not in str(draft["topics"])
     selected = client.get(endpoint(analysis), {"topic_message_id": earlier.pk}).json()
-    assert "BATCH_ONLY_FINDING" in selected["body"] and "SWITCH_FINDING" not in selected["body"]
+    assert selected["discussion_findings_available"] and "SWITCH_FINDING" not in selected["body"]
     assert selected["title"] == "Explain import batches."
     assert not Job.objects.exists()
 
@@ -178,7 +180,8 @@ def test_interrupted_run_public_findings_are_available_without_a_result(client, 
         "analyst": {"claims": [{"statement": "An import validates the file format.", "sources": []}], "private_reasoning": "NEVER_EXPOSE"},
     }})
     draft = client.get(endpoint(analysis)).json()
-    assert "An import validates" in draft["body"] and "incomplete verification" in draft["body"]
+    assert draft["discussion_findings_available"]
+    assert "An import validates" not in draft["body"]
     assert "NEVER_EXPOSE" not in draft["body"] and not draft["source_verified"]
 
 
@@ -287,3 +290,29 @@ def test_cancelled_drafting_does_not_become_an_ordinary_discussion_retry(client,
         "message":"", "expected_revision":analysis.discussion_state["revision"], "restart_session":True,
     }, content_type="application/json")
     assert response.status_code == 409 and "ticket preparation" in response.json()["detail"]
+
+
+def test_selected_answer_uses_its_own_clarifications_in_a_long_conversation(client,analysis,monkeypatch):
+    for index in range(45):
+        RequestMessage.objects.create(request=analysis,role="user",kind="discussion",content=f"UNRELATED_TOPIC_{index}")
+        RequestMessage.objects.create(request=analysis,role="assistant",kind="discussion_reply",content=f"UNRELATED_FINDING_{index}")
+    question=RequestMessage.objects.create(request=analysis,role="user",kind="discussion",content="Prevent invalid periods.")
+    clarification=RequestMessage.objects.create(request=analysis,role="assistant",kind="clarification",content="Include archived records?")
+    answer=RequestMessage.objects.create(request=analysis,role="user",kind="answer",content="Yes, archived records too.")
+    anchor=RequestMessage.objects.create(request=analysis,role="assistant",kind="discussion_reply",content="Period validation is missing in the import.")
+    RequestMessage.objects.create(request=analysis,role="user",kind="discussion",content="UNRELATED_NEW_QUESTION")
+    RequestMessage.objects.create(request=analysis,role="assistant",kind="discussion_reply",content="UNRELATED_NEW_ANSWER")
+    row=client.get(endpoint(analysis),{"new_ticket":True,"anchor_message_id":anchor.pk}).json()
+    assert row["anchor_message_id"]==anchor.pk and row["topic_message_id"]==question.pk
+    assert row["context_message_ids"]==[question.pk,clarification.pk,answer.pk,anchor.pk]
+    assert row["topics"]==[] and row["source_version"] is None
+    saved=save(client,analysis,row,topic_message_id=question.pk,anchor_message_id=anchor.pk).json()
+    response=client.post(endpoint(analysis)+"/generate",{"ticket_id":saved["id"],"expected_revision":saved["revision"],
+      "expected_discussion_revision":saved["discussion_revision"],"topic_message_id":question.pk,"anchor_message_id":anchor.pk},content_type="application/json")
+    assert response.status_code==200,response.content
+    job=Job.objects.get(kind="discussion")
+    inputs=job.payload["ticket_preparation"]["inputs"]
+    assert "Yes, archived records too." in str(inputs)
+    assert "Period validation is missing" in str(inputs)
+    assert "UNRELATED_" not in str(inputs)
+    assert not AnalysisRun.objects.exists() and not analysis.business_decisions.exists()

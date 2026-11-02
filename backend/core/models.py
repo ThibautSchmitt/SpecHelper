@@ -612,7 +612,7 @@ class PublishedTicket(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     request = models.ForeignKey(Request, related_name="published_tickets", on_delete=models.PROTECT)
     version = models.ForeignKey(
-        ResultVersion, related_name="published_tickets", on_delete=models.PROTECT
+        ResultVersion, related_name="published_tickets", on_delete=models.PROTECT, null=True
     )
     conversation_ticket = models.ForeignKey(ConversationTicket, null=True, on_delete=models.PROTECT, related_name="publications")
     connector = models.ForeignKey(
@@ -659,6 +659,7 @@ class PublishedTicket(models.Model):
                 condition=models.Q(conversation_ticket__isnull=True) & ~models.Q(status="ERROR"),
                 name="unique_version_ticket_destination",
             ),
+            models.CheckConstraint(condition=models.Q(version__isnull=False) | models.Q(conversation_ticket__isnull=False), name="publication_has_source"),
             models.UniqueConstraint(fields=["conversation_ticket", "destination"],
                 condition=models.Q(conversation_ticket__isnull=False) & ~models.Q(status="ERROR"),
                 name="unique_prepared_ticket_destination"),
@@ -674,8 +675,10 @@ class PublishedTicket(models.Model):
             raise ValueError(
                 "A publication snapshot is immutable; only its delivery state may change"
             )
-        if self.request_id != self.version.request_id:
+        if self.version_id and self.request_id != self.version.request_id:
             raise ValueError("The published version does not belong to this request")
+        if not self.version_id and (not self.conversation_ticket_id or self.conversation_ticket.request_id != self.request_id):
+            raise ValueError("A publication without analysis requires its source conversation ticket")
         return super().save(*args, **kwargs)
 
 
@@ -684,7 +687,7 @@ class TicketPublicationDraft(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     version = models.ForeignKey(
-        ResultVersion, related_name="ticket_drafts", on_delete=models.CASCADE
+        ResultVersion, related_name="ticket_drafts", on_delete=models.CASCADE, null=True
     )
     conversation_ticket = models.ForeignKey(ConversationTicket, null=True, on_delete=models.PROTECT, related_name="publication_drafts")
     connector = models.ForeignKey(
@@ -704,6 +707,9 @@ class TicketPublicationDraft(models.Model):
             ),
             models.UniqueConstraint(fields=["conversation_ticket", "version", "connector", "project"],
                 condition=models.Q(conversation_ticket__isnull=False), name="unique_prepared_draft_destination"),
+            models.UniqueConstraint(fields=["conversation_ticket", "connector", "project"],
+                condition=models.Q(conversation_ticket__isnull=False, version__isnull=True), name="unique_discussion_draft_destination"),
+            models.CheckConstraint(condition=models.Q(version__isnull=False) | models.Q(conversation_ticket__isnull=False), name="publication_draft_has_source"),
         ]
 
 

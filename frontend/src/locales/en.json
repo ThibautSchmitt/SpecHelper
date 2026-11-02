@@ -2364,5 +2364,17 @@
   "Title, reference, platform or project": "Title, reference, platform or project",
   "No published tickets yet.": "No published tickets yet.",
   "Tickets published from your conversations will appear here.": "Tickets published from your conversations will appear here.",
-  "External link unavailable": "External link unavailable"
+  "External link unavailable": "External link unavailable",
+  "Deep analysis available": "Deep analysis available",
+  "Not independently verified": "Not independently verified",
+  "Continue to publication": "Continue to publication",
+  "Sources and options": "Sources and options",
+  "Source message": "Source message",
+  "Message actions": "Message actions",
+  "Ticket draft": "Ticket draft",
+  "Review and publish the conversation draft.": "Review and publish the conversation draft.",
+  "Conversation draft": "Conversation draft",
+  "Publish without independent verification": "Publish without independent verification",
+  "Publish anyway": "Publish anyway",
+  "This ticket has not been verified by a deep analysis. Publish it anyway?": "This ticket has not been verified by a deep analysis. Publish it anyway?"
 }

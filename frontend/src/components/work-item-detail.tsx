@@ -398,6 +398,7 @@ function RequestContent({
       <AnalysisConversation value={value} result={loadingVersion ? null : result} trackingUnavailable={trackingUnavailable}
         reply={conversationReply} onSelectVersion={selectConversationVersion}
         resultActions={(unified || value.discussion?.enabled) ? number=><TicketPreparation value={value} sourceVersion={number} onUpdated={setValue}/> : undefined}
+        messageActions={messageId=><TicketPreparation value={value} anchorMessageId={messageId} onUpdated={setValue}/>}
         ticketActions={ticketId=><TicketPreparation value={value} ticketId={ticketId} triggerLabel="Open ticket draft" onUpdated={setValue}/>}
         actions={<>
           <Button variant="outline" size="sm" onClick={openReport}>{t("Analysis report")}</Button>

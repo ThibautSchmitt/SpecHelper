@@ -13,7 +13,14 @@ from django.utils import timezone
 from ninja.errors import HttpError
 
 from .i18n import translate
-from .models import Environment, PublishedTicket, Request, TicketConnector, TicketPublicationDraft
+from .models import (
+    Environment,
+    PublishedTicket,
+    Request,
+    RequestMessage,
+    TicketConnector,
+    TicketPublicationDraft,
+)
 from .ticket_preparation import publication_ticket, version_workflow
 from .ticket_providers import NetworkUncertain, TicketProviderError, provider_for, render_body
 
@@ -92,10 +99,10 @@ def publication_dict(value):
         "attempt_history": value.attempt_history,
         "platform": value.platform,
         "project": value.project,
-        "environment_name": value.version.environment_name,
+        "environment_name": value.version.environment_name if value.version_id else value.request.environment_name_snapshot or (value.request.environment.name if value.request.environment_id else ""),
         "request_id": str(value.request_id),
         "analysis_deleted": value.request.deleted_at is not None,
-        "version_number": value.version.number,
+        "version_number": value.version.number if value.version_id else None,
         "external_id": value.external_id,
         "external_key": value.external_key,
         "external_reference": value.external_reference,
@@ -237,9 +244,12 @@ def preview(
     version, connector, project, template_id="", issue_type="", presentation=None, *, restore=False
 ):
     require_environment(version, connector)
-    if version_workflow(version) != "request":
+    prepared_ticket = publication_ticket(version, (presentation or {}).get("conversation_ticket_id"))
+    if not version.pk and any((presentation or {}).get(key) for key in ("include_business_analysis","include_technical_analysis","include_goal","include_diagrams")):
+        raise HttpError(422,"No source analysis is available for this artifact.")
+    if not prepared_ticket and version_workflow(version) != "request":
         raise HttpError(409, "A question cannot publish an external ticket.")
-    if version.status not in {"READY", "PARTIAL"}:
+    if not prepared_ticket and version.status not in {"READY", "PARTIAL"}:
         raise HttpError(409, "Only a completed result version can be published.")
     provider, options = checked_options(connector, project, template_id, issue_type)
     if presentation is not None:
@@ -260,7 +270,7 @@ def preview(
             "issue_type", ""
         ):
             provider, options = checked_options(connector, project, template_id, issue_type)
-    artifact = version.artifacts.filter(name="ticket.md").first()
+    artifact = version.artifacts.filter(name="ticket.md").first() if version.pk else None
     body = artifact.content if artifact else ""
     template = options.get("template_body", "")
     if options.get("render_fields"):
@@ -359,7 +369,7 @@ def preview(
         content["title"] = prepared["title"]
         content["body"] = prepared["markdown"] + ("\n\n" + extra if extra else "")
     existing = TicketPublicationDraft.objects.filter(
-        version=version, connector=connector, project=project, conversation_ticket=conversation_ticket
+        version_id=version.pk, connector=connector, project=project, conversation_ticket=conversation_ticket
     ).first()
     if restore and existing and {"include_diagrams": False, **existing.presentation} == selection:
         # Only restore against the same destination metadata revision. A changed
@@ -560,6 +570,13 @@ def store_success(record, result):
                 updated_at=timezone.now(),
                 finished_at=timezone.now(),
             )
+            request = Request.objects.select_for_update().get(pk=record.request_id)
+            _, created = RequestMessage.objects.get_or_create(request=request, kind="ticket_publication", data__publication_id=str(record.pk),
+                defaults={"role":"assistant", "content":record.title, "version_id":record.version_id,
+                    "data":{"publication_id":str(record.pk), "conversation_ticket_id":str(record.conversation_ticket_id) if record.conversation_ticket_id else None,
+                            "platform":record.platform,"external_key":str(external_key) or external_id,"url":url}})
+            if created:
+                Request.objects.filter(pk=request.pk).update(updated_at=timezone.now())
     except IntegrityError:
         raise NetworkUncertain("The external identity needs reconciliation") from None
 
@@ -593,15 +610,18 @@ def publish(version, connector, payload):
         raise HttpError(404, "Analysis not found.")
     if payload.get("confirmed") is not True:
         raise HttpError(422, "Explicit human confirmation is required to publish a ticket.")
-    if version_workflow(version) != "request":
+    conversation_ticket = publication_ticket(version, payload.get("conversation_ticket_id"))
+    if not conversation_ticket and version_workflow(version) != "request":
         raise HttpError(409, "A question cannot publish an external ticket.")
-    if version.status not in {"READY", "PARTIAL"}:
+    if not conversation_ticket and version.status not in {"READY", "PARTIAL"}:
         raise HttpError(409, "Only a completed result version can be published.")
     from .ticket_presentation import publication_blockers
 
-    blockers = publication_blockers(version)
-    conversation_ticket = publication_ticket(version, payload.get("conversation_ticket_id"))
-    logical_scope = {"conversation_ticket":conversation_ticket} if conversation_ticket else {"version":version, "conversation_ticket__isnull":True}
+    blockers = [] if conversation_ticket else publication_blockers(version)
+    if conversation_ticket:
+        from .ticket_preparation import publication_requires_ack
+        blockers = []
+    logical_scope = {"conversation_ticket":conversation_ticket} if conversation_ticket else {"version_id":version.pk, "conversation_ticket__isnull":True}
     project = payload["project"]
     destination = canonical_hash(
         {
@@ -639,10 +659,10 @@ def publish(version, connector, payload):
         )
         snapshot["baseline"] = version.baseline
         snapshot["environment_name"] = version.environment_name
-        snapshot["version_id"] = str(version.pk)
+        snapshot["version_id"] = str(version.pk) if version.pk else None
         if payload.get("draft_id"):
             draft = TicketPublicationDraft.objects.filter(
-                pk=payload["draft_id"], version=version, connector=connector, project=project, conversation_ticket=conversation_ticket
+                pk=payload["draft_id"], version_id=version.pk, connector=connector, project=project, conversation_ticket=conversation_ticket
             ).first()
             content_keys = ("title", "body", "fields", "labels", "assignees", "options_revision")
             if (
@@ -653,6 +673,8 @@ def publish(version, connector, payload):
                 or draft.content.get("selected_attachments", []) != snapshot["selected_attachments"]
             ):
                 raise HttpError(409, "Save and review the exact ticket draft before publication.")
+    if conversation_ticket and payload.get("unverified_confirmed") is True:
+        snapshot["unverified_confirmed"] = True
     digest = canonical_hash(snapshot)
     key = payload["idempotency_key"]
     existing = PublishedTicket.objects.filter(idempotency_key=key).first()
@@ -697,6 +719,8 @@ def publish(version, connector, payload):
             PublishedTicket.Status.UNCERTAIN,
         }
     )
+    if conversation_ticket and not legacy_recovery and publication_requires_ack(conversation_ticket,payload,version,payload) and payload.get("unverified_confirmed") is not True:
+        raise HttpError(409, "Confirm publication without independent verification.")
     if blockers and not legacy_recovery:
         raise HttpError(
             409,
@@ -762,7 +786,7 @@ def publish(version, connector, payload):
                         raise HttpError(409, "The ticket changed. Review its publication preview again.")
                 record = PublishedTicket.objects.create(
                     request=version.request,
-                    version=version,
+                    version_id=version.pk,
                     conversation_ticket=conversation_ticket,
                     connector=connector,
                     platform=connector.platform,

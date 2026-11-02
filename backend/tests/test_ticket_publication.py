@@ -503,7 +503,7 @@ def test_separate_prepared_tickets_can_publish_to_same_destination(publication_c
     ]
     deliveries=[]
     for ticket in [first,second]:
-        values={**payload,"conversation_ticket_id":str(ticket.pk),"idempotency_key":uuid.uuid4(),"title":ticket.draft["title"]}
+        values={**payload,"unverified_confirmed":True,"conversation_ticket_id":str(ticket.pk),"idempotency_key":uuid.uuid4(),"title":ticket.draft["title"]}
         deliveries.append(publish(version,connector,values))
     assert len({d.pk for d in deliveries}) == 2
     assert {d.conversation_ticket_id for d in deliveries} == {first.pk,second.pk}
@@ -534,3 +534,147 @@ def test_prepared_standard_preview_uses_its_own_subject_and_preserves_destinatio
     assert restored["title"] == "Destination-specific edit"
     assert restored["body"] == "Preserved target content"
     provider.create.assert_not_called()
+
+
+def test_discussion_ticket_can_publish_without_an_analysis_only_after_explicit_acknowledgement(publication_context):
+    from core.models import ConversationTicket, Job, RequestMessage
+
+    _,connector,provider,_=publication_context
+    request=Request.objects.create(environment=connector.environments.first(),need="Reject invalid periods",status="DISCUSSING",language="en")
+    anchor=RequestMessage.objects.create(request=request,role="assistant",kind="discussion_reply",content="The period can be checked before saving.")
+    ticket=ConversationTicket.objects.create(request=request,draft={"title":"Check periods","body":"Reject invalid periods.","revision":1,"anchor_message_id":anchor.pk})
+    client=TestClient(router)
+    endpoint=f"/analyses/{request.pk}/tickets/{ticket.pk}"
+    response=client.get(endpoint+f"/publication-draft?connector_id={connector.pk}&project=42")
+    assert response.status_code == 200,response.content
+    draft=response.json()
+    assert draft["publication_allowed"] and draft["requires_unverified_confirmation"]
+    assert draft["version_id"] is None and not request.versions.exists()
+    payload={"conversation_ticket_id":str(ticket.pk),"connector_id":connector.pk,"project":"42",
+      "title":draft["title"],"body":draft["body"],"fields":draft["values"],"labels":draft["defaults"]["labels"],"assignees":draft["defaults"]["assignees"],
+      "options_revision":draft["options_revision"],"template_id":"","issue_type":"","ticket_format":"standard",
+      "draft_id":draft["draft_id"],"draft_revision":draft["draft_revision"],"idempotency_key":str(uuid.uuid4()),"confirmed":True}
+    assert client.post(endpoint+"/publications",json=payload).status_code == 409
+    provider.create.assert_not_called()
+    response=client.post(endpoint+"/publications",json={**payload,"unverified_confirmed":True})
+    assert response.status_code == 200,response.content
+    assert response.json()["status"] == "PUBLISHED"
+    publication=PublishedTicket.objects.get(request=request)
+    assert publication.version_id is None and publication.conversation_ticket_id == ticket.pk
+    assert publication.snapshot["unverified_confirmed"] is True
+    assert client.post(endpoint+"/publications",json={**payload,"unverified_confirmed":True}).json()["id"] == str(publication.pk)
+    assert provider.create.call_count == 1
+    assert request.messages.filter(kind="ticket_publication").count() == 1
+    assert not request.versions.exists() and not Job.objects.filter(kind="analysis",target=str(request.pk)).exists()
+    assert client.get("/tickets").json()["items"][0]["request_id"] == str(request.pk)
+
+
+@pytest.fixture
+def discussion_publication(publication_context):
+    from core.models import ConversationTicket
+    from core.ticket_preparation import publication_source
+
+    _, connector, provider, payload = publication_context
+    request = Request.objects.create(environment=connector.environments.first(), need="Check dates", status="DISCUSSING", language="en")
+    ticket = ConversationTicket.objects.create(request=request, draft={"title":"Check dates", "body":"Reject invalid periods.", "revision":1})
+    source = publication_source(request.pk, ticket_id=ticket.pk)
+    return request, ticket, source, connector, provider, {**payload, "conversation_ticket_id":str(ticket.pk), "unverified_confirmed":True}
+
+
+@pytest.mark.parametrize("uncertain", [False, True])
+def test_discussion_publication_failure_never_creates_a_false_success(discussion_publication, uncertain):
+    from core.queue import snapshot as activity_snapshot
+    request, ticket, source, connector, provider, payload = discussion_publication
+    provider.create.side_effect = NetworkUncertain("Lost response fixture-secret") if uncertain else TicketProviderError("Rejected fixture-secret")
+    first = publish(source, connector, payload)
+    assert first.status == ("UNCERTAIN" if uncertain else "ERROR")
+    assert "fixture-secret" not in first.error
+    assert not request.messages.filter(kind="ticket_publication").exists()
+    assert TestClient(router).get("/tickets").json()["total"] == 0
+    assert activity_snapshot()
+    ticket.refresh_from_db()
+    assert ticket.draft["body"] == "Reject invalid periods."
+    if uncertain:
+        assert publish(source, connector, payload).status == "UNCERTAIN"
+        assert provider.create.call_count == 1
+        provider.find.return_value = {"external_id":"123", "external_key":"#1", "url":"https://gitlab.example/team/project/-/issues/1"}
+        assert publish(source, connector, payload).status == "PUBLISHED"
+        assert publish(source, connector, payload).pk == first.pk
+        assert provider.create.call_count == 1
+        assert request.messages.filter(kind="ticket_publication").count() == 1
+
+
+def test_discussion_publication_checks_scope_acknowledgement_and_real_artifacts(discussion_publication):
+    from core.models import ConversationTicket
+    request, ticket, source, connector, provider, payload = discussion_publication
+    client = TestClient(router)
+    endpoint = f"/analyses/{request.pk}/tickets/{ticket.pk}"
+    assert client.post(endpoint+"/publications", json={**payload,"unverified_confirmed":"true"}).status_code == 422
+    foreign = Request.objects.create(need="Another conversation")
+    assert client.get(f"/analyses/{foreign.pk}/tickets/{ticket.pk}/publications").status_code == 404
+    other = ConversationTicket.objects.create(request=foreign, draft={"title":"Other", "revision":1})
+    assert client.get(f"/analyses/{request.pk}/tickets/{other.pk}/publication-draft?connector_id={connector.pk}&project=42").status_code == 404
+    for flag in ("include_goal", "include_diagrams", "include_business_analysis", "include_technical_analysis"):
+        result = client.post(endpoint+"/publication-preview", json={"connector_id":connector.pk,"project":"42","ticket_format":"standard",flag:True})
+        assert result.status_code == 422
+    connector.environments.remove(request.environment)
+    with pytest.raises(HttpError):
+        publish(source, connector, payload)
+    provider.create.assert_not_called()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_discussion_double_click_uses_one_persisted_claim_on_postgresql(discussion_publication):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from django.db import close_old_connections, connection
+
+    from core.ticket_preparation import publication_source
+    if connection.vendor != "postgresql":
+        pytest.skip("Requires PostgreSQL row locks")
+    request, ticket, source, connector, provider, payload = discussion_publication
+    entered, release = Event(), Event()
+    result = provider.create.return_value
+    def slow_provider(*args):
+        entered.set()
+        assert release.wait(10)
+        return result
+    def first_click():
+        close_old_connections()
+        try:
+            return publish(publication_source(request.pk, ticket_id=ticket.pk), TicketConnector.objects.get(pk=connector.pk), payload)
+        finally:
+            close_old_connections()
+    provider.create.side_effect = slow_provider
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(first_click)
+        try:
+            assert entered.wait(10)
+            second = publish(source, connector, {**payload,"idempotency_key":uuid.uuid4()})
+            assert second.status == "PUBLISHING"
+        finally:
+            release.set()
+        first = future.result(timeout=10)
+    assert first.pk == second.pk and first.status == "PUBLISHED"
+    assert provider.create.call_count == 1
+    assert request.messages.filter(kind="ticket_publication").count() == 1
+
+
+def test_discussion_ticket_retains_two_destinations_and_links_when_archived(discussion_publication, client):
+    request, ticket, source, connector, provider, payload = discussion_publication
+    connector.projects = ["42", "99"]
+    connector.save(update_fields=["projects"])
+    first = publish(source, connector, payload)
+    provider.create.return_value = {"external_id":"124", "external_key":"#2", "url":"https://gitlab.example/team/other/-/issues/2"}
+    second = publish(source, connector, {**payload,"project":"99","idempotency_key":uuid.uuid4()})
+    assert first.pk != second.pk
+    assert request.messages.filter(kind="ticket_publication").count() == 2
+    request.archived_at = timezone.now()
+    request.save(update_fields=["archived_at"])
+    detail = client.get(f"/api/analyses/{request.pk}")
+    assert detail.status_code == 200
+    assert {item["url"] for item in detail.json()["publications"]} == {first.url,second.url}
+    assert len(detail.json()["conversation_tickets"]) == 1
+    assert TestClient(router).get("/tickets").json()["total"] == 2
+    assert not request.versions.exists()

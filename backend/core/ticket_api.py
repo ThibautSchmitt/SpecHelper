@@ -5,8 +5,8 @@ from typing import Literal
 from uuid import UUID
 
 from django.db import transaction
-from django.db.models import Q
-from django.db.models.functions import Coalesce
+from django.db.models import Q, Value
+from django.db.models.functions import Coalesce, NullIf
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router, Schema
@@ -18,7 +18,6 @@ from .models import (
     Environment,
     PublishedTicket,
     Request,
-    ResultVersion,
     TicketConnector,
     TicketPublicationDraft,
 )
@@ -94,6 +93,7 @@ class PublicationDraftIn(PreviewIn):
 
 
 class PublicationIn(PublicationDraftIn):
+    unverified_confirmed: bool = Field(default=False, strict=True)
     title: str = Field(min_length=1, max_length=500)
     idempotency_key: UUID
     confirmed: Literal[True]
@@ -113,6 +113,7 @@ class TicketPreparationIn(StrictSchema):
     expected_discussion_revision: int = Field(ge=0)
     source_version: int | None = Field(default=None, ge=1)
     topic_message_id: int | None = Field(default=None, ge=1)
+    anchor_message_id: int | None = Field(default=None, ge=1)
     scope_choice: Literal["unknown", "covered", "clarified", "changed"] = "unknown"
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(max_length=30000)
@@ -127,11 +128,11 @@ class TicketPreparationIn(StrictSchema):
 
 @router.get("/analyses/{analysis_id}/ticket-preparation")
 def ticket_preparation(request, analysis_id: UUID, topic_message_id: int | None = None,
-                       source_version: int | None = None, ticket_id: UUID | None = None, new_ticket: bool = False, without_analysis: bool = False):
+                       source_version: int | None = None, ticket_id: UUID | None = None, new_ticket: bool = False, without_analysis: bool = False, anchor_message_id: int | None = None):
     from .ticket_preparation import snapshot
 
     return snapshot(get_object_or_404(Request, pk=analysis_id, deleted_at__isnull=True), topic_id=topic_message_id,
-                    source_number=source_version, ticket_id=ticket_id, new=new_ticket, without_analysis=without_analysis)
+                    source_number=source_version, ticket_id=ticket_id, new=new_ticket, without_analysis=without_analysis, anchor_id=anchor_message_id)
 
 
 @router.put("/analyses/{analysis_id}/ticket-preparation")
@@ -147,6 +148,7 @@ class TicketDraftGenerationIn(StrictSchema):
     expected_discussion_revision: int = Field(ge=0)
     source_version: int | None = Field(default=None, ge=1)
     topic_message_id: int = Field(ge=1)
+    anchor_message_id: int | None = Field(default=None, ge=1)
 
 
 @router.post("/analyses/{analysis_id}/ticket-preparation/generate")
@@ -295,12 +297,13 @@ def list_tickets(
     values = (
         PublishedTicket.objects.filter(status="PUBLISHED")
         .filter(Q(external_id__regex=r"\S") | Q(external_key__regex=r"\S"))
-        .select_related("connector", "version", "request")
+        .select_related("connector", "version", "request__environment")
     )
+    values = values.annotate(publication_environment=Coalesce("version__environment_name", NullIf("request__environment_name_snapshot", Value("")), "request__environment__name", Value("")))
     environments = list(
-        values.exclude(version__environment_name="")
-        .order_by("version__environment_name")
-        .values_list("version__environment_name", flat=True)
+        values.exclude(publication_environment="")
+        .order_by("publication_environment")
+        .values_list("publication_environment", flat=True)
         .distinct()
     )
     # Retain compatibility with older URLs without exposing failed/pending operations here.
@@ -309,7 +312,7 @@ def list_tickets(
     if platform:
         values = values.filter(platform=platform)
     if environment:
-        values = values.filter(version__environment_name=environment)
+        values = values.filter(publication_environment=environment)
     if search:
         search = search[:500]
         values = values.filter(
@@ -344,13 +347,13 @@ def published_summary(value):
         "external_id": value.external_id,
         "external_key": value.external_key,
         "url": stored_publication_url(value),
-        "environment_name": value.version.environment_name,
+        "environment_name": value.publication_environment,
         "published_at": value.finished_at or value.created_at,
         "connector_id": value.connector_id,
         "connector_name": value.connector.name,
         "request_id": str(value.request_id),
         "analysis_deleted": bool(value.request.deleted_at),
-        "version_number": value.version.number,
+        "version_number": value.version.number if value.version_id else None,
         "conversation_ticket_id": str(value.conversation_ticket_id)
         if value.conversation_ticket_id
         else None,
@@ -471,23 +474,21 @@ def ticket_detail(request, ticket_id: UUID):
 
 @router.get("/requests/{request_id}/versions/{number}/publications")
 def version_publications(request, request_id: UUID, number: int, conversation_ticket_id: UUID | None = None):
-    version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True
-    )
+    from .ticket_preparation import publication_source
+    version = publication_source(request_id, number, conversation_ticket_id)
     from .ticket_preparation import publication_ticket
     if conversation_ticket_id:
         publication_ticket(version, conversation_ticket_id)
     return [
         publication_dict(value)
-        for value in version.published_tickets.filter(conversation_ticket_id=conversation_ticket_id).select_related("connector", "version")
+        for value in PublishedTicket.objects.filter(request_id=request_id, version_id=version.pk, conversation_ticket_id=conversation_ticket_id).select_related("connector", "version", "request")
     ]
 
 
 @router.post("/requests/{request_id}/versions/{number}/publication-preview")
 def publication_preview(request, request_id: UUID, number: int, payload: PreviewIn):
-    version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True
-    )
+    from .ticket_preparation import publication_source
+    version = publication_source(request_id, number, payload.conversation_ticket_id)
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     return preview(
         version,
@@ -502,15 +503,13 @@ def publication_preview(request, request_id: UUID, number: int, payload: Preview
 @router.get("/requests/{request_id}/versions/{number}/publication-draft")
 def publication_draft(request, request_id: UUID, number: int, connector_id: int, project: str, conversation_ticket_id: UUID | None = None):
     from .models import TicketPublicationDraft
-
-    version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True
-    )
+    from .ticket_preparation import publication_source
+    version = publication_source(request_id, number, conversation_ticket_id)
     connector = get_object_or_404(TicketConnector, pk=connector_id)
     from .ticket_preparation import publication_ticket
     ticket = publication_ticket(version, conversation_ticket_id)
     draft = TicketPublicationDraft.objects.filter(
-        version=version, connector=connector, project=project, conversation_ticket=ticket
+        version_id=version.pk, connector=connector, project=project, conversation_ticket=ticket
     ).first()
     presentation = (
         draft.presentation
@@ -531,21 +530,19 @@ def publication_draft(request, request_id: UUID, number: int, connector_id: int,
 @router.put("/requests/{request_id}/versions/{number}/publication-draft")
 def update_publication_draft(request, request_id: UUID, number: int, payload: PublicationDraftIn):
     from .models import TicketPublicationDraft
+    from .ticket_preparation import publication_source
     from .ticket_presentation import (
         PRESENTATION_KEYS,
         draft_metadata,
         publication_reference,
         save_draft,
     )
-
-    version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True
-    )
+    version = publication_source(request_id, number, payload.conversation_ticket_id)
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     from .ticket_preparation import publication_ticket
     ticket = publication_ticket(version, payload.conversation_ticket_id)
     previous = TicketPublicationDraft.objects.filter(
-        version=version, connector=connector, project=payload.project, conversation_ticket=ticket
+        version_id=version.pk, connector=connector, project=payload.project, conversation_ticket=ticket
     ).first()
     if payload.draft_revision is not None and (
         previous is None or previous.revision != payload.draft_revision
@@ -599,9 +596,8 @@ def update_publication_draft(request, request_id: UUID, number: int, payload: Pu
 
 @router.post("/requests/{request_id}/versions/{number}/publications")
 def create_publication(request, request_id: UUID, number: int, payload: PublicationIn):
-    version = get_object_or_404(
-        ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True
-    )
+    from .ticket_preparation import publication_source
+    version = publication_source(request_id, number, payload.conversation_ticket_id)
     connector = get_object_or_404(TicketConnector, pk=payload.connector_id)
     values = payload.model_dump(mode="json")
     if "ticket_format" not in payload.model_fields_set:
@@ -613,3 +609,29 @@ def create_publication(request, request_id: UUID, number: int, payload: Publicat
             if key not in {"template_id", "issue_type"}:
                 values.pop(key, None)
     return publication_dict(publish(version, connector, values))
+
+
+# Prepared-ticket routes reuse the same validation, previews and idempotent publication engine.
+@router.get("/analyses/{analysis_id}/tickets/{ticket_id}/publications")
+def prepared_publications(request, analysis_id: UUID, ticket_id: UUID):
+    return version_publications(request, analysis_id, None, ticket_id)
+
+
+@router.get("/analyses/{analysis_id}/tickets/{ticket_id}/publication-draft")
+def prepared_publication_draft(request, analysis_id: UUID, ticket_id: UUID, connector_id: int, project: str):
+    return publication_draft(request, analysis_id, None, connector_id, project, ticket_id)
+
+
+@router.put("/analyses/{analysis_id}/tickets/{ticket_id}/publication-draft")
+def update_prepared_publication_draft(request, analysis_id: UUID, ticket_id: UUID, payload: PublicationDraftIn):
+    return update_publication_draft(request, analysis_id, None, payload.model_copy(update={"conversation_ticket_id":ticket_id}))
+
+
+@router.post("/analyses/{analysis_id}/tickets/{ticket_id}/publication-preview")
+def prepared_publication_preview(request, analysis_id: UUID, ticket_id: UUID, payload: PreviewIn):
+    return publication_preview(request, analysis_id, None, payload.model_copy(update={"conversation_ticket_id":ticket_id}))
+
+
+@router.post("/analyses/{analysis_id}/tickets/{ticket_id}/publications")
+def create_prepared_publication(request, analysis_id: UUID, ticket_id: UUID, payload: PublicationIn):
+    return create_publication(request, analysis_id, None, payload.model_copy(update={"conversation_ticket_id":ticket_id}))

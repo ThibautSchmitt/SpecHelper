@@ -43,6 +43,7 @@ type Preview = Partial<Presentation> & {
   issue_type?: string;
   fallback_reason?: string;
   publication_allowed?: boolean;
+  requires_unverified_confirmation?: boolean;
   publication_blockers?: string[];
   validation_errors?: Record<string, string>;
   available_attachments?: TransferFile[];
@@ -92,6 +93,7 @@ type Payload = Partial<Presentation> & {
   options_revision: string;
   idempotency_key: string;
   confirmed: boolean;
+  unverified_confirmed?: boolean;
 };
 type Attempt = Publication & {
   connector_id: number;
@@ -102,6 +104,12 @@ type Attempt = Publication & {
     "connector_id" | "project" | "idempotency_key" | "confirmed"
   >;
 };
+
+function recoveryPayload(attempt:Attempt):Payload {
+  const allowed=["conversation_ticket_id","title","body","fields","labels","assignees","template_id","issue_type","options_revision","ticket_format","include_business_analysis","include_technical_analysis","include_attachments","attachment_ids","include_goal","include_diagrams","unverified_confirmed"];
+  const snapshot=Object.fromEntries(Object.entries(attempt.snapshot).filter(([key])=>allowed.includes(key)));
+  return {...snapshot,connector_id:attempt.connector_id,project:attempt.project,idempotency_key:attempt.idempotency_key,confirmed:true} as Payload;
+}
 
 function remember(key: string, payload: Payload | null) {
   try {
@@ -117,18 +125,30 @@ export function PublishTicket({
   preparedDraft,
   conversationTicketId,
   onClosed,
+  onAnalyze,
+  preparedSource = false,
+  autoOpen = false,
+  hideTrigger = false,
 }: {
   requestId: string;
-  version: number;
+  version: number | null;
   triggerLabel?: string;
   preparedDraft?: { title: string; body: string };
   conversationTicketId?: string;
   onClosed?: () => void;
+  onAnalyze?: () => void;
+  preparedSource?: boolean;
+  autoOpen?: boolean;
+  hideTrigger?: boolean;
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const prefix = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
+  const [confirmation, setConfirmation] = useState<Payload | null>(null);
+  const confirmationPanel = useRef<HTMLDivElement>(null);
+  useEffect(()=>{if(confirmation){confirmationPanel.current?.focus();confirmationPanel.current?.scrollIntoView({block:"nearest"});}},[confirmation]);
+  useEffect(()=>{if(autoOpen)dialog.current?.showModal();},[autoOpen]);
   const [connectors, setConnectors] = useState<TicketConnector[]>([]);
   const [connector, setConnector] = useState("");
   const [projects, setProjects] = useState<Destination[]>([]);
@@ -154,7 +174,7 @@ export function PublishTicket({
   const [result, setResult] = useState<Publication | null>(null);
   const [pending, setPending] = useState<Payload | null>(null);
   const storageKey = `publication:${requestId}:${version}${conversationTicketId ? ":"+conversationTicketId : ""}`;
-  const endpoint = `/requests/${requestId}/versions/${version}`;
+  const endpoint = preparedSource && conversationTicketId ? `/analyses/${requestId}/tickets/${conversationTicketId}` : `/requests/${requestId}/versions/${version}`;
   const ticketQuery = conversationTicketId ? `&conversation_ticket_id=${conversationTicketId}` : "";
   useEffect(() => {
     if (!open) return;
@@ -178,13 +198,7 @@ export function PublishTicket({
           ["UNCERTAIN", "PUBLISHING"].includes(p.status),
         );
         if (unfinished) {
-          const payload = {
-            ...unfinished.snapshot,
-            connector_id: unfinished.connector_id,
-            project: unfinished.project,
-            idempotency_key: unfinished.idempotency_key,
-            confirmed: true,
-          };
+          const payload = recoveryPayload(unfinished);
           setPending(payload);
           remember(storageKey, payload);
           setResult(unfinished);
@@ -424,13 +438,7 @@ export function PublishTicket({
               existing &&
               ["UNCERTAIN", "PUBLISHING"].includes(existing.status)
             ) {
-              const original = {
-                ...existing.snapshot,
-                connector_id: existing.connector_id,
-                project: existing.project,
-                idempotency_key: existing.idempotency_key,
-                confirmed: true,
-              };
+              const original = recoveryPayload(existing);
               setResult(existing);
               setPending(original);
               remember(storageKey, original);
@@ -477,6 +485,7 @@ export function PublishTicket({
   }
   function finishClose() {
     previewGeneration.current++;
+    setConfirmation(null);
     dialog.current?.close();
     setOpen(false);
     setPreview(null);
@@ -489,7 +498,7 @@ export function PublishTicket({
   }
   return (
     <>
-      <Button
+      {!hideTrigger && <Button
         variant="outline"
         onClick={() => {
           setOpen(true);
@@ -497,7 +506,7 @@ export function PublishTicket({
         }}
       >
         {t(triggerLabel)}
-      </Button>
+      </Button>}
       <dialog
         ref={dialog}
         className="publication-dialog"
@@ -511,10 +520,7 @@ export function PublishTicket({
           <div>
             <h2 id={`publication-title-${prefix}`}>{t("Publish ticket")}</h2>
             <p className="mt-1 text-sm muted">
-              {t(
-                "Publish analysis version {number}. The saved analysis will remain unchanged.",
-                { number: version },
-              )}
+              {version ? t("Publish analysis version {number}. The saved analysis will remain unchanged.", {number:version}) : t("Review and publish the conversation draft.")}
             </p>
           </div>
           <Button type="button" variant="ghost" onClick={close}>
@@ -585,12 +591,12 @@ export function PublishTicket({
           <form
             onSubmit={async (event) => {
               event.preventDefault();
-              if (!preview || preview.publication_allowed === false) return;
+              if (!preview || preview.publication_allowed === false || confirmation) return;
               setBusy(true);
               let current = preview;
               try { current = await saveDraft(); }
               catch (error) { setError((error as Error).message); setBusy(false); return; }
-              publish({
+              const candidate:Payload = {
                 conversation_ticket_id:conversationTicketId,
                 ...presentation,
                 draft_id: current.draft_id,
@@ -607,7 +613,8 @@ export function PublishTicket({
                 options_revision: preview.revision,
                 idempotency_key: crypto.randomUUID(),
                 confirmed: true,
-              });
+              };
+              if(current.requires_unverified_confirmation){setConfirmation(candidate);setBusy(false);}else void publish(candidate);
             }}
           >
             {!connectors.length && (
@@ -616,7 +623,7 @@ export function PublishTicket({
                 <a className="text-primary underline" href="/admin?tab=environments" target="_blank" rel="noopener noreferrer">{t("Configure publication destinations")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
               </p>
             )}
-            <fieldset disabled={busy} className="grid gap-x-4 sm:grid-cols-2">
+            <fieldset disabled={busy||!!confirmation} className="grid gap-x-4 sm:grid-cols-2">
               <p className="mt-3 text-xs muted sm:col-span-2">{t("The selected external account publishes the ticket; it does not identify the person using SpecHelper.")}</p>
               <div className="field">
                 <label htmlFor={prefix+"-publish-connector"}>{t("Publication connection")}</label>
@@ -724,18 +731,18 @@ export function PublishTicket({
               </Button>
             )}
             {preview && (
-              <fieldset disabled={busy}>
-                {preparedDraft && <div className="mt-4 space-y-2"><p className="text-sm muted">{t("The prepared draft includes unverified proposals. Publication does not verify your edits.")}</p><Button type="button" variant="outline" onClick={() => { setTitle(preparedDraft.title); setBody(preparedDraft.body); setDirty(true); }}>{t("Use prepared draft")}</Button></div>}
+              <fieldset disabled={busy||!!confirmation}>
+                {preparedDraft && (title !== preparedDraft.title || body !== preparedDraft.body) && <div className="mt-4 space-y-2"><Button type="button" variant="outline" onClick={() => { setTitle(preparedDraft.title); setBody(preparedDraft.body); setDirty(true); }}>{t("Use prepared draft")}</Button></div>}
                 {preview.notice && (
                   <p className="mt-4 rounded border bg-muted p-3 text-sm">
                     {t(preview.notice)}
                   </p>
                 )}
-                <fieldset className="mt-5 space-y-3 rounded-lg border p-4">
+                {!!version && <fieldset className="mt-5 space-y-3 rounded-lg border p-4">
                   <legend className="px-1 text-sm font-semibold">{t("Optional ticket content")}</legend>
                   {([["include_business_analysis", "Include detailed business analysis"], ["include_technical_analysis", "Include detailed technical analysis"]] as const).map(([key, label]) => <label key={key} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation[key]} onChange={event => change(() => { void recompose({ [key]: event.target.checked }); })} />{t(label)}</label>)}
                   <p className="text-xs muted">{t("These options change only the ticket presentation. The verified analysis and detailed goal.md remain unchanged.")}</p>
-                </fieldset>
+                </fieldset>}
                 <div className="field">
                   <label htmlFor={prefix+"-publish-title"}>{t("Ticket title")}</label>
                   <Input
@@ -913,7 +920,7 @@ export function PublishTicket({
                 </fieldset>
                 <h3 className="mt-6">{t("Publication preview")}</h3>
                 <p className="mt-2 break-words text-sm font-semibold">{title}</p>
-                <p className="mt-1 flex items-center gap-2 text-xs muted"><ProviderLogo provider={connectors.find(item => String(item.id) === connector)?.platform} />{t("Analysis version {number}", { number: version })} · {projects.find(item => item.id === project)?.name || project}</p>
+                <p className="mt-1 flex items-center gap-2 text-xs muted"><ProviderLogo provider={connectors.find(item => String(item.id) === connector)?.platform} />{version ? t("Analysis version {number}", { number: version }) : t("Conversation draft")} · {projects.find(item => item.id === project)?.name || project}</p>
                 <div className="markdown-preview mt-3 rounded border bg-muted p-4">
                   {preview.format === "markdown" ? (
                     <SafeMarkdown>
@@ -952,6 +959,12 @@ export function PublishTicket({
             )}
           </form>
         )}
+        {confirmation&&<div ref={confirmationPanel} tabIndex={-1} className="mt-4 rounded-md border p-4 space-y-3" role="alertdialog" aria-label={t("Publish without independent verification")}>
+          <p>{t("This ticket has not been verified by a deep analysis. Publish it anyway?")}</p>
+          <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>{const payload=confirmation;setConfirmation(null);void publish({...payload,unverified_confirmed:true});}}>{t("Publish anyway")}</Button>
+          {onAnalyze&&<Button variant="outline" disabled={busy} onClick={()=>{finishClose();onAnalyze();}}>{t("Launch deep analysis")}</Button>}
+          <Button variant="ghost" disabled={busy} onClick={()=>setConfirmation(null)}>{t("Cancel")}</Button></div>
+        </div>}
         <div className="mt-4 flex justify-end border-t pt-4">
           <Button type="button" variant="outline" disabled={busy} onClick={close}>
             {t("Cancel")}

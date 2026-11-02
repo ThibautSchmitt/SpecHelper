@@ -224,7 +224,10 @@ def test_multiple_tickets_have_explicit_sources_and_independent_edits(client, en
     drafts = []
     for n in [1, 2]:
         draft = client.get(endpoint, {"new_ticket": True, "source_version": n}).json()
-        assert f"FINDING_{n}" in draft["body"] and f"FINDING_{3 - n}" not in draft["body"]
+        assert draft["source_version"] == n
+        assert draft["verified_scope"] == topics[n - 1].content
+        assert topics[n - 1].content in draft["body"]
+        assert f"FINDING_{3 - n}" not in draft["body"]
         response = save_draft(client, row, draft, title=f"Ticket {n}")
         assert response.status_code == 200, response.content
         drafts.append(response.json())
@@ -333,7 +336,7 @@ def test_delayed_generation_updates_only_its_original_ticket(environment):
         },
     )
     assert complete_generation(
-        row, job, SimpleNamespace(title="Dates draft", body="Generated dates", sources=[])
+        row, job, SimpleNamespace(title="Dates draft", body="Generated dates", sources=[], clarification="")
     )
     first.refresh_from_db()
     second.refresh_from_db()

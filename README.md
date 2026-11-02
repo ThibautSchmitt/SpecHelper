@@ -1,7 +1,7 @@
 # SpecHelper
 
 SpecHelper is a self-hosted application for exploring software projects with AI
-and turning a reviewed business need into a ticket and a `goal.md` for a coding
+and turning a business need into a ticket and a `goal.md` for a coding
 agent. It is intended for business users, analysts and developers working with a
 trusted team, across different applications and technology stacks.
 
@@ -27,8 +27,10 @@ calls the final role **Validateur**.
 - Follow observed work, answer clarifications and inspect a concise result or detailed report.
 - Prepare, save and export a ticket draft without launching verification. Reuse
   existing findings, keep later proposals explicitly unverified and choose whether
-  to update the analysis. Publish eligible change results to GitHub Issues, GitLab
-  Issues, Jira Cloud or GLPI after an explicit confirmation. Reports, original
+  to update the analysis. Publish conversation drafts, with or without deep analysis,
+  to GitHub Issues, GitLab
+  Issues, Jira Cloud or GLPI after an explicit confirmation, acknowledging any missing
+  independent verification. Published links stay in the conversation. Reports, original
   files and `goal.md` are optional deliverables.
 
 SpecHelper does not modify source code or business databases. Independent checks
@@ -82,7 +84,8 @@ are four active AI invocations per detected account and eight across the instanc
 Each conversation keeps one active operation. Provider quotas, account restrictions
 and host resources still apply; aliases of an account share its budget.
 
-Partial results remain visibly qualified and cannot publish a new external ticket.
+Partial results remain visibly qualified. Publishing a draft without complete
+independent verification requires an additional explicit acknowledgement.
 Configuration or a model catalogue does not prove subscription access. Live model
 accuracy, cost and throughput are not certified by application tests.
 

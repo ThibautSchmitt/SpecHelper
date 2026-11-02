@@ -45,7 +45,7 @@ def available_attachments(version, connector, policy=None, *, allow_diagrams=Tru
                 reason="The attachment is unavailable or no longer matches its validated metadata.",
             )
         rows.append(row)
-    goal = version.artifacts.filter(name="goal.md").first()
+    goal = version.artifacts.filter(name="goal.md").first() if version.pk else None
     if goal:
         content = goal.content.encode()
         rows.append(

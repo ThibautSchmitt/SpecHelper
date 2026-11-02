@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router, Schema
 from ninja.errors import HttpError
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .agent import RULES, ProviderUnavailable, output_language_instruction, runtime_call
 from .discussion_access import actor
@@ -48,16 +48,29 @@ class ContinueIn(Schema):
     configuration_token: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class TicketDraftReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(default="", max_length=200)
+    body: str = Field(default="", max_length=30000)
+    sources: list[str] = Field(default_factory=list, max_length=40)
+    clarification: str = Field(default="", max_length=1000)
+
+    @model_validator(mode="after")
+    def require_draft_or_question(self):
+        if not self.clarification and (not self.title.strip() or not self.body.strip()):
+            raise ValueError("Provide a ticket draft or a clarification question")
+        return self
+
+
+class ConversationTicketReply(TicketDraftReply):
+    anchor_message_id: int | None = Field(default=None, ge=1)
+
+
 class Reply(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(min_length=1, max_length=12000)
-
-
-class TicketDraftReply(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    title: str = Field(min_length=1, max_length=200)
-    body: str = Field(min_length=1, max_length=30000)
-    sources: list[str] = Field(max_length=40)
+    ticket: ConversationTicketReply | None = None
+    ticket_clarification: bool = False
 
 
 def describe(value):
@@ -396,19 +409,39 @@ def run_job(job, caller=None):
             "limits": latest.evidence.get("limitations", []),
             "applies_only_to_its_frozen_context": True,
         }
+    ticket_messages = []
+    pending_ticket = value.discussion_state.get("pending_ticket_clarification")
+    if "ticket" in message.content.lower() or "issue" in message.content.lower() or pending_ticket:
+        if pending_ticket and pending_ticket.get("message_ids"):
+            ticket_messages=list(value.messages.filter(pk__in=pending_ticket["message_ids"]).order_by("id"))
+            ticket_messages += list(value.messages.filter(id__gt=max(pending_ticket["message_ids"]),id__lt=message.pk).exclude(kind__in=["error","ticket_preparation"]).order_by("-id")[:6])[::-1]
+        else:
+            ticket_messages = list(value.messages.filter(id__lt=message.pk).exclude(kind__in=["error","decision_revision","ticket_preparation"]).order_by("-id")[:12])[::-1]
+        ticket_messages = [item for item in ticket_messages if item.data.get("response_status") != "stale"]
+        data["ticket_context"] = [{"id":item.pk,"role":item.role,"text":item.content[:1800]} for item in ticket_messages]
+        data["pending_ticket_clarification"] = bool(pending_ticket)
     instructions = (
         "You are the instance's single conversational assistant. Discuss the user's project naturally. "
         "Answer the latest question, ask only useful factual clarifications and accept corrections. "
         "Prefer a short direct answer; provide detail when requested. You may inspect granted read-only "
         "sources and documents. Never invent observed behavior or hide tool/access errors. "
         "This is informal discussion, NOT independent verification. Treat your earlier messages as "
-        "unverified hypotheses. Do not claim to have performed three-role review. Never create or "
-        "publish a ticket, goal or change any resource. Never turn a factual clarification into a "
+        "unverified hypotheses. Do not claim to have performed three-role review. Never publish "
+        "a ticket, create a goal or change any resource. Never turn a factual clarification into a "
         "normative business decision. The user can explicitly launch deep analysis separately. "
         "Return the Markdown response in message, as JSON matching the schema. "
         "Do not serialize another reply envelope inside message. When the user requests JSON "
         "data or a JSON example, include it as a fenced json code block inside the Markdown message. "
-        "No private reasoning."
+        "No private reasoning. If the user explicitly requests a ticket, you may propose an editable draft "
+        "in the optional ticket field. Use ONLY the relevant supplied ticket_context messages; set "
+        "anchor_message_id to the specific answer or user message being turned into a ticket, and sources "
+        "to message:<id> references actually used. Do not mix unrelated topics. Write a short business need, "
+        "expected behavior and justified acceptance criteria; include technical details only when requested "
+        "or necessary and established. Do not invent a desired change from a question of understanding. "
+        "If the requested change or subject is ambiguous, return ticket=null and ask ONE focused question "
+        "in message and set ticket_clarification=true. A relevant answer to pending_ticket_clarification "
+        "continues that explicit ticket request; an unrelated question does not. Do not create an investigation/documentation task as a substitute for an unknown change. "
+        "A draft never triggers publication or independent analysis. In all other cases return ticket=null."
     )
     preparation = job.payload.get("ticket_preparation")
     if preparation:
@@ -419,9 +452,10 @@ def run_job(job, caller=None):
             "or run tools. This is drafting, not independent verification; never claim three-role checks occurred. "
             "Write a meaningful title and Markdown body: need, existing behavior and relevant findings, "
             "explicitly requested change (only if one was requested), acceptance criteria only when justified, "
-            "important uncertainties and useful source references. Do not paste the conversation or greeting. "
-            "For an informational question, prepare an investigation/documentation ticket rather than inventing "
-            "a correction. Preserve relevant explicit requests in the editable draft, but discard unrelated "
+            "important uncertainties. Default to a concise business-facing Need / Expected behavior / Acceptance criteria "
+            "structure. Keep SHA, code, long paths and orchestration details out unless explicitly requested. Sources remain in metadata. Do not paste the conversation or greeting. "
+            "If the desired change cannot be identified, return one concise clarification question in clarification "
+            "with empty title/body rather than inventing a correction or documentation task. Preserve relevant explicit requests in the editable draft, but discard unrelated "
             "subjects and do not treat draft claims as evidence. Reuse actual code findings and references; distinguish informal discussion from "
             "independently verified findings. A failed deep analysis does not erase discussion observations. "
             "An older result may concern a different scope: check its relevance, do not merge unrelated subjects. "
@@ -540,7 +574,7 @@ def run_job(job, caller=None):
 
                 completed = complete_generation(locked, locked_job, output)
                 locked.status, locked.error = "DISCUSSING", ""
-                locked.save(update_fields=["status", "error", "updated_at"])
+                locked.save(update_fields=["status", "error", "discussion_state", "updated_at"])
                 if completed:
                     RequestMessage.objects.create(
                         request=locked, role="assistant", kind="discussion_reply",
@@ -551,6 +585,14 @@ def run_job(job, caller=None):
                     )
                     Job.objects.filter(pk=job.pk).update(status="DONE", finished_at=timezone.now())
                 return
+            if (output.ticket_clarification or output.ticket and output.ticket.clarification) and ticket_messages:
+                locked.discussion_state={**locked.discussion_state,"pending_ticket_clarification":{"message_ids":[item.pk for item in ticket_messages]}}
+            if output.ticket:
+                from .ticket_preparation import create_conversational_draft
+                if output.ticket.clarification:
+                    output.message = output.ticket.clarification
+                else:
+                    create_conversational_draft(locked, message, output.ticket, ticket_messages)
             RequestMessage.objects.create(
                 request=locked,
                 role="assistant",
@@ -585,7 +627,7 @@ def run_job(job, caller=None):
                 },
             )
             locked.status, locked.error = "DISCUSSING", ""
-            locked.save(update_fields=["status", "error", "updated_at"])
+            locked.save(update_fields=["status", "error", "discussion_state", "updated_at"])
             Job.objects.filter(pk=job.pk).update(status="DONE", finished_at=timezone.now())
         return
 

@@ -119,7 +119,8 @@ for (const language of ["en", "fr"] as const) {
 
   for (const prepared of [false, true]) test(`publication explicitly selects an account and destination ${prepared ? 'with a prepared draft' : 'from a legacy result'} in ${language}`, async ({ page }) => {
     await setup(page, language);
-    const endpoint = `/api/requests/${id}/versions/1`;
+    const ticketId = "47474747-4747-4747-8747-474747474747";
+    const endpoint = prepared ? `/api/analyses/${id}/tickets/${ticketId}` : `/api/requests/${id}/versions/1`;
     const version = { id: "version-1", number: 1, status: "READY", created_at: stamp, ticket: { title: "Verified change" }, markdown: "# Verified change", evidence: { blocking: false, claims: [], limitations: [], database: { status: "not_configured", limitations: [], checks: [] } } };
     const detail = { id, title: "Verified change", need: "Explain the change", workflow: "request", analysis_protocol: "2.4", status: "READY", language,
       environment_id: 1, environment_name: "Staging", created_at: stamp, baseline: [], database: {}, questions: [], conversation: [], progress: [], attachments: [], error: "", messages: [],
@@ -127,7 +128,7 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: detail }));
     await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: detail }));
     await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`), route => route.fulfill({ json: {
-      revision:1,discussion_revision:0,source_version:1,source_verified:true,analysis_state:'complete',
+      id:ticketId,revision:1,discussion_revision:0,source_version:1,source_verified:true,analysis_state:'complete',
       verified_scope:'Investigate date anomalies.',limitations:[],has_new_messages:true,scope_choice:'clarified',
       title:'Prepared correction',body:'Reject invalid periods.',markdown:'> Later proposals remain unverified.\n\nReject invalid periods.',
       publication_available:true,publication_allowed:true,
@@ -151,7 +152,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto(`/${prepared ? 'analyses' : 'requests'}/${id}`);
     if(prepared){
       await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).last().click();
-      await page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true}).getByRole('button',{name:t('Publish ticket'),exact:true}).click();
+      await page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true}).getByRole('button',{name:t('Continue to publication'),exact:true}).click();
     }else await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
     const account = dialog.getByLabel(t("Publication connection"), { exact: true });

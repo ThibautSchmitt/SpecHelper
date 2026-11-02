@@ -197,67 +197,49 @@ their generated content when the conversation or environment later changes.
 
 ## Prepare and publish a ticket
 
-**Prepare a ticket** beside a result opens a draft bound to that exact analysis.
-The general conversation action lets you choose a source when several analyses exist,
-or keep an explicitly unverified draft. Each saved ticket has its own identity,
-subject and edits; it does not replace another ticket in the same conversation.
-Reopen a draft from its conversation timeline or **Prepared tickets**. Preparation,
-editing and publication stay in that conversation. Rewriting a saved document with AI
-requires confirmation; concurrent edits are rejected rather than overwritten.
+Use **⋯ → Prepare a ticket** on a SpecHelper response to start a draft for that
+exchange. The selected message and its nearby clarifications define the scope;
+unrelated questions elsewhere in a long conversation are excluded. This explicit
+action starts one queued drafting turn with the conversational assistant, never
+the three analysis roles. You can also ask for a ticket in the conversation. If the
+requested change is unclear, the assistant asks one clarification rather than
+inventing a change or offering every historical question in a selector.
 
-**Prepare a ticket** opens an editable draft in the conversation. It never starts
-the three roles or publishes anything. You can save, copy or download the draft
-without an analysis, after an interruption or with incomplete checks; it remains
-explicitly unverified in those cases. Saved drafts are shared with the conversation
-and reject conflicting edits from another browser.
+A right-side panel presents the editable **Ticket title** and **Ticket description**.
+The draft should explain the need, expected behavior and acceptance criteria, with
+technical details when requested or necessary. **Save** retains the draft without
+requiring a publication account. Reopen it from the conversation timeline or
+**Prepared tickets**: opening a saved draft never regenerates its content. Explicit
+rewriting asks before replacing saved content, and revision guards preserve
+concurrent manual edits. Sources and optional exports remain available in details.
 
-The most recent user question is selected by default. **Ticket subject** lets you
-choose another question without merging unrelated subjects. The initial draft
-reuses that subject's stored discussion answer, code references and any public
-interim role findings, even if no deep cycle produced a result. Clarification
-answers use the user's answer text rather than copying the assistant's question.
-Invalidated replies are excluded. Saved manual edits are preserved on reopening.
+Deep analysis is optional for both preparation and publication. A relevant analysis
+can supply existing conclusions and evidence; later proposals are not independently
+verified merely because an earlier cycle completed. The panel shows one discreet
+verification indicator. An interrupted, partial or failed analysis does not certify
+the draft. You can explicitly launch an independent analysis, but preparation,
+saving and publication never start it automatically.
 
-Choose **Write from conversation** for a concise, structured ticket written by the
-conversation's selected assistant. This is a single queued drafting turn, using
-its native session when available and the existing quota/cancellation controls.
-It uses the selected subject, recorded answers, public role reports and relevant
-source results; it does not run the three roles or claim new verification.
-The title and body are saved back into the draft. Concurrent manual edits cannot
-be overwritten by a delayed generated answer. Opening, selecting a subject or
-saving by itself never invokes an AI.
+Choose **Continue to publication**, then an enabled, verified connection associated
+with the environment and a destination accessible with that account. No account is
+required before this step. Multiple accounts of the same provider remain separate
+choices; an unavailable account cannot be selected and a failure never switches
+accounts silently. If none is associated, follow the environment configuration link.
 
-When an analysis result exists, preparation also records its version and scope.
-Discussion findings and later proposals are not promoted to verified findings.
-Indicate whether the later exchanges concern the same need, a minor clarification
-or a significant change. This assessment does not certify a proposed solution.
-You can keep preparing immediately, or explicitly choose **Update analysis**.
-That action saves and freezes the edited proposal as an unverified input for a
-new independent cycle. Opening, editing or saving the draft never triggers it.
+Complete any mandatory destination fields and inspect the content to send. A new
+standard-format preview starts with the conversation draft; an existing destination
+draft keeps its edits. **Use prepared draft** explicitly replaces those destination
+edits. All publication still requires human confirmation. A ticket without complete
+independent verification asks **Publish anyway** or offers **Launch deep analysis**.
+This acknowledgement permits publication; it does not turn its contents into verified
+findings. Destination edits also require acknowledgement when they are not covered
+by the original analysis.
 
-The preparation draft is separate from destination-specific publication drafts.
-External publication retains the existing change-analysis workflow and requires
-completed mandatory checks and non-blocking verified evidence. Question-only
-conversations and incomplete analyses can still save and export their preparation
-drafts. **Prepare a change** retains the existing linked-evolution path for a
-question result; its source question and evidence remain available.
-Changing the verified need requires reassessment before an earlier result
-can be published. Editing a ticket does not independently verify those edits.
-
-Select an enabled, verified connection associated with the environment, then a
-destination accessible with that account. Multiple accounts of the same provider
-remain separate choices. An unavailable account stays visible but cannot be selected;
-a failure never silently switches accounts. If none is associated, follow the link
-to the environment’s **Publication destinations** configuration. Choose the
-standard concise format or a real destination template, complete mandatory fields,
-edit the draft and inspect the preview. A new standard-format destination starts with
-the selected ticket's content; an already saved destination draft keeps its edits.
-**Use prepared draft** explicitly copies
-the saved conversation draft into the destination preview, including its verification
-notice and source limitations; it never replaces a saved publication draft silently.
-Draft edits persist separately from the
-immutable result and reject stale concurrent changes. Publication happens only after
-an explicit **Create ticket** confirmation; no agent publishes on your behalf.
+After confirmed creation, **Ticket published** appears permanently in the conversation
+with its platform, reference and direct external link. It remains after reloading or
+archiving. Each destination has its own event; retries do not duplicate it. Drafts,
+failed writes and uncertain writes never produce a success link. The **Tickets** page
+lists only confirmed external publications; preparation stays in the conversation.
 
 Destination-specific behavior matters:
 
@@ -272,7 +254,8 @@ Destination-specific behavior matters:
 ### Optional files
 
 **Include attachments** starts unchecked. Select originals and `goal.md` individually
-when the destination supports uploads. A detailed diagram annex is separately selectable
+when the destination supports uploads. `goal.md`, analysis reports and diagram annexes
+require a real source analysis; discussion-only drafts do not fabricate them. A detailed diagram annex is separately selectable
 for supported standard-format publications. Up to 20 selected files and 50 MB total
 are accepted; each original file must also meet the 25 MB safety limit. Preview hashes,
 sizes and types are rechecked before transfer.

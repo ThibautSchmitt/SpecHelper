@@ -2,7 +2,8 @@
 
 Conversation records reuse `Request`; each independently frozen investigation uses
 an `AnalysisRun` and immutable `ResultVersion`. `ConversationTicket` stores each
-editable ticket with an optional exact result and selected user-message reference.
+editable ticket with an optional exact result, selected-message anchor and bounded
+context references. Drafting uses this scope instead of the entire conversation.
 Destination-specific previews remain `TicketPublicationDraft`; publication records
 retain the prepared-ticket identity when known. The former selected preparation
 JSON remains mirrored for compatibility, but it is not the identity of every ticket.
@@ -17,6 +18,20 @@ the conversation. Reconciliation only searches for the
 original external reference. A retry of a definitively rejected operation records its
 previous outcome in `PublishedTicket.attempt_history` before claiming another attempt.
 Published snapshots remain immutable, including when their source conversation is archived.
+
+Both destination drafts and publications may reference a conversation ticket without
+an analysis result; database constraints require at least one real source. No placeholder
+analysis row is created. Prepared-ticket publication bypasses the legacy completed-change
+analysis gate while retaining environment permissions, provider validation, immutable
+payload hashes, idempotency and explicit human confirmation. Incomplete verification or
+changed content requires a separate strict acknowledgement. Legacy result-only publication
+keeps its original verification rules.
+
+A confirmed write records one durable `ticket_publication` message under the conversation
+lock, keyed by publication ID. The timeline renders the persisted publication once at its
+completion time; failed and uncertain writes do not create success messages. Natural ticket
+requests use the normal conversational turn and optional structured draft output. Ambiguity
+asks one question and retains bounded context for the answer; it does not enqueue deep roles.
 
 SpecHelper separates conversational exploration from independently checked analysis.
 Both use the same conversation history and authorized resources. This describes the

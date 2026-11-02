@@ -171,7 +171,7 @@ def suggest_choice(version, choices):
 def save_draft(version, connector, project, presentation, content, expected_revision=None, conversation_ticket=None):
     with transaction.atomic():
         draft, created = TicketPublicationDraft.objects.select_for_update().get_or_create(
-            version=version,
+            version_id=version.pk,
             connector=connector,
             project=project,
             conversation_ticket=conversation_ticket,
@@ -190,17 +190,20 @@ def save_draft(version, connector, project, presentation, content, expected_revi
 
 
 def draft_metadata(draft, version):
+    from .ticket_preparation import publication_requires_ack
+    prepared = draft.conversation_ticket
     return {
         "draft_id": str(draft.pk),
         **({"conversation_ticket_id":str(draft.conversation_ticket_id)} if draft.conversation_ticket_id else {}),
         "draft_revision": draft.revision,
-        "version_id": str(version.pk),
-        "version_number": version.number,
+        "version_id": str(version.pk) if version.pk else None,
+        "version_number": version.number if version.pk else None,
         "environment_name": version.environment_name,
         "baseline": version.baseline,
         "result_status": version.status,
-        "publication_allowed": not publication_blockers(version),
-        "publication_blockers": publication_blockers(version),
+        "publication_allowed": bool(prepared) or not publication_blockers(version),
+        "requires_unverified_confirmation": publication_requires_ack(prepared,draft.content,version,draft.presentation) if prepared else False,
+        "publication_blockers": [] if prepared else publication_blockers(version),
         **draft.presentation,
     }
 

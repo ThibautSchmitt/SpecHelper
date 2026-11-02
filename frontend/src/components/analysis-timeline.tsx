@@ -29,14 +29,16 @@ type Event = {
   compactSqlReferences?:boolean;
   subject?:string;
   ticketId?:string;
+  messageId?:number; publicationMeta?:string;
 };
 
-export function AnalysisConversation({ value, result, reply, actions, controls, resultActions, ticketActions, onSelectVersion, trackingUnavailable=false }: {
+export function AnalysisConversation({ value, result, reply, actions, controls, resultActions, ticketActions, messageActions, onSelectVersion, trackingUnavailable=false }: {
   value: RequestDetail; result?: ResultVersion | null; reply?: ReactNode;
   actions?: ReactNode; controls?: ReactNode; onSelectVersion?: (version: number) => void;
   trackingUnavailable?:boolean;
   resultActions?: (number:number)=>ReactNode;
   ticketActions?: (id:string)=>ReactNode;
+  messageActions?: (id:number)=>ReactNode;
 }) {
   const { t, dateLocale } = useI18n();
   const runs = value.analysis_runs || [];
@@ -60,7 +62,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   const pendingMessage = pending && lastClarification?.content === value.questions.map(question=>question.question).join("\n") ? lastClarification : undefined;
   let latestUserText=value.need;
   const events: Event[] = messages.filter(message => {
-    if (["result", "decision_revision", "error"].includes(message.kind)) return false;
+    if (["result", "decision_revision", "error", "ticket_publication"].includes(message.kind)) return false;
     if(message.role === "assistant" && message.kind === "ticket_preparation" && message.data?.conversation_ticket_id)return false;
     // Pending questions appear once, together with their real answer controls.
     return message.id !== pendingMessage?.id;
@@ -71,6 +73,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     const observations=message.data?.observations as {database_checks?:SQLReceipt[];web_checks?:unknown[];context_usage?:unknown[]}|undefined;
     const checks=Array.isArray(observations?.database_checks)?observations.database_checks.filter(check=>check&&typeof check.query_id==="string"&&typeof check.sql==="string"):[];
     return { id: `message-${message.id}`, at: message.created_at,
+      messageId:message.role==="assistant"&&message.kind==="discussion_reply"&&!message.data?.ticket_preparation&&!stale?message.id:undefined,
       speaker: message.role === "user" ? "user" : "assistant",
       content: stale ? "" : answers && typeof answers === "object" ? Object.values(answers).filter(item => typeof item === "string").join("\n\n") : message.content,
       label: stale ? "Response interrupted" : message.kind === "need_revision" ? "Need updated" : undefined,
@@ -104,9 +107,10 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
       subject:version.subject,
       label: version.status === "ERROR" ? "Deep analysis interrupted" : version.status === "PARTIAL" || displayed?.evidence?.blocking ? "Deep analysis finished with limits" : "Deep analysis completed" });
   }
-  for(const ticket of value.conversation_tickets || [])events.push({id:`ticket-${ticket.id}`,at:ticket.created_at,speaker:"assistant",content:ticket.title,ticketId:ticket.id,label:ticket.status === "PUBLISHED" ? "Ticket published" : ticket.status === "ERROR" ? "Ticket publication failed" : ticket.status === "UNCERTAIN" ? "Publication to verify" : ticket.status === "PUBLISHING" ? "Publication in progress" : "Ticket in preparation"});
+  for(const ticket of value.conversation_tickets || [])events.push({id:`ticket-${ticket.id}`,at:ticket.created_at,speaker:"assistant",content:ticket.title,ticketId:ticket.id,label:"Ticket draft"});
   for (const publication of value.publications || []) events.push({ id:`publication-${publication.id}`, at:publication.created_at, speaker:"assistant", content:publication.title,
-    label:publication.status === "PUBLISHED" ? "Ticket published" : publication.status === "ERROR" ? "Ticket publication failed" : "Ticket publication not confirmed",
+    label:publication.status === "PUBLISHED" ? "Ticket published" : publication.status === "ERROR" ? "Ticket publication failed" : "Publication to verify",
+    publicationMeta:[publication.platform,publication.external_key].filter(Boolean).join(" · "),
     url:publication.status === "PUBLISHED" && /^https?:\/\//i.test(publication.url) ? publication.url : undefined });
   for (const run of runs) {
     const at=run.started_at || run.steps.find(step=>step.started_at)?.started_at || value.created_at;
@@ -153,6 +157,8 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
           {event.subject && <p className="mb-2 text-xs muted">{t("Subject")}: {event.subject}</p>}
           {event.content && (event.version || event.markdown ? <div className="conversation-answer break-words text-sm leading-7"><SafeMarkdown roleMentions compactSqlReferences={event.compactSqlReferences!==false} sqlChecks={event.sqlChecks} sourcesUrl={event.sourcesUrl}>{event.content}</SafeMarkdown></div> : <p className="conversation-message-text whitespace-pre-wrap break-words text-sm leading-7">{event.speaker === "assistant" ? <RoleMentions>{event.content}</RoleMentions> : event.content}</p>)}
           {event.child && <Link className="mt-3 inline-block text-sm text-primary underline" href={`/analyses/${event.child}`}>{t("Open linked change")}</Link>}
+          {event.publicationMeta&&<p className="mt-1 text-xs muted">{event.publicationMeta}</p>}
+          {event.messageId&&messageActions&&<details className="action-menu conversation-message-actions mt-2 w-fit" onKeyDown={event=>{if(event.key==="Escape"){event.currentTarget.open=false;event.currentTarget.querySelector("summary")?.focus();}}}><summary aria-label={t("Message actions")}>⋯</summary><div className="action-menu-items">{messageActions(event.messageId)}</div></details>}
           {event.url && <a className="mt-3 inline-block text-sm text-primary underline" href={event.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{t("Open published ticket")}</a>}
           {event.version && event.version !== result?.number && <Button variant="ghost" size="sm" className="mt-3" onClick={()=>onSelectVersion?.(event.version!)}>{t("Read result version {number}", {number:event.version})}</Button>}
           {event.version && <div className="mt-3 flex flex-wrap gap-2">{resultActions?.(event.version)}</div>}

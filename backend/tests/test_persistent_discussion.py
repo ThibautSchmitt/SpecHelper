@@ -710,3 +710,111 @@ def test_revising_enabled_need_continues_discussion_without_deep_pipeline(
     assert not AnalysisRun.objects.exists()
     assert native[-1]["session_id"] == native_id
     assert Request.objects.get(pk=value["id"]).messages.filter(kind="need_revision").count() == 1
+
+
+def test_natural_ticket_request_creates_a_scoped_draft_without_deep_analysis(
+    client, environment, native, monkeypatch
+):
+    from core.models import ConversationTicket, PublishedTicket
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    row = Request.objects.get(pk=value["id"])
+    anchor = row.messages.filter(role="assistant", kind="discussion_reply").latest("id")
+
+    def run(path, payload=None, **kwargs):
+        if path == "/runs/cancel":
+            return {"stopped": True}
+        assert "ticket_context" in payload["prompt"]
+        return {
+            "session_id": payload["session_id"] or str(uuid4()),
+            "output": {
+                "message": "Draft prepared.",
+                "ticket": {
+                    "anchor_message_id": anchor.pk,
+                    "title": "Reject invalid periods",
+                    "body": "## Need\n\nReject an invalid date interval.\n\n## Acceptance criteria\n\n- The record is not saved.",
+                    "sources": [f"message:{anchor.pk}"],
+                },
+            },
+        }
+
+    monkeypatch.setattr(discussion, "runtime_call", run)
+    response = turn(
+        client,
+        value,
+        row.discussion_state["revision"],
+        message="Prépare un ticket pour corriger cette anomalie.",
+    )
+    assert response.status_code == 200, response.content
+    finish()
+    ticket = ConversationTicket.objects.get(request=row)
+    assert ticket.draft["anchor_message_id"] == anchor.pk
+    assert ticket.draft["sources"] == [f"message:{anchor.pk}"]
+    assert ticket.source_version_id is None
+    assert not AnalysisRun.objects.exists() and not PublishedTicket.objects.exists()
+
+
+def test_ambiguous_ticket_request_asks_one_question_and_waits_for_its_answer(
+    client, environment, native, monkeypatch
+):
+    from core.models import ConversationTicket
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    row = Request.objects.get(pk=value["id"])
+    anchor = row.messages.filter(role="assistant", kind="discussion_reply").latest("id")
+    asked = []
+
+    def run(path, payload=None, **kwargs):
+        if path == "/runs/cancel":
+            return {"stopped": True}
+        if not asked:
+            asked.append(True)
+            output = {"message": "Which behavior should change?", "ticket_clarification": True}
+        else:
+            assert "pending_ticket_clarification" in payload["prompt"]
+            output = {
+                "message": "Draft prepared.",
+                "ticket": {
+                    "anchor_message_id": anchor.pk,
+                    "title": "Validate dates",
+                    "body": "Reject an invalid interval.",
+                    "sources": [f"message:{anchor.pk}"],
+                },
+            }
+        return {"session_id": payload["session_id"] or str(uuid4()), "output": output}
+
+    monkeypatch.setattr(discussion, "runtime_call", run)
+    assert (
+        turn(
+            client,
+            value,
+            row.discussion_state["revision"],
+            message="Crée un ticket pour le deuxième problème.",
+        ).status_code
+        == 200
+    )
+    finish()
+    row.refresh_from_db()
+    assert row.messages.filter(content="Which behavior should change?").count() == 1
+    assert not ConversationTicket.objects.exists()
+    assert row.discussion_state.get("pending_ticket_clarification")
+    assert (
+        turn(
+            client,
+            value,
+            row.discussion_state["revision"],
+            message="Il faut refuser les périodes invalides.",
+        ).status_code
+        == 200
+    )
+    finish()
+    row.refresh_from_db()
+    assert ConversationTicket.objects.filter(request=row).count() == 1
+    assert (
+        not row.discussion_state.get("pending_ticket_clarification")
+        and not AnalysisRun.objects.exists()
+    )
