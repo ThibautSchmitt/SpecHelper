@@ -47,6 +47,13 @@ def test_focused_check_and_interrupted_verification_remain_unfinished():
     assert [stage["status"] for stage in snapshot["stages"]] == ["done", "error", "unknown"]
 
 
+def test_recorded_analyst_failure_leaves_later_roles_not_started():
+    value=cycle("ERROR",role="analyst")
+    value["orchestration"].update(version="2.4",sessions={"analyst":1})
+    value["steps"]=[{"public_role":"analyst","status":"ERROR","roles":["code"]}]
+    assert [s["status"] for s in progress_snapshot(value,[])["stages"]] == ["error","not_started","not_started"]
+
+
 @pytest.mark.parametrize("status", ["QUEUED", "ANALYZING"])
 def test_final_drafting_does_not_restart_a_completed_verifier(status):
     outputs = {key: {"questions": []} for key in ("analyst", "comparison", "verifier")}

@@ -59,7 +59,7 @@
 .work-response-preview { padding-top: 12px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .work-response-preview :is(pre,table) { max-width: 100%; overflow-x: auto; }
 .conversation-bubble { min-width: 0; flex: 1; padding: 6px 0 2px; }
-.conversation-assistant .badge[data-role] { color: var(--speaker-color); background: color-mix(in srgb, var(--speaker-color) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--speaker-color) 70%, var(--border)); padding: 6px 14px; font-size: 12px; }
+.conversation-assistant .badge[data-role]:not(.connection-role-tag) { color: var(--speaker-color); background: color-mix(in srgb, var(--speaker-color) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--speaker-color) 70%, var(--border)); padding: 6px 14px; font-size: 12px; }
 .conversation-assistant .conversation-message-text { font-size: 15px; line-height: 1.55; }
 .conversation-user { margin-left: auto; width: min(570px, 76%); max-width: 76%; flex-direction: row-reverse; }
 .conversation-user .conversation-bubble { border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius: 14px; padding: 12px 16px; background: color-mix(in srgb, var(--primary) 5%, var(--card)); }

@@ -618,7 +618,7 @@ class Orchestrator:
             # At most one repair for artifact format or an already answered business question.
             for attempt in range(2):
                 remaining = (
-                    self.config.get("tool_timeout_seconds", 300)
+                    self.config.get("tool_timeout_seconds", 3600)
                     if self.incremental
                     else int(self.deadline - time.monotonic()) - reserve
                 )
@@ -698,7 +698,10 @@ class Orchestrator:
                     self.session.usage = response.get("usage", {})
                     self.session.save(update_fields=["runtime_id", "usage"])
                 if response.get("timed_out"):
-                    raise TimeoutError("Time limit reached")
+                    step["failure"] = "TIMEOUT"
+                    step["timeout_seconds"] = timeout
+                    step["diagnostic"] = "The AI reached the execution time limit. Completed observations are preserved; retry to resume this step."
+                    raise FlowError(step["diagnostic"])
                 try:
                     output = schema.model_validate(redact(response["output"], self.secret_values))
                     self.validate_business_questions(output)

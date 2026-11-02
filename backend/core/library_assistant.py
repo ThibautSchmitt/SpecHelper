@@ -425,6 +425,9 @@ def generation_context(payload):
 
 def run_job(job, caller=None):
     """Use the same privileged supervisor and restricted child as business analyses."""
+    from .orchestration_settings import get_config
+
+    timeout = get_config("2.4")["tool_timeout_seconds"]
     caller = caller or runtime_call
     payload = job.payload
     operation = payload["operation"]
@@ -545,9 +548,9 @@ def run_job(job, caller=None):
                 ),
                 "prompt": prompt,
                 "schema": schema.model_json_schema(),
-                "timeout": 260,
+                "timeout": timeout,
             },
-            timeout=263,
+            timeout=timeout + 15,
         )
     except ProviderUnavailable as exc:
         from .model_catalog import record_execution

@@ -21,9 +21,15 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
   const inputs=(value.messages||[]).filter(message=>message.role==="user"&&!["ticket_preparation","derived_request"].includes(message.kind));
   const activeOperation=["IN_PROGRESS","WAITING_AI"].includes(conversationState(value));
   const working=!!value.archived_at || activeOperation;
+  const deepRetry=value.discussion?.mode === "analysis" && !!value.analysis_runs?.length;
   async function action(operation:"message"|"deep"|"cancel"|"retry"|"start") {
     setBusy(true);setError("");
     try {
+      if(operation === "retry" && deepRetry){
+        onUpdated(await send<RequestDetail>(`/${value.workflow === "question" ? "questions" : "requests"}/${value.id}/retry`, {}));
+        window.dispatchEvent(new Event("queue-updated"));
+        return;
+      }
       const revision=value.discussion?.revision || 0;
       if(operation === "message" || operation === "retry")for(let index=uploaded;index<files.length;index++){
         const body=new FormData();body.append("file",files[index]);
@@ -58,7 +64,7 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
         const latest=inputs.at(-1);setSubject(latest?.content||value.need);setSelectedMessages(latest?[latest.id]:[]);setError("");scopeDialog.current?.showModal();
       }}><Sparkles size={15} aria-hidden="true"/>{t("Launch deep analysis")}</Button>
       {activeOperation && <Button size="sm" variant="ghost" disabled={busy} onClick={()=>action("cancel")}><Square size={13} aria-hidden="true"/>{t("Cancel")}</Button>}
-      {((["ERROR","CANCELLED"].includes(value.status) && value.discussion?.job?.operation !== "ticket_preparation") || error === "The selected AI configuration changed. Start a new discussion session explicitly.") && <Button size="sm" variant="outline" disabled={busy || !!value.archived_at} onClick={()=>action("retry")}>{t("Retry")}</Button>}
+      {((["ERROR","CANCELLED"].includes(value.status) && (deepRetry || value.discussion?.job?.operation !== "ticket_preparation")) || error === "The selected AI configuration changed. Start a new discussion session explicitly.") && <Button size="sm" variant="outline" disabled={busy || !!value.archived_at || (deepRetry && (!!text.trim() || !!files.length))} onClick={()=>action("retry")}>{t("Retry")}</Button>}
     </div>
     <dialog ref={scopeDialog} className="publication-dialog" aria-labelledby="deep-scope-title" onCancel={event=>{if(busy)event.preventDefault();}}>
       <h2 id="deep-scope-title">{t("Deep analysis scope")}</h2>

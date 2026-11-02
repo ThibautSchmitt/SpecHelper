@@ -72,7 +72,7 @@ class GlobalOrchestrationIn(Schema):
     allow_same_family_fallback: bool = True
     # Retained for older clients and snapshots; execution no longer caps total calls.
     max_calls: int = Field(default=20, ge=6, le=100)
-    tool_timeout_seconds: int = Field(default=300, ge=30, le=600)
+    tool_timeout_seconds: int = Field(default=3600, ge=30, le=3600)
     allow_confrontation: bool = True
     verifier_enabled: bool = True
 

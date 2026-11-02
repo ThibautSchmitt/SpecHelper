@@ -70,6 +70,11 @@ def progress_snapshot(run, messages):
             stage = "error" if status == "ERROR" else "cancelled"
         elif role == current and status == "QUEUED":
             stage = "blocked" if reason else "waiting"
+        elif (status in {"ERROR", "CANCELLED"} and state.get("version") == "2.4"
+              and current in checkpoints and list(checkpoints).index(role) > list(checkpoints).index(current)
+              and role not in state.get("sessions", {})
+              and not any(step.get("public_role") == role for step in run.get("steps", []))):
+            stage = "not_started"
         elif status in {"READY", "PARTIAL", "ERROR", "CANCELLED"}:
             stage = "unknown"
         else:

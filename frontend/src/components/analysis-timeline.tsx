@@ -181,7 +181,7 @@ export function conversationAnswer(result:ResultVersion) {
   return typeof explanation === "string" ? explanation.trim() : "";
 }
 
-const stageLabels:Record<string,string>={done:"Completed",running:"In progress",waiting:"Upcoming",blocked:"AI unavailable",clarification:"Clarification requested",error:"Technical failure",cancelled:"Analysis cancelled",unknown:"Stage completion not recorded"};
+const stageLabels:Record<string,string>={done:"Completed",running:"In progress",waiting:"Upcoming",not_started:"Not started",blocked:"AI unavailable",clarification:"Clarification requested",error:"Technical failure",cancelled:"Analysis cancelled",unknown:"Stage completion not recorded"};
 const causeLabels:Record<string,string>={quota:"Quota limit reported",busy:"Assistant busy",connection_missing:"No authenticated connection",model_unavailable:"Model unavailable",unavailable:"Unavailable"};
 
 function InvestigationProgress({run,work,unavailable=false}:{run:Run;work?:WorkExecution;unavailable?:boolean}) {
@@ -206,7 +206,7 @@ function InvestigationProgress({run,work,unavailable=false}:{run:Run;work?:WorkE
       <ol className="investigation-stages" aria-label={t("Investigation stages")}>{stages.map(stage=>{
         const causes = !drafting && stage.role === current && stage.status === "blocked" ? snapshot?.waiting_causes || [] : [];
         const label = causes.length === 1 ? causeLabels[causes[0]] || "Unavailable" : stageLabels[stage.status] || "Unknown";
-        const Icon=stage.status === "done" ? CheckCircle2 : stage.status === "running" ? LoaderCircle : stage.status === "waiting" ? Circle : stage.status === "clarification" ? MessageCircle : stage.status === "error" ? AlertCircle : Clock3;
+        const Icon=stage.status === "done" ? CheckCircle2 : stage.status === "running" ? LoaderCircle : ["waiting","not_started"].includes(stage.status) ? Circle : stage.status === "clarification" ? MessageCircle : stage.status === "error" ? AlertCircle : Clock3;
         return <li key={stage.role} data-stage={stage.role} data-stage-status={stage.status}>
           <Icon size={18} className={stage.status === "running" && !unavailable ? "animate-spin motion-reduce:animate-none" : ""} aria-hidden="true" />
           <span className="investigation-role"><span className="badge connection-tag connection-role-tag" data-role={stage.role}>{t(roleLabels[stage.role] || stage.role)}</span></span><span className="investigation-stage-state muted">{t(label)}</span>

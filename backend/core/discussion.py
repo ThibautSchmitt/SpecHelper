@@ -344,6 +344,9 @@ def live(job):
 
 def run_job(job, caller=None):
     """Native history remains in a private context; no analysis run or result is created."""
+    from .orchestration_settings import get_config
+
+    timeout = get_config("2.4")["tool_timeout_seconds"]
     from .environment_context import materialize_context
     from .git import request_workspace
     from .global_skills import catalog, registry_instructions
@@ -483,9 +486,9 @@ def run_job(job, caller=None):
                     "skill_definitions": redact(skills.get("definitions", []), secrets),
                     "prompt": prompt,
                     "schema": (TicketDraftReply if preparation else Reply).model_json_schema(),
-                    "timeout": 260,
+                    "timeout": timeout,
                 },
-                timeout=270,
+                timeout=timeout + 15,
             )
         except ProviderUnavailable as exc:
             if exc.kind == "SESSION_UNAVAILABLE" and native and attempt == 0:

@@ -2340,5 +2340,7 @@
   "Invalid analysis search or pagination.": "Invalid analysis search or pagination.",
   "Invalid environment filter.": "Invalid environment filter.",
   "Unknown analysis status.": "Unknown analysis status.",
-  "Discard unsaved ticket edits?": "Discard unsaved ticket edits?"
+  "Discard unsaved ticket edits?": "Discard unsaved ticket edits?",
+  "The AI reached the execution time limit. Completed observations are preserved; retry to resume this step.": "The AI reached the execution time limit. Completed observations are preserved; retry to resume this step.",
+  "Not started": "Not started"
 }

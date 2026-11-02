@@ -484,6 +484,8 @@ def retry_analysis(request_id):
 
     request = Request.objects.select_for_update().get(pk=request_id)
     assert_editable(request)
+    if request.archived_at:
+        raise HttpError(409, "Unarchive this conversation before continuing.")
     if request.status not in {"ERROR", "CANCELLED"}:
         raise HttpError(409, "Only an interrupted or cancelled analysis can be retried.")
     job = (
@@ -497,6 +499,19 @@ def retry_analysis(request_id):
     if job.payload.get("connection_ids"):
         raise HttpError(409, "The previous execution is still stopping. Retry shortly.")
     run = AnalysisRun.objects.get(job=job)
+    from .orchestration_settings import get_config
+
+    timeout = get_config("2.4")["tool_timeout_seconds"]
+    previous_timeout = run.orchestration.get("config", {}).get("tool_timeout_seconds", 300)
+    if timeout != previous_timeout:
+        run.orchestration.setdefault("execution_policy_history", []).append({
+            "changed_at": timezone.now().isoformat(), "reason": "explicit_retry",
+            "previous_timeout_seconds": previous_timeout, "timeout_seconds": timeout,
+        })
+        run.orchestration.setdefault("config", {})["tool_timeout_seconds"] = timeout
+        if "timeout_seconds" in run.orchestration["config"]:
+            run.orchestration["config"]["timeout_seconds"] = timeout
+        run.save(update_fields=["orchestration"])
     invalidate_superseded_steps(job, run.orchestration.get("outputs", {}))
     job.status, job.error, job.finished_at = "QUEUED", "", None
     job.payload["waiting_reason"] = ""

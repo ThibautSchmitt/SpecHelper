@@ -2340,5 +2340,7 @@
   "Invalid analysis search or pagination.": "Recherche ou pagination invalide.",
   "Invalid environment filter.": "Filtre d’environnement invalide.",
   "Unknown analysis status.": "Statut d’analyse inconnu.",
-  "Discard unsaved ticket edits?": "Abandonner les modifications non enregistrées du ticket ?"
+  "Discard unsaved ticket edits?": "Abandonner les modifications non enregistrées du ticket ?",
+  "The AI reached the execution time limit. Completed observations are preserved; retry to resume this step.": "L’IA a atteint la limite de temps d’exécution. Les observations terminées sont conservées ; réessayez pour reprendre cette étape.",
+  "Not started": "Non démarré"
 }

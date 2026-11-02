@@ -105,7 +105,7 @@ class RunIn(BaseModel):
     database: dict | None = None
     context_dir: str | None = None
     context_resources: list[ContextResource] = Field(default_factory=list, max_length=64)
-    timeout: int = Field(ge=1, le=600)
+    timeout: int = Field(ge=1, le=3600)
 
 
 def sandbox(

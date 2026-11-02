@@ -313,7 +313,7 @@ def test_native_default_and_explicit_effort_are_not_replaced_by_guessed_models()
         headless_command("exact-model", effort="ultra")
 
 
-@pytest.mark.parametrize("model,timeout", [("bad model", 30), ("-model", 30), ("good-model", 0), ("good-model", 601), ("good-model", True)])
+@pytest.mark.parametrize("model,timeout", [("bad model", 30), ("-model", 30), ("good-model", 0), ("good-model", 3601), ("good-model", True)])
 def test_invalid_model_or_resource_bounds_are_rejected(model, timeout):
     with pytest.raises(ValueError):
         headless_command(model, timeout=timeout)

@@ -100,6 +100,12 @@ those locks. Independent conversations share configurable account and instance s
 by default **four per account and eight overall**. Discussion and deep-analysis calls
 use the same budgets. Account aliases share reservations for the detected account.
 One conversation permits only one active operation at a time.
+AI invocations use a one-hour execution limit by default, including conversational
+turns, library drafting and deep-analysis checkpoints. Runtime validation and the
+Antigravity CLI accept the same bounded limit. Database/network tool limits remain
+separate. An explicit retry applies the current invocation budget and records the
+change without replacing frozen evidence, role sessions or completed checkpoints.
+An execution timeout is reported explicitly; it never becomes successful verification.
 
 The roles inside an analysis remain sequential while other conversations run alongside
 it. Actual provider throttling, quota, authentication and backoff still constrain work.

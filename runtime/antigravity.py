@@ -211,7 +211,7 @@ def read_quota(env, *, timeout=10):
     return windows
 
 
-def headless_command(model, *, schema_path="/session/schema.json", timeout=300, binary="agy", effort="", conversation=None):
+def headless_command(model, *, schema_path="/session/schema.json", timeout=3600, binary="agy", effort="", conversation=None):
     """Use one stdin turn, avoiding prompts in argv and implicit session resumption.
 
     Streamed input and -p are mutually exclusive in the native CLI. Fresh stdin
@@ -219,7 +219,7 @@ def headless_command(model, *, schema_path="/session/schema.json", timeout=300, 
     """
     if not isinstance(model, str) or (model and not IDENTIFIER.fullmatch(model)):
         raise ValueError("Select an actual discovered Antigravity model")
-    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 600:
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 3600:
         raise ValueError("Invalid Antigravity invocation timeout")
     if schema_path != "/session/schema.json":
         raise ValueError("Invalid schema path")

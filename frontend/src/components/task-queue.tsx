@@ -13,6 +13,7 @@ import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
 import { api, resultStates } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { AnalysisWarning } from "@/lib/orchestration";
+import { roleLabels } from "@/lib/orchestration";
 
 export type QueueJob = {
   id: number | string;
@@ -206,6 +207,7 @@ export function TaskQueue() {
             <div className="title-tags">
               <h3 className="line-clamp-2 break-words text-sm font-semibold" title={job.title}>{job.title || t("Analysis")}</h3>
               <span className="badge" data-state={state === "WAITING_AI" ? "QUEUED" : state === "PAUSED" ? "NEEDS_CLARIFICATION" : state === "DONE" && resultState === "partial" ? "PARTIAL" : state}>{t(status)}</span>
+              {job.kind === "analysis" && job.public_role && roleLabels[job.public_role] && <span className="badge connection-tag connection-role-tag" data-role={job.public_role}>{t(roleLabels[job.public_role])}</span>}
             </div>
             {state === "ERROR" && <p className="mt-1 text-xs muted">{t("Analysis interrupted")}</p>}
             {state === "RUNNING" && job.stage_number && job.stage_count ? <p className="mt-1 text-xs muted">{t("Step {step} of {total}", { step: job.stage_number, total: job.stage_count })}</p> : null}
