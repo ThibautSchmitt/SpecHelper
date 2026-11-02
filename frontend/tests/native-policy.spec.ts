@@ -30,19 +30,19 @@ for (const language of ["en", "fr"] as const) {
     await nav.getByRole("button", { name: t("Orchestration"), exact: true }).click();
     await expect(page.getByLabel(t("Maximum AI calls per analysis"), { exact: true })).toHaveCount(0);
     await expect(page.getByText(t("Instruction hierarchy"), { exact: true })).toHaveCount(0);
-    await expect(page.getByText(t("Automatic safeguards stop stalled or repeated steps and preserve completed observations."), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("Deep analyses use three distinct roles with independent sessions."), { exact: true })).toBeVisible();
     await nav.getByRole("button", { name: t("Skills"), exact: true }).click();
     await expect(page.getByRole("heading", { name: t("Built-in skills"), exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: t("Custom skills"), exact: true })).toBeVisible();
-    const builtin = page.getByRole("article", { name: t(native.name), exact: true });
+    const builtin = page.locator("[data-builtin-skill]").filter({hasText:t(native.name)});
     await expect(builtin.getByRole("button", { name: t("Edit {name}").replace("{name}", native.name), exact: true })).toHaveCount(0);
     for (const item of builtins) {
-      const card = page.getByRole("article", {name:t(item.name),exact:true});
+      const card = page.locator("[data-builtin-skill]").filter({hasText:t(item.name)});
       await expect(card).toBeVisible();
       await expect(card.getByText(/v\d+/, {exact:true})).toHaveCount(0);
       await expect(card.getByText(t("Built-in"), {exact:true})).toBeVisible();
     }
-    await builtin.getByText(t("View instructions"), { exact: true }).click();
+    await builtin.locator("summary").click();
     await expect(builtin).toContainText(native.instructions);
     await expect(builtin.getByLabel(t("More actions for {name}").replace("{name}", native.name), { exact: true })).toHaveCount(0);
     await expect(builtin.getByText(/v\d+/, { exact: true })).toHaveCount(0);

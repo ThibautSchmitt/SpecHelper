@@ -159,7 +159,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto("/admin");
     await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
     await page.getByRole("button", { name: t("Skills"), exact: true }).click();
-    await expect(page.getByRole("button", { name: t("Generate a skill"), exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: t("Generate with AI"), exact: true })).toBeVisible();
     await page.getByLabel(t("Search skills"), { exact: true }).fill("billing");
     await expect(page.getByRole("heading", { name: /Billing review/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Stock review/ })).toHaveCount(0);
@@ -167,7 +167,8 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByRole("group", { name: t("Required skills"), exact: true })).toHaveCount(0);
     await page.getByLabel(t("Instructions"), { exact: true }).fill("Inspect billing boundaries and rare states.");
     await page.getByRole("button", { name: t("Save skill"), exact: true }).click();
-    await expect(page.getByRole("heading", { name: /Billing review/ })).toContainText("v2");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /Billing review/ })).not.toContainText("v2");
     await page.getByLabel(t("More actions for {name}").replace("{name}", "Billing review"), { exact: true }).click();
     await page.getByRole("button", { name: t("Versions of {name}").replace("{name}", "Billing review"), exact: true }).click();
     await page.locator("summary").filter({ hasText: /^v1/ }).click();

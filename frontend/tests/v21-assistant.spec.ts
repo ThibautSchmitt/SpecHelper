@@ -668,9 +668,10 @@ for (const language of ["en", "fr"] as const) {
     await expect(assistant).toContainText(
       t("Creation cancelled. No definition was activated."),
     );
-    await assistant
+    await page.getByRole("dialog")
       .getByRole("button", { name: t("Close"), exact: true })
       .click();
+    await page.getByLabel(t("More actions for {name}").replace("{name}", "Review skill"), {exact:true}).click();
     await page
       .getByRole("button", {
         name: t("Versions of {name}").replace("{name}", "Review skill"),
@@ -694,8 +695,8 @@ for (const language of ["en", "fr"] as const) {
       .getByRole("button", { name: t("Confirm restoration"), exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: /^Review skill v/ }),
-    ).toContainText("v3");
+      page.getByRole("heading", { name: "Review skill", exact:true }),
+    ).toBeVisible();
     expect(restores).toBe(1);
     await page
       .getByRole("button", { name: t("Import skill"), exact: true })

@@ -183,10 +183,14 @@ export function LibraryAssistant({
   kind,
   onClose,
   onSaved,
+  onCloseStateChange,
+  embedded = false,
 }: {
   kind: "agent" | "skill";
   onClose: () => void;
   onSaved: () => Promise<void>;
+  onCloseStateChange?: (state: { unsaved: boolean; busy: boolean }) => void;
+  embedded?: boolean;
 }) {
   const { t, language, dateLocale } = useI18n();
   const [connections, setConnections] = useState<AIConnection[]>([]);
@@ -213,6 +217,9 @@ export function LibraryAssistant({
     current?.status === "ACTIVE" || current?.status === "CANCELLED";
   const dirty =
     canonical(definition) !== canonical(current?.definition || null);
+  useEffect(() => {
+    onCloseStateChange?.({ unsaved: dirty || !!message.trim() || !!demo.trim() || !current && !!description.trim(), busy });
+  }, [dirty, message, demo, current, description, busy, onCloseStateChange]);
 
   function receive(value: AssistantDraft, preservePrevious = true) {
     if (!alive.current) return;
@@ -334,24 +341,24 @@ export function LibraryAssistant({
     <section
       ref={section}
       tabIndex={-1}
-      className="min-w-0 rounded-xl border bg-muted/20 p-4 sm:p-5 space-y-5 outline-none"
+      className={embedded ? "min-w-0 space-y-5 outline-none" : "min-w-0 rounded-xl border bg-muted/20 p-4 sm:p-5 space-y-5 outline-none"}
       aria-label={t("Creation assistant")}
     >
       <div className="flex flex-wrap justify-between items-start gap-3">
         <div>
-          <h3 className="flex items-center gap-2">
+          {!embedded && <h3 className="flex items-center gap-2">
             <Sparkles size={18} aria-hidden="true" />
             {t(kind === "agent" ? "Generate an agent" : "Generate a skill")}
-          </h3>
+          </h3>}
           <p className="mt-2 text-sm muted">
             {t(
               "Describe the mission in your own words. The assistant asks only what is needed and prepares an inactive draft for your review.",
             )}
           </p>
         </div>
-        <Button variant="ghost" size="sm" disabled={busy} onClick={onClose}>
+        {!embedded && <Button variant="ghost" size="sm" disabled={busy} onClick={onClose}>
           {t("Close")}
-        </Button>
+        </Button>}
       </div>
       {error && (
         <p role="alert" className="rounded-md border p-3 text-sm break-words">
@@ -394,7 +401,7 @@ export function LibraryAssistant({
               </select>
             </div>
           )}
-          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+          <div className={embedded ? "grid min-w-0 gap-5" : "grid min-w-0 gap-5 xl:grid-cols-2"}>
             <section
               className="min-w-0 space-y-4"
               aria-label={t("Clarification discussion")}

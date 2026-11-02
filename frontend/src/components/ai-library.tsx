@@ -1,18 +1,21 @@
 "use client";
 import { SkillMetadata } from "@/components/skill-metadata";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   BookOpen,
+  ChevronDown,
   Bot,
   Download,
   History,
   Pencil,
   Plus,
   Power,
+  Search,
   Sparkles,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { LibraryAssistant } from "@/components/library-assistant";
 import { Button } from "@/components/ui/button";
@@ -85,6 +88,35 @@ function toggle(values: string[], value: string) {
     : [...values, value];
 }
 
+/** The library uses the same native modal behavior as the other settings dialogs. */
+function SkillDrawer({ title, busy, onClose, children }: {
+  title: string; busy: boolean; onClose: () => void; children: ReactNode;
+}) {
+  const { t } = useI18n();
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const panel = dialog.current;
+    panel?.showModal();
+    panel?.querySelector<HTMLElement>("input:not([disabled]), textarea:not([disabled])")?.focus();
+    return () => { panel?.close(); if (opener?.isConnected) opener.focus(); };
+  }, []);
+  return <dialog ref={dialog} aria-labelledby="skill-drawer-title" className="skill-drawer"
+    onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
+    onClick={event => { if (event.target === event.currentTarget && !busy) {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
+    } }}>
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b p-5">
+        <h2 id="skill-drawer-title" className="text-lg">{title}</h2>
+        <Button type="button" size="sm" variant="ghost" className="shrink-0" disabled={busy} aria-label={t("Close")} onClick={onClose}><X size={18} aria-hidden="true" /></Button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+    </div>
+  </dialog>;
+}
+
 export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
   const { t, dateLocale } = useI18n();
   const [search, setSearch] = useState("");
@@ -115,6 +147,16 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const generation = useRef(0);
+  const draftBaseline = useRef("");
+  const importFile = useRef<HTMLInputElement>(null);
+  const [assistantState, setAssistantState] = useState({ unsaved: false, busy: false });
+  const drawerOpen = kind === "skill" && (!!draft || assistant || importText !== null);
+  function closePanel() {
+    if (busy || assistant && assistantState.busy) return;
+    const dirty = draft ? JSON.stringify(draft) !== draftBaseline.current : assistant ? assistantState.unsaved : !!importText?.trim();
+    if (kind === "skill" && dirty && !window.confirm(t("Discard unsaved skill changes?"))) return;
+    setDraft(null); setEditing(null); setAssistant(false); setImportText(null); setImportPreview(null); setError("");
+  }
   const prefix = `library-${kind}`;
   async function refresh() {
     const version = ++generation.current;
@@ -169,10 +211,14 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
     }
   }
   const Icon = kind === "agent" ? Bot : BookOpen;
+  const visibleItems = items.filter(item => [item.name, item.objective, item.slug,
+    ...(item.built_in ? [t(item.name), t(item.objective)] : []),
+  ].join(" ").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+    .sort((a, b) => Number(!!a.built_in) - Number(!!b.built_in));
   const definitionForm = draft ? (
         <form
           id={draft.slug ? `${prefix}-editor-${draft.slug}` : `${prefix}-editor-new`}
-          className="mt-4 min-w-0 border-t pt-4"
+          className={kind === "skill" ? "min-w-0" : "mt-4 min-w-0 border-t pt-4"}
           onSubmit={(event) => {
             event.preventDefault();
             const submitted = {
@@ -192,15 +238,15 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
             }, "Library definition saved.");
           }}
         >
-          <h3>
+          {kind === "agent" && <h3>
             {t(
               editing
-                ? kind === "skill" ? "Edit skill" : "Edit definition"
+                ? "Edit definition"
                 : kind === "agent"
                   ? "New agent"
                   : "New skill",
             )}
-          </h3>
+          </h3>}
           <fieldset disabled={busy} className="min-w-0">
             <div className="field">
               <label htmlFor={`${prefix}-slug`}>{t("Identifier")}</label>
@@ -388,7 +434,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                 </div>
               </fieldset>
             )}
-            {editing && (
+            {editing && kind === "agent" && (
               <p className="mt-5 text-xs muted">
                 {t(
                   "Editing version {version}. Saving creates a new immutable version.",
@@ -396,15 +442,12 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                 )}
               </p>
             )}
-            <div className="mt-5 flex flex-wrap justify-end gap-2" data-editor-actions>
+            <div className={kind === "skill" ? "sticky bottom-0 -mx-5 -mb-5 mt-5 flex flex-wrap justify-end gap-2 border-t bg-card p-4" : "mt-5 flex flex-wrap justify-end gap-2"} data-editor-actions>
               <Button
                 type="button"
                 variant="outline"
                 disabled={busy}
-                onClick={() => {
-                  setDraft(null);
-                  setEditing(null);
-                }}
+                onClick={closePanel}
               >
                 {t("Cancel")}
               </Button>
@@ -413,105 +456,33 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
           </fieldset>
         </form>
   ) : null;
-  return (
-    <Card className="settings-section min-w-0 space-y-4" aria-label={t(kind === "agent" ? "Agent library" : "Skills")}>
-      <header>
-        <div className="section-heading">
-          <h2><Icon size={18} aria-hidden="true" />{t(kind === "agent" ? "Agent library" : "Skills")}</h2>
-          <Button
-            type="button"
-            size="sm"
-            aria-label={t(kind === "agent" ? "Add agent" : "Add skill")}
-            variant="outline"
-            disabled={busy || loading}
-            onClick={() => {
-              setDraft({ ...blank });
-              setEditing(null);
-              setHistory(null);
-              setRemove(null);
-              setAssistant(false);
-            }}
-          >
-            <Plus size={16} aria-hidden="true" />
-            {t(kind === "agent" ? "Add agent" : "Add skill")}
-          </Button>
-        </div>
-        <p className="mt-2 text-sm muted">{t(kind === "skill" ? "These skills are used automatically when relevant and authorized. Each assistant reads only the instructions it needs." : "One shared library, reusable across environments and supported assistants.")}</p>
-      </header>
-      <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={busy || loading}
-            onClick={() => {
-              setAssistant(true);
-              setDraft(null);
-              setHistory(null);
-              setRemove(null);
-              setImportText(null);
-            }}
-          >
-            <Sparkles size={16} aria-hidden="true" />
-            {t(kind === "agent" ? "Generate an agent" : "Generate a skill")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={busy || loading}
-            onClick={() => {
-              setImportText("");
-              setImportPreview(null);
-              setAssistant(false);
-              setDraft(null);
-            }}
-          >
-            <Upload size={16} aria-hidden="true" />
-            {t(kind === "skill" ? "Import skill" : "Import definition")}
-          </Button>
-      </div>
-      <p className="text-sm muted">
-        {t(
-          kind === "skill" ? "Skills contain instructions only. They cannot change sandbox permissions or access credentials." : "Definitions contain instructions only. They cannot change sandbox permissions or access credentials.",
-        )}
-      </p>
-      {error && (
-        <div role="alert" className="rounded-md border p-3 text-sm">
-          {t(error)}{" "}
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => action(refresh)}
-          >
-            {t("Retry")}
-          </Button>
-        </div>
-      )}
-      {notice && (
-        <p role="status" className="text-sm">
-          {t(notice)}
-        </p>
-      )}
-      {assistant && (
-        <LibraryAssistant
-          kind={kind}
-          onClose={() => setAssistant(false)}
-          onSaved={refresh}
-        />
-      )}
-      {importText !== null && (
+  const importForm = importText !== null ? (
         <section
-          className="rounded-lg border p-4 space-y-3"
+          className={kind === "skill" ? "space-y-3" : "rounded-lg border p-4 space-y-3"}
           aria-label={t(kind === "skill" ? "Import skill" : "Import definition")}
         >
-          <h3>{t(kind === "skill" ? "Import skill" : "Import definition")}</h3>
+          {kind === "agent" && <h3>{t("Import definition")}</h3>}
           <p className="text-sm muted">
             {t(
               "Paste a declarative JSON export. Imports are saved inactive and cannot install scripts or extensions.",
             )}
           </p>
+          {kind === "skill" && <>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => importFile.current?.click()}><Upload size={15} aria-hidden="true" />{t("Select a JSON file")}</Button>
+            <input ref={importFile} type="file" accept=".json,application/json" hidden aria-label={t("Select a JSON file")}
+              onChange={async event => {
+                const file = event.target.files?.[0]; event.target.value = "";
+                if (!file) return;
+                setError(""); setImportPreview(null); setBusy(true);
+                try {
+                  if (file.size > 200000) throw new Error("The import is limited to 50,000 characters.");
+                  const content = await file.text();
+                  if (content.length > 50000) throw new Error("The import is limited to 50,000 characters.");
+                  setImportText(content); setImportPreview(null);
+                } catch (error) { setError((error as Error).message); }
+                finally { setBusy(false); }
+              }} />
+          </>}
           <label className="text-sm" htmlFor={`${prefix}-import`}>
             {t("Definition JSON")}
           </label>
@@ -520,6 +491,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
             className="w-full rounded-md border bg-background p-3 font-mono text-xs"
             rows={8}
             maxLength={50000}
+            disabled={busy}
             value={importText}
             onChange={(event) => {
               setImportText(event.target.value);
@@ -608,13 +580,103 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
             <Button
               variant="outline"
               disabled={busy}
-              onClick={() => setImportText(null)}
+              onClick={closePanel}
             >
               {t("Cancel")}
             </Button>
           </div>
         </section>
+       ) : null;
+  return (
+    <Card className={"settings-section min-w-0 space-y-4" + (kind === "skill" ? " skill-library-panel" : "")} aria-label={t(kind === "agent" ? "Agent library" : "Skills")}>
+      <header>
+        <div className="section-heading">
+          <h2><Icon size={18} aria-hidden="true" />{t(kind === "agent" ? "Agent library" : "Skills")}</h2>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            aria-label={t(kind === "agent" ? "Add agent" : "Add skill")}
+            variant="outline"
+            disabled={busy || loading}
+            onClick={() => {
+              draftBaseline.current = JSON.stringify(blank);
+              setError(""); setNotice(""); setImportText(null); setImportPreview(null);
+              setDraft({ ...blank });
+              setEditing(null);
+              setHistory(null);
+              setRemove(null);
+              setAssistant(false);
+            }}
+          >
+            <Plus size={16} aria-hidden="true" />
+            {t(kind === "agent" ? "Add agent" : "Add skill")}
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={busy || loading}
+            onClick={() => {
+              setError(""); setNotice(""); setAssistantState({unsaved:false, busy:false});
+              setAssistant(true);
+              setDraft(null);
+              setHistory(null);
+              setRemove(null);
+              setImportText(null);
+            }}
+          >
+            <Sparkles size={16} aria-hidden="true" />
+            {t(kind === "agent" ? "Generate an agent" : "Generate with AI")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={busy || loading}
+            onClick={() => {
+              setError(""); setNotice("");
+              setImportText("");
+              setImportPreview(null);
+              setAssistant(false);
+              setDraft(null);
+            }}
+          >
+            <Upload size={16} aria-hidden="true" />
+            {t(kind === "skill" ? "Import skill" : "Import definition")}
+          </Button>
+        </div>
+      </div>
+      <p className="mt-2 text-sm muted">{t(kind === "skill" ? "Skills give AI assistants specialized methods. Built-in skills are automatic; you can add your own." : "One shared library, reusable across environments and supported assistants.")}</p>
+      </header>
+      <details className="text-xs muted"><summary className="cursor-pointer">{t("About skill permissions")}</summary><p className="mt-2">{t("Skills guide AI assistants without changing their access permissions.")}</p></details>
+      {error && !drawerOpen && (
+        <div role="alert" className="rounded-md border p-3 text-sm">
+          {t(error)}{" "}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => action(refresh)}
+          >
+            {t("Retry")}
+          </Button>
+        </div>
       )}
+      {notice && (
+        <p role="status" className="text-sm">
+          {t(notice)}
+        </p>
+      )}
+      {kind === "agent" && assistant && (
+        <LibraryAssistant
+          kind={kind}
+          onClose={() => setAssistant(false)}
+          onSaved={refresh}
+        />
+      )}
+      {kind === "agent" && importForm}
       {loading && (
         <p role="status" className="text-sm muted">
           {t("Loading library…")}
@@ -629,23 +691,36 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
           )}
         </p>
       )}
-      <div className="field"><label htmlFor={`${prefix}-search`}>{t(kind === "skill" ? "Search skills" : "Search agents")}</label><Input id={`${prefix}-search`} type="search" value={search} onChange={event => setSearch(event.target.value)} /></div>
-      {items.filter(item => `${item.name} ${item.objective} ${item.slug}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).sort((a, b) => Number(!!b.built_in) - Number(!!a.built_in)).map((item, index, filtered) => (
+      <div className="relative w-full sm:max-w-xs">
+        <label className="sr-only" htmlFor={`${prefix}-search`}>{t(kind === "skill" ? "Search skills" : "Search agents")}</label>
+        <Search size={15} className="pointer-events-none absolute left-3 top-3 muted" aria-hidden="true" />
+        <Input className="pl-9" id={`${prefix}-search`} type="search" placeholder={t("Search skills…")} value={search} onChange={event => setSearch(event.target.value)} />
+      </div>
+      {kind === "skill" && !loading && !error && !visibleItems.some(item => !item.built_in) && <section aria-label={t("Custom skills")} className="pt-2"><h3 className="text-sm font-semibold">{t("Custom skills")}</h3><p className="mt-1 text-xs muted">{t("Skills added to this instance.")}</p><p className="mt-3 text-sm muted">{t(search.trim() ? "No matching skills." : "No custom skills.")}</p></section>}
+      {kind === "agent" && !loading && search.trim() && !visibleItems.length && <p role="status" className="text-sm muted">{t("No matching skills.")}</p>}
+      {visibleItems.map((item, index, filtered) => (
         <Fragment key={item.slug}>
-        {kind === "skill" && (index === 0 || !!item.built_in !== !!filtered[index - 1].built_in) && <h3 className="pt-3 text-sm font-semibold">{t(item.built_in ? "Built-in skills" : "Custom skills")}</h3>}
-        <article className="rounded-lg border p-4" aria-label={item.built_in ? t(item.name) : item.name}>
-          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+        {kind === "skill" && (index === 0 || !!item.built_in !== !!filtered[index - 1].built_in) && <div className="pt-3"><h3 className="text-sm font-semibold">{t(item.built_in ? "Built-in skills" : "Custom skills")}</h3><p className="mt-1 text-xs muted">{t(item.built_in ? "Provided and used automatically by SpecHelper." : "Skills added to this instance.")}</p></div>}
+        {kind === "skill" && item.built_in ? <details className="group border-b py-3 last:border-b-0" data-builtin-skill>
+          <summary className="flex cursor-pointer list-none items-start gap-3" aria-label={t("View instructions") + " — " + t(item.name)}>
+            <BookOpen size={17} className="mt-1 shrink-0 muted" aria-hidden="true" />
+            <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{t(item.name)}</span><span className="mt-1 line-clamp-2 block text-xs muted">{t(item.objective || item.name)}</span></span>
+            <span className="badge shrink-0">{t("Built-in")}</span><ChevronDown size={16} className="mt-1 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <pre className="mt-3 whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-sans text-xs">{item.instructions}</pre>
+        </details> : <article className={kind === "skill" ? "border-b py-3 last:border-b-0" : "rounded-lg border p-4"} aria-label={item.built_in ? t(item.name) : item.name}>
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="title-tags"><h3 className="break-words">
+              <div className="title-tags"><h3 className={kind === "skill" ? "break-words text-sm font-medium" : "break-words"}>
                 {item.built_in ? t(item.name) : item.name}{" "}
-                {!item.built_in && <span className="text-xs muted">v{item.version}</span>}
+                {kind === "agent" && !item.built_in && <span className="text-xs muted">v{item.version}</span>}
               </h3>
-                {kind === "skill" && <span className="badge">{t(item.built_in ? "Built-in" : "Custom")}</span>}
+                {kind === "skill" && <span className="badge">{t(item.enabled ? "Active" : "Inactive")}</span>}
               </div>
-              <p className="mt-1 text-sm muted break-words">
+              <p className="mt-1 line-clamp-2 text-sm muted break-words">
                 {item.built_in ? t(item.objective || item.name) : item.objective || item.name}
               </p>
-              {!item.built_in && <p className="mt-2 text-xs muted">
+              {kind === "agent" && !item.built_in && <p className="mt-2 text-xs muted">
                 {t(item.enabled ? "Active" : "Inactive")} ·{" "}
                 {kind === "agent" && item.compatibility.length
                   ? item.compatibility
@@ -668,6 +743,8 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
                   setError("");
                   if (draft && editing === item.slug) { setDraft(null); setEditing(null); return; }
                   setEditing(item.slug);
+                  draftBaseline.current = JSON.stringify(libraryPayload(item));
+                  setAssistant(false); setImportText(null); setImportPreview(null);
                   setDraft(libraryPayload(item));
                   setHistory(null);
                   setRemove(null);
@@ -777,8 +854,9 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
             </div>
           </div>
           {item.built_in && <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium">{t("View instructions")}</summary><pre className="mt-3 whitespace-pre-wrap break-words font-sans text-xs muted">{item.instructions}</pre></details>}
-          {editing === item.slug && definitionForm}
-        </article>
+          {kind === "skill" && <details className="mt-2 text-xs"><summary className="cursor-pointer muted">{t("View instructions")}</summary><pre className="mt-3 whitespace-pre-wrap break-words font-sans">{item.instructions}</pre></details>}
+          {kind === "agent" && editing === item.slug && definitionForm}
+        </article>}
         </Fragment>
       ))}
       {remove && (
@@ -818,7 +896,12 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
           </div>
         </div>
       )}
-      {!editing && definitionForm}
+      {kind === "agent" && !editing && definitionForm}
+      {drawerOpen && <SkillDrawer title={t(draft ? editing ? "Edit skill" : "New skill" : assistant ? "Generate with AI" : "Import skill")}
+        busy={busy || assistant && assistantState.busy} onClose={closePanel}>
+        {error && <p role="alert" className="mb-4 rounded-md border p-3 text-sm">{t(error)}</p>}
+        {draft ? definitionForm : assistant ? <LibraryAssistant kind={kind} onClose={closePanel} onSaved={refresh} onCloseStateChange={setAssistantState} embedded /> : importForm}
+      </SkillDrawer>}
       {history && (
         <div className="rounded-lg border p-4 space-y-4">
           <h3>{t("Versions of {name}", { name: history.name })}</h3>

@@ -2284,5 +2284,17 @@
   "Unreadable document. Replace it with a supported file.": "Document illisible. Remplacez-le par un fichier pris en charge.",
   "Documents updated.": "Documents mis à jour.",
   "Text and link changes still need saving.": "Les modifications du texte et des liens restent à enregistrer.",
-  "Verification date not recorded": "Non renseignée"
+  "Verification date not recorded": "Non renseignée",
+  "Skills give AI assistants specialized methods. Built-in skills are automatic; you can add your own.": "Les compétences permettent aux IA d’utiliser des méthodes spécialisées. Les compétences intégrées sont automatiques ; vous pouvez ajouter vos propres compétences.",
+  "Generate with AI": "Générer avec l’IA",
+  "About skill permissions": "À propos des autorisations",
+  "Skills guide AI assistants without changing their access permissions.": "Les compétences donnent des instructions aux IA, sans modifier leurs autorisations d’accès.",
+  "Skills added to this instance.": "Compétences ajoutées à cette instance.",
+  "Provided and used automatically by SpecHelper.": "Fournies et utilisées automatiquement par SpecHelper.",
+  "No custom skills.": "Aucune compétence personnalisée.",
+  "No matching skills.": "Aucune compétence ne correspond à la recherche.",
+  "Search skills…": "Rechercher une compétence…",
+  "Discard unsaved skill changes?": "Abandonner les modifications non enregistrées de cette compétence ?",
+  "Select a JSON file": "Choisir un fichier JSON",
+  "The import is limited to 50,000 characters.": "L’import est limité à 50 000 caractères."
 }

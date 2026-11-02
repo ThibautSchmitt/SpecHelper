@@ -238,6 +238,17 @@ failures are not bypassed to obtain a completed label.
   skill is not necessarily read. Recorded file access proves access, not comprehension.
 - Skills and per-connection instructions cannot grant tools, network access or write permissions.
 
+The **Skills** page lists custom procedures first, followed by four compact built-in
+rows. Expand a built-in row to read its complete, unmodified instructions. The search
+also matches translated built-in names. **Add skill**, **Generate with AI** and
+**Import skill** open a side panel without moving to the bottom of the page.
+Manual edits use **Cancel** and **Save**; closing a panel with unsaved changes asks
+for confirmation. Errors remain in the panel with the entered content intact.
+Import accepts the existing declarative JSON format, pasted or selected from a file,
+and requires validation before saving an inactive draft. Generated proposals also
+remain drafts until explicit activation. Export, recorded revisions and activation
+actions remain available through each custom skill's **…** menu.
+
 The same read-only skill files are exposed inside the isolated Codex, Claude Code and
 Antigravity CLI sessions. SpecHelper supplies a lightweight registry; the assistant
 reads a procedure when needed. This does not depend on a provider-specific skill loader.
