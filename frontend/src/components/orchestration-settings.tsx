@@ -159,7 +159,9 @@ export function OrchestrationSettingsForm() {
           <fieldset className="mt-5 space-y-3"><legend className="font-medium text-sm">{t("Analysis tools")}</legend><p className="text-xs muted">{t("Required tools remain active to produce a complete analysis and its documents.")}</p>{value.available_agents.map((agent) => <label key={agent.slug} className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={agent.required} checked={value.active_internal_agents.includes(agent.slug)} onChange={() => toggle("active_internal_agents", agent.slug)} /><span>{t(agent.name)}{agent.required && ` · ${t("Required")}`}{agent.description && <span className="mt-1 block text-xs muted">{t(agent.description)}</span>}</span></label>)}</fieldset>
           <fieldset className="mt-5 space-y-3"><legend className="font-medium text-sm">{t("Default skills")}</legend>{value.available_skills.map((skill) => <label key={skill.slug} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={value.default_skills.includes(skill.slug)} onChange={() => toggle("default_skills", skill.slug)} /><span>{t(skill.name)}{skill.description && <span className="mt-1 block text-xs muted">{t(skill.description)}</span>}</span></label>)}</fieldset>
         </details>}
-        <Button variant="outline" size="sm" disabled={!dirty || busy}>{t("Save")}</Button>
+        <div className="mt-4 flex flex-wrap justify-end gap-2" data-editor-actions>
+          <Button disabled={!dirty || busy}>{t("Save")}</Button>
+        </div>
       </fieldset>
     </form>}
     {notice && <p role="status" className="mt-4 text-sm text-green-800">{notice}</p>}
