@@ -45,10 +45,13 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
     });
     await page.goto("/admin?tab=ai-agents&section=skills");
     const library = page.getByRole("region", { name: t("Skills"), exact: true });
-    await expect(library).toHaveAttribute("data-slot", "card");
-    expect(await library.evaluate(node => parseFloat(getComputedStyle(node).borderTopWidth))).toBeGreaterThan(0);
-    expect(await library.evaluate(node => parseFloat(getComputedStyle(node).paddingLeft))).toBeGreaterThan(0);
-    await expect(library.locator("[data-slot=card]")).toHaveCount(0);
+    const panel = library.locator("[data-skill-library-content]");
+    await expect(panel).toHaveAttribute("data-slot", "card");
+    expect(await panel.evaluate(node => parseFloat(getComputedStyle(node).borderTopWidth))).toBeGreaterThan(0);
+    expect(await panel.evaluate(node => parseFloat(getComputedStyle(node).paddingLeft))).toBeGreaterThan(0);
+    await expect(panel.getByRole("heading", {name:t("Skills"), exact:true})).toHaveCount(0);
+    await expect(panel.getByRole("button", {name:t("Add skill"), exact:true})).toHaveCount(0);
+    await expect(library.locator("[data-slot=card]")).toHaveCount(1);
     await expect(library.locator("[data-builtin-skill]")).toHaveCount(4);
     const customHeading = await library.getByRole("heading", { name: t("Custom skills"), exact: true }).boundingBox();
     const builtinHeading = await library.getByRole("heading", { name: t("Built-in skills"), exact: true }).boundingBox();

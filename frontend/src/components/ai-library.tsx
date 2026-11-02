@@ -588,7 +588,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
         </section>
        ) : null;
   return (
-    <Card className={"settings-section min-w-0 space-y-4" + (kind === "skill" ? " skill-library-panel" : "")} aria-label={t(kind === "agent" ? "Agent library" : "Skills")}>
+    <section className="min-w-0 space-y-5" aria-label={t(kind === "agent" ? "Agent library" : "Skills")}>
       <header>
         <div className="section-heading">
           <h2><Icon size={18} aria-hidden="true" />{t(kind === "agent" ? "Agent library" : "Skills")}</h2>
@@ -650,6 +650,7 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
       </div>
       <p className="mt-2 text-sm muted">{t(kind === "skill" ? "Skills give AI assistants specialized methods. Built-in skills are automatic; you can add your own." : "One shared library, reusable across environments and supported assistants.")}</p>
       </header>
+      <Card data-skill-library-content className={"settings-section min-w-0 space-y-4" + (kind === "skill" ? " skill-library-panel" : "")}>
       <details className="text-xs muted"><summary className="cursor-pointer">{t("About skill permissions")}</summary><p className="mt-2">{t("Skills guide AI assistants without changing their access permissions.")}</p></details>
       {error && !drawerOpen && (
         <div role="alert" className="rounded-md border p-3 text-sm">
@@ -995,5 +996,6 @@ export function AILibrary({ kind }: { kind: "agent" | "skill" }) {
         </div>
       )}
     </Card>
+    </section>
   );
 }

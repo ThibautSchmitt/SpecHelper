@@ -238,7 +238,8 @@ failures are not bypassed to obtain a completed label.
   skill is not necessarily read. Recorded file access proves access, not comprehension.
 - Skills and per-connection instructions cannot grant tools, network access or write permissions.
 
-The **Skills** page lists custom procedures first, followed by four compact built-in
+The **Skills** heading, description and add/generate/import actions sit above the
+library panel. The panel lists custom procedures first, followed by four compact built-in
 rows. Expand a built-in row to read its complete, unmodified instructions. The search
 also matches translated built-in names. **Add skill**, **Generate with AI** and
 **Import skill** open a side panel without moving to the bottom of the page.
