@@ -134,6 +134,7 @@ def document_dict(document):
 
 @transaction.atomic
 def create_document(question_id, number, kind):
+    from .conversation_sources import version_records
     from .question_outputs import render_document
 
     version = source_version(question_id, number)
@@ -146,6 +147,7 @@ def create_document(question_id, number, kind):
             redact(version.baseline, secrets),
             kind,
             version.language,
+            sources=version_records(version)["sources"],
         )
     except ValueError as exc:
         raise HttpError(

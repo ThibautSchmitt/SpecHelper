@@ -159,6 +159,16 @@ passage; missing excerpts remain explicitly unavailable. Source content is treat
 as text, never executed. Tables have shared cell spacing, borders and their own
 horizontal scrolling when needed on a small screen.
 
+Generated documentation reuses these recorded sources from the selected answer
+version. Business documentation keeps functional conclusions, essential limits,
+document links and recorded web quotations; it does not append raw SQL or source
+code. Technical documentation includes frozen code excerpts, executed queries and
+retained document/page excerpts. Mixed documentation includes both presentations
+without repeating the source annex. Rejected or unavailable SQL attempts are not
+exported as evidence. A source citation alone never upgrades a finding's verification
+status. Exports do not rerun investigations or queries, and saved documents keep
+their generated content when the conversation or environment later changes.
+
 ## Prepare and publish a ticket
 
 **Prepare a ticket** opens an editable draft in the conversation. It never starts

@@ -159,7 +159,7 @@ def test_version_copy_and_document_formats_preserve_selected_source(answer, stor
         assert document["source_version"] == 1
         assert document["baseline"] == answer.baseline
         assert document["language"] == "en"
-        assert "a" * 40 in document["markdown"]
+        assert ("a" * 40 in document["markdown"]) == (kind != "business")
         assert client.get(document["download_url"]).content.decode() == document["markdown"]
         if kind == "business":
             assert "Only active contracts" in document["markdown"]

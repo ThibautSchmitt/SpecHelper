@@ -10,7 +10,7 @@ STATUS = {
 }
 
 
-def render_evidence(report, language="en", *, include_diagrams=True):
+def render_evidence(report, language="en", *, include_diagrams=True, include_source_details=True):
     if not report:
         return ""
     lines = ["## " + translate("Checked conclusions and limits", language), ""]
@@ -50,6 +50,8 @@ def render_evidence(report, language="en", *, include_diagrams=True):
                 "",
             ]
         for source in claim.get("sources", []):
+            if not include_source_details:
+                continue
             if source["kind"] == "git":
                 lines += [
                     f"{source['repository']} · `{source['commit']}` · `{source['path']}`:{source['line_start']}-{source['line_end']}",
@@ -92,7 +94,7 @@ def render_evidence(report, language="en", *, include_diagrams=True):
                     ),
                     None,
                 )
-                if receipt:
+                if receipt and receipt.get("status") == "checked":
                     lines += [
                         translate("Authorized database observation", language)
                         + f": {receipt['query_id']} · {receipt['checked_at']}",

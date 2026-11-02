@@ -71,12 +71,14 @@ def collect(value, content, observations, frozen, evidence=None):
             url = public_reference_url(receipt.get("url", ""))
         except ValueError:
             continue
-        quotes = [s.get("excerpt", "") for s in sources if s.get("kind") == "web" and s.get("reference_id") == receipt["reference_id"]]
+        citations = [s for s in sources if s.get("kind") == "web" and s.get("reference_id") == receipt["reference_id"]]
+        quotes = [s.get("excerpt", "") for s in citations]
         body = receipt.get("text", "") if isinstance(receipt.get("text", ""), str) else ""
         exact = [quote for quote in quotes if quote and quote in body]
         add({"kind":"web", "id":receipt["reference_id"], "title":receipt.get("title") or url, "url":url,
              "excerpt":"\n\n".join(exact)[:12000] if exact else body[:6000], "checked_at":receipt.get("consulted_at", ""),
-             "note":"" if exact else "Preview of the recorded page; no precise quoted passage was recorded."})
+             "note":"" if exact else "Preview of the recorded page; no precise quoted passage was recorded.",
+             "applicability":[{key:s[key] for key in ("applicability_notes", "effective_date", "version", "jurisdiction", "scope") if s.get(key)} for s in citations]})
 
     git_sources = [source for source in sources if source.get("kind") == "git"]
     # Inline citations can be resolved against this turn's frozen repositories.
@@ -151,9 +153,29 @@ def message_sources(analysis_id, message_id):
     return collect(value, message.content, message.data.get("observations", {}), frozen)
 
 
+def version_records(version):
+    """Resolve only this immutable result's references, also for saved report exports."""
+    frozen = {**version.context_snapshot, "dossier":{**version.context_snapshot.get("dossier", {})}}
+    frozen["dossier"].setdefault("baseline", version.baseline)
+    evidence = {**version.evidence}
+    # Older consolidated answers can have file citations without structured claims.
+    baseline = frozen["dossier"]["baseline"]
+    references = []
+    cited = {(source.get("repository"), source.get("path"))
+             for claim in evidence.get("claims", []) for source in claim.get("sources", [])
+             if source.get("kind") == "git"}
+    for reference in version.explanation.get("references", []):
+        if (reference.get("repository"), reference.get("path")) in cited:
+            continue
+        row = next((row for row in baseline if row.get("repository") == reference.get("repository")), None)
+        if row:
+            references.append({"kind":"git", "repository":row["repository"], "commit":row["sha"], "path":reference["path"]})
+    evidence["claims"] = [*evidence.get("claims", []), {"sources":references}]
+    content = "\n".join(value for value in version.explanation.values() if isinstance(value, str))
+    return collect(version.request, content, {"context_usage":version.context_usage}, frozen, evidence)
+
+
 def version_sources(analysis_id, number):
     version = get_object_or_404(ResultVersion.objects.select_related("request"), request_id=analysis_id,
                                 request__deleted_at__isnull=True, number=number)
-    frozen = {**version.context_snapshot, "dossier":{**version.context_snapshot.get("dossier", {})}}
-    frozen["dossier"].setdefault("baseline", version.baseline)
-    return collect(version.request, "", {"context_usage":version.context_usage}, frozen, version.evidence)
+    return version_records(version)

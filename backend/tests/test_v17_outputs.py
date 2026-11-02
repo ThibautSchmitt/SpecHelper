@@ -71,7 +71,9 @@ def test_document_formats_prioritize_distinct_useful_content(explanation, baseli
     assert "## Business explanation" not in technical
     assert "## Business explanation" in mixed and "## Technical explanation" in mixed
     for result in (business, technical, mixed):
-        assert "nightly scheduler" in result and "b" * 40 in result
+        assert "nightly scheduler" in result
+    assert "b" * 40 not in business and "contracts/renewal.py" not in business
+    assert "b" * 40 in technical and "b" * 40 in mixed
 
 
 def test_transfer_contains_only_selected_conclusions_and_explicit_provenance(explanation, baseline):

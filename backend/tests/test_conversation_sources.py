@@ -130,3 +130,94 @@ def test_source_disclosure_redacts_configured_credentials(client, source_message
     monkeypatch.setattr("core.conversation_sources.configured_secrets",lambda:["private-test-credential"])
     response = client.get(url(value,message))
     assert "private-test-credential" not in response.content.decode() and "[REDACTED]" in response.content.decode()
+
+
+@pytest.mark.parametrize("language", ["en", "fr"])
+def test_reports_reuse_frozen_sources_by_audience_without_new_investigation(
+    source_message, frozen_code, environment, storage, monkeypatch, language
+):
+    from copy import deepcopy
+
+    from core import environment_context
+    from core.analysis_evidence import ReliabilityReport
+    from core.question_actions import create_document
+
+    value, _, receipt = source_message
+    _, sha = frozen_code
+    environment_context.upload_resource(environment.pk, SimpleUploadedFile("policy.md", b"Original retained policy", "text/plain"), 1)
+    document_version = ContextResourceVersion.objects.get()
+    snapshot = environment_context.snapshot_environment(environment)
+    baseline = [{"repository":"fixture/project", "sha":sha, "branch":"main"}]
+    snapshot["dossier"] = {"baseline":baseline}
+    code = {"kind":"git", "repository":"fixture/project", "commit":sha,
+            "path":"rules.py", "line_start":2, "line_end":3, "excerpt":"FIRST = 1\nCHECKED = True"}
+    evidence = ReliabilityReport.model_validate({
+        "claims":[{"id":"rule", "statement":"The rule remains unverified.", "kind":"unknown",
+                   "status":"unverified", "scope":{"sample_limits":"Static inspection only."}, "sources":[code, {"kind":"sql", "query_id":"rejected-query"}]}],
+        "database":{"status":"checked", "checks":[receipt, {**receipt,"query_id":"rejected-query", "status":"rejected", "sql":"SELECT rejected_statement"}]},
+        "limitations":["No runtime behavior was verified."],
+    }).model_dump()
+    explanation = {"title":"Rule behavior", "summary":"The rule describes eligibility.",
+                   "response":"Technical response mentioning `FIRST`.",
+                   "business_explanation":"Eligible cases follow the rule.",
+                   "technical_explanation":"The flag is checked by the caller.",
+                   "references":[{"repository":"fixture/project", "path":"rules.py"}],
+                   "evidence":evidence}
+    saved_evidence = deepcopy(evidence)
+    saved_evidence["web_references"] = [{"reference_id":"web-rule", "url":"https://example.org/rule", "title":"Official rule", "text":"Recorded page preview"}]
+    version = ResultVersion.objects.create(request=value, number=1, status="PARTIAL", language=language,
+        baseline=baseline, context_snapshot=snapshot, context_usage=[{"version_id":str(document_version.pk),"status":"observed"}],
+        explanation=explanation, evidence=saved_evidence)
+    # A later environment edit must not replace a source selected by this cycle.
+    environment.refresh_from_db()
+    environment_context.upload_resource(environment.pk, SimpleUploadedFile("policy.md", b"Later policy", "text/plain"), environment.context_revision, document_version.resource_id)
+    value.need = "A different later subject"
+    value.save()
+    before_jobs = Job.objects.count()
+    monkeypatch.setattr("core.discussion.runtime_call", lambda *a, **k: pytest.fail("No AI during report export"))
+    business = create_document(value.pk, 1, "business")
+    technical = create_document(value.pk, 1, "technical")
+    mixed = create_document(value.pk, 1, "mixed")
+    assert "FIRST = 1" not in business.markdown and "SELECT COUNT" not in business.markdown
+    assert sha not in business.markdown and "Technical response" not in business.markdown
+    assert "policy.md" in business.markdown and "https://example.org/rule" in business.markdown
+    for document in (technical, mixed):
+        assert "FIRST = 1\nCHECKED = True" in document.markdown and sha in document.markdown
+        assert receipt["sql"] in document.markdown and "Original retained policy" in document.markdown
+        assert "Later policy" not in document.markdown and "rejected_statement" not in document.markdown
+        assert "rejected-query" not in document.markdown
+        assert "Recorded page preview" in document.markdown
+    for document in (business, technical, mixed):
+        assert "No runtime behavior was verified." in document.markdown
+        assert "Static inspection only." in document.markdown
+        assert ("Non vérifié" if language == "fr" else "Unverified") in document.markdown
+        assert document.source_version_id == version.pk
+        assert "A different later subject" not in document.markdown
+    assert Job.objects.count() == before_jobs
+    version.refresh_from_db()
+    assert version.explanation == explanation and version.evidence == saved_evidence
+    original_export = technical.markdown
+    monkeypatch.setattr("core.conversation_sources.code_excerpt", lambda *a: ("", "The frozen source excerpt is unavailable."))
+    technical.refresh_from_db()
+    assert technical.markdown == original_export
+    unavailable = create_document(value.pk, 1, "technical")
+    assert "FIRST = 1" not in unavailable.markdown
+    assert ("indisponible" if language == "fr" else "unavailable") in unavailable.markdown
+
+
+def test_report_sources_do_not_execute_or_promote_untrusted_source_text():
+    from core.report_sources import render_sources
+
+    sources = [
+        {"kind":"web", "id":"web-quote", "title":"Rule <script>bad()</script>", "url":"https://example.org/rule", "excerpt":"A recorded rule."},
+        {"kind":"document", "id":"document", "title":"policy.md", "excerpt":"```\n<script>bad()</script>\n```", "note":"Preview from the retained document; the exact passage used was not recorded."},
+        {"kind":"sql", "id":"failed", "status":"unavailable", "sql":"SELECT hidden_statement"},
+    ]
+    business = render_sources(sources, "business")
+    technical = render_sources(sources, "technical")
+    assert "> A recorded rule." in business
+    assert "<script>" not in business
+    assert "````\n```\n<script>bad()</script>\n```\n````" in technical
+    assert "does not by itself verify" in business and "does not by itself verify" in technical
+    assert "hidden_statement" not in business + technical
+    assert "exact passage used was not recorded" in business + technical

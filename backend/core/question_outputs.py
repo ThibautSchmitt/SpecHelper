@@ -189,7 +189,7 @@ TECHNICAL_SECTIONS = (
 )
 
 
-def _render(answer, baseline, kind, language):
+def _render(answer, baseline, kind, language, sources=None):
     answer = QuestionAnswer.model_validate(answer)
     references = _references(answer, baseline)
     sections = {
@@ -200,18 +200,25 @@ def _render(answer, baseline, kind, language):
     if kind not in sections:
         raise ValueError("Unsupported documentation format")
     values = answer.model_dump()
-    lines = ["# " + answer.title, "", answer.response or answer.summary, ""]
+    introduction = answer.summary if kind == "business" else answer.response or answer.summary
+    lines = ["# " + answer.title, "", introduction, ""]
     if answer.business_summary:
         lines += [summary_markdown(answer.business_summary.model_dump(), language)]
     for key, label in sections[kind] + COMMON_SECTIONS:
         if values[key]:
             lines += section(label, values[key], language)
-    lines += section("Source references", references, language)
+    if kind != "business":
+        lines += section("Source references", references, language)
     if answer.evidence:
         from .evidence_rendering import render_evidence
 
-        lines += [render_evidence(answer.evidence.model_dump(), language)]
-    if not references:
+        lines += [render_evidence(answer.evidence.model_dump(), language,
+                                 include_source_details=kind != "business")]
+    if sources is not None:
+        from .report_sources import render_sources
+
+        lines += [render_sources(sources, kind, language)]
+    if not references and not sources:
         lines += [
             translate("No source references were verified for this explanation.", language),
             "",
@@ -224,9 +231,9 @@ def render_answer(answer, baseline, language="en"):
     return _render(answer, baseline, "mixed", language)
 
 
-def render_document(answer, baseline, kind, language="en"):
+def render_document(answer, baseline, kind, language="en", *, sources=None):
     """Restate the selected immutable answer without another agent execution."""
-    return _render(answer, baseline, kind, language)
+    return _render(answer, baseline, kind, language, sources)
 
 
 def render_transfer(
