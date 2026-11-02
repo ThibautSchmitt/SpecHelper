@@ -92,6 +92,10 @@ export function scopeNeedsContext(assessment?: ScopeAssessment | null) {
 export type ConversationAssistant = {
   connection_id: number | null; name: string; agent: string; model: string;
   reasoning_effort: string; availability: string;
+  status?: string; enabled?: boolean;
+  availability_issue?: string;
+  quota_windows?: import("@/components/ai-connections").AIConnection["quota_windows"];
+  quota_status?: import("@/components/ai-connections").AIConnection["quota_status"];
 };
 export type RequestItem = {
   id: string;

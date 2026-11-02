@@ -144,9 +144,17 @@ The sidebar contains a compact, model-relevant summary with a global refresh act
 Multiple limiting windows use the most restrictive applicable observation. Other
 model families are not treated as exhausted merely because one pool is depleted.
 
-Antigravity reports Gemini and shared Claude/GPT pools separately. Its red exhausted
-badge represents observed total weekly exhaustion across those pools. A five-hour
-limit, one depleted family or missing data does not establish total exhaustion.
+Availability uses the same labels in Connections, Orchestration and the sidebar:
+**Available** (green), **Waiting** (amber) for a reported five-hour limit,
+**Quota exhausted** (red) for a reported weekly limit, and **Unavailable** (neutral)
+for a known authentication, model, communication or capacity problem. A weekly
+limit takes priority over a five-hour limit; a separate known connection error
+remains unavailable. Unknown availability and unspecified quota periods keep
+neutral labels rather than implying a particular quota or renewed availability.
+
+Antigravity reports Gemini and shared Claude/GPT pools separately. The badge applies
+to the selected model's pool, not automatically to every model on the account.
+Other quota windows remain visible in the details; their periods are not inferred.
 Percentages, reset times and credits are displayed only when reported. Old readings
 remain distinguishable from fresh observations; no reset date or quota is estimated.
 
@@ -164,7 +172,7 @@ selected account/model; they do not move silently when it is busy. Configure the
 
 ## Analysis roles and skills
 
-**AI & Agents → Orchestration** shows Analyst, Counter-analyst and Verifier coverage
+**AI & Agents → Orchestration** shows Analyst, Counter-analyst and Validator coverage
 and the connections eligible for each role. The French labels are Analyste,
 Contre-analyste and Validateur. A connection can cover several roles; no separate
 participation checkbox is needed. Busy accounts or exhausted quotas affect immediate
@@ -175,6 +183,8 @@ examines the need independently. Each role uses an isolated session; the discuss
 session is not reused as a role session. If configured fallback permits the same model
 family, distinct sessions do not become distinct families. Full/partial/limited family
 diversity is descriptive, never a confidence percentage.
+**Allow limited AI diversity** retains that fallback setting. Save is enabled only
+after an edit; quota refreshes preserve unsaved edits and never launch an analysis.
 
 SpecHelper supplies its native analysis method and fixed progression safeguards.
 There is no standard global prompt editor or total AI-call-count setting. A step must

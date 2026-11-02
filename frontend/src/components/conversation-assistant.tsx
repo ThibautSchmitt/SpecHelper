@@ -6,6 +6,7 @@ import { ProviderLogo } from "@/components/provider-logo";
 import { api, send, type ConversationAssistant, type RequestDetail } from "@/lib/api";
 import { assistantName } from "@/lib/assistant-providers";
 import { useI18n } from "@/lib/i18n";
+import { ConnectionAvailability } from "@/components/connection-availability";
 
 type Choice = Omit<ConversationAssistant, "availability"> & {configuration_token:string};
 type Options = {revision:number; can_continue:boolean; options:Choice[]};
@@ -48,7 +49,7 @@ export function ConversationAssistantControl({value,onUpdated}:{value:RequestDet
       <ProviderLogo provider={current.agent} />
       <span className="min-w-0 max-w-full break-words">{current.name || assistantName(current.agent)}</span>
       <span className="badge connection-tag connection-model-tag" title={`${t("Model")}: ${current.model || t("Provider default model")}${current.reasoning_effort ? ` · ${t("Reasoning effort")}: ${current.reasoning_effort}` : ""}`}>{model(current)}</span>
-      {exhausted && <span className="badge" data-state="ERROR">{t("Quota exhausted")}</span>}
+      {exhausted && <ConnectionAvailability connection={current} />}
       {canChoose && <Button type="button" variant="ghost" size="sm" disabled={busy} aria-expanded={!!options} onClick={()=>options?setOptions(null):void load()}>{t("Continue the analysis with…")}</Button>}
     </div>
     {!!previous.length && <div aria-label={t("AI history")} className="space-y-1 text-xs">

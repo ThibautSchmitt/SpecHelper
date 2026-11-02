@@ -28,7 +28,7 @@ for(const language of ["en","fr"] as const){
    const tag=control.locator(".connection-model-tag");
    await expect(tag).toHaveText("original-model low");
    expect(await tag.evaluate(el=>getComputedStyle(el).getPropertyValue("--tag-ink").trim())).not.toBe("");
-   await expect(control.getByText(t("Quota exhausted"),{exact:true})).toBeVisible();
+   await expect(control.getByText(t("Quota limit reported"),{exact:true})).toBeVisible();
    await control.getByRole("button",{name:t("Continue the analysis with…"),exact:true}).click();
    const choice=control.getByLabel(t("Available assistant"),{exact:true});
    await expect(choice).toHaveValue("");

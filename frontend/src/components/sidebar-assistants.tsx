@@ -7,7 +7,7 @@ import { AssistantLogo } from "@/components/assistant-logo";
 import type { AIConnection } from "@/components/ai-connections";
 import { api, send } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { observedQuota } from "@/lib/quota";
+import { connectionAvailability, observedQuota } from "@/lib/quota";
 import { assistantName } from "@/lib/assistant-providers";
 import "./sidebar-assistants.css";
 
@@ -74,14 +74,16 @@ export function SidebarAssistants() {
     </div>
     {connections?.map(connection => {
       const quota = observedQuota(connection);
+      const availability = connectionAvailability(connection);
       const windowName = quota.limiting === "session" ? "session" : quota.limiting === "weekly" || quota.limitingWindow?.window_type === "weekly" || ["gemini-weekly", "3p-weekly"].includes(quota.limiting) ? "weekly" : quota.limiting === "daily" ? "daily" : "remaining";
-      const summary = quota.partiallyAvailable ? t("Partially available") : quota.state === "Quota remaining"
-        ? t("{percent}% {window}", { percent: Number(quota.remaining!.toFixed(1)), window: t(windowName) }) : t(quota.state);
+      const detail = availability.key === "available" ? quota.partiallyAvailable ? t("Partially available") : quota.state === "Quota remaining"
+        ? t("{percent}% {window}", { percent: Number(quota.remaining!.toFixed(1)), window: t(windowName) }) : "" : "";
+      const summary = t(availability.label) + (detail ? ` · ${detail}` : "");
       const label = `${connection.name || assistantName(connection.agent)} · ${summary}`;
-      return <section key={connection.id} className="sidebar-assistant" data-connection={connection.id} data-quota-state={quota.state} aria-label={connection.name || assistantName(connection.agent)}>
+      return <section key={connection.id} className="sidebar-assistant" data-connection={connection.id} data-quota-state={quota.state} data-availability={availability.key} aria-label={connection.name || assistantName(connection.agent)}>
         <Link href={`/admin?tab=ai-agents&connection=${connection.id}`} className="sidebar-assistant-link" aria-label={label + ((quota.stale || unavailable) && quota.observed ? ` · ${t("Data needs refreshing")}` : "")} title={label}>
           <AssistantLogo agent={connection.agent} />
-          <span className="connection-dot" data-quota-color={quota.color} data-stale={quota.stale || unavailable} data-connected={connection.enabled && connection.status === "CONNECTED" && ["AVAILABLE", "UNKNOWN"].includes(connection.availability || "UNKNOWN") && quota.state !== "Quota exhausted"} aria-hidden="true" />
+          <span className="connection-dot" data-quota-color={availability.key === "available" ? "green" : availability.key === "waiting" ? "orange" : availability.key === "quota_exhausted" ? "red" : "unknown"} data-stale={quota.stale || unavailable} data-connected={availability.key === "available"} aria-hidden="true" />
           <span className="sidebar-assistant-label"><strong>{connection.name || assistantName(connection.agent)}</strong><small>{summary}</small></span>
           {(quota.stale || unavailable) && quota.observed && <Clock3 size={12} aria-label={t("Data needs refreshing")} className="shrink-0 muted" />}
         </Link>

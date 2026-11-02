@@ -53,8 +53,10 @@ def assistant(value, job=None):
         identity = AIIdentity.objects.filter(pk=session.identity_snapshot).first()
         if identity:
             connection.identity = identity
-        availability = public(connection)["availability"]
+        observed = public(connection)
+        availability = observed["availability"]
     else:
+        observed = {"status":"DISCONNECTED", "enabled":False}
         availability = "DISCONNECTED"
     reply = (
         value.messages.filter(kind="discussion_reply", data__session_pk=session.pk)
@@ -69,6 +71,7 @@ def assistant(value, job=None):
         "model": (reply.data.get("model") if reply else None) or session.model_snapshot,
         "reasoning_effort": session.reasoning_effort_snapshot,
         "availability": availability,
+        **{key:observed[key] for key in ("status", "enabled", "quota_windows", "quota_status", "availability_issue") if key in observed},
     }
 
 

@@ -13,7 +13,8 @@ import { ConnectButton } from "@/components/connect-button";
 import { ModelSelect } from "@/components/ai-models";
 import { api, send } from "@/lib/api";
 import { assistantName, assistantProviders, type AssistantProvider } from "@/lib/assistant-providers";
-import { observedQuota, remainingPercent, weeklyQuotaExhausted } from "@/lib/quota";
+import { connectionAvailability, remainingPercent } from "@/lib/quota";
+import { ConnectionAvailability } from "@/components/connection-availability";
 import type { CSSProperties } from "react";
 
 function ConnectionQuotas({ connection, group }: { connection: AIConnection; group: AIConnection[] }) {
@@ -24,7 +25,6 @@ function ConnectionQuotas({ connection, group }: { connection: AIConnection; gro
     if (!old || (Date.parse(window.observed_at || "") || 0) > (Date.parse(old.observed_at || "") || 0)) windows.set(name, window);
   }
   const order = (name: string) => name === "session" ? 0 : name === "weekly" ? 1 : name === "daily" ? 2 : 3;
-  const accountExhausted = observedQuota(connection).state === "Quota exhausted";
   const poolOrder = (name: string, window: QuotaWindow) => window.model_pool === "gemini" || name === "gemini-weekly" ? 0 : window.model_pool === "claude_gpt" || name === "3p-weekly" ? 1 : 2;
   const checked = group.map(value => value.quota_status?.checked_at).filter((value): value is string => !!value && Number.isFinite(Date.parse(value))).sort((a, b) => Date.parse(b) - Date.parse(a))[0];
   return <details className="connection-quotas mt-4">
@@ -33,7 +33,7 @@ function ConnectionQuotas({ connection, group }: { connection: AIConnection; gro
       {Array.from(windows).sort(([a, first], [b, second]) => poolOrder(a, first) - poolOrder(b, second) || order(a) - order(b)).map(([name, window]) => {
         const remaining = remainingPercent(window);
         const exhausted = window.exhausted || remaining === 0;
-        const displayedRemaining = exhausted ? 0 : remaining;
+        const displayedRemaining = remaining;
         const reset = window.reset_at || window.resets_at;
         const observed = window.observed_at && Number.isFinite(Date.parse(window.observed_at)) ? window.observed_at : null;
         const stale = !observed || Date.now() - Date.parse(observed) > 300000 || (!!reset && Date.parse(reset) <= Date.now() && Date.parse(observed) < Date.parse(reset)) || group.some(value => ["error", "unavailable"].includes(value.quota_status?.state || ""));
@@ -47,7 +47,7 @@ function ConnectionQuotas({ connection, group }: { connection: AIConnection; gro
           {stale && <dd className="text-xs muted">{t("Old data")}</dd>}
         </div>;
       })}
-      {!windows.size && <div style={{ "--quota-ink": "var(--danger)" } as CSSProperties}><dt>{t("Quota")}</dt><dd>{accountExhausted ? <><progress max={100} value={0} aria-label={t("Quota remaining")} /><span>{t("0% remaining")}</span></> : t("Not reported")}</dd></div>}
+      {!windows.size && <div><dt>{t("Quota")}</dt><dd>{t("Not reported")}</dd></div>}
     </dl>
     {group.some(value => value.quota_status?.state === "error") ? <p className="mt-2 text-xs text-red-700">{t("Quota refresh failed. Last known observations are preserved.")}</p> : group.some(value => value.quota_status?.state === "unavailable") ? <p className="mt-2 text-xs muted">{t(connection.agent === "claude" ? "This Claude Code version does not expose account quotas. Check your provider usage page." : "The provider did not return account quotas.")}</p> : null}
     {checked && <p className="mt-2 text-xs muted">{t("Last checked")}: {new Date(checked).toLocaleString(dateLocale)}</p>}
@@ -83,6 +83,7 @@ export type AIConnection = {
   reasoning_effort?: string;
   status: string;
   availability: string;
+  availability_issue?: string;
   error?: string;
   enabled: boolean;
   account: string;
@@ -482,7 +483,7 @@ export function AIConnections({
                 {value.name || assistantName(value.agent)}
               </h3>
               <div className="connection-tags">
-                <span className="badge" data-state={value.enabled && value.status === "CONNECTED" ? "CONNECTED" : "DISABLED"}>{t(!value.enabled ? "Disabled" : value.status === "CONNECTED" ? "Connected" : "Not connected")}</span>
+                {connectionAvailability(value).key !== "quota_exhausted" && <ConnectionAvailability connection={value} />}
                 <span className="badge connection-tag connection-model-tag" title={`${t("Model")}: ${value.model || t("Provider default model")}${value.agent !== "antigravity" && value.reasoning_effort ? ` · ${t("Reasoning effort")}: ${value.reasoning_effort}` : ""}`}>
                   {value.model || t("Provider default model")}{value.agent !== "antigravity" && value.reasoning_effort && ` ${value.reasoning_effort}`}
                 </span>
@@ -518,7 +519,7 @@ export function AIConnections({
                 }}
               />)}
               <div className="flex shrink-0 items-center gap-2">
-              {weeklyQuotaExhausted(value) && <span className="badge connection-quota-exhausted" data-state="ERROR">{t("Quota exhausted")}</span>}
+              {connectionAvailability(value).key === "quota_exhausted" && <ConnectionAvailability connection={value} className="connection-quota-exhausted" />}
               <Button
                 type="button"
                 size="sm"

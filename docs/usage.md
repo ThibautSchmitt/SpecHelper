@@ -106,7 +106,7 @@ The roles execute sequentially inside the analysis:
 1. **Analyst** investigates the need and authorized sources.
 2. **Counter-analyst** performs an independent initial investigation, then confronts
    findings and searches for omissions, contradictions and counterexamples.
-3. **Verifier** checks evidence and unresolved issues before a result is accepted.
+3. **Validator** checks evidence and unresolved issues before a result is accepted.
 
 The role sessions are separate from each other and from the discussion. Other
 conversations may execute concurrently within [deployment limits](installation.md#concurrent-work).

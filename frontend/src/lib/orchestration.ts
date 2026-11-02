@@ -3,7 +3,7 @@ export type PublicRole = (typeof publicRoles)[number];
 export const roleLabels: Record<string, string> = {
   analyst: "Analyst",
   counter_analyst: "Counter-analyst",
-  verifier: "Verifier",
+  verifier: "Validator",
   library_generator: "Definition generator",
   library_test: "Definition sandbox test",
 };

@@ -276,6 +276,10 @@ h3 {
   color: var(--success);
   background: var(--success-soft);
 }
+.badge.ai-availability { color: var(--muted-foreground); background: var(--muted); }
+.badge.ai-availability[data-availability="available"] { color: var(--success); background: var(--success-soft); }
+.badge.ai-availability[data-availability="waiting"] { color: var(--waiting); background: var(--waiting-soft); }
+.badge.ai-availability[data-availability="quota_exhausted"] { color: var(--danger); background: var(--danger-soft); }
 .ticket-section {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

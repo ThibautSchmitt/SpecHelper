@@ -360,6 +360,9 @@ def test_explicit_quota_transfer_preserves_pending_turn_and_uses_fresh_session(
     detail = client.get(f"/api/analyses/{value['id']}").json()
     assert detail["discussion"]["assistant"]["model"] == "original-model"
     assert detail["discussion"]["assistant"]["reasoning_effort"] == "low"
+    assert detail["discussion"]["assistant"]["status"] == "CONNECTED"
+    assert detail["discussion"]["assistant"]["enabled"] is True
+    assert "quota_windows" in detail["discussion"]["assistant"]
     choices = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()
     choice = next(item for item in choices["options"] if item["connection_id"] == target.pk)
     response = client.post(f"/api/analyses/{value['id']}/discussion/continue-with",

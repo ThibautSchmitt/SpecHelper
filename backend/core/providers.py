@@ -302,6 +302,10 @@ def candidates(exclude=(), preferred=None):
 
 def public(connection):
     identity = identity_for(connection)
+    # Preserve a known independent failure for display even when the existing
+    # scheduling availability is overridden by a recorded quota block.
+    issue = next((state for state in (connection.availability, identity.availability)
+                  if state in {"AUTH_ERROR", "MODEL_UNAVAILABLE", "UNAVAILABLE", "ERROR"}), "")
     availability = identity.availability
     if connection.availability not in {"AVAILABLE", "UNKNOWN"}:
         availability = connection.availability
@@ -345,6 +349,7 @@ def public(connection):
         "account": identity.account,
         "status": identity.status,
         "availability": availability,
+        "availability_issue": issue,
         "active_executions": used,
         "max_parallel_executions": settings.AI_ACCOUNT_CONCURRENCY,
         "enabled": connection.enabled,

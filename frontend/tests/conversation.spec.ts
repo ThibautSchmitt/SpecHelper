@@ -279,7 +279,7 @@ for(const language of ["en","fr"] as const) {
    await expect(progress).toHaveAttribute("open","");
    const order=await thread.locator('.conversation-messages > li').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-message')));
    expect(order.indexOf('progress-1')).toBeGreaterThan(order.indexOf('message-3'));
-   await expect(progress.getByText(t("Quota exhausted"),{exact:true})).toBeVisible();
+   await expect(progress.getByText(t("Quota limit reported"),{exact:true})).toBeVisible();
    await expect(progress.locator('.investigation-subtitle')).toHaveText(t("The counter-analysis will resume when an assistant is available."));
    await page.screenshot({path:`../.local/progress-waiting-${language}-${theme}-${info.project.name}.png`,fullPage:true});
    await expect(page.getByLabel(t("Your message"),{exact:true})).toBeDisabled();
@@ -339,7 +339,7 @@ for(const language of ["en","fr"] as const) {
   let current:any={...dossier(),status:"QUEUED",questions:[],analysis_runs:[{number:1,status:"QUEUED",steps:[],execution:execution("QUEUED","analyst",["blocked","waiting","waiting"],["quota"])}]};
   await setup(page,language,()=>current);await page.goto(`/analyses/${id}`);
   const progress=page.locator('[data-cycle="1"]');await progress.locator(":scope > summary").click();
-  for(const [cause,label] of [["quota","Quota exhausted"],["busy","Assistant busy"],["connection_missing","No authenticated connection"],["model_unavailable","Model unavailable"]]){
+  for(const [cause,label] of [["quota","Quota limit reported"],["busy","Assistant busy"],["connection_missing","No authenticated connection"],["model_unavailable","Model unavailable"]]){
    current={...current,analysis_runs:[{...current.analysis_runs[0],execution:execution("QUEUED","analyst",["blocked","waiting","waiting"],[cause])}]};
    await expect(progress.locator('[data-stage="analyst"]')).toContainText(t(label),{timeout:10000});
    await expect(progress.locator('[data-stage="analyst"]').getByText(t(label),{exact:true})).toHaveCount(1);

@@ -7,7 +7,7 @@ trusted team, across different applications and technology stacks.
 
 Start in **Analyses** with one conversational assistant. Ask about the existing
 code, add documents and clarify the need. When you choose **Launch deep analysis**,
-SpecHelper runs an Analyst, an independent Counter-analyst and a Verifier in
+SpecHelper runs an Analyst, an independent Counter-analyst and a Validator in
 separate sessions. Results retain sources, frozen Git references and unresolved
 limits. The French interface calls the final role **Validateur**.
 

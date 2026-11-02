@@ -63,7 +63,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(analyst).toContainText("Antigravity team");
     await expect(panel).not.toContainText("Disabled Claude");
     await expect(analyst.locator('[data-connection-id="1"]')).toContainText(t("Available"));
-    await expect(analyst.locator('[data-connection-id="2"]')).toContainText(t("Waiting"));
+    await expect(analyst.locator('[data-connection-id="2"]')).toContainText(t("Quota limit reported"));
     for (const card of [cards.nth(1), cards.nth(2)]) await expect(card).toContainText(t("No AI connection covers this role."));
     const bounds = await Promise.all((await cards.all()).map(card => card.boundingBox()));
     if (info.project.name === "desktop") {
@@ -79,7 +79,7 @@ for (const language of ["en", "fr"] as const) {
     await page.evaluate(() => window.dispatchEvent(new Event("connections-updated")));
     await expect(panel).toContainText(t("Configuration complete"));
     await expect(cards.locator("header .badge")).toHaveText([t("Covered"), t("Covered"), t("Covered")]);
-    await expect(panel.getByText(t("Waiting"), { exact: true })).toHaveCount(3);
+    await expect(panel.getByText(t("No connection available now"), { exact: true })).toHaveCount(3);
     await expect(panel).not.toContainText("Antigravity team");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
@@ -124,14 +124,16 @@ for (const language of ["en", "fr"] as const) {
     await expect.poll(() => connectionWrite).toMatchObject({ additional_instructions: "Check callers before generalizing.", roles: ["analyst", "counter_analyst", "verifier"] });
     expect(connectionWrite).not.toHaveProperty("skill_overrides");
     await nav.getByRole("button", { name: t("Orchestration"), exact: true }).click();
-    await expect(page.getByText(t("Independent review is required"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("Deep analyses use three distinct roles with independent sessions."), { exact: true })).toBeVisible();
     await expect(page.getByLabel(t("Analysis time limit (seconds)"), { exact: true })).toHaveCount(0);
     await expect(page.locator("[id^=role-instructions-]")).toHaveCount(0);
     await expect(page.getByText(t("Default skills"), { exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Maximum AI calls per analysis"), { exact: true })).toHaveCount(0);
     await expect(page.getByText(t("Instruction hierarchy"), { exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: t("Save analysis settings"), exact: true }).click();
-    await expect.poll(() => writes[0]).toEqual({ allow_same_family_fallback: true });
+    await expect(page.getByRole("button", { name: t("Save"), exact: true })).toBeDisabled();
+    await page.getByLabel(t("Allow limited AI diversity"), { exact: true }).uncheck();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
+    await expect.poll(() => writes[0]).toEqual({ allow_same_family_fallback: false });
     await page.getByRole("navigation", { name: t("Administration"), exact: true }).getByRole("button", { name: t("Environments"), exact: true }).click();
     await expect(page.getByText(t("Agents and skills for this environment"), { exact: true })).toHaveCount(0);
     await page.getByText(t("Environment context"), { exact: true }).click();

@@ -171,7 +171,7 @@ export function conversationAnswer(result:ResultVersion) {
 }
 
 const stageLabels:Record<string,string>={done:"Completed",running:"In progress",waiting:"Upcoming",blocked:"AI unavailable",clarification:"Clarification requested",error:"Technical failure",cancelled:"Analysis cancelled",unknown:"Stage completion not recorded"};
-const causeLabels:Record<string,string>={quota:"Quota exhausted",busy:"Assistant busy",connection_missing:"No authenticated connection",model_unavailable:"Model unavailable",unavailable:"Unavailable"};
+const causeLabels:Record<string,string>={quota:"Quota limit reported",busy:"Assistant busy",connection_missing:"No authenticated connection",model_unavailable:"Model unavailable",unavailable:"Unavailable"};
 
 function InvestigationProgress({run,work,unavailable=false}:{run:Run;work?:WorkExecution;unavailable?:boolean}) {
   const {t}=useI18n();

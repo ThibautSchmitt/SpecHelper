@@ -45,6 +45,25 @@ def test_empty_roles_never_satisfy_assignment():
 
 
 @pytest.mark.django_db
+def test_public_connection_preserves_independent_failure_alongside_quota_without_changing_selection():
+    from core.models import AIConnection
+    from core.providers import identity_for, public
+
+    value = AIConnection.objects.create(agent="codex", status="CONNECTED", availability="UNAVAILABLE")
+    identity = identity_for(value)
+    identity.status = "CONNECTED"
+    identity.availability = "UNAVAILABLE"
+    identity.quota_windows = {"weekly":{"exhausted":True, "window_type":"weekly"}}
+    identity.save()
+    result = public(value)
+    assert result["availability"] == "QUOTA_EXHAUSTED"
+    assert result["availability_issue"] == "UNAVAILABLE"
+    value.refresh_from_db()
+    identity.refresh_from_db()
+    assert value.availability == identity.availability == "UNAVAILABLE"
+
+
+@pytest.mark.django_db
 def test_explicit_catalog_families_support_three_step_diversity_and_disabled_models_are_excluded():
     from core.models import AIConnection, AIModel
     from core.providers import candidates, identity_for

@@ -67,7 +67,7 @@ Within one deep cycle, the roles execute sequentially:
 
 1. The Analyst investigates authorized evidence.
 2. The Counter-analyst starts independently of the Analyst's conclusions, then confronts them.
-3. The Verifier checks the findings, evidence and unresolved material issues.
+3. The Validator checks the findings, evidence and unresolved material issues.
 
 Role sessions remain distinct even under a permitted same-family fallback; separate
 sessions do not establish provider diversity. Any role can pause for a clarification.
