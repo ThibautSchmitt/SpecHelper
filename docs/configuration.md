@@ -18,6 +18,9 @@ Under **Environments → Manage Git connections**, connect GitHub or GitLab usin
 or token method offered for that provider. GitLab can use a self-hosted instance URL.
 Use only accounts authorized for the selected repositories. Source checkout and ticket
 publication are separate operations with separate credentials.
+Git and PostgreSQL cards show **Last checked** using the recorded connection-test
+time, including failed tests. Connections without a recorded date show **Not recorded**;
+opening the page does not run a test or invent a historical date.
 
 GitHub source connections currently support `https://github.com` only; GitHub
 Enterprise servers are not supported. Select GitLab to enter a custom GitLab URL.
@@ -61,11 +64,27 @@ Updates preserve the frozen commits and workspaces of existing analyses.
 Saved context text is used automatically when nonempty; clear the field to omit it
 from future analyses. Existing frozen analysis contexts retain their original content.
 
-An environment can also hold optional factual context, terminology, public-reference
-hints and reference documents. Expand **Environment context** to manage them.
-Context text is limited to 4,000 characters. Up to 20 documents of 25 MB each can be
+Expand **Application knowledge** when creating or editing an environment to add
+optional **Business presentation and vocabulary**, **Reference documents** and
+**Reference sites**. The collapsed section summarizes the configured text, documents
+and links. These are reference information, not privileged assistant instructions
+or automatically verified facts.
+
+Context text is limited to 4,000 characters. **Add a document** opens the file picker;
+document details, previews and replacement remain available on demand. Up to 20
+documents of 25 MB each can be
 provided in supported image, PDF, DOCX, text, Markdown, CSV, JSON or LOG formats.
 Unsupported archives, executable content and unsafe DOCX containers are rejected.
+Up to 12 public HTTPS reference links can include optional applicability notes.
+Use **Add a link** or the link's edit action, then **Save** to persist text and links.
+In an existing environment, document operations save separately and preserve unsaved
+text and link edits. Switching settings sections also retains these drafts; leaving
+or reloading the application discards unsaved changes.
+
+During creation, text and links are saved with the environment before documents
+are uploaded. If an upload fails, the form identifies the saved environment and
+**Save** retries pending documents without creating another environment. Cancelling
+at this point leaves the environment and documents already saved in place.
 
 A document replacement creates an immutable content version. Disable or remove it
 from future work without rewriting historical analysis copies. Removing an environment

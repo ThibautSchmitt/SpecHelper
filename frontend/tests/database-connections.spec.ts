@@ -5,8 +5,8 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
   const t = (key: string, parameters: Record<string, string | number> = {}) => translate(key, language, parameters);
   test(`PostgreSQL cards, inline edits and real actions in ${language} ${theme}`, async ({ page }, info) => {
     let databases = [
-      { id: 1, name: "Business reader", status: "CONNECTED", host: "db.example", port: 5432, database: "business", username: "readonly", sslmode: "require" },
-      { id: 2, name: "Direct PostgreSQL", status: "ERROR", host: "db.local", port: 5433, database: "direct", username: "reader", sslmode: "disable" },
+      { id: 1, name: "Business reader", status: "CONNECTED", host: "db.example", port: 5432, database: "business", username: "readonly", sslmode: "require", checked_at: "2026-11-02T05:31:03Z" as string | null },
+      { id: 2, name: "Direct PostgreSQL", status: "ERROR", host: "db.local", port: 5433, database: "direct", username: "reader", sslmode: "disable", checked_at: null },
     ];
     const writes: { method: string; id?: number; body?: Record<string, unknown> }[] = [];
     await page.route("**/api/**", route => {
@@ -24,7 +24,7 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
           const body = route.request().postDataJSON();
           databases = databases.map(database => database.id === id ? { ...database, name: body.name, host: body.host } : database);
         }
-        if (match[2]) databases = databases.map(database => database.id === id ? { ...database, status: "CONNECTED" } : database);
+        if (match[2]) databases = databases.map(database => database.id === id ? { ...database, status: "CONNECTED", checked_at: "2026-11-02T05:32:03Z" } : database);
         if (method === "DELETE") {
           if (id === 1) return route.fulfill({ status: 409, json: { detail: "This PostgreSQL connection is used by an environment or analysis history." } });
           databases = databases.filter(database => database.id !== id);
@@ -33,7 +33,7 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
       }
       if (path === "/connections/databases" && method === "POST") {
         const body = route.request().postDataJSON(); writes.push({ method, body });
-        databases.push({ id: 3, name: body.name, status: "CONNECTED", host: "new-db.example", port: 5432, database: "new", username: "reader", sslmode: "require" });
+        databases.push({ id: 3, name: body.name, status: "CONNECTED", host: "new-db.example", port: 5432, database: "new", username: "reader", sslmode: "require", checked_at: "2026-11-02T05:32:03Z" });
         return route.fulfill({ status: 201, json: { id: 3, status: "CONNECTED", checks: { connection: true, read: true, read_only: true } } });
       }
       return route.fulfill({ json });
@@ -45,6 +45,10 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
     const second = section.getByRole("region", { name: "Direct PostgreSQL", exact: true });
     await expect(first.locator(".badge")).toHaveText(t("Connected"));
     await expect(second.locator(".badge")).toHaveText(t("Connection failed"));
+    const dateLocale = language === "fr" ? "fr-FR" : "en-US";
+    const dateText = await page.evaluate(({ date, dateLocale }) => new Date(date).toLocaleString(dateLocale), { date: "2026-11-02T05:31:03Z", dateLocale });
+    await expect(first).toContainText(t("Last checked") + ": " + dateText);
+    await expect(second).toContainText(t("Last checked") + ": " + t("Verification date not recorded"));
     for (const card of [first, second]) {
       const logo = card.locator('img[data-provider="postgresql"]');
       await expect(logo).toHaveAttribute("src", "/postgresql.png");
@@ -76,6 +80,7 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
     await expect(second.locator(".action-menu-items button svg")).toHaveCount(2);
     await second.getByRole("button", { name: t("Test connection"), exact: true }).click();
     await expect(second.locator(".badge")).toHaveText(t("Connected"));
+    await expect(second).not.toContainText(t("Verification date not recorded"));
     await first.getByLabel(t("More actions for {name}", { name: "Business reader" }), { exact: true }).click();
     await first.getByRole("button", { name: t("Delete"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Delete PostgreSQL connection"), exact: true });

@@ -39,6 +39,7 @@ def test_edit_preserves_blank_password_and_environment_associations(client, data
     assert database.name == "Renamed reader" and database.host == "new-db.example"
     assert database.secret == original_secret and environment.database_id == database.pk
     assert checked == [("new-db.example", "fixture-old-password")]
+    assert database.checked_at is not None
     assert response.json()["checks"] == {"connection":True, "read":True, "read_only":True}
     assert "fixture-old-password" not in response.content.decode()
 
@@ -115,3 +116,22 @@ def test_failed_saved_connection_test_persists_its_real_error_state(client, data
     assert client.post(endpoint(database) + "/test").status_code == 422
     database.refresh_from_db()
     assert database.status == "ERROR"
+    assert database.checked_at is not None
+    public = client.get("/api/connections").json()["databases"]
+    assert next(row for row in public if row["id"] == database.pk)["checked_at"]
+
+
+def test_legacy_connection_has_no_fabricated_verification_date(client, database):
+    assert database.checked_at is None
+    row = next(row for row in client.get("/api/connections").json()["databases"] if row["id"] == database.pk)
+    assert row["checked_at"] is None
+
+
+def test_successful_probe_refreshes_verification_date(client, database, monkeypatch):
+    from datetime import datetime, timezone
+    moment = datetime(2026, 11, 2, 5, 31, 3, tzinfo=timezone.utc)
+    monkeypatch.setattr("core.api.check_connection", lambda connection: True)
+    monkeypatch.setattr("core.api.timezone.now", lambda: moment)
+    assert client.post(endpoint(database) + "/test").status_code == 200
+    database.refresh_from_db()
+    assert database.status == "CONNECTED" and database.checked_at == moment

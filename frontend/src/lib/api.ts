@@ -43,6 +43,7 @@ export function send<T>(path: string, body?: unknown, method = "POST") {
   });
 }
 export type Environment = {
+  knowledge_summary?: { has_text: boolean; documents: number; sites: number };
   publication_connection_ids?: number[];
   publication_connections?: TicketConnector[];
   id: number;

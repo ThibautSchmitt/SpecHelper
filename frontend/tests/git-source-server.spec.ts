@@ -21,6 +21,8 @@ for (const language of ["en", "fr"] as const) {
     await page.goto("/admin?tab=environments");
     await page.getByRole("button", { name: t("Manage Git connections"), exact: true }).click();
     const source = page.getByRole("region", { name: "reader", exact: true });
+    await expect(source).toContainText(t("Last checked") + ": " + t("Verification date not recorded"));
+    saved.checked_at = "2026-11-02T05:31:03Z";
     await source.getByRole("button", { name: t("Edit"), exact: true }).click();
     const url = page.locator("#git-source-server");
     await expect(source.locator("#git-source-server")).toBeVisible();
@@ -35,6 +37,8 @@ for (const language of ["en", "fr"] as const) {
     await expect(token).toHaveAttribute("required", "");
     await token.fill("synthetic-read-only-token");
     await page.getByRole("button", { name: t("Save"), exact: true }).click();
+    const dateText = await page.evaluate(({ language }) => new Date("2026-11-02T05:31:03Z").toLocaleString(language === "fr" ? "fr-FR" : "en-US"), { language });
+    await expect(source).toContainText(t("Last checked") + ": " + dateText);
     expect(changes[0]).toMatchObject({ base_url: "https://new.example.test/gitlab", secret: "synthetic-read-only-token" });
     await source.getByRole("button", { name: t("Edit"), exact: true }).click();
     await expect(url).toHaveValue("https://new.example.test/gitlab");

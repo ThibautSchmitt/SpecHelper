@@ -11,6 +11,7 @@ export type DatabaseConnection = {
   id: number;
   name: string;
   status: string;
+  checked_at?: string | null;
   host: string;
   database: string;
   port?: number;
@@ -26,7 +27,7 @@ const empty = { name: "", url: "", host: "", port: 5432, database: "", username:
 export function DatabaseConnections({ values, onChanged }: {
   values: DatabaseConnection[]; onChanged: () => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, dateLocale } = useI18n();
   const [show, setShow] = useState(false);
   const [editing, setEditing] = useState<DatabaseConnection | null>(null);
   const [removing, setRemoving] = useState<DatabaseConnection | null>(null);
@@ -257,6 +258,7 @@ export function DatabaseConnections({ values, onChanged }: {
         </div>
       </div>
       <p className="mt-2 break-words text-sm muted">{database.host}:{database.port ?? 5432} · {database.database}</p>
+      <p className="mt-1 text-xs muted">{t("Last checked")}: {database.checked_at ? new Date(database.checked_at).toLocaleString(dateLocale) : t("Verification date not recorded")}</p>
       {show && editing?.id === database.id && connectionForm}
     </section>)}</div>
     {(checks || notice) && <div role="status" className="mt-4 space-y-2 text-sm text-green-800">

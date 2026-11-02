@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ninja import File, NinjaAPI, Schema
 from ninja.errors import HttpError
 from ninja.files import UploadedFile
@@ -100,6 +101,11 @@ class EnvironmentIn(Schema):
     repositories: list[RepositoryIn] = Field(min_length=1, max_length=100)
     database_id: int | None = None
     publication_connection_ids: list[int] | None = None
+
+
+class EnvironmentCreateIn(EnvironmentIn):
+    context_instructions: str = Field(default="", max_length=4000)
+    official_references: list[dict] = Field(default_factory=list, max_length=12)
 
 
 class EnvironmentEditIn(EnvironmentIn):
@@ -200,6 +206,9 @@ def environment_dict(environment):
         "git_check_running": Job.objects.filter(kind="branch_check", target=str(environment.pk), status__in=["QUEUED", "RUNNING"]).exists(),
         "database_id": environment.database_id,
         "database_name": environment.database.name if environment.database_id else None,
+        "knowledge_summary": {"has_text":bool(environment.context_instructions.strip()),
+                              "documents":environment.context_resources.filter(removed=False).count(),
+                              "sites":len(environment.official_references)},
         "publication_connection_ids": [item.pk for item in connections],
         "publication_connections": [connector_dict(item) for item in connections],
         "repositories": [
@@ -447,7 +456,7 @@ def connections(request):
         ],
         "databases": list(
             DatabaseConnection.objects.values(
-                "id", "name", "host", "port", "database", "username", "sslmode", "status"
+                "id", "name", "host", "port", "database", "username", "sslmode", "status", "checked_at"
             )
         ),
     }
@@ -570,6 +579,7 @@ def create_database(request, payload: DatabaseIn):
     connection = DatabaseConnection(**values, secret=encrypt(password))
     check_connection(connection)
     connection.status = "CONNECTED"
+    connection.checked_at = timezone.now()
     connection.save()
     return Status(
         201,
@@ -577,6 +587,7 @@ def create_database(request, payload: DatabaseIn):
             "id": connection.id,
             "name": connection.name,
             "status": connection.status,
+            "checked_at": connection.checked_at,
             "checks": {"connection": True, "read": True, "read_only": True},
         },
     )
@@ -593,11 +604,13 @@ def test_database(request, connection_id: int):
         except ValueError as exc:
             connection.status = "ERROR"
             failure = exc
-        connection.save(update_fields=["status"])
+        connection.checked_at = timezone.now()
+        connection.save(update_fields=["status", "checked_at"])
     if failure:
         raise failure
     return {
         "status": connection.status,
+        "checked_at": connection.checked_at,
         "checks": {"connection": True, "read": True, "read_only": True},
     }
 
@@ -622,12 +635,13 @@ def update_database(request, connection_id: int, payload: DatabaseIn):
         connection.secret = encrypt(password)
     check_connection(connection)
     connection.status = "CONNECTED"
+    connection.checked_at = timezone.now()
     try:
         with transaction.atomic():
             connection.save()
     except IntegrityError as exc:
         raise HttpError(409, "This name already exists") from exc
-    return {"id":connection.pk, "name":connection.name, "status":connection.status,
+    return {"id":connection.pk, "name":connection.name, "status":connection.status, "checked_at":connection.checked_at,
             "checks":{"connection":True, "read":True, "read_only":True}}
 
 
@@ -660,9 +674,14 @@ def environments(request):
 
 @api.post("/environments", response={201: dict})
 @transaction.atomic
-def create_environment(request, payload: EnvironmentIn):
+def create_environment(request, payload: EnvironmentCreateIn):
+    from .environment_context import update_instructions
     environment_actions.validate(payload)
     environment = Environment.objects.create(name=payload.name, database_id=payload.database_id)
+    if payload.context_instructions or payload.official_references:
+        update_instructions(environment.pk, payload.context_instructions, True,
+                            environment.context_revision, payload.official_references)
+        environment.refresh_from_db()
     if payload.publication_connection_ids is not None:
         environment.publication_connections.set(payload.publication_connection_ids)
     EnvironmentRepository.objects.bulk_create(

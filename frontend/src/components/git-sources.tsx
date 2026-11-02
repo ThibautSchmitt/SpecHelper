@@ -19,10 +19,11 @@ export type GitConnection = {
   status: string;
   error: string;
   has_secret: boolean;
+  checked_at?: string | null;
   referenced_environments: number;
 };
 export function GitSources() {
-  const { t } = useI18n();
+  const { t, dateLocale } = useI18n();
   const [values, setValues] = useState<GitConnection[]>([]);
   const [showForm, setShowForm] = useState(false);
   const editor = useRef<HTMLFormElement>(null);
@@ -61,6 +62,8 @@ export function GitSources() {
       setNotice(t("Connection settings saved."));
     } catch (e) {
       setError((e as Error).message);
+      // Failed probes also persist a verification date and connection state.
+      await refresh().catch(() => {});
     } finally {
       setBusy(false);
     }
@@ -306,6 +309,7 @@ export function GitSources() {
             <p className="mt-2 break-all text-sm muted">
               {value.base_url}
             </p>
+            <p className="mt-1 text-xs muted">{t("Last checked")}: {value.checked_at ? new Date(value.checked_at).toLocaleString(dateLocale) : t("Verification date not recorded")}</p>
             {value.error && (
               <p className="mt-2 text-sm text-red-700">{t(value.error)}</p>
             )}

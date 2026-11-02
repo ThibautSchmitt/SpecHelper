@@ -26,8 +26,8 @@ function configuration(revision = 1, references: { url: string; note: string }[]
 async function contextPanel(page: Page, language: "en" | "fr") {
   const t = (key: string) => dictionary(language, key);
   await page.goto("/admin?tab=environments");
-  await page.getByText(t("Environment context"), { exact: true }).click();
-  return page.locator("details").filter({ has: page.locator("summary").filter({ hasText: new RegExp(`^${t("Environment context")}$`) }) });
+  await page.getByText(t("Application knowledge"), { exact: true }).click();
+  return page.locator(".application-knowledge");
 }
 const baseScope = { environment: "Production", conditions: ["Current deployed release"], period: "2026-10", population: "Configured deployment", sample_limits: "Only the declared scope was checked." };
 function report(missingReceipt = false) {
@@ -55,22 +55,22 @@ for (const language of ["en", "fr"] as const) {
     });
     let context = await contextPanel(page, language);
     await expect(context.getByRole("checkbox", { name: t("Use business context"), exact: true })).toHaveCount(0);
-    const references = context.getByRole("region", { name: t("Official reference sources"), exact: true });
-    await references.getByRole("button", { name: t("Add official reference"), exact: true }).click();
-    await references.getByLabel(t("Reference URL or domain"), { exact: true }).fill(urls[0]);
-    await references.getByLabel(t("Reference note"), { exact: true }).fill("Public service guidance; verify applicability to the request.");
-    await references.getByRole("button", { name: t("Add official reference"), exact: true }).click();
-    await references.getByLabel(t("Reference URL or domain"), { exact: true }).nth(1).fill("www.legifrance.gouv.fr");
-    await references.getByLabel(t("Reference note"), { exact: true }).nth(1).fill("Check the effective text and jurisdiction.");
-    await context.getByRole("button", { name: t("Save business context"), exact: true }).click();
+    const references = context.getByRole("region", { name: t("Reference sites"), exact: true });
+    for (const [url, note] of [[urls[0], "Public service guidance; verify applicability to the request."], ["www.legifrance.gouv.fr", "Check the effective text and jurisdiction."]]) {
+      await references.getByRole("button", { name: t("Add a link"), exact: true }).click();
+      const editor = references.getByRole("group");
+      await editor.getByLabel(t("Reference URL or domain"), { exact: true }).fill(url);
+      await editor.getByLabel(t("Applicability note (optional)"), { exact: true }).fill(note);
+      await editor.getByRole("button", { name: t("Add"), exact: true }).click();
+    }
+    await context.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => saves[0]).toMatchObject({ expected_revision: 1, instructions: "Archived contracts are retained for audit.", official_references: [{ url: urls[0], note: "Public service guidance; verify applicability to the request." }, { url: "www.legifrance.gouv.fr", note: "Check the effective text and jurisdiction." }] });
     expect(saves[0]).not.toHaveProperty("instructions_enabled");
-    await expect(context.getByRole("status")).toContainText(t("Environment context saved. Existing analyses remain unchanged."));
-    await expect(references.getByLabel(t("Reference URL or domain"), { exact: true }).nth(1)).toHaveValue(urls[1]);
+    await expect(context.getByRole("status")).toContainText(t("Application knowledge saved."));
+    await expect(references.getByRole("link", {name: urls[1], exact: true})).toBeVisible();
     await page.reload(); context = await contextPanel(page, language);
-    await expect(context.getByLabel(t("Reference URL or domain"), { exact: true })).toHaveCount(2);
-    await expect(context.getByLabel(t("Reference note"), { exact: true }).nth(1)).toHaveValue("Check the effective text and jurisdiction.");
-    await expect(context.getByText(t("Optional public URLs or domains and applicability notes. These are starting points, not an exclusive list or assistant instructions."), { exact: true })).toBeVisible();
+    await expect(context.getByRole("region", {name: t("Reference sites"), exact:true}).getByRole("link")).toHaveCount(2);
+    await expect(context.getByText("Check the effective text and jurisdiction.", {exact:true})).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await context.screenshot({ path: `../.local/v25-ui/web-references-${language}-${info.project.name}.png`, animations: "disabled" });
   });
@@ -81,24 +81,29 @@ for (const language of ["en", "fr"] as const) {
       puts++; return route.fulfill({ status: stale ? 409 : 422, json: { detail: stale ? "The environment context has changed. Refresh before editing." : "Use a public HTTPS reference URL without credentials." } });
     });
     const context = await contextPanel(page, language);
-    await context.getByRole("button", { name: t("Add official reference"), exact: true }).click();
-    await context.getByLabel(t("Reference note"), { exact: true }).fill("Missing URL needs correction.");
-    await context.getByRole("button", { name: t("Save business context"), exact: true }).click();
+    await context.getByRole("button", { name: t("Add a link"), exact: true }).click();
+    const editor = context.getByRole("group");
+    await editor.getByLabel(t("Applicability note (optional)"), {exact:true}).fill("Missing URL needs correction.");
+    await context.getByRole("button", {name:t("Add"),exact:true}).click();
     expect(puts).toBe(0);
-    await expect(context.getByLabel(t("Reference URL or domain"), { exact: true })).toBeFocused();
-    await context.getByLabel(t("Reference URL or domain"), { exact: true }).fill("https://127.0.0.1/private");
-    await context.getByRole("button", { name: t("Save business context"), exact: true }).click();
+    await expect(editor.getByLabel(t("Reference URL or domain"), {exact:true})).toBeFocused();
+    await editor.getByLabel(t("Reference URL or domain"), {exact:true}).fill("https://127.0.0.1/private");
+    await editor.getByRole("button", {name:t("Add"),exact:true}).click();
+    await context.getByRole("button", {name:t("Save"),exact:true}).click();
     await expect(context.getByRole("alert")).toContainText(t("Use a public HTTPS reference URL without credentials."));
-    await expect(context.getByLabel(t("Reference note"), { exact: true })).toHaveValue("Missing URL needs correction.");
+    await expect(context.getByText("Missing URL needs correction.", {exact:true})).toBeVisible();
     stale = true;
-    await context.getByLabel(t("Reference URL or domain"), { exact: true }).fill(urls[0]);
-    await context.getByRole("button", { name: t("Save business context"), exact: true }).click();
+    await context.getByRole("button", {name: language === "fr" ? "Modifier le lien 1" : "Edit link 1", exact:true}).click();
+    await editor.getByLabel(t("Reference URL or domain"), {exact:true}).fill(urls[0]);
+    await editor.getByRole("button", {name:t("Save"),exact:true}).click();
+    await context.getByRole("button", {name:t("Save"),exact:true}).click();
     await expect(context.getByRole("alert")).toContainText(t("The environment context has changed. Refresh before editing."));
-    await expect(context.getByLabel(t("Reference URL or domain"), { exact: true })).toHaveValue(urls[0]);
+    await expect(context.getByRole("link", {name:urls[0],exact:true})).toBeVisible();
     current = configuration(3, [{ url: urls[1], note: "Another browser saved this current reference." }]);
-    await context.getByRole("button", { name: t("Reload context"), exact: true }).click();
-    await expect(context.getByLabel(t("Reference URL or domain"), { exact: true })).toHaveValue(urls[1]);
-    await expect(context.getByLabel(t("Reference note"), { exact: true })).toHaveValue("Another browser saved this current reference.");
+    page.once("dialog", dialog => dialog.accept());
+    await context.getByRole("button", {name:t("Reload context"),exact:true}).click();
+    await expect(context.getByRole("link", {name:urls[1],exact:true})).toBeVisible();
+    await expect(context.getByText("Another browser saved this current reference.", {exact:true})).toBeVisible();
     expect(puts).toBe(2);
   });
   test(`official-reference loading failure remains retryable without false saved state in ${language}`, async ({ page }) => {
@@ -106,14 +111,15 @@ for (const language of ["en", "fr"] as const) {
     await page.route("**/api/environments/1/context", route => available ? route.fulfill({ json: configuration(2, [{ url: urls[1], note: "Recovered reference." }]) }) : route.fulfill({ status: 503, json: { detail: "Reference metadata unavailable." } }));
     const context = await contextPanel(page, language);
     await expect(context.getByRole("alert")).toContainText("Reference metadata unavailable.");
-    await expect(context.getByText(t("Environment context saved. Existing analyses remain unchanged."), { exact: true })).toHaveCount(0);
+    await expect(context.getByText(t("Application knowledge saved."), { exact: true })).toHaveCount(0);
     available = true; await context.getByRole("button", { name: t("Reload context"), exact: true }).click();
-    await expect(context.getByLabel(t("Reference URL or domain"), { exact: true })).toHaveValue(urls[1]);
+    await expect(context.getByRole("link", { name: urls[1], exact: true })).toBeVisible();
     await expect(context.getByRole("alert")).toHaveCount(0);
   });
   test(`Web observations retain dated provenance and stay separate from deployment behavior in ${language}`, async ({ page }, info) => {
     await setup(page, language); const value = requestDetail(); await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: value }));
     await page.goto(`/requests/${id}`);
+    await page.getByText(t("Final synthesis"), {exact:true}).click();
     await page.getByText(t("Verification details"), { exact: true }).click();
     const official = page.getByRole("article", { name: "The official guidance describes retention for this jurisdiction.", exact: true });
     const deployed = page.getByRole("article", { name: "The deployed code retains audit entries behind the configured flag.", exact: true });
@@ -141,8 +147,9 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/requests/${id}/versions/1`, route => route.fulfill({ json: historical }));
     await page.route("**/api/environments/1/context", route => route.fulfill({ json: configuration(9, [{ url: "https://www.service-public.fr/current-only", note: "CURRENT_ENVIRONMENT_ONLY" }]) }));
     await page.goto(`/requests/${id}?version=1`);
+    await page.getByText(t("Final synthesis"), {exact:true}).click();
     await page.getByText(t("Frozen analysis context"), { exact: true }).click();
-    const frozen = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: new RegExp(`^${t("Frozen analysis context")}$`) }) });
+    const frozen = page.getByText(t("Frozen analysis context"), {exact:true}).locator("..");
     await expect(frozen.getByRole("link", { name: "https://www.legifrance.gouv.fr/frozen-1", exact: true })).toHaveAttribute("href", "https://www.legifrance.gouv.fr/frozen-1");
     await expect(frozen).toContainText("Frozen official source note 1"); await expect(frozen).not.toContainText("CURRENT_ENVIRONMENT_ONLY");
     await expect(frozen).toContainText(t("Context revision {number}").replace("{number}", "1"));
@@ -150,7 +157,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(frozen.getByLabel(t("Document read observations"), { exact: true })).toContainText(`${t("Verifier")} · ${t("Read telemetry unavailable")}`);
     await expect(frozen.getByRole("link", { name: t("Download frozen document"), exact: true })).toHaveAttribute("href", `/api/requests/${id}/runs/1/context/document-v1/download`);
     await page.getByLabel(t("Result version"), { exact: true }).selectOption("latest");
-    await expect(page.getByRole("heading", { name: "Reviewed retention 2", exact: true })).toBeVisible();
+    await expect(page.getByLabel(t("Result version"), {exact:true})).toHaveValue("latest");
     if (await frozen.getAttribute("open") === null) await page.getByText(t("Frozen analysis context"), { exact: true }).click();
     await expect(page.getByRole("link", { name: "https://www.legifrance.gouv.fr/frozen-2", exact: true })).toBeVisible();
     await expect(page.getByText("Frozen official source note 1", { exact: true })).toHaveCount(0);
@@ -160,6 +167,7 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: requestDetail() }));
     await page.route(`**/api/requests/${id}/versions/1`, route => route.fulfill({ json: historical }));
     await page.goto(`/requests/${id}?version=1`);
+    await page.getByText(t("Final synthesis"), {exact:true}).click();
     await expect(page.getByText(t("Environment context was not recorded for this historical analysis."), { exact: true })).toBeVisible();
     await page.getByText(t("Verification details"), { exact: true }).click();
     const claim = page.getByRole("article", { name: "The undated reference does not establish a current obligation.", exact: true });

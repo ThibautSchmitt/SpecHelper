@@ -26,7 +26,7 @@ import {
 } from "@/components/database-connections";
 import { EnvironmentActions } from "@/components/environment-actions";
 import { EnvironmentBranchStatus, EnvironmentSyncBadge } from "@/components/environment-branch-status";
-import { EnvironmentContext } from "@/components/environment-context";
+import { EnvironmentContext, KnowledgePanel, emptyKnowledge, uploadCreationDocuments, type KnowledgeDraft } from "@/components/environment-context";
 import { api, send, statuses, type Environment } from "@/lib/api";
 
 type Connections = {
@@ -80,6 +80,9 @@ function AdminPanel() {
   const [envName, setEnvName] = useState("");
   const [publicationConnections, setPublicationConnections] = useState<number[]>([]);
   const [showEnvironmentForm, setShowEnvironmentForm] = useState(false);
+  const [knowledge, setKnowledge] = useState<KnowledgeDraft>(emptyKnowledge);
+  const [createdKnowledgeTarget, setCreatedKnowledgeTarget] = useState<number | null>(null);
+  const createdKnowledge = useRef<number | null>(null);
   const [dbId, setDbId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -195,15 +198,14 @@ function AdminPanel() {
           simplified={protocol === "2.4"}
         />
       )}
-      {tab === "environments" && (
-        <div className="space-y-6">
+        <div hidden={tab !== "environments"} className="space-y-6">
           <nav className="flex flex-wrap gap-2" aria-label={t("Environment settings")}>
             {[["environments", "Configured environments"], ["git", "Manage Git connections"], ["postgres", "Manage PostgreSQL connections"]].map(([id, label]) =>
               <Button key={id} variant={sourceTab === id ? "default" : "outline"} aria-pressed={sourceTab === id} onClick={() => setSourceTab(id)}>{t(label)}</Button>)}
           </nav>
-          {sourceTab === "git" && <GitSources />}
-          {sourceTab === "postgres" && <DatabaseConnections values={connections?.databases || []} onChanged={refresh} />}
-          {sourceTab === "environments" && <Card className="settings-section min-w-0" aria-label={t("Environments")}>
+          {tab === "environments" && sourceTab === "git" && <GitSources />}
+          {tab === "environments" && sourceTab === "postgres" && <DatabaseConnections values={connections?.databases || []} onChanged={refresh} />}
+          <div hidden={sourceTab !== "environments"}><Card className="settings-section min-w-0" aria-label={t("Environments")}>
             <div className="section-heading">
               <h2><GitBranch size={18} aria-hidden="true" />{t("Environments")}</h2>
               <Button type="button" size="sm" variant="outline" disabled={busy} aria-label={t("New environment")} aria-expanded={showEnvironmentForm} aria-controls="environment-create-form" onClick={() => { setShowEnvironmentForm(!showEnvironmentForm); if (!showEnvironmentForm) requestAnimationFrame(() => document.getElementById("env-name")?.focus()); }}><Plus size={15} aria-hidden="true" />{t("Add environment")}</Button>
@@ -285,7 +287,7 @@ function AdminPanel() {
                 <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("Update failed")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{t(e.error)}</pre></details>
               )}
               <PublicationConnectionsSummary values={e.publication_connections || []} />
-              <EnvironmentContext environmentId={e.id} factualOnly={protocol === "2.4"} />
+              <EnvironmentContext environmentId={e.id} summary={e.knowledge_summary} />
               {protocol !== "2.4" && <EnvironmentLibrary environmentId={e.id} />}
                     </>}
                   </EnvironmentActions>
@@ -307,18 +309,33 @@ function AdminPanel() {
                   return;
                 }
                 action(async () => {
-                  await send("/environments", {
+                  if (!createdKnowledge.current) {
+                  const created = await send<Environment>("/environments", {
                     name: envName,
                     database_id: dbId ? Number(dbId) : null,
                     publication_connection_ids: publicationConnections,
                     repositories: selection.map(sourcePayload),
+                    ...(knowledge.instructions ? { context_instructions: knowledge.instructions } : {}),
+                    ...(knowledge.references.length ? { official_references: knowledge.references } : {}),
                   });
+                  createdKnowledge.current = created.id;
+                  setCreatedKnowledgeTarget(created.id);
+                  }
+                  try {
+                    if (knowledge.files.length) await uploadCreationDocuments(createdKnowledge.current, knowledge.files,
+                      file => setKnowledge(previous => ({ ...previous, files: previous.files.filter(item => item !== file) })));
+                  } catch (failure) {
+                    throw new Error(t("The environment is saved. Some documents still need uploading; retry Save without creating another environment.") + " " + t((failure as Error).message));
+                  }
+                  createdKnowledge.current = null; setCreatedKnowledgeTarget(null);
+                  setKnowledge(emptyKnowledge()); setShowEnvironmentForm(false);
                   setEnvName("");
                   setPublicationConnections([]);
                   setSelection([{ repository: "", branch: "" }]);
                 }, t("Environment created. Update in progress."));
               }}
             >
+              <fieldset disabled={busy || !!createdKnowledgeTarget} className="min-w-0">
               <div className="field">
                 <label htmlFor="env-name">{t("Name")}</label>
                 <Input
@@ -352,19 +369,27 @@ function AdminPanel() {
                 </select>
               </div>
               <PublicationConnectionPicker selected={publicationConnections} onChange={setPublicationConnections} disabled={busy} />
+              </fieldset>
+              <KnowledgePanel id="new-environment-knowledge" draft={knowledge} onChange={setKnowledge}
+                busy={busy} readOnlyText={!!createdKnowledgeTarget} onError={setError} />
               <Button
                 className="mt-5"
-                disabled={busy || duplicateSources(selection)}
+                disabled={busy || duplicateSources(selection) || !!knowledge.linkEditor}
               >
                 {t("Create environment")}
               </Button>
-              <Button className="mt-5 ml-3" type="button" variant="ghost" onClick={() => setShowEnvironmentForm(false)}>{t("Cancel")}</Button>
+              <Button className="mt-5 ml-3" type="button" variant="ghost" disabled={busy} onClick={() => {
+                if (createdKnowledge.current) {
+                  createdKnowledge.current = null; setCreatedKnowledgeTarget(null); setKnowledge(emptyKnowledge());
+                  setEnvName(""); setPublicationConnections([]); setSelection([{ repository: "", branch: "" }]);
+                }
+                setShowEnvironmentForm(false);
+              }}>{t("Cancel")}</Button>
             </form>
           </Card>}
             </div>
-          </Card>}
+          </Card></div>
         </div>
-      )}
       {tab === "connectors" && <div className="space-y-6">
         <TicketConnectors />
       </div>}

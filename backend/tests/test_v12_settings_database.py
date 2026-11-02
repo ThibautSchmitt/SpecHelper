@@ -49,6 +49,7 @@ def test_database_url_test_has_only_simple_checks_and_keeps_password_private(cli
         "id": response.json()["id"],
         "name": "Test database",
         "status": "CONNECTED",
+        "checked_at": response.json()["checked_at"],
         "checks": {"connection": True, "read": True, "read_only": True},
     }
     value = DatabaseConnection.objects.get()

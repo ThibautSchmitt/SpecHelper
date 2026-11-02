@@ -48,11 +48,12 @@ for (const language of ["en", "fr"] as const) {
       { public_role: "analyst", connection_name: "ChatGPT team", agent: "codex", model: "recorded-model", status: "DONE", instruction_snapshot: instructions, skills_audit: "observed", loaded_skills: [{ slug: "billing-review", version: 3, sha256: "b".repeat(64) }] },
       { public_role: "counter_analyst", connection_name: "Claude team", agent: "claude", model: "recorded-model", status: "RUNNING", instruction_snapshot: { ...instructions, public_role: "counter_analyst" }, skills_audit: "unavailable", loaded_skills: [] },
     ] }] };
-    await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: value }));
+    await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: { ...value, latest_version: { id: "previous-result", number: 1, status: "PARTIAL", created_at: "2026-10-24T10:00:00Z", ticket: null, artifacts: {} } } }));
     await page.goto(`/requests/${id}`);
+    await page.getByText(t("Final synthesis"), { exact: true }).click();
     await page.getByText(t("Analysis assignment history"), { exact: true }).click();
     await page.getByText(t("Frozen analysis context"), { exact: true }).click();
-    await expect(page.getByText(t("Business terminology and factual context"), { exact: false })).toBeVisible();
+    await expect(page.getByText(t("Business presentation and vocabulary"), { exact: false })).toBeVisible();
     await expect(page.getByText("Unused legacy agent instructions", { exact: true })).toHaveCount(0);
     const disclosures = page.getByText(t("Recorded execution configuration"), { exact: true });
     await disclosures.first().click();

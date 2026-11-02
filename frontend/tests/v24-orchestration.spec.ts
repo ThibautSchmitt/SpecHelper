@@ -136,8 +136,8 @@ for (const language of ["en", "fr"] as const) {
     await expect.poll(() => writes[0]).toEqual({ allow_same_family_fallback: false });
     await page.getByRole("navigation", { name: t("Administration"), exact: true }).getByRole("button", { name: t("Environments"), exact: true }).click();
     await expect(page.getByText(t("Agents and skills for this environment"), { exact: true })).toHaveCount(0);
-    await page.getByText(t("Environment context"), { exact: true }).click();
-    await expect(page.getByLabel(t("Business terminology and factual context"), { exact: true })).toHaveValue("A closed contract is archived.");
+    await page.getByText(t("Application knowledge"), { exact: true }).click();
+    await expect(page.getByLabel(t("Business presentation and vocabulary"), { exact: true })).toHaveValue("A closed contract is archived.");
     await expect(page.getByLabel(t("Short environment instructions"), { exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

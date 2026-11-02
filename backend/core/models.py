@@ -119,6 +119,7 @@ class DatabaseConnection(models.Model):
     secret = models.TextField()
     sslmode = models.CharField(max_length=20, default="require")
     status = models.CharField(max_length=20, default="UNKNOWN")
+    checked_at = models.DateTimeField(null=True)
 
 
 class Environment(models.Model):
