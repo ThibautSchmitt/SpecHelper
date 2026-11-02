@@ -108,10 +108,10 @@ test("ticket selection displays submitted content, labels, immutable provenance 
   await expect(selected.getByText("business", { exact: true })).toBeVisible();
   await expect(
     selected.getByRole("link", {
-      name: "Published analysis · v2",
+      name: "Source analysis · v2",
       exact: true,
     }),
-  ).toHaveAttribute("href", "/requests/request-one?version=2");
+  ).toHaveAttribute("href", "/analyses/request-one?version=2");
   await expect(
     selected.getByText(/not a live external ticket status/),
   ).toBeVisible();
@@ -123,10 +123,10 @@ test("ticket selection displays submitted content, labels, immutable provenance 
   );
   await expect(
     selected.getByRole("link", {
-      name: "Published analysis · v1",
+      name: "Source analysis · v1",
       exact: true,
     }),
-  ).toHaveAttribute("href", "/requests/request-two?version=1");
+  ).toHaveAttribute("href", "/analyses/request-two?version=1");
   await expect(selected.getByRole("alert")).toContainText(
     "Publication status is uncertain",
   );
@@ -181,7 +181,7 @@ test("ticket filters are server-backed and empty matches have a useful next acti
     .getByLabel("Publication status", { exact: true })
     .selectOption("ERROR");
   await expect(
-    page.getByText("No ticket publications match these filters.", {
+    page.getByText("No tickets match these filters.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -242,7 +242,7 @@ test("selected detail failure and partial metadata remain truthful and can be re
   ).toBeVisible();
   await expect(
     selected.getByRole("link", {
-      name: "Published analysis · v2",
+      name: "Source analysis · v2",
       exact: true,
     }),
   ).toBeVisible();
@@ -280,7 +280,7 @@ test("ticket list loading keeps filters usable and errors offer a retry", async 
     page.getByRole("button", { name: "Refresh records", exact: true }),
   ).toBeEnabled();
   await expect(
-    page.getByText("No ticket publications match these filters.", {
+    page.getByText("No tickets match these filters.", {
       exact: true,
     }),
   ).toHaveCount(0);

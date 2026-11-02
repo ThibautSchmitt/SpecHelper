@@ -16,14 +16,14 @@ from .models import (
 )
 
 
-def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_text=None, scope_operation="analyze", ticket_proposal=None):
+def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_text=None, scope_operation="analyze", ticket_proposal=None, cycle_scope=None):
     from .orchestration import require_role_coverage
     from .scope_service import assess
 
     require_role_coverage(request.analysis_protocol)
 
     if ticket_proposal:
-        scope_text = request.need + "\n\n" + ticket_proposal["title"] + "\n" + ticket_proposal["body"]
+        scope_text = (scope_text or request.need) + "\n\n" + ticket_proposal["title"] + "\n" + ticket_proposal["body"]
     if not assess(request, text=scope_text, operation=scope_operation):
         return request
     if request.analysis_protocol in {"2.3", "2.4"}:
@@ -44,6 +44,7 @@ def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_te
             "decision_revision": request.decision_revision,
             "changed_decision_keys": changed_decision_keys or [],
             **({"ticket_proposal": ticket_proposal} if ticket_proposal else {}),
+            **({"cycle_scope": cycle_scope} if cycle_scope else {}),
         },
     )
     number = (request.analysis_runs.aggregate(last=Max("number"))["last"] or 0) + 1
@@ -166,6 +167,8 @@ def enqueue_analysis(
         .get(pk=request_id)
     )
     changed_decision_keys = []
+    if request.archived_at:
+        raise HttpError(409, "Unarchive this conversation before continuing.")
     from .orchestration import require_role_coverage
 
     require_role_coverage(analysis_protocol or request.analysis_protocol)
@@ -225,6 +228,8 @@ def enqueue_analysis(
 @transaction.atomic
 def continue_conversation(request_id, message, expected_version, analysis_protocol=None):
     request = Request.objects.select_for_update().get(pk=request_id)
+    if request.archived_at:
+        raise HttpError(409, "Unarchive this conversation before continuing.")
     from .business_decisions import assert_editable
 
     assert_editable(request)

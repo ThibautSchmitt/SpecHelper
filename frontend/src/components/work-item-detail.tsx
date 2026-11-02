@@ -13,6 +13,8 @@ import { ScopeAssessmentPanel } from "@/components/scope-assessment";
 import { NeedEditor } from "@/components/need-editor";
 import { AnalysisConversation, conversationAnswer } from "@/components/analysis-timeline";
 import { DiscussionComposer } from "@/components/discussion-composer";
+import { ConversationArchive } from "@/components/conversation-archive";
+import { conversationLabels, conversationState } from "@/lib/conversation-state";
 import { ConversationAssistantControl } from "@/components/conversation-assistant";
 import { AnalysisDiagrams } from "@/components/analysis-diagrams";
 import { useI18n } from "@/lib/i18n";
@@ -40,7 +42,6 @@ import {
   api,
   send,
   statuses,
-  resultStates,
   scopeNeedsContext,
   type RequestDetail,
   type ResultVersion,
@@ -180,7 +181,7 @@ function RequestContent({
       return;
     }
     let alive = true;
-    api<ResultVersion>(`${base}/${id}/versions/${selectedNumber}`)
+    api<ResultVersion>(`${value?.versions.find(version=>version.number===selectedNumber)?.workflow === "question" ? "/questions" : value?.versions.find(version=>version.number===selectedNumber)?.workflow === "request" ? "/requests" : base}/${id}/versions/${selectedNumber}`)
       .then((v) => {
         if (alive) setSelectedVersion(v);
       })
@@ -198,8 +199,9 @@ function RequestContent({
     selectedNumber !== null && selectedVersion?.number !== selectedNumber;
   const result =
     selectedNumber === null ? value?.latest_version : selectedVersion;
+  const reportIsQuestion = result?.workflow ? result.workflow === "question" : isQuestion;
   const ticket =
-    loadingVersion || isQuestion ? null : result?.ticket || value?.ticket;
+    loadingVersion || reportIsQuestion ? null : result?.ticket || value?.ticket;
   async function continueDiscussion(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -261,7 +263,7 @@ function RequestContent({
           : t("Loading analysis…")}
       </div>
     );
-  const titleLocked = busy || ["QUEUED", "UNDERSTANDING", "ANALYZING", "REVIEWING", "GENERATING_RESULT", "CONTINUING_CONVERSATION", "GENERATING_TICKET"].includes(value.status);
+  const titleLocked = busy || ["IN_PROGRESS", "WAITING_AI"].includes(conversationState(value));
   function selectConversationVersion(number: number) {
     router.replace(`${detailBase}/${id}?version=${number}`, { scroll: false });
     setSelectedVersion(null); setSelectedNumber(number);
@@ -357,7 +359,7 @@ function RequestContent({
         <ArrowLeft size={16} />{" "}
         {t("All analyses")}
       </Link>
-      <AnalysisDeleteButton id={id} title={value.title || value.need.split("\n")[0]} disabled={busy || active.includes(value.status)} /></div>
+      <div className="flex flex-wrap items-center gap-2"><ConversationArchive value={value} onUpdated={setValue}/><AnalysisDeleteButton id={id} title={value.title || value.need.split("\n")[0]} disabled={busy || ["IN_PROGRESS", "WAITING_AI"].includes(conversationState(value))} /></div></div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">
@@ -367,8 +369,10 @@ function RequestContent({
           <div className="title-tags analysis-title">
             <h1 className="break-words">{value.title || value.need.split("\n")[0] || t("Analysis")}</h1>
             {!editingTitle && <Button id="edit-analysis-title" className="conversation-title-edit" aria-label={t("Edit title")} type="button" size="sm" variant="ghost" disabled={titleLocked} title={titleLocked ? t("Wait for the analysis to finish before renaming it.") : t("Edit title")} onClick={() => { setTitleDraft(value.title || value.need.split("\n")[0]); setEditingTitle(true); }}><Pencil size={14} aria-hidden="true" /></Button>}
-            <span role="status" className="badge conversation-state" data-state={value.status}>{t(resultStates[value.result_state || ""] || statuses[value.status] || value.status)}</span>
+            <span role="status" className="badge conversation-state" data-state={conversationState(value)}>{t(conversationLabels[conversationState(value)])}</span>
           </div>
+          {value.archived_at && <p className="mt-2 text-sm muted">{t("This conversation is archived. Unarchive it to continue.")}</p>}
+          {value.conversation_incident && <p className="mt-2 text-sm" id="conversation-incident">{t(value.incident_kind === "CANCELLED" ? "Operation cancelled" : value.incident_kind === "ERROR" ? "Operation failed" : "Operation interrupted")}</p>}
           <ConversationAssistantControl value={value} onUpdated={setValue} />
           {editingTitle && <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={async event => {
             event.preventDefault(); setBusy(true); setError("");
@@ -382,25 +386,27 @@ function RequestContent({
           </form>}
         </div>
       </div>
-      {(error || value.error) && (
+      {(error || value.error || value.conversation_error) && (
         <div
           role="alert"
           className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800"
         >
-          {error ? t(error) : value.discussion?.mode === "discussion" ? t(value.error) : t("The analysis was interrupted. Open diagnostics for details.")}
-          {value.error && value.discussion?.mode !== "discussion" && <details className="mt-2"><summary className="cursor-pointer">{t("Diagnostics")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{value.error}</pre></details>}
+          {error ? t(error) : value.discussion?.mode === "discussion" ? t(value.error || value.conversation_error || "Operation interrupted") : t("The analysis was interrupted. Open diagnostics for details.")}
+          {(value.error || value.conversation_error) && value.discussion?.mode !== "discussion" && <details className="mt-2"><summary className="cursor-pointer">{t("Diagnostics")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{value.error || value.conversation_error}</pre></details>}
         </div>
       )}
       <AnalysisConversation value={value} result={loadingVersion ? null : result} trackingUnavailable={trackingUnavailable}
         reply={conversationReply} onSelectVersion={selectConversationVersion}
+        resultActions={(unified || value.discussion?.enabled) ? number=><TicketPreparation value={value} sourceVersion={number} onUpdated={setValue}/> : undefined}
+        ticketActions={ticketId=><TicketPreparation value={value} ticketId={ticketId} triggerLabel="Open ticket draft" onUpdated={setValue}/>}
         actions={<>
           <Button variant="outline" size="sm" onClick={openReport}>{t("Analysis report")}</Button>
           {!unified && !value.discussion?.enabled && !isQuestion && result && !value.conclusions_stale && <PublishTicket requestId={id} version={result.number} />}
-          {isQuestion && result && !value.conclusions_stale && <Button asChild size="sm"><Link href={`/analyses?new=1&from_question=${id}&version=${result.number}`}>{t("Prepare a change")}</Link></Button>}
+          {reportIsQuestion && result && !value.conclusions_stale && <Button asChild size="sm"><Link href={`/analyses?new=1&from_question=${id}&version=${result.number}`}>{t("Prepare a change")}</Link></Button>}
           <Button variant="ghost" size="sm" onClick={copyAnswer}><Copy size={14} aria-hidden="true" />{t(copied ? "Copied!" : "Copy answer")}</Button>
         </>}
         controls={<>
-          {(unified || value.discussion?.enabled) && <TicketPreparation value={value} onUpdated={updated => { setValue(updated); setSelectedNumber(null); setSelectedVersion(null); }}/ >}
+          {(unified || value.discussion?.enabled) && <TicketPreparation value={value} ticketId={search.get("ticket") || undefined} autoOpen={!!search.get("ticket")} onUpdated={setValue}/ >}
           {!unified && !value.discussion?.enabled && value.analysis_protocol === "2.4" && active.includes(value.status) && <AnalysisCancelButton requestId={id} workflow={isQuestion ? "question" : "request"} onCancelled={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} />}
           {!unified && !value.discussion?.enabled && value.analysis_protocol === "2.4" && ["ERROR","CANCELLED"].includes(value.status) && <AnalysisRetryButton requestId={id} workflow={isQuestion ? "question" : "request"} onRetried={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} />}
         </>}
@@ -572,9 +578,9 @@ function RequestContent({
         <h2 className="text-base">{t(result.status === "ERROR" ? "No usable result" : "Partial result")}</h2>
         <p className="mt-2">{t("Execution has ended, but the required independent checks are incomplete. This result is not a fully verified analysis.")}</p>
         {!!result.evidence?.limitations?.length && <ul className="mt-3 list-disc space-y-1 pl-5">{result.evidence.limitations.map((limit, index) => <li key={index}>{t(limit)}</li>)}</ul>}
-        {!isQuestion && <p className="mt-3 font-medium">{t("Publication is blocked until the required checks are complete. You can still review the draft and download the artifacts.")}</p>}
+        {!reportIsQuestion && <p className="mt-3 font-medium">{t("Publication is blocked until the required checks are complete. You can still review the draft and download the artifacts.")}</p>}
       </section>}
-      {isQuestion && result && !loadingVersion && (
+      {reportIsQuestion && result && !loadingVersion && (
         <QuestionResult
           key={`${id}-${result.number}`}
           questionId={id}

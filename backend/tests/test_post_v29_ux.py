@@ -17,6 +17,8 @@ def test_home_categories_are_disjoint_even_with_previous_results(client, environ
     rows = []
     for state in ["ERROR", "NEEDS_CLARIFICATION", "QUEUED", "PARTIAL", "READY"]:
         value = Request.objects.create(environment=environment, status=state, need=state)
+        if state == "QUEUED":
+            Job.objects.create(kind="analysis",target=str(value.pk),status="QUEUED")
         ResultVersion.objects.create(request=value, number=1, status="PARTIAL")
         rows.append(value)
     sections = client.get("/api/analyses/overview").json()["sections"]
@@ -46,6 +48,7 @@ def test_title_changes_preserve_business_need_history_and_result(client, environ
     assert client.get("/api/analyses?q=custom").json()["total"] == 1
     assert not Job.objects.exists() and not AnalysisRun.objects.exists()
     assert client.patch(f"/api/analyses/{value.pk}/title", data=json.dumps({"title": " "}), content_type="application/json").status_code == 422
+    Job.objects.create(kind="analysis",target=str(value.pk),status="RUNNING")
     value.status = "ANALYZING"
     value.save(update_fields=["status"])
     assert client.patch(f"/api/analyses/{value.pk}/title", data=json.dumps({"title": "Unsafe concurrent edit"}), content_type="application/json").status_code == 409

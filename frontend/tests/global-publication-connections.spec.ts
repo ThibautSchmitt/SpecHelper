@@ -126,7 +126,7 @@ for (const language of ["en", "fr"] as const) {
       versions: [{ number: 1, status: "READY", created_at: stamp }], latest_version: version };
     await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: detail }));
     await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: detail }));
-    await page.route(`**/api/analyses/${id}/ticket-preparation`, route => route.fulfill({ json: {
+    await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`), route => route.fulfill({ json: {
       revision:1,discussion_revision:0,source_version:1,source_verified:true,analysis_state:'complete',
       verified_scope:'Investigate date anomalies.',limitations:[],has_new_messages:true,scope_choice:'clarified',
       title:'Prepared correction',body:'Reject invalid periods.',markdown:'> Later proposals remain unverified.\n\nReject invalid periods.',
@@ -150,7 +150,7 @@ for (const language of ["en", "fr"] as const) {
     } }));
     await page.goto(`/${prepared ? 'analyses' : 'requests'}/${id}`);
     if(prepared){
-      await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
+      await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).last().click();
       await page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true}).getByRole('button',{name:t('Publish ticket'),exact:true}).click();
     }else await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });

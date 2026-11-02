@@ -76,6 +76,35 @@ def test_deep_launch_racing_with_discussion_cannot_start_both(client, environmen
     )
 
 
+def test_same_ticket_edits_are_serialized_without_overwriting_another_draft(client, environment):
+    from core.models import ConversationTicket
+    value=Request.objects.create(environment=environment,need="Explain dates",status="DISCUSSING",
+        discussion_state={"enabled":True,"revision":0})
+    ticket=ConversationTicket.objects.create(request=value,draft={"revision":1,"title":"Dates","body":"Original"})
+    other=ConversationTicket.objects.create(request=value,draft={"revision":1,"title":"Rounding","body":"Unrelated"})
+    barrier=threading.Barrier(2)
+    def submit(body):
+        close_old_connections()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SET lock_timeout = '5s'")
+            barrier.wait(timeout=5)
+            return Client().put(f"/api/analyses/{value.pk}/ticket-preparation",{
+                "ticket_id":str(ticket.pk),"expected_revision":1,"expected_discussion_revision":0,
+                "title":"Dates","body":body,
+            },content_type="application/json").status_code
+        finally:
+            connections.close_all()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        assert sorted(executor.map(submit,["First edit","Second edit"])) == [200,409]
+    ticket.refresh_from_db()
+    other.refresh_from_db()
+    assert ticket.draft["revision"] == 2
+    assert ticket.draft["body"] in {"First edit","Second edit"}
+    assert other.draft["body"] == "Unrelated"
+    assert not Job.objects.exists()
+
+
 def test_two_browsers_cannot_transfer_the_same_pending_turn_twice(client, environment, storage):
     from core.models import AIConnection, AIIdentity
     from core.providers import mark_failure

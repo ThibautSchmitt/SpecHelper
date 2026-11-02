@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 from django.db import IntegrityError
+from django.http import Http404
 from django.utils import timezone
 from ninja.errors import HttpError
 from ninja.testing import TestClient
@@ -483,3 +484,26 @@ def test_unavailable_template_and_unknown_required_type_fail_before_write(public
     with pytest.raises(HttpError, match="unsupported"):
         publish(version, connector, {**payload, "fields": {"custom": "human value"}})
     provider.create.assert_not_called()
+
+
+def test_separate_prepared_tickets_can_publish_to_same_destination(publication_context):
+    from core.models import ConversationTicket
+    version, connector, provider, payload = publication_context
+    first=ConversationTicket.objects.create(request=version.request,source_version=version,draft={"revision":1,"title":"First topic"})
+    second=ConversationTicket.objects.create(request=version.request,source_version=version,draft={"revision":1,"title":"Second topic"})
+    provider.create.side_effect=[
+        {"external_id":"201","external_key":"#201","url":"https://gitlab.example/team/project/-/issues/201"},
+        {"external_id":"202","external_key":"#202","url":"https://gitlab.example/team/project/-/issues/202"},
+    ]
+    deliveries=[]
+    for ticket in [first,second]:
+        values={**payload,"conversation_ticket_id":str(ticket.pk),"idempotency_key":uuid.uuid4(),"title":ticket.draft["title"]}
+        deliveries.append(publish(version,connector,values))
+    assert len({d.pk for d in deliveries}) == 2
+    assert {d.conversation_ticket_id for d in deliveries} == {first.pk,second.pk}
+    assert provider.create.call_count == 2
+    assert deliveries[0].snapshot["conversation_ticket_id"] == str(first.pk)
+    unrelated=ResultVersion.objects.create(request=version.request,number=2)
+    with pytest.raises(Http404):
+        preview(unrelated,connector,"42",presentation={"conversation_ticket_id":str(first.pk)})
+    assert provider.create.call_count == 2

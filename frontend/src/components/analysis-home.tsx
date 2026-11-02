@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { BookOpen, CircleHelp, Clock3, Flame, ArrowRight, ClipboardList, Sparkles } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { api, statuses, resultStates, type RequestItem } from "@/lib/api";
+import { api, type RequestItem } from "@/lib/api";
+import { conversationLabels, conversationState } from "@/lib/conversation-state";
 import { useI18n } from "@/lib/i18n";
 import { useInstanceName } from "@/lib/instance";
 
@@ -71,9 +72,9 @@ export function AnalysisHome() {
           {section && <ul className="mt-3 space-y-3">{section.items.map((item) => <li key={item.id} className="home-result">
             <Link href={item.href} className="block min-w-0 rounded text-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-primary">
               <span className="title-tags"><span className="title-text line-clamp-2 break-words" title={item.title || item.need}>{item.title || item.need}</span>
-                <span className="badge" data-state={item.status}>{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
+                <span className="badge" data-state={conversationState(item)}>{t(conversationLabels[conversationState(item)])}</span>
               </span>
-              {item.stage && <span className="mt-1 block line-clamp-2 text-xs muted">{t(item.stage)}</span>}
+              {item.conversation_incident && <span className="mt-1 block text-xs text-destructive">{t("Operation interrupted")}</span>}
               <span className="mt-1 block truncate text-xs muted">{item.environment_name}</span><time className="home-item-date" dateTime={item.latest_activity_at}>{new Date(item.latest_activity_at).toLocaleDateString(dateLocale, { day: "numeric", month: "short" })}</time>
             </Link>
           </li>)}</ul>}

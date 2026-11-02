@@ -11,6 +11,7 @@ import { type RequestDetail, type ResultVersion, type WorkExecution } from "@/li
 import { activityLabel, DiscussionProgress, ProgressDisclosure, ResponsePreview, WorkSteps } from "@/components/work-progress";
 import { useI18n } from "@/lib/i18n";
 import { roleLabels } from "@/lib/orchestration";
+import { conversationState } from "@/lib/conversation-state";
 import type { SQLReceipt } from "@/lib/analysis-evidence";
 
 type Run = NonNullable<RequestDetail["analysis_runs"]>[number];
@@ -26,16 +27,20 @@ type Event = {
   sqlChecks?: SQLReceipt[];
   sourcesUrl?:string;
   compactSqlReferences?:boolean;
+  subject?:string;
+  ticketId?:string;
 };
 
-export function AnalysisConversation({ value, result, reply, actions, controls, onSelectVersion, trackingUnavailable=false }: {
+export function AnalysisConversation({ value, result, reply, actions, controls, resultActions, ticketActions, onSelectVersion, trackingUnavailable=false }: {
   value: RequestDetail; result?: ResultVersion | null; reply?: ReactNode;
   actions?: ReactNode; controls?: ReactNode; onSelectVersion?: (version: number) => void;
   trackingUnavailable?:boolean;
+  resultActions?: (number:number)=>ReactNode;
+  ticketActions?: (id:string)=>ReactNode;
 }) {
   const { t, dateLocale } = useI18n();
   const runs = value.analysis_runs || [];
-  const working = ["QUEUED", "UNDERSTANDING", "ANALYZING", "REVIEWING", "GENERATING_TICKET", "GENERATING_RESULT", "CONTINUING_CONVERSATION"].includes(value.status);
+  const working = ["IN_PROGRESS", "WAITING_AI"].includes(conversationState(value));
   const pending = value.status === "NEEDS_CLARIFICATION";
   const messages = value.messages || [];
   const list=useRef<HTMLOListElement>(null);
@@ -56,6 +61,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   let latestUserText=value.need;
   const events: Event[] = messages.filter(message => {
     if (["result", "decision_revision", "error"].includes(message.kind)) return false;
+    if(message.role === "assistant" && message.kind === "ticket_preparation" && message.data?.conversation_ticket_id)return false;
     // Pending questions appear once, together with their real answer controls.
     return message.id !== pendingMessage?.id;
   }).map(message => {
@@ -95,8 +101,10 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
       content: typeof summary === "string" ? summary : "", sqlChecks: displayed?.evidence?.database?.checks,
       compactSqlReferences:!requestsSqlIds(value.need),
       sourcesUrl:displayed?.evidence?.claims?.some(claim=>claim.sources?.length)||displayed?.evidence?.database?.checks?.length||displayed?.context_usage?.some(usage=>usage.status==='observed')?`/analyses/${value.id}/versions/${version.number}/sources`:undefined,
-      label: version.status === "PARTIAL" || version.status === "ERROR" || displayed?.evidence?.blocking ? "Partial result" : "Result available" });
+      subject:version.subject,
+      label: version.status === "ERROR" ? "Deep analysis interrupted" : version.status === "PARTIAL" || displayed?.evidence?.blocking ? "Deep analysis finished with limits" : "Deep analysis completed" });
   }
+  for(const ticket of value.conversation_tickets || [])events.push({id:`ticket-${ticket.id}`,at:ticket.created_at,speaker:"assistant",content:ticket.title,ticketId:ticket.id,label:ticket.status === "PUBLISHED" ? "Ticket published" : ticket.status === "ERROR" ? "Ticket publication failed" : "Ticket in preparation"});
   for (const publication of value.publications || []) events.push({ id:`publication-${publication.id}`, at:publication.created_at, speaker:"assistant", content:publication.title,
     label:publication.status === "PUBLISHED" ? "Ticket published" : publication.status === "ERROR" ? "Ticket publication failed" : "Ticket publication not confirmed",
     url:publication.status === "PUBLISHED" && /^https?:\/\//i.test(publication.url) ? publication.url : undefined });
@@ -142,10 +150,13 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
           {event.run && <InvestigationProgress run={event.run} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
           {event.work&&<DiscussionProgress job={event.work} unavailable={trackingUnavailable}/>}
           {event.label && <p className="mb-2 flex items-center gap-2 text-xs font-medium text-primary">{event.discussion && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>}{t(event.label)}{event.version ? ` · v${event.version}` : ""}</p>}
+          {event.subject && <p className="mb-2 text-xs muted">{t("Subject")}: {event.subject}</p>}
           {event.content && (event.version || event.markdown ? <div className="conversation-answer break-words text-sm leading-7"><SafeMarkdown roleMentions compactSqlReferences={event.compactSqlReferences!==false} sqlChecks={event.sqlChecks} sourcesUrl={event.sourcesUrl}>{event.content}</SafeMarkdown></div> : <p className="conversation-message-text whitespace-pre-wrap break-words text-sm leading-7">{event.speaker === "assistant" ? <RoleMentions>{event.content}</RoleMentions> : event.content}</p>)}
           {event.child && <Link className="mt-3 inline-block text-sm text-primary underline" href={`/analyses/${event.child}`}>{t("Open linked change")}</Link>}
           {event.url && <a className="mt-3 inline-block text-sm text-primary underline" href={event.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{t("Open published ticket")}</a>}
           {event.version && event.version !== result?.number && <Button variant="ghost" size="sm" className="mt-3" onClick={()=>onSelectVersion?.(event.version!)}>{t("Read result version {number}", {number:event.version})}</Button>}
+          {event.version && <div className="mt-3 flex flex-wrap gap-2">{resultActions?.(event.version)}</div>}
+          {event.ticketId && <div className="mt-3 flex flex-wrap gap-2">{ticketActions?.(event.ticketId)}</div>}
           {event.version === result?.number && result && <>
             {value.conclusions_stale && <p className="mt-3 text-sm font-medium">{t("Previous conclusions need reassessment")}</p>}
             {(result.status !== "READY" || result.evidence?.blocking) && <p className="mt-3 text-sm muted">{t("Some conclusions remain unverified. See the analysis report for the limits and evidence.")}</p>}
@@ -155,7 +166,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
         </article>
       </li>)}
     </ol>
-    <div className="conversation-reply">
+    <div className="conversation-reply" id={pending || value.conversation_state === "AWAITING_REPLY" ? "conversation-clarification" : undefined}>
       <div className="conversation-reply-content">{reply}</div>
     </div>
     {controls && <div className="flex flex-wrap gap-2">{controls}</div>}

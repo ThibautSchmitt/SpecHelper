@@ -235,6 +235,8 @@ def snapshot(value):
         value.status,
         value.error,
         value.updated_at.isoformat(),
+        value.archived_at.isoformat() if value.archived_at else None,
+        value.display_title,
         value.messages.aggregate(last=Max("id"))["last"],
         value.versions.aggregate(last=Max("number"))["last"],
         [

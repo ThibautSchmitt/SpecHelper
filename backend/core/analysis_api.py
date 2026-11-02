@@ -87,7 +87,8 @@ def analysis_rows():
     messages = RequestMessage.objects.filter(request_id=OuterRef("pk")).order_by("-created_at", "-id")
     publications = PublishedTicket.objects.filter(request_id=OuterRef("pk")).order_by("-updated_at", "id")
     runs = AnalysisRun.objects.filter(request_id=OuterRef("pk")).order_by("-number")
-    return Request.objects.select_related("environment", "source_question_version").annotate(
+    from .conversation_lifecycle import annotate
+    return annotate(Request.objects.select_related("environment", "source_question_version")).annotate(
         result_number=Subquery(versions.values("number")[:1]),
         latest_wait_reason=Subquery(runs.values("job__payload__waiting_reason")[:1]),
         latest_run_wait_reason=Subquery(runs.values("orchestration__waiting_reason")[:1]),
@@ -114,16 +115,16 @@ def analysis_rows():
 def bucket_rows(rows, bucket):
     # Guard missing JSON keys so exclusion does not discard unassessed legacy rows.
     attention = (
-        Q(status="NEEDS_CLARIFICATION")
-        | Q(status="ERROR")
+        Q(conversation_state="AWAITING_REPLY")
+        | Q(conversation_incident=True)
         | Q(status__in=["DRAFT", "READY", "PARTIAL"], scope_assessment__has_key="status", scope_assessment__status__in=["NEEDS_CLARIFICATION", "OUT_OF_SCOPE"])
     )
     if bucket == "clarify":
         return rows.filter(attention)
     if bucket == "consult":
-        return rows.filter(status__in=["READY", "PARTIAL"], has_result=True).exclude(attention)
+        return rows.filter(has_result=True, conversation_state="DISCUSSION").exclude(attention)
     if bucket == "active":
-        return rows.filter(status__in=ACTIVE_STATUSES)
+        return rows.filter(conversation_state__in=["IN_PROGRESS", "WAITING_AI"])
     return rows
 
 
@@ -137,14 +138,28 @@ class AnalysisDeleteIn(Schema):
     confirmed: bool = False
 
 
+class ArchiveIn(Schema):
+    model_config = ConfigDict(extra="forbid")
+    archived: bool
+
+
+@router.patch("/analyses/{analysis_id}/archive")
+@transaction.atomic
+def archive_conversation(request, analysis_id: UUID, payload: ArchiveIn):
+    from .api import request_dict
+    value = get_object_or_404(Request.objects.select_for_update(), pk=analysis_id)
+    value.archived_at = (value.archived_at or timezone.now()) if payload.archived else None
+    value.save(update_fields=["archived_at"])
+    return request_dict(value, full=True)
+
+
 @router.patch("/analyses/{analysis_id}/title")
 @transaction.atomic
 def rename_analysis(request, analysis_id: UUID, payload: AnalysisTitleIn):
     from .analysis_titles import analysis_title
-    from .business_decisions import BUSY
 
     value = get_object_or_404(Request.objects.select_for_update(), pk=analysis_id)
-    if value.status in BUSY:
+    if Job.objects.filter(kind__in=["analysis", "discussion"], target=str(value.pk), status__in=["QUEUED", "RUNNING"]).exists():
         raise HttpError(409, "Wait for the analysis to finish before renaming it.")
     title = " ".join(payload.title.split())
     if not title:
@@ -191,6 +206,8 @@ def list_analyses(
     bucket: Literal["all", "clarify", "consult", "active"] = "all",
     page: int = 1,
     page_size: int = 20,
+    archived: Literal["active", "archived", "all"] = "active",
+    conversation_status: str = "",
 ):
     if not 1 <= page <= 1_000_000 or not 1 <= page_size <= 100 or len(q) > 500:
         raise HttpError(422, "Invalid analysis search or pagination.")
@@ -198,9 +215,16 @@ def list_analyses(
         raise HttpError(422, "Invalid environment filter.")
     if status and status not in Request.Status.values:
         raise HttpError(422, "Unknown analysis status.")
+    from .conversation_lifecycle import STATES
+    if conversation_status and conversation_status not in STATES:
+        raise HttpError(422, "Unknown conversation status.")
     from .discussion_access import visible
 
     rows = bucket_rows(visible(request, analysis_rows()), bucket)
+    if archived != "all":
+        rows = rows.filter(archived_at__isnull=archived == "active")
+    if conversation_status:
+        rows = rows.filter(conversation_state=conversation_status)
     if workflow != "all":
         rows = rows.filter(workflow=workflow).filter(Q(intent_mode="explicit") | ~Q(understanding="") | Q(has_result=True))
     if status:
@@ -215,6 +239,8 @@ def list_analyses(
             | Q(environment_name_snapshot__icontains=text) | Q(environment__name__icontains=text)
             | Q(versions__ticket__title__icontains=text)
             | Q(versions__explanation__title__icontains=text)
+            | Q(messages__content__icontains=text)
+            | Q(conversation_tickets__draft__title__icontains=text)
         ).distinct()
     rows = rows.order_by("-latest_activity_at", "-created_at", "id")
     total = rows.count()
@@ -231,7 +257,7 @@ def list_analyses(
 def analysis_overview(request):
     from .discussion_access import visible
 
-    rows = visible(request, analysis_rows()).order_by("-latest_activity_at", "-created_at", "id")
+    rows = visible(request, analysis_rows()).filter(archived_at__isnull=True).order_by("-latest_activity_at", "-created_at", "id")
     sections = {}
     for bucket in ("clarify", "consult", "active"):
         selected = bucket_rows(rows, bucket)
@@ -258,7 +284,7 @@ def get_analysis(request, analysis_id: UUID):
 def get_progress(request, analysis_id: UUID, cursor: str = ""):
     from .work_progress import snapshot
 
-    value = get_object_or_404(Request.objects.only("id", "status", "error", "updated_at"), pk=analysis_id)
+    value = get_object_or_404(Request.objects.only("id", "status", "error", "updated_at", "archived_at", "display_title"), pk=analysis_id)
     current = snapshot(value)
     if cursor == current["progress_cursor"]:
         return {"unchanged": True, "progress_cursor": cursor}
@@ -307,7 +333,7 @@ def delete_analysis(request, analysis_id: UUID, payload: AnalysisDeleteIn):
     value = get_object_or_404(Request.all_objects.select_for_update(), pk=analysis_id)
     if value.deleted_at:
         return {"status": "DELETED"}
-    if value.status in ACTIVE_STATUSES or Job.objects.filter(
+    if Job.objects.filter(
         kind__in=["analysis", "discussion"], target=str(value.pk), status__in=["QUEUED", "RUNNING"],
     ).exists() or StepExecution.objects.filter(
         job__kind="analysis", job__target=str(value.pk), status="RUNNING",

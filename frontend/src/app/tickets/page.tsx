@@ -22,7 +22,9 @@ type Ticket = {
   environment_name: string;
   request_id: string;
   analysis_deleted?: boolean;
-  version_number: number;
+  version_number: number | null;
+  kind?: string;
+  conversation_ticket_id?: string;
   status: string;
   created_at: string;
   updated_at?: string;
@@ -42,6 +44,7 @@ type TicketList = {
   statuses?: string[];
 };
 const publicationStatuses: Record<string, string> = {
+  DRAFT: "Ticket in preparation",
   PUBLISHED: "Published",
   PUBLISHING: "Publishing",
   PENDING: "Queued",
@@ -164,7 +167,7 @@ export default function TicketsPage() {
           <h1>{t("Tickets")}</h1>
           <p className="mt-2 muted max-w-xl">
             {t(
-              "Tickets and publication attempts, linked to their exact analysis version.",
+              "Prepared tickets and publications, linked to their conversation and source analysis.",
             )}
           </p>
         </div>
@@ -274,10 +277,10 @@ export default function TicketsPage() {
       )}
       <Card
         className="p-0 overflow-hidden"
-        aria-label={t("Ticket publications")}
+        aria-label={t("Tickets")}
       >
         <div className="border-b px-5 py-4 flex flex-wrap justify-between gap-2">
-          <h2>{t("Ticket publications")}</h2>
+          <h2>{t("Tickets")}</h2>
           <span className="text-sm muted">
             {t("{total} tickets", { total: data.total })}
           </span>
@@ -294,7 +297,7 @@ export default function TicketsPage() {
               size={28}
               aria-hidden="true"
             />
-            <h3>{t("No ticket publications match these filters.")}</h3>
+            <h3>{t("No tickets match these filters.")}</h3>
             <p className="mt-2 text-sm muted">
               {t(
                 "Publish a completed request to your ticket platform, or adjust these filters.",
@@ -362,7 +365,7 @@ export default function TicketsPage() {
                       </span>
                       </div>
                       <p className="mt-1 text-xs muted break-words">
-                        {platformName(ticket.platform)} ·{" "}
+                        {ticket.kind === "preparation" ? t("Not published") : platformName(ticket.platform)} ·{" "}
                         {ticket.external_key ||
                           ticket.external_id ||
                           t("No external reference")}
@@ -408,6 +411,7 @@ export default function TicketsPage() {
                 {selected.title}
               </h2>
             </div>
+            {selected.kind === "preparation" && !selected.analysis_deleted && <Button variant="outline" size="sm" asChild><Link href={`/analyses/${selected.request_id}?ticket=${selected.conversation_ticket_id}`}>{t("Open ticket draft")}</Link></Button>}
             {externalUrl && (
               <Button variant="outline" size="sm" asChild>
                 <a href={externalUrl} target="_blank" rel="noopener noreferrer">
@@ -482,11 +486,9 @@ export default function TicketsPage() {
                   </p>
                   {detail.analysis_deleted ? <p className="mt-2 text-sm muted">{t("Source analysis deleted · publication evidence preserved")}</p> : <Link
                     className="inline-block mt-2 text-primary underline text-sm"
-                    href={`/requests/${detail.request_id}?version=${detail.version_number}`}
+                    href={`/analyses/${detail.request_id}${detail.version_number ? `?version=${detail.version_number}` : ""}`}
                   >
-                    {t("Published analysis · v{number}", {
-                      number: detail.version_number,
-                    })}
+                    {detail.version_number ? t("Source analysis · v{number}", {number:detail.version_number}) : t("Source conversation")}
                   </Link>}
                   <p className="mt-2 text-xs muted">
                     {t("Created")}: {date(detail.created_at)}

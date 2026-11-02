@@ -169,9 +169,9 @@ class ReliableOrchestrator(ConfrontationOrchestrator):
         )
         self.request.understanding = requirement.understanding
         self.run.orchestration["inferred_intent"] = requirement.intent
-        if automatic and not self.request.versions.exists():
-            # Existing published histories keep their type. A later evolution is
-            # represented by a linked child rather than rewriting its origin.
+        if automatic and (self.run.context_snapshot.get("dossier", {}).get("cycle_scope") or not self.request.versions.exists()):
+            # New scoped cycles resolve their own intent. Earlier result types
+            # remain derived from their immutable outputs and recorded resolution.
             workflow = "question" if requirement.intent in {"question", "mixed", "unknown"} else "request"
             self.request.workflow = workflow
             self.is_question = workflow == "question"

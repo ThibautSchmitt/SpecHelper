@@ -282,6 +282,7 @@ class Request(models.Model):
         )
 
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
 
 class RequestAttachment(models.Model):
@@ -540,6 +541,18 @@ class RequestMessage(models.Model):
         ordering = ["created_at", "id"]
 
 
+class ConversationTicket(models.Model):
+    """One editable ticket subject; source results and publications remain immutable."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request = models.ForeignKey(Request, related_name="conversation_tickets", on_delete=models.PROTECT)
+    source_version = models.ForeignKey(ResultVersion, null=True, on_delete=models.PROTECT)
+    topic_message = models.ForeignKey(RequestMessage, null=True, on_delete=models.SET_NULL)
+    draft = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class ConnectionAttempt(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     provider = models.CharField(max_length=20)
@@ -601,6 +614,7 @@ class PublishedTicket(models.Model):
     version = models.ForeignKey(
         ResultVersion, related_name="published_tickets", on_delete=models.PROTECT
     )
+    conversation_ticket = models.ForeignKey(ConversationTicket, null=True, on_delete=models.PROTECT, related_name="publications")
     connector = models.ForeignKey(
         TicketConnector, related_name="published_tickets", on_delete=models.PROTECT
     )
@@ -641,9 +655,12 @@ class PublishedTicket(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["version", "destination"],
-                condition=~models.Q(status="ERROR"),
+                condition=models.Q(conversation_ticket__isnull=True) & ~models.Q(status="ERROR"),
                 name="unique_version_ticket_destination",
             ),
+            models.UniqueConstraint(fields=["conversation_ticket", "destination"],
+                condition=models.Q(conversation_ticket__isnull=False) & ~models.Q(status="ERROR"),
+                name="unique_prepared_ticket_destination"),
             models.UniqueConstraint(
                 fields=["platform", "destination", "external_id"],
                 condition=~models.Q(external_id=""),
@@ -668,6 +685,7 @@ class TicketPublicationDraft(models.Model):
     version = models.ForeignKey(
         ResultVersion, related_name="ticket_drafts", on_delete=models.CASCADE
     )
+    conversation_ticket = models.ForeignKey(ConversationTicket, null=True, on_delete=models.PROTECT, related_name="publication_drafts")
     connector = models.ForeignKey(
         TicketConnector, related_name="ticket_drafts", on_delete=models.CASCADE
     )
@@ -681,8 +699,10 @@ class TicketPublicationDraft(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["version", "connector", "project"], name="unique_ticket_draft_destination"
-            )
+                fields=["version", "connector", "project"], condition=models.Q(conversation_ticket__isnull=True), name="unique_ticket_draft_destination"
+            ),
+            models.UniqueConstraint(fields=["conversation_ticket", "version", "connector", "project"],
+                condition=models.Q(conversation_ticket__isnull=False), name="unique_prepared_draft_destination"),
         ]
 
 

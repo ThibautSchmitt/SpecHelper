@@ -35,7 +35,8 @@ for (const language of ["en", "fr"] as const) {
   test(`unified analysis retains history and renders accessible diagrams in ${language}`, async ({ page }) => {
     test.setTimeout(60000);
     await setup(page, language);
-    await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: dossier() }));
+    let current = dossier();
+    await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: current }));
     await page.goto(`/analyses/${id}`);
     await expect(page.getByRole("link", { name: t("All analyses"), exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: t("Conversation"), exact: true })).toContainText("Explain the export.");
@@ -57,7 +58,8 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/analyses/${id}/need`, route => {
       expect(route.request().postDataJSON()).toMatchObject({ need: "Explain the archived export exception.", expected_revision: 0, expected_version: 1, expected_decision_revision: 0 });
       saved = true;
-      return route.fulfill({ json: { ...dossier(), status: "QUEUED", need_revision: 1, conclusions_stale: true, need: "Explain the archived export exception." } });
+      current = { ...dossier(), status: "QUEUED", need_revision: 1, conclusions_stale: true, need: "Explain the archived export exception." } as typeof current;
+      return route.fulfill({ json: current });
     });
     await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => saved).toBe(true);
@@ -146,10 +148,10 @@ for (const language of ["en", "fr"] as const) {
     await page.getByRole("button", { name: t("Search"), exact: true }).click();
     await expect(page.getByRole("group", { name: t("Analysis type"), exact: true })).toHaveCount(0);
     await page.getByLabel(t("Environment"), { exact: true }).selectOption("1");
-    await page.getByLabel(t("Status"), { exact: true }).selectOption("READY");
+    await page.getByLabel(t("Status"), { exact: true }).selectOption("DISCUSSION");
     await page.getByRole("button", { name: t("Next"), exact: true }).click();
     await expect(page.getByRole("heading", { name: "Second result", exact: true })).toBeVisible();
-    expect(Object.fromEntries(requests.at(-1)!)).toMatchObject({ q: "export", environment_id: "1", status: "READY", page: "2" });
+    expect(Object.fromEntries(requests.at(-1)!)).toMatchObject({ q: "export", environment_id: "1", conversation_status: "DISCUSSION", page: "2" });
     await page.getByRole("button", { name: t("Previous"), exact: true }).click();
     await expect(page.getByRole("heading", { name: "Historical question", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

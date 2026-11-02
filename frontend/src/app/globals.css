@@ -1315,3 +1315,8 @@ summary:focus-visible {
   .action-menu > summary { min-height: 44px; min-width: 44px; padding: 8px 12px; }
   .action-menu-items [data-slot="button"] { min-height: 44px; }
 }
+
+/* Conversation status describes activity; incident badges retain operation failures. */
+.badge[data-state="IN_PROGRESS"] { color: var(--running); background: var(--running-soft); }
+.badge[data-state="WAITING_AI"] { color: var(--waiting); background: var(--waiting-soft); }
+.badge[data-state="AWAITING_REPLY"] { color: var(--paused); background: var(--paused-soft); }

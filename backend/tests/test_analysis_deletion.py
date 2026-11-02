@@ -58,6 +58,7 @@ def test_deletion_hides_all_views_and_legacy_outputs_but_keeps_other_analyses(cl
 @pytest.mark.parametrize("status", ["QUEUED", "ANALYZING", "REVIEWING", "CONTINUING_CONVERSATION"])
 def test_active_analysis_requires_cancellation(client, environment, status):
     value = Request.objects.create(environment=environment, need="Busy", status=status)
+    Job.objects.create(kind="analysis",target=str(value.pk),status="QUEUED")
     assert remove(client, value).status_code == 409
     assert Request.objects.filter(pk=value.pk).exists()
 

@@ -34,10 +34,11 @@ def source_version(question_id, number):
     value = get_object_or_404(
         ResultVersion.objects.select_related("request", "run"),
         request_id=question_id,
-        request__deleted_at__isnull=True, request__workflow="question",
+        request__deleted_at__isnull=True,
         number=number,
     )
-    if value.status not in {"READY", "PARTIAL"} or not value.explanation:
+    from .ticket_preparation import version_workflow
+    if version_workflow(value) != "question" or value.status not in {"READY", "PARTIAL"} or not value.explanation:
         raise HttpError(409, "A usable consolidated answer is required.")
     return value
 
@@ -83,10 +84,14 @@ def question_dict(value, full=False):
             .select_related("source_question_version")
             .order_by("created_at")
         ]
-        result["latest_version"] = question_version_dict(value.versions.order_by("-number").first())
+        from .api import version_dict
+        from .ticket_preparation import version_workflow
+
+        latest = value.versions.order_by("-number").first()
+        result["latest_version"] = question_version_dict(latest) if latest and version_workflow(latest) == "question" else version_dict(latest)
         result.pop("ticket", None)
         result["markdown"] = (
-            result["latest_version"]["answer_markdown"] if result["latest_version"] else None
+            result["latest_version"].get("answer_markdown") or result["latest_version"].get("markdown") if result["latest_version"] else None
         )
     return result
 

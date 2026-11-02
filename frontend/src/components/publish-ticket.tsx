@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ProviderLogo } from "@/components/provider-logo";
 import { SafeMarkdown } from "@/components/safe-markdown";
 import { secureFetch } from "@/lib/access";
@@ -77,6 +77,7 @@ type Publication = {
   attachment_delivery?: { id: string; name: string; status: "TRANSFERRING" | "TRANSFERRED" | "UNCERTAIN"; error?: string; external_id?: string }[];
 };
 type Payload = Partial<Presentation> & {
+  conversation_ticket_id?: string;
   draft_id?: string;
   draft_revision?: number;
   connector_id: number;
@@ -114,14 +115,17 @@ export function PublishTicket({
   version,
   triggerLabel = "Prepare ticket",
   preparedDraft,
+  conversationTicketId,
 }: {
   requestId: string;
   version: number;
   triggerLabel?: string;
   preparedDraft?: { title: string; body: string };
+  conversationTicketId?: string;
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
+  const prefix = useId();
   const [open, setOpen] = useState(false);
   const [connectors, setConnectors] = useState<TicketConnector[]>([]);
   const [connector, setConnector] = useState("");
@@ -147,8 +151,9 @@ export function PublishTicket({
   const [error, setError] = useState("");
   const [result, setResult] = useState<Publication | null>(null);
   const [pending, setPending] = useState<Payload | null>(null);
-  const storageKey = `publication:${requestId}:${version}`;
+  const storageKey = `publication:${requestId}:${version}${conversationTicketId ? ":"+conversationTicketId : ""}`;
   const endpoint = `/requests/${requestId}/versions/${version}`;
+  const ticketQuery = conversationTicketId ? `&conversation_ticket_id=${conversationTicketId}` : "";
   useEffect(() => {
     if (!open) return;
     let alive = true;
@@ -164,7 +169,7 @@ export function PublishTicket({
         storedKey = payload.idempotency_key;
       }
     } catch {}
-    api<Attempt[]>(`${endpoint}/publications`)
+    api<Attempt[]>(`${endpoint}/publications${conversationTicketId ? "?conversation_ticket_id="+conversationTicketId : ""}`)
       .then((attempts) => {
         if (!alive) return;
         const unfinished = attempts.find((p) =>
@@ -267,7 +272,7 @@ export function PublishTicket({
     setBusy(true);
     setError("");
     setPreview(null);
-    api<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}`)
+    api<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}${ticketQuery}`)
       .then(value => { if (generation === previewGeneration.current) applyPreview(value); })
       .catch(error => { if (generation === previewGeneration.current) setError(error.message); })
       .finally(() => { if (generation === previewGeneration.current) setBusy(false); });
@@ -284,7 +289,7 @@ export function PublishTicket({
     setBusy(true);
     setError("");
     try {
-      const value = await send<Preview>(`${endpoint}/publication-preview`, { connector_id: Number(connector), project, template_id: template, issue_type: issueType, ...presentation, ...changes });
+      const value = await send<Preview>(`${endpoint}/publication-preview`, { conversation_ticket_id:conversationTicketId, connector_id: Number(connector), project, template_id: template, issue_type: issueType, ...presentation, ...changes });
       if (generation === previewGeneration.current) applyPreview(value);
     } catch (error) {
       if (generation === previewGeneration.current) { setPresentation(before); setTemplate(previousTemplate); setIssueType(previousType); setError((error as Error).message); }
@@ -293,11 +298,11 @@ export function PublishTicket({
     }
   }
   function draftPayload() {
-    return { connector_id: Number(connector), project, title, body, fields, labels, assignees, template_id: template, issue_type: issueType, options_revision: preview?.revision, draft_id: preview?.draft_id, draft_revision: preview?.draft_revision, ...presentation };
+    return { conversation_ticket_id:conversationTicketId, connector_id: Number(connector), project, title, body, fields, labels, assignees, template_id: template, issue_type: issueType, options_revision: preview?.revision, draft_id: preview?.draft_id, draft_revision: preview?.draft_revision, ...presentation };
   }
   async function saveDraft() {
     try {
-      const value = await send<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}`, draftPayload(), "PUT");
+      const value = await send<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}${ticketQuery}`, draftPayload(), "PUT");
       setPreview(value);
       setDirty(false);
       setSaved(true);
@@ -313,7 +318,7 @@ export function PublishTicket({
     setBusy(true);
     setError("");
     try {
-      const value = await api<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}`);
+      const value = await api<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}${ticketQuery}`);
       if (generation === previewGeneration.current) applyPreview(value);
     } catch (error) {
       if (generation === previewGeneration.current) setError((error as Error).message);
@@ -402,7 +407,7 @@ export function PublishTicket({
               : "Publication failed. Verify the destination before retrying.",
           );
           if (response.status === 409) {
-            const attempts = await api<Attempt[]>(`${endpoint}/publications`);
+            const attempts = await api<Attempt[]>(`${endpoint}/publications${conversationTicketId ? "?conversation_ticket_id="+conversationTicketId : ""}`);
             const existing = attempts.find(
               (attempt) =>
                 attempt.connector_id === payload.connector_id &&
@@ -493,7 +498,7 @@ export function PublishTicket({
       <dialog
         ref={dialog}
         className="publication-dialog"
-        aria-labelledby={`publication-title-${version}`}
+        aria-labelledby={`publication-title-${prefix}`}
         onCancel={(event) => {
           event.preventDefault();
           close();
@@ -501,7 +506,7 @@ export function PublishTicket({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id={`publication-title-${version}`}>{t("Publish ticket")}</h2>
+            <h2 id={`publication-title-${prefix}`}>{t("Publish ticket")}</h2>
             <p className="mt-1 text-sm muted">
               {t(
                 "Publish analysis version {number}. The saved analysis will remain unchanged.",
@@ -583,6 +588,7 @@ export function PublishTicket({
               try { current = await saveDraft(); }
               catch (error) { setError((error as Error).message); setBusy(false); return; }
               publish({
+                conversation_ticket_id:conversationTicketId,
                 ...presentation,
                 draft_id: current.draft_id,
                 draft_revision: current.draft_revision,
@@ -610,9 +616,9 @@ export function PublishTicket({
             <fieldset disabled={busy} className="grid gap-x-4 sm:grid-cols-2">
               <p className="mt-3 text-xs muted sm:col-span-2">{t("The selected external account publishes the ticket; it does not identify the person using SpecHelper.")}</p>
               <div className="field">
-                <label htmlFor="publish-connector">{t("Publication connection")}</label>
+                <label htmlFor={prefix+"-publish-connector"}>{t("Publication connection")}</label>
                 <select
-                  id="publish-connector"
+                  id={prefix+"-publish-connector"}
                   required
                   value={connector}
                   onChange={(e) => change(() => setConnector(e.target.value))}
@@ -626,11 +632,11 @@ export function PublishTicket({
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="publish-project">
+                <label htmlFor={prefix+"-publish-project"}>
                   {t("Project / repository")}
                 </label>
                 <select
-                  id="publish-project"
+                  id={prefix+"-publish-project"}
                   required
                   value={project}
                   onChange={(e) =>
@@ -659,11 +665,11 @@ export function PublishTicket({
               </div>}
               {!!preview?.templates.length && (
                 <div className="field">
-                  <label htmlFor="publish-template">
+                  <label htmlFor={prefix+"-publish-template"}>
                     {t("Ticket template")}
                   </label>
                   <select
-                    id="publish-template"
+                    id={prefix+"-publish-template"}
                     value={template}
                     required={presentation.ticket_format === "project"}
                     disabled={presentation.ticket_format === "standard"}
@@ -680,9 +686,9 @@ export function PublishTicket({
               )}
               {!!preview?.issue_types.length && (
                 <div className="field">
-                  <label htmlFor="publish-issue-type">{t("Issue type")}</label>
+                  <label htmlFor={prefix+"-publish-issue-type"}>{t("Issue type")}</label>
                   <select
-                    id="publish-issue-type"
+                    id={prefix+"-publish-issue-type"}
                     required
                     value={issueType}
                     onChange={(e) => change(() => { void recompose({ issue_type: e.target.value }); })}
@@ -728,9 +734,9 @@ export function PublishTicket({
                   <p className="text-xs muted">{t("These options change only the ticket presentation. The verified analysis and detailed goal.md remain unchanged.")}</p>
                 </fieldset>
                 <div className="field">
-                  <label htmlFor="publish-title">{t("Ticket title")}</label>
+                  <label htmlFor={prefix+"-publish-title"}>{t("Ticket title")}</label>
                   <Input
-                    id="publish-title"
+                    id={prefix+"-publish-title"}
                     required
                     value={title}
                     onChange={(e) => {
@@ -740,11 +746,11 @@ export function PublishTicket({
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="publish-body">
+                  <label htmlFor={prefix+"-publish-body"}>
                     {t("Ticket description")}
                   </label>
                   <Textarea
-                    id="publish-body"
+                    id={prefix+"-publish-body"}
                     required={!preview.render_fields}
                     className="min-h-52"
                     value={body}
@@ -756,7 +762,7 @@ export function PublishTicket({
                 </div>
                 {preview.fields.map((field) => (
                   <div key={field.id} className="field">
-                    <label htmlFor={`publish-field-${field.id}`}>
+                    <label htmlFor={`${prefix}-publish-field-${field.id}`}>
                       {field.label}
                       {field.required ? " *" : ""}
                     </label>
@@ -765,7 +771,7 @@ export function PublishTicket({
                     )}
                     {field.type === "checkbox" ? (
                       <input
-                        id={`publish-field-${field.id}`}
+                        id={`${prefix}-publish-field-${field.id}`}
                         disabled={field.read_only}
                         type="checkbox"
                         required={field.required}
@@ -780,7 +786,7 @@ export function PublishTicket({
                       />
                     ) : field.type === "textarea" ? (
                       <Textarea
-                        id={`publish-field-${field.id}`}
+                        id={`${prefix}-publish-field-${field.id}`}
                         disabled={field.read_only}
                         required={field.required}
                         value={String(fields[field.id] ?? "")}
@@ -791,7 +797,7 @@ export function PublishTicket({
                       />
                     ) : field.options?.length ? (
                       <select
-                        id={`publish-field-${field.id}`}
+                        id={`${prefix}-publish-field-${field.id}`}
                         disabled={field.read_only}
                         required={field.required}
                         multiple={["checkboxes", "multiselect"].includes(
@@ -826,7 +832,7 @@ export function PublishTicket({
                       </select>
                     ) : (
                       <Input
-                        id={`publish-field-${field.id}`}
+                        id={`${prefix}-publish-field-${field.id}`}
                         disabled={field.read_only}
                         required={field.required}
                         type={
@@ -847,9 +853,9 @@ export function PublishTicket({
                 ))}
                 {!!preview.labels.length && (
                   <div className="field">
-                    <label htmlFor="publish-labels">{t("Labels")}</label>
+                    <label htmlFor={prefix+"-publish-labels"}>{t("Labels")}</label>
                     <select
-                      id="publish-labels"
+                      id={prefix+"-publish-labels"}
                       multiple
                       value={labels}
                       onChange={(e) => {
@@ -869,9 +875,9 @@ export function PublishTicket({
                 )}
                 {!!preview.assignees.length && (
                   <div className="field">
-                    <label htmlFor="publish-assignees">{t("Assignees")}</label>
+                    <label htmlFor={prefix+"-publish-assignees"}>{t("Assignees")}</label>
                     <select
-                      id="publish-assignees"
+                      id={prefix+"-publish-assignees"}
                       multiple
                       value={assignees}
                       onChange={(e) => {
@@ -922,7 +928,7 @@ export function PublishTicket({
                 <div className="mb-4 text-xs muted" aria-label={t("Attachment transfer preview")}>
                   <p>{t("Files to transfer")}: {presentation.include_attachments ? (preview.selected_attachments || []).map(file => file.name).join(", ") || t("None") : t("None")}</p>
                 </div>
-                {!!publicationIssues.length && <div id={`publication-issues-${version}`} role="status" className="mb-4 rounded-lg border border-amber-500/50 p-4 text-sm">
+                {!!publicationIssues.length && <div id={`publication-issues-${prefix}`} role="status" className="mb-4 rounded-lg border border-amber-500/50 p-4 text-sm">
                   <p className="font-semibold">{t("Publication is blocked")}</p>
                   <ul className="mt-2 list-disc pl-5">{publicationIssues.map((reason, index) => <li key={index}>{reason}</li>)}</ul>
                   {preview.publication_allowed === false && <p className="mt-2 muted">{t("You can review and save this draft. Exporting it does not complete the missing checks.")}</p>}
@@ -934,7 +940,7 @@ export function PublishTicket({
                   {saved && !dirty && <p role="status" className="text-xs muted">{t("Publication draft saved.")}</p>}
                 <Button
                   disabled={busy || publicationIssues.length > 0}
-                  aria-describedby={publicationIssues.length ? `publication-issues-${version}` : undefined}
+                  aria-describedby={publicationIssues.length ? `publication-issues-${prefix}` : undefined}
                 >
                   {t("Create ticket")}
                 </Button>

@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import BooleanField, Case, Q, Value, When
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -220,6 +220,7 @@ def environment_dict(environment):
 
 def request_dict(value, full=False):
     from .analysis_titles import analysis_title
+    from .conversation_lifecycle import presentation
     from .discussion import describe as describe_discussion
 
     result = {
@@ -249,6 +250,8 @@ def request_dict(value, full=False):
         or (value.environment.name if value.environment_id else "Environment not selected" if not value.baseline else "Deleted environment"),
         "created_at": value.created_at,
         "updated_at": value.updated_at,
+        "archived_at": value.archived_at,
+        **presentation(value),
     }
     if full:
         from .work_progress import snapshot as progress_snapshot_for_request
@@ -307,7 +310,10 @@ def request_dict(value, full=False):
                 "ticket": analysis.ticket if analysis else None,
                 "markdown": analysis.markdown if analysis else None,
                 "versions": list(
-                    value.versions.values("id", "number", "format_version", "status", "created_at")
+                    value.versions.annotate(
+                        output_question=Case(When(~Q(explanation={}),then=Value(True)),default=Value(False),output_field=BooleanField()),
+                        output_change=Case(When(~Q(ticket={}),then=Value(True)),default=Value(False),output_field=BooleanField()),
+                    ).values("id", "number", "format_version", "status", "created_at", "run__number", "context_snapshot__dossier__need", "context_snapshot__dossier__workflow", "run__orchestration__intent_resolution__workflow", "output_question", "output_change")
                 ),
                 "messages": [
                     {
@@ -345,8 +351,16 @@ def request_dict(value, full=False):
         from .conversation import attribute_messages, progress_snapshot, role_reviews
         from .discussion_output import normalize_messages
         from .models import PublishedTicket
+        from .ticket_preparation import summaries
 
         normalize_messages(result["messages"], value.need)
+        for version in result["versions"]:
+            version["run_number"] = version.pop("run__number")
+            version["subject"] = version.pop("context_snapshot__dossier__need") or value.need
+            frozen_workflow = version.pop("context_snapshot__dossier__workflow")
+            resolved_workflow = version.pop("run__orchestration__intent_resolution__workflow")
+            question_output, change_output = version.pop("output_question"), version.pop("output_change")
+            version["workflow"] = "question" if question_output else "request" if change_output else resolved_workflow or frozen_workflow or value.workflow
         attribute_messages(result["messages"], result["analysis_runs"])
         for run in result["analysis_runs"]:
             run["execution"] = progress_snapshot(run, result["messages"])
@@ -360,6 +374,7 @@ def request_dict(value, full=False):
              "created_at": row.finished_at or row.created_at}
             for row in PublishedTicket.objects.filter(request=value).select_related("version").order_by("created_at", "id")
         ]
+        result["conversation_tickets"] = summaries(value)
         evidence = result["evidence"] or {}
         result["result_state"] = result_state(
             value.status, value.workflow,
@@ -381,9 +396,13 @@ def request_dict(value, full=False):
 def version_dict(version):
     if version is None:
         return None
+    from .ticket_preparation import version_workflow
     artifacts = {a.name: a.content for a in version.artifacts.all()}
     return {
         "id": str(version.id),
+        "workflow": version_workflow(version),
+        "explanation": version.explanation,
+        "answer_markdown": artifacts.get("answer.md", ""),
         "number": version.number,
         "format_version": version.format_version,
         "run_number": version.run.number if version.run_id else None,
@@ -780,7 +799,9 @@ def revise_request_scope(request, request_id: UUID, payload: ScopeIn):
 def get_request(request, request_id: UUID):
     return request_dict(
         get_object_or_404(
-            Request.objects.select_related("environment"), pk=request_id, workflow="request"
+            Request.objects.select_related("environment").filter(
+                Q(workflow="request") | Q(versions__ticket__has_key="title")
+            ).distinct(), pk=request_id
         ),
         full=True,
     )
@@ -877,7 +898,7 @@ def continue_request(request, request_id: UUID, payload: ContinuationIn):
 def get_version(request, request_id: UUID, number: int):
     return version_dict(
         get_object_or_404(
-            ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True, request__workflow="request"
+            ResultVersion, request_id=request_id, number=number, request__deleted_at__isnull=True
         )
     )
 
@@ -889,7 +910,7 @@ def download_artifact(
     artifact = get_object_or_404(
         GeneratedArtifact,
         version__request_id=request_id,
-        version__request__deleted_at__isnull=True, version__request__workflow="request",
+        version__request__deleted_at__isnull=True,
         version__number=number,
         name=name,
     )

@@ -14,6 +14,7 @@ from ninja.errors import HttpError
 
 from .i18n import translate
 from .models import Environment, PublishedTicket, Request, TicketConnector, TicketPublicationDraft
+from .ticket_preparation import publication_ticket, version_workflow
 from .ticket_providers import NetworkUncertain, TicketProviderError, provider_for, render_body
 
 
@@ -235,7 +236,7 @@ def preview(
     version, connector, project, template_id="", issue_type="", presentation=None, *, restore=False
 ):
     require_environment(version, connector)
-    if version.request.workflow != "request":
+    if version_workflow(version) != "request":
         raise HttpError(409, "A question cannot publish an external ticket.")
     if version.status not in {"READY", "PARTIAL"}:
         raise HttpError(409, "Only a completed result version can be published.")
@@ -349,8 +350,9 @@ def preview(
         "assignees": options.get("defaults", {}).get("assignees", []),
         "options_revision": options.get("revision", ""),
     }
+    conversation_ticket = publication_ticket(version, presentation.get("conversation_ticket_id"))
     existing = TicketPublicationDraft.objects.filter(
-        version=version, connector=connector, project=project
+        version=version, connector=connector, project=project, conversation_ticket=conversation_ticket
     ).first()
     if restore and existing and {"include_diagrams": False, **existing.presentation} == selection:
         # Only restore against the same destination metadata revision. A changed
@@ -360,7 +362,7 @@ def preview(
     policy = attachment_policy(connector, project) if selection.get("include_attachments") else None
     chosen = selected_attachments(version, connector, selection, policy=policy)
     content = {**content, "selected_attachments": chosen}
-    draft = save_draft(version, connector, project, selection, content)
+    draft = save_draft(version, connector, project, selection, content, conversation_ticket=conversation_ticket)
     return {
         **result,
         "title": content["title"],
@@ -526,13 +528,15 @@ def publish(version, connector, payload):
         raise HttpError(404, "Analysis not found.")
     if payload.get("confirmed") is not True:
         raise HttpError(422, "Explicit human confirmation is required to publish a ticket.")
-    if version.request.workflow != "request":
+    if version_workflow(version) != "request":
         raise HttpError(409, "A question cannot publish an external ticket.")
     if version.status not in {"READY", "PARTIAL"}:
         raise HttpError(409, "Only a completed result version can be published.")
     from .ticket_presentation import publication_blockers
 
     blockers = publication_blockers(version)
+    conversation_ticket = publication_ticket(version, payload.get("conversation_ticket_id"))
+    logical_scope = {"conversation_ticket":conversation_ticket} if conversation_ticket else {"version":version, "conversation_ticket__isnull":True}
     project = payload["project"]
     destination = canonical_hash(
         {
@@ -555,6 +559,8 @@ def publish(version, connector, payload):
         )
     }
     draft = None
+    if conversation_ticket:
+        snapshot.update(conversation_ticket_id=str(conversation_ticket.pk), conversation_ticket_revision=conversation_ticket.draft.get("revision", 0))
     if "ticket_format" in payload:
         from .ticket_attachments import selected_attachments
         from .ticket_presentation import PRESENTATION_KEYS
@@ -571,7 +577,7 @@ def publish(version, connector, payload):
         snapshot["version_id"] = str(version.pk)
         if payload.get("draft_id"):
             draft = TicketPublicationDraft.objects.filter(
-                pk=payload["draft_id"], version=version, connector=connector, project=project
+                pk=payload["draft_id"], version=version, connector=connector, project=project, conversation_ticket=conversation_ticket
             ).first()
             content_keys = ("title", "body", "fields", "labels", "assignees", "options_revision")
             if (
@@ -601,7 +607,7 @@ def publish(version, connector, payload):
             "This publication key was already used with different content or a different destination.",
         )
     active = (
-        PublishedTicket.objects.filter(version=version, destination=destination)
+        PublishedTicket.objects.filter(**logical_scope, destination=destination)
         .exclude(status=PublishedTicket.Status.ERROR)
         .first()
     )
@@ -685,9 +691,14 @@ def publish(version, connector, payload):
                 lock_selected_connection(version, connector)
                 if not Request.objects.select_for_update().filter(pk=version.request_id).exists():
                     raise HttpError(404, "Analysis not found.")
+                if conversation_ticket:
+                    current = publication_ticket(version, conversation_ticket.pk)
+                    if current.draft.get("revision", 0) != snapshot["conversation_ticket_revision"]:
+                        raise HttpError(409, "The ticket changed. Review its publication preview again.")
                 record = PublishedTicket.objects.create(
                     request=version.request,
                     version=version,
+                    conversation_ticket=conversation_ticket,
                     connector=connector,
                     platform=connector.platform,
                     project=project,
@@ -704,7 +715,7 @@ def publish(version, connector, payload):
                 )
         except IntegrityError:
             record = (
-                PublishedTicket.objects.filter(version=version, destination=destination)
+                PublishedTicket.objects.filter(**logical_scope, destination=destination)
                 .exclude(status=PublishedTicket.Status.ERROR)
                 .first()
             )
@@ -731,7 +742,7 @@ def publish(version, connector, payload):
                 )
         except IntegrityError:
             active = (
-                PublishedTicket.objects.filter(version=version, destination=destination)
+                PublishedTicket.objects.filter(**logical_scope, destination=destination)
                 .exclude(status=PublishedTicket.Status.ERROR)
                 .first()
             )

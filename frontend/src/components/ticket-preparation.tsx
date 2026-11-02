@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { FileText, LoaderCircle } from "lucide-react";
 import { api, send, type RequestDetail } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { PublishTicket } from "@/components/publish-ticket";
 
 type Draft = {
+  id?:string|null; read_only?:boolean; needs_source_choice?:boolean;
+  analyses?:{number:number;subject:string;status:string;topic_message_id?:number|null}[];
   revision: number; discussion_revision: number;
   source_version: number | null; source_verified: boolean;
   analysis_state: "none" | "complete" | "partial" | "interrupted" | "in_progress";
@@ -23,13 +25,15 @@ type Draft = {
 };
 const states = {
   none: "No deep analysis yet.", complete: "Deep analysis completed.",
-  partial: "Deep analysis has incomplete checks.", interrupted: "The last deep analysis was interrupted.",
+  partial: "Deep analysis has incomplete checks.", interrupted: "The selected deep analysis was interrupted.",
   in_progress: "Deep analysis is in progress.",
 };
 
-export function TicketPreparation({ value, onUpdated }: { value: RequestDetail; onUpdated: (value: RequestDetail) => void }) {
+export function TicketPreparation({ value, onUpdated, sourceVersion, ticketId, autoOpen = false, triggerLabel = "Prepare a ticket" }: { value: RequestDetail; onUpdated: (value: RequestDetail) => void; sourceVersion?:number; ticketId?:string; autoOpen?:boolean; triggerLabel?:string }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
+  const prefix = useId();
+  const [selectedTicket, setSelectedTicket] = useState(ticketId || "");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -37,30 +41,40 @@ export function TicketPreparation({ value, onUpdated }: { value: RequestDetail; 
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const endpoint = `/analyses/${value.id}/ticket-preparation`;
-  const working = ["QUEUED", "UNDERSTANDING", "ANALYZING", "REVIEWING", "GENERATING_RESULT", "CONTINUING_CONVERSATION", "GENERATING_TICKET", "NEEDS_CLARIFICATION"].includes(value.status);
+  const working = !!value.archived_at || (value.conversation_state ? value.conversation_state !== "DISCUSSION" : ["QUEUED", "UNDERSTANDING", "ANALYZING", "REVIEWING", "GENERATING_RESULT", "CONTINUING_CONVERSATION", "GENERATING_TICKET", "NEEDS_CLARIFICATION"].includes(value.status));
+  function draftUrl(id = selectedTicket, extra: Record<string,string> = {}) {
+    const query = new URLSearchParams(id ? {ticket_id:id} : {new_ticket:"true", ...(sourceVersion ? {source_version:String(sourceVersion)} : {})});
+    for (const [key,val] of Object.entries(extra)) query.set(key,val);
+    return endpoint + "?" + query;
+  }
   const generating = !!draft?.generation && ["QUEUED","RUNNING"].includes(draft.generation.status);
   useEffect(() => {
     if (!open || !generating) return;
     let alive = true;
     const timer = setInterval(async () => {
       try {
-        const next = await api<Draft>(endpoint);
+        const next = await api<Draft>(draftUrl());
         if (alive) { setDraft(next); if (next.generation?.status === "ERROR") setError(next.generation.error); }
       } catch (failure) { if (alive) setError((failure as Error).message); }
     }, 2000);
     return () => { alive = false; clearInterval(timer); };
-  }, [open, generating, endpoint]);
+  }, [open, generating, endpoint, selectedTicket]);
 
-  async function load() {
+  async function load(id = selectedTicket) {
     setBusy(true); setError(""); setDraft(null); setSaved(false);
-    try { const next=await api<Draft>(endpoint); setDraft(next); setDirty(false); if(next.generation?.status==='ERROR')setError(next.generation.error); }
+    try { const next=await api<Draft>(draftUrl(id)); setSelectedTicket(next.id || ""); setDraft(next); setDirty(false); if(next.generation?.status==='ERROR')setError(next.generation.error); }
     catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   }
+  useEffect(() => {
+    if (autoOpen) { dialog.current?.showModal(); setOpen(true); void load(ticketId); }
+    // Auto-open is only for an explicit saved-ticket link on initial navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   async function selectTopic(id:number) {
     if(dirty && !window.confirm(t("Discard unsaved ticket edits and change the subject?")))return;
     setBusy(true); setError(""); setSaved(false);
-    try { setDraft(await api<Draft>(`${endpoint}?topic_message_id=${id}`)); setDirty(true); }
+    try { setDraft(await api<Draft>(draftUrl(selectedTicket, {topic_message_id:String(id)}))); setDirty(true); }
     catch(failure){setError((failure as Error).message);}
     finally{setBusy(false);}
   }
@@ -72,12 +86,14 @@ export function TicketPreparation({ value, onUpdated }: { value: RequestDetail; 
     if (!draft) throw new Error("Load the ticket draft first.");
     if (!dirty && draft.revision) return draft;
     const updated = await send<Draft>(endpoint, {
+      ticket_id:draft.id || undefined, new_ticket:!draft.id,
       expected_revision: draft.revision, expected_discussion_revision: draft.discussion_revision,
       source_version: draft.source_version, scope_choice: draft.scope_choice,
       topic_message_id: draft.topic_message_id,
       title: draft.title, body: draft.body,
     }, "PUT");
-    setDraft(updated); setDirty(false); setSaved(true);
+    setDraft(updated); setSelectedTicket(updated.id || ""); setDirty(false); setSaved(true);
+    onUpdated(await api<RequestDetail>(`/analyses/${value.id}`));
     return updated;
   }
   async function action(operation: "save" | "copy" | "download" | "analyze" | "generate" | "cancelDraft") {
@@ -85,16 +101,17 @@ export function TicketPreparation({ value, onUpdated }: { value: RequestDetail; 
     try {
       if(operation === "cancelDraft"){
         onUpdated(await send<RequestDetail>(`/analyses/${value.id}/discussion/cancel`, {}));
-        setDraft(await api<Draft>(endpoint)); return;
+        setDraft(await api<Draft>(draftUrl())); return;
       }
       const current = await persist();
       if(operation === "generate"){
         if(!current.topic_message_id)throw new Error("Choose a conversation subject before drafting.");
         onUpdated(await send<RequestDetail>(`${endpoint}/generate`, {
+          ticket_id:current.id || undefined,
           expected_revision:current.revision, expected_discussion_revision:current.discussion_revision,
           source_version:current.source_version, topic_message_id:current.topic_message_id,
         }));
-        setDraft(await api<Draft>(endpoint)); setSaved(false);
+        setDraft(await api<Draft>(draftUrl(current.id || selectedTicket))); setSaved(false);
         window.dispatchEvent(new Event("queue-updated"));
       }
       if (operation === "copy") await navigator.clipboard.writeText(current.markdown);
@@ -105,7 +122,8 @@ export function TicketPreparation({ value, onUpdated }: { value: RequestDetail; 
       }
       if (operation === "analyze") {
         const updated = await send<RequestDetail>(`/analyses/${value.id}/deep-analyze`, {
-          expected_revision: current.discussion_revision, intent: "change", preparation_revision: current.revision,
+          expected_revision: current.discussion_revision, intent: "change", preparation_revision: current.revision, ticket_id:current.id,
+          subject:current.title, topic_message_id:current.topic_message_id,
         });
         onUpdated(updated); dialog.current?.close();
         window.dispatchEvent(new Event("queue-updated"));
@@ -113,20 +131,30 @@ export function TicketPreparation({ value, onUpdated }: { value: RequestDetail; 
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   }
+  function allowClose() { return !busy && (!dirty || window.confirm(t("Discard unsaved ticket edits?"))); }
   return <>
-    <Button size="sm" variant="outline" onClick={() => { dialog.current?.showModal(); setOpen(true); void load(); }}><FileText size={15} aria-hidden="true"/>{t("Prepare a ticket")}</Button>
-    <dialog ref={dialog} className="publication-dialog" aria-labelledby={`ticket-preparation-title-${value.id}`} onClose={()=>setOpen(false)} onCancel={event => { if (busy) event.preventDefault(); }}>
+    <Button size="sm" variant="outline" onClick={() => { dialog.current?.showModal(); setOpen(true); void load(); }}><FileText size={15} aria-hidden="true"/>{t(triggerLabel)}</Button>
+    <dialog ref={dialog} className="publication-dialog" aria-labelledby={`ticket-preparation-title-${prefix}`} onClose={()=>setOpen(false)} onCancel={event => { if (!allowClose()) event.preventDefault(); }}>
       <div className="flex items-start justify-between gap-4">
-        <h2 id={`ticket-preparation-title-${value.id}`}>{t("Prepare a ticket")}</h2>
-        <Button variant="ghost" disabled={busy} onClick={() => dialog.current?.close()}>{t(generating ? "Close" : "Cancel")}</Button>
+        <h2 id={`ticket-preparation-title-${prefix}`}>{t("Prepare a ticket")}</h2>
+        <Button variant="ghost" disabled={busy} onClick={() => {if(allowClose())dialog.current?.close();}}>{t(generating ? "Close" : "Cancel")}</Button>
       </div>
       <p className="mt-2 text-sm muted">{t("Preparing a draft does not launch an analysis or publish a ticket.")}</p>
-      {error && <div className="mt-4" role="alert"><p>{t(error)}</p><Button variant="ghost" disabled={busy} onClick={load}>{t("Reload saved draft")}</Button></div>}
+      {error && <div className="mt-4" role="alert"><p>{t(error)}</p><Button variant="ghost" disabled={busy} onClick={()=>void load()}>{t("Reload saved draft")}</Button></div>}
       {!draft && busy && <p className="mt-4" role="status">{t("Loading…")}</p>}
       {draft && <div className="mt-5 space-y-4">
-        {!!draft.topics?.length && <div className="field"><label htmlFor="ticket-subject">{t("Ticket subject")}</label><select id="ticket-subject" value={draft.topic_message_id} disabled={busy||generating} onChange={event=>void selectTopic(Number(event.target.value))}>{draft.topics.map(topic=><option key={topic.id} value={topic.id}>{topic.label}</option>)}</select><p className="text-xs muted">{t("Select the question to include. Other subjects remain in the conversation.")}</p></div>}
+        {!!value.conversation_tickets?.length && <div className="field"><label htmlFor={prefix+"-saved"}>{t("Prepared tickets")}</label><select id={prefix+"-saved"} value={selectedTicket} disabled={busy||generating} onChange={event=>{if(!dirty || window.confirm(t("Discard unsaved ticket edits and change the subject?")))void load(event.target.value);}}><option value="">{t("New ticket")}</option>{value.conversation_tickets.filter(item=>!sourceVersion||item.source_version===sourceVersion).map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></div>}
+        {!!draft.analyses?.length && <div className="field"><label htmlFor={prefix+"-source"}>{t("Source deep analysis")}</label><select id={prefix+"-source"} value={draft.source_version||""} disabled={busy||generating||draft.read_only||!!sourceVersion} onChange={async event=>{
+          if(dirty && !window.confirm(t("Discard unsaved ticket edits and change the subject?")))return;
+          const number=Number(event.target.value), selected=draft.analyses?.find(item=>item.number===number);
+          setBusy(true); setError("");
+          try {setDraft(await api<Draft>(draftUrl(selectedTicket, number ? {source_version:String(number),...(selected?.topic_message_id?{topic_message_id:String(selected.topic_message_id)}:{})} : {without_analysis:"true"})));setDirty(true);setSaved(false);}
+          catch(error){setError((error as Error).message);}finally{setBusy(false);}
+        }}><option value="">{t("No source analysis · unverified draft")}</option>{draft.analyses.map(item=><option key={item.number} value={item.number}>#{item.number} · {item.subject}</option>)}</select>{draft.needs_source_choice && <p className="mt-1 text-xs muted">{t("Choose the analysis relevant to this ticket, or keep an unverified draft.")}</p>}</div>}
+
+        {!!draft.topics?.length && <div className="field"><label htmlFor={prefix + "-ticket-subject"}>{t("Ticket subject")}</label><select id={prefix + "-ticket-subject"} value={draft.topic_message_id} disabled={busy||generating||draft.read_only} onChange={event=>void selectTopic(Number(event.target.value))}>{draft.topics.map(topic=><option key={topic.id} value={topic.id}>{topic.label}</option>)}</select><p className="text-xs muted">{t("Select the question to include. Other subjects remain in the conversation.")}</p></div>}
         {draft.discussion_findings_available && <p className="text-sm muted">{t("Recorded discussion findings are available, even without a completed deep analysis.")}</p>}
-        <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy||working||generating||!draft.topic_message_id} onClick={()=>action("generate")}>{t("Write from conversation")}</Button>{generating&&<><p role="status" className="flex items-center gap-2 text-sm"><LoaderCircle size={16} className="animate-spin" aria-hidden="true"/>{t(draft.generation?.waiting_reason||"Drafting the ticket…")}</p><Button variant="ghost" disabled={busy} onClick={()=>action("cancelDraft")}>{t("Cancel drafting")}</Button></>}</div>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy||working||generating||draft.read_only||!draft.topic_message_id} onClick={()=>action("generate")}>{t("Write from conversation")}</Button>{generating&&<><p role="status" className="flex items-center gap-2 text-sm"><LoaderCircle size={16} className="animate-spin" aria-hidden="true"/>{t(draft.generation?.waiting_reason||"Drafting the ticket…")}</p><Button variant="ghost" disabled={busy} onClick={()=>action("cancelDraft")}>{t("Cancel drafting")}</Button></>}</div>
         <div className="space-y-2 text-sm" aria-label={t("Analysis coverage")}>
           <p className="font-semibold">{t(states[draft.analysis_state])}</p>
           {draft.source_version && <p>{t("Source analysis: v{number}", { number: draft.source_version })} · {t(draft.source_verified ? "Verified findings available" : "Incomplete verification")}</p>}
@@ -134,8 +162,8 @@ export function TicketPreparation({ value, onUpdated }: { value: RequestDetail; 
           <p>{t(draft.source_verified ? "Reuse the existing findings. Later proposals and ticket edits have not been independently verified." : "This draft is unverified: independent checks are missing or incomplete.")}</p>
           {!!draft.limitations?.length && <ul className="list-disc pl-5">{draft.limitations.map((limit, index) => <li key={index}>{limit}</li>)}</ul>}
           {draft.source_version && draft.has_new_messages && <div className="field">
-            <label htmlFor="ticket-scope-choice">{t("Changes since the analysis")}</label>
-            <select id="ticket-scope-choice" value={draft.scope_choice} disabled={busy} onChange={event => edit({ scope_choice: event.target.value as Draft["scope_choice"] })}>
+            <label htmlFor={prefix + "-ticket-scope-choice"}>{t("Changes since the analysis")}</label>
+            <select id={prefix + "-ticket-scope-choice"} value={draft.scope_choice} disabled={busy||draft.read_only} onChange={event => edit({ scope_choice: event.target.value as Draft["scope_choice"] })}>
               <option value="unknown">{t("Scope still to assess")}</option>
               <option value="covered">{t("Same need; additional discussion")}</option>
               <option value="clarified">{t("Minor clarification or proposed correction")}</option>
@@ -144,16 +172,16 @@ export function TicketPreparation({ value, onUpdated }: { value: RequestDetail; 
           </div>}
           {(draft.scope_choice === "changed" || !draft.source_verified) && <p>{t("You can update the analysis, or keep an explicitly unverified draft.")}</p>}
         </div>
-        <div className="field"><label htmlFor="ticket-draft-title">{t("Ticket title")}</label><Input id="ticket-draft-title" value={draft.title} maxLength={200} disabled={busy||generating} onChange={event => edit({ title: event.target.value })}/></div>
-        <div className="field"><label htmlFor="ticket-draft-body">{t("Ticket description")}</label><Textarea id="ticket-draft-body" rows={12} value={draft.body} maxLength={30000} disabled={busy||generating} onChange={event => edit({ body: event.target.value })}/></div>
+        <div className="field"><label htmlFor={prefix + "-ticket-draft-title"}>{t("Ticket title")}</label><Input id={prefix + "-ticket-draft-title"} value={draft.title} maxLength={200} disabled={busy||generating||draft.read_only} onChange={event => edit({ title: event.target.value })}/></div>
+        <div className="field"><label htmlFor={prefix + "-ticket-draft-body"}>{t("Ticket description")}</label><Textarea id={prefix + "-ticket-draft-body"} rows={12} value={draft.body} maxLength={30000} disabled={busy||generating||draft.read_only} onChange={event => edit({ body: event.target.value })}/></div>
         {saved && <p role="status" className="text-sm">{t("Ticket draft saved.")}</p>}
         <div className="flex flex-wrap gap-2">
-          <Button disabled={busy || generating || !draft.title.trim()} onClick={() => action("save")}>{t("Save")}</Button>
+          <Button disabled={busy || generating || draft.read_only || !draft.title.trim()} onClick={() => action("save")}>{t("Save")}</Button>
           <Button variant="outline" disabled={busy || generating || !draft.title.trim()} onClick={() => action("download")}>{t("Download draft")}</Button>
           <Button variant="ghost" disabled={busy || generating || !draft.title.trim()} onClick={() => action("copy")}>{t("Copy draft")}</Button>
-          <Button variant="outline" disabled={busy || working || !!value.validated_version || !draft.title.trim()} onClick={() => action("analyze")}>{t(draft.source_version ? "Update analysis" : "Launch deep analysis")}</Button>
+          <Button variant="outline" disabled={busy || working || !draft.title.trim()} onClick={() => action("analyze")}>{t(draft.source_version ? "Update analysis" : "Launch deep analysis")}</Button>
         </div>
-        {draft.publication_available && draft.source_version && !dirty && draft.revision > 0 && <PublishTicket requestId={value.id} version={draft.source_version} triggerLabel="Publish ticket" preparedDraft={{ title: draft.title, body: draft.markdown }}/>}
+        {draft.publication_available && draft.source_version && !dirty && draft.revision > 0 && <PublishTicket requestId={value.id} version={draft.source_version} triggerLabel="Publish ticket" preparedDraft={{ title: draft.title, body: draft.markdown }} conversationTicketId={draft.id || undefined}/>}
         {!draft.publication_available && <p className="text-xs muted">{t("The draft can be saved and exported. External publication still requires a verified change analysis.")}</p>}
       </div>}
     </dialog>

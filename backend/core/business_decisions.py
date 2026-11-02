@@ -61,8 +61,14 @@ def describe(decision):
     }
 
 
-def snapshot_for_request(request):
-    history = [describe(row) for row in request.business_decisions.order_by("sequence")]
+def snapshot_for_request(request, *, sequence_after=None):
+    if sequence_after is None and request.discussion_state.get("enabled"):
+        latest = request.analysis_runs.order_by("-number").first()
+        sequence_after = (latest.context_snapshot.get("dossier", {}).get("cycle_scope", {}).get("decision_sequence") if latest else None)
+    decisions = request.business_decisions.order_by("sequence")
+    if sequence_after is not None:
+        decisions = decisions.filter(sequence__gt=sequence_after)
+    history = [describe(row) for row in decisions]
     active = {}
     for value in history:
         active[value["key"]] = value

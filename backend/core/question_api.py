@@ -82,7 +82,13 @@ def revise_question_scope(request, question_id: UUID, payload: ScopeIn):
 
 @router.get("/questions/{question_id}")
 def get_question(request, question_id: UUID):
-    return actions.question_dict(actions.question(question_id), full=True)
+    from django.http import Http404
+
+    from .api import request_dict
+    value = get_object_or_404(Request, pk=question_id)
+    if value.workflow != "question" and not value.versions.exclude(explanation={}).exists():
+        raise Http404
+    return actions.question_dict(value, full=True) if value.workflow == "question" else request_dict(value, full=True)
 
 
 @router.post("/questions/{question_id}/analyze")

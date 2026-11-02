@@ -10,7 +10,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404
 from ninja.errors import HttpError
 
@@ -281,7 +281,8 @@ def freeze_context(request, run=None, reuse=None):
         snapshot.setdefault("instructions", {})["mode"] = "factual"
     from .business_decisions import snapshot_for_request
 
-    snapshot["business_decisions"] = snapshot_for_request(request)
+    cycle_scope = run.job.payload.get("cycle_scope") if run and run.job_id else None
+    snapshot["business_decisions"] = snapshot_for_request(request, sequence_after=cycle_scope.get("decision_sequence") if cycle_scope else None)
     snapshot["changed_decision_keys"] = (
         run.job.payload.get("changed_decision_keys", []) if run and run.job_id else []
     )
@@ -309,6 +310,14 @@ def freeze_context(request, run=None, reuse=None):
     if request.discussion_state.get("enabled"):
         snapshot["dossier"]["discussion_revision"] = request.discussion_state.get("revision", 0)
         snapshot["dossier"]["user_messages"] = list(request.messages.filter(role="user").values("id", "kind", "content"))
+    if cycle_scope:
+        snapshot["dossier"]["cycle_scope"] = copy.deepcopy(cycle_scope)
+        snapshot["dossier"]["need"] = cycle_scope["subject"]
+        snapshot["dossier"]["answers"] = request.conversation[cycle_scope["answer_offset"]:]
+        users = request.messages.filter(role="user").filter(
+            Q(pk__in=cycle_scope["message_ids"]) | Q(kind__in=["answer", "answers", "decision_revision"], created_at__gte=run.job.created_at)
+        ).order_by("id")
+        snapshot["dossier"]["user_messages"] = list(users.values("id", "kind", "content"))
     proposal = run.job.payload.get("ticket_proposal") if run and run.job_id else None
     if proposal:
         snapshot["dossier"]["ticket_proposal"] = copy.deepcopy(proposal)

@@ -1,12 +1,13 @@
 # Architecture
 
-Ticket preparation is stored in the conversation's existing discussion state,
-separately from immutable result versions and destination-specific publication
-drafts. Reading or saving a preparation draft does not enqueue work. Optimistic
-guards cover both draft and conversation revisions. An explicit deep-analysis
-request can pin the saved proposal revision into the job and frozen context;
-its content is an unverified investigation input, not a confirmed decision.
-Publication still uses the existing connector, preview and evidence checks.
+Conversation records reuse `Request`; each independently frozen investigation uses
+an `AnalysisRun` and immutable `ResultVersion`. `ConversationTicket` stores each
+editable ticket with an optional exact result and selected user-message reference.
+Destination-specific previews remain `TicketPublicationDraft`; publication records
+retain the prepared-ticket identity when known. The former selected preparation
+JSON remains mirrored for compatibility, but it is not the identity of every ticket.
+Reading or saving a preparation does not enqueue work. Row locks and revision guards
+prevent stale saves or a delayed drafting response from overwriting another ticket.
 
 SpecHelper separates conversational exploration from independently checked analysis.
 Both use the same conversation history and authorized resources. This describes the
@@ -41,6 +42,14 @@ state. Jobs record execution state and bounded observations. Analysis runs, role
 AI sessions and result versions preserve checkpoints and provenance. Publication
 records retain the chosen destination and uncertain/confirmed outcomes.
 
+The four conversation states are derived from actual queued/running jobs and pending
+clarifications: discussion, in progress, waiting for AI, and reply expected. Terminal
+job/run states remain unchanged. A failed/cancelled operation or an orphaned active
+technical state adds a visible incident; it is never silently shown as still running.
+`archived_at` controls the active/archive filter independently of execution state.
+Archiving changes neither messages, native sessions, results nor publication evidence.
+Deletion remains soft and retains published-ticket provenance.
+
 A new discussion selects one eligible AI connection and keeps its model and session.
 The application persists the visible history independently of native CLI storage.
 
@@ -59,7 +68,11 @@ The UI retains recorded connection/model/reasoning history. A user-confirmed tra
 after quota exhaustion creates a new native session with bounded saved context; it
 does not migrate the provider's private session state. See [Usage](usage.md#start-a-discussion).
 
-**Launch deep analysis** captures a versioned need and resource baseline. Human
+**Launch deep analysis** asks for the subject and relevant user messages, then captures
+a separate need and resource baseline for each cycle. Its frozen dossier contains
+only those selected exchanges and that cycle's subsequent answers/decisions. Other
+cycles' conclusions are not injected as verified facts. Old results remain accessible
+and the discussion session is retained. Human
 statements and confirmed decisions are distinguished from exploratory AI hypotheses.
 The discussion's native session is never reused as an Analyst or Counter-analyst session.
 

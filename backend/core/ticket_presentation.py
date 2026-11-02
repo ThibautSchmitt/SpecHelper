@@ -24,7 +24,7 @@ PRESENTATION_KEYS = (
 
 def publication_blockers(version):
     blockers = []
-    if version.request.messages.filter(kind="need_revision", created_at__gt=version.created_at).exists():
+    if not version.context_snapshot.get("dossier", {}).get("cycle_scope") and version.request.messages.filter(kind="need_revision", created_at__gt=version.created_at).exists():
         blockers.append("The need changed after this result. Reanalyze before publication.")
     if version.status != "READY":
         blockers.append(
@@ -168,12 +168,13 @@ def suggest_choice(version, choices):
     )
 
 
-def save_draft(version, connector, project, presentation, content, expected_revision=None):
+def save_draft(version, connector, project, presentation, content, expected_revision=None, conversation_ticket=None):
     with transaction.atomic():
         draft, created = TicketPublicationDraft.objects.select_for_update().get_or_create(
             version=version,
             connector=connector,
             project=project,
+            conversation_ticket=conversation_ticket,
             defaults={"presentation": presentation, "content": content},
         )
         if not created:
@@ -191,6 +192,7 @@ def save_draft(version, connector, project, presentation, content, expected_revi
 def draft_metadata(draft, version):
     return {
         "draft_id": str(draft.pk),
+        **({"conversation_ticket_id":str(draft.conversation_ticket_id)} if draft.conversation_ticket_id else {}),
         "draft_revision": draft.revision,
         "version_id": str(version.pk),
         "version_number": version.number,

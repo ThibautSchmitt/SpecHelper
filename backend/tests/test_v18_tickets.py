@@ -42,7 +42,7 @@ def test_ticket_detail_and_status_filter_are_local_and_truthful(environment, mon
     assert client.get("/api/tickets").json()["total"] == 1
     all_items = client.get("/api/tickets?status=all").json()
     assert all_items["total"] == 4
-    assert set(all_items["statuses"]) == set(PublishedTicket.Status.values)
+    assert set(all_items["statuses"]) == {"DRAFT", *PublishedTicket.Status.values}
     for status, item in values.items():
         listed = client.get(f"/api/tickets?status={status}").json()
         assert listed["total"] == 1

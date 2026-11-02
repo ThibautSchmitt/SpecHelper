@@ -96,7 +96,7 @@ for(const language of ['en','fr'] as const){
    await route.fulfill({json:value});
   });
   await page.route(`**/api/analyses/${id}/deep-analyze`,async route=>{
-   expect(route.request().postDataJSON()).toEqual({expected_revision:2,intent:'auto'});deep++;
+   expect(route.request().postDataJSON()).toMatchObject({expected_revision:2,intent:'auto',subject:'Explain that exception.',message_ids:[11]});deep++;
    value={...value,status:'ANALYZING',discussion:{...value.discussion,mode:'analysis',has_new_messages:false},analysis_runs:[{number:1,status:'RUNNING',steps:[],execution:{status:'ANALYZING',current_role:'analyst',checkpoint:'analyst',waiting_reason:'',waiting_causes:[],all_stages_done:false,stages:[{role:'analyst',status:'running'},{role:'counter_analyst',status:'waiting'},{role:'verifier',status:'waiting'}]}}]};
    await route.fulfill({json:value});
   });
@@ -118,6 +118,7 @@ for(const language of ['en','fr'] as const){
   await expect(page.getByText('The exception needs a source check.',{exact:true})).toBeVisible();
   expect(turns).toBe(1);expect(deep).toBe(0);
   await page.getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
+  await page.getByRole('dialog',{name:t('Deep analysis scope'),exact:true}).getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
   await expect(page.locator('.investigation-progress')).toHaveCount(1);
   const version={id:'version',number:1,status:'PARTIAL',format_version:'2.9',language,created_at:'2026-10-30T10:04:00Z',run_number:1,explanation:{title:'Benefit conditions',summary:'The source defines an exception. Database behavior remains unverified.'},ticket:{},markdown:'Detailed findings',goal_markdown:'',evidence:{claims:[],blocking:true,limitations:['Database behavior remains unverified.'],database:{status:'not_configured',limitations:[],checks:[],scope:''}}};
   value={...value,status:'PARTIAL',latest_version:version,versions:[{number:1,status:'PARTIAL',created_at:version.created_at}],analysis_runs:[{...value.analysis_runs[0],status:'PARTIAL',execution:{...value.analysis_runs[0].execution,status:'PARTIAL',all_stages_done:true,stages:['analyst','counter_analyst','verifier'].map(role=>({role,status:'done'}))}}]};
@@ -140,7 +141,7 @@ for(const language of ['en','fr'] as const){
   await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
   await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language,primary_color:'#168e95'}}));
   await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
-  await page.route(`**/api/analyses/${id}/ticket-preparation`,route=>{
+  await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),route=>{
    if(route.request().method()==='PUT'){
     const payload=route.request().postDataJSON();expect(payload.expected_revision).toBe(draft.revision);
     draft={...draft,revision:draft.revision+1,title:payload.title,body:payload.body};
@@ -148,7 +149,7 @@ for(const language of ['en','fr'] as const){
    return route.fulfill({json:draft});
   });
   await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{
-   expect(route.request().postDataJSON()).toEqual({expected_revision:1,intent:'change',preparation_revision:1});launches++;
+   expect(route.request().postDataJSON()).toMatchObject({expected_revision:1,intent:'change',preparation_revision:1,subject:'Contract dates'});launches++;
    value={...value,workflow:'request',status:'QUEUED',discussion:{...value.discussion,mode:'analysis'}};
    return route.fulfill({json:value});
   });
@@ -173,7 +174,7 @@ for(const language of ['en','fr'] as const){
   await expect(preparation).not.toBeVisible();
   await page.locator('.conversation-reply').getByRole('button',{name:t('Cancel'),exact:true}).click();
   await expect(page.getByLabel(t('Your message'),{exact:true})).toBeEnabled();
-  await expect(page.getByText('Explain benefit behavior.',{exact:true})).toBeVisible();
+  await expect(page.locator('.analysis-conversation [data-message="message-1"]').getByText('Explain benefit behavior.',{exact:true})).toBeVisible();
  });
 
  test(`ticket drafting selects one subject and uses one assistant without deep analysis in ${language}`,async({page})=>{
@@ -220,7 +221,7 @@ for(const language of ['en','fr'] as const){
    await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
    await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
    await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{launches++;return route.fulfill({json:value});});
-   await page.route(`**/api/analyses/${id}/ticket-preparation`,route=>{
+   await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),route=>{
     if(route.request().method()==='PUT'){const payload=route.request().postDataJSON();draft={...draft,revision:1,scope_choice:payload.scope_choice};}
     return route.fulfill({json:draft});
    });

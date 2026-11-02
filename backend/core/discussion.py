@@ -35,6 +35,10 @@ class DeepIn(Schema):
     expected_revision: int = Field(ge=0)
     intent: str = Field(default="auto", pattern=r"^(auto|change)$")
     preparation_revision: int | None = Field(default=None, ge=1)
+    ticket_id: uuid.UUID | None = None
+    subject: str = Field(default="", max_length=30000)
+    topic_message_id: int | None = Field(default=None, ge=1)
+    message_ids: list[int] = Field(default_factory=list, max_length=100)
 
 
 class ContinueIn(Schema):
@@ -85,6 +89,8 @@ def describe(value):
 
 
 def idle(value):
+    if value.archived_at:
+        raise HttpError(409, "Unarchive this conversation before continuing.")
     if Job.objects.filter(
         target=str(value.pk), kind__in=["analysis", KIND], status__in=BUSY
     ).exists():
@@ -709,25 +715,45 @@ def deepen(request, analysis_id: uuid.UUID, payload: DeepIn):
     state = value.discussion_state
     if payload.expected_revision != state.get("revision", 0):
         raise HttpError(409, "The conversation changed. Refresh before starting deep analysis.")
-    if value.validated_version:
-        raise HttpError(409, "Reopen the validated request before starting another analysis.")
     proposal = None
     if payload.preparation_revision is not None:
-        draft = state.get("ticket_preparation", {})
+        from .ticket_preparation import selected
+        _, draft = selected(value, payload.ticket_id)
         if (draft.get("revision") != payload.preparation_revision
                 or draft.get("discussion_revision") != state.get("revision", 0)):
             raise HttpError(409, "The ticket draft changed. Reload it before starting deep analysis.")
         proposal = {key: draft.get(key) for key in ("revision", "source_version", "title", "body")}
         proposal["verification_status"] = "unverified"
         proposal["user_message_id_at_submission"] = value.messages.filter(role="user").order_by("-id").values_list("id", flat=True).first()
-    if payload.intent == "change" and not value.versions.exists():
+    from .ticket_preparation import user_text
+    users = value.messages.filter(role="user").exclude(kind__in=["ticket_preparation", "derived_request"])
+    topic = get_object_or_404(users, pk=payload.topic_message_id) if payload.topic_message_id else users.order_by("-id").first()
+    ids = payload.message_ids if "message_ids" in payload.model_fields_set else ([topic.pk] if topic else [])
+    if not ids and "message_ids" in payload.model_fields_set:
+        topic = None
+    elif topic and topic.pk not in ids:
+        topic = users.filter(pk__in=ids).order_by("-id").first()
+    if len(set(ids)) != len(ids) or users.filter(pk__in=ids).count() != len(ids):
+        raise HttpError(422, "Choose messages belonging to this conversation.")
+    subject = payload.subject.strip() or (user_text(topic) if topic else value.need)
+    if not subject.strip() or "\x00" in subject:
+        raise HttpError(422, "Describe the need to investigate.")
+    from .environment_context import reject_credentials
+    reject_credentials(subject)
+    cycle_scope = {"subject":subject, "topic_message_id":topic.pk if topic else None, "message_ids":ids,
+                   "answer_offset":len(value.conversation),
+                   "decision_sequence":value.business_decisions.order_by("-sequence").values_list("sequence", flat=True).first() or 0}
+    if payload.intent == "change":
         value.workflow, value.intent_mode = "request", "explicit"
+    else:
+        value.workflow, value.intent_mode = "question", "auto"
     pin_environment(value)
     value.analysis_protocol, value.confrontation, value.status = "2.4", True, "DRAFT"
+    value.validated_version, value.understanding, value.questions = None, "", []
     state.update(enabled=True, mode="analysis", analyzed_revision=state.get("revision", 0))
     value.discussion_state = state
     value.save()
-    value = queue_run(value, ticket_proposal=proposal)
+    value = queue_run(value, ticket_proposal=proposal, cycle_scope=cycle_scope, scope_text=subject)
     return request_dict(value, full=True)
 
 

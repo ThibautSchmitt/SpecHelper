@@ -230,7 +230,20 @@ def context(request, run=None):
                 "technical_summary": previous.technical_summary,
                 "evidence": previous.evidence,
             }
-    proposal = frozen.get("dossier", {}).get("ticket_proposal")
+    dossier = frozen.get("dossier", {})
+    if dossier.get("cycle_scope"):
+        selected = dossier.get("user_messages", [])
+        if run and run.job_id:
+            known = {item["id"] for item in selected}
+            selected = [*selected, *request.messages.filter(role="user", kind__in=["answer", "answers", "clarification", "decision_revision"],
+                created_at__gte=run.job.created_at).exclude(pk__in=known).order_by("id").values("id", "kind", "content")]
+        data.update(need=dossier["need"], user_dossier=selected,
+                    recent_messages=[{"role":"user", "kind":m["kind"], "content":m["content"]} for m in selected[-3:]],
+                    latest_user_message=selected[-1]["content"] if selected else dossier["need"],
+                    latest_user_message_id=selected[-1]["id"] if selected else None,
+                    previous_result=None, question_source=None,
+                    baseline=dossier.get("baseline", request.baseline))
+    proposal = dossier.get("ticket_proposal")
     if proposal:
         data["ticket_proposal"] = {key: value for key, value in proposal.items() if key != "body"}
         data["need"] = frozen["dossier"]["need"]
@@ -877,7 +890,7 @@ class Orchestrator:
             confirmed = self.run.context_snapshot.get("business_decisions", {}).get("decisions", [])
             answered_texts = {
                 re.sub(r"\W+", " ", item.get("question", "")).casefold().strip()
-                for turn in self.request.conversation for item in turn.get("questions", [])
+                for turn in (self.run.context_snapshot.get("dossier", {}).get("answers", []) if self.run.context_snapshot.get("dossier", {}).get("cycle_scope") else self.request.conversation) for item in turn.get("questions", [])
                 if turn.get("answers", {}).get(item.get("id"))
             }
             for question in questions:

@@ -103,6 +103,7 @@ def test_home_sections_use_real_states_and_require_an_actual_result(client, envi
     clarify = dossier(environment, "question", status="NEEDS_CLARIFICATION")
     scope = dossier(environment, scope_assessment={"status": "NEEDS_CLARIFICATION"})
     active = dossier(environment, status="QUEUED")
+    Job.objects.create(kind="analysis",target=str(active.pk),status="QUEUED")
     ready = dossier(environment, status="PARTIAL")
     ResultVersion.objects.create(request=ready, number=1)
     dossier(environment, status="READY")
@@ -115,7 +116,7 @@ def test_home_sections_use_real_states_and_require_an_actual_result(client, envi
     assert {item["id"] for item in sections["clarify"]["items"]} == {str(clarify.pk), str(scope.pk), str(outside.pk)}
     assert sections["active"]["count"] == 1 and sections["active"]["items"][0]["id"] == str(active.pk)
     assert sections["consult"]["count"] == 1 and sections["consult"]["items"][0]["id"] == str(ready.pk)
-    assert not Job.objects.exists()
+    assert Job.objects.count() == 1
 
 
 def test_business_states_distinguish_drafts_publications_and_unavailable_checks(client, environment):

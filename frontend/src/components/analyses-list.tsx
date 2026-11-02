@@ -4,11 +4,12 @@ import Link from "next/link";
 import { WorkItemForm } from "@/components/work-item-form";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, CircleHelp, FileText, Plus, Search } from "lucide-react";
-import { api, statuses, resultStates, type Environment, type RequestItem } from "@/lib/api";
+import { ArrowRight, MessageCircle, Plus, Search } from "lucide-react";
+import { api, type Environment, type RequestItem } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { conversationLabels, conversationState } from "@/lib/conversation-state";
 
 type AnalysisItem = RequestItem & {
   href: string;
@@ -26,11 +27,6 @@ type AnalysisPage = {
   has_next: boolean;
 };
 
-const analysisStatuses = [
-  "DRAFT", "QUEUED", "UNDERSTANDING", "NEEDS_CLARIFICATION", "ANALYZING",
-  "REVIEWING", "GENERATING_RESULT", "CONTINUING_CONVERSATION", "GENERATING_TICKET",
-  "READY", "PARTIAL", "ERROR", "CANCELLED",
-];
 
 export function AnalysesList() {
   const { t, dateLocale } = useI18n();
@@ -105,10 +101,10 @@ export function AnalysesList() {
           <Input placeholder={t("Search analyses")} value={text} onChange={(event) => setText(event.target.value)} className="mt-1" maxLength={500} />
         </label>
         <label className="text-sm"><span className="sr-only">{t("Status")}</span>
-          <select aria-label={t("Status")} className="mt-1 block h-10 rounded-md border bg-background px-3" value={parameters.get("status") || ""}
-            onChange={(event) => navigate({ status: event.target.value, q: text })}>
+          <select aria-label={t("Status")} className="mt-1 block h-10 rounded-md border bg-background px-3" value={parameters.get("conversation_status") || ""}
+            onChange={(event) => navigate({ conversation_status: event.target.value, status:"", q: text })}>
             <option value="">{t("All statuses")}</option>
-            {analysisStatuses.map((status) => <option key={status} value={status}>{t(statuses[status] || status)}</option>)}
+            {Object.entries(conversationLabels).map(([status,label]) => <option key={status} value={status}>{t(label)}</option>)}
           </select>
         </label>
         <label className="text-sm"><span className="sr-only">{t("Environment")}</span>
@@ -118,6 +114,11 @@ export function AnalysesList() {
             {environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.name}</option>)}
           </select>
         </label>
+        <label className="text-sm"><span className="sr-only">{t("Archive filter")}</span>
+          <select aria-label={t("Archive filter")} className="mt-1 block h-10 rounded-md border bg-background px-3" value={parameters.get("archived") || "active"} onChange={event=>navigate({archived:event.target.value,q:text})}>
+            <option value="active">{t("Active conversations")}</option><option value="archived">{t("Archived conversations")}</option><option value="all">{t("All conversations")}</option>
+          </select>
+        </label>
         <Button type="submit" variant="outline" aria-label={t("Search")} title={t("Search")} className="analysis-search-submit"><Search size={16} aria-hidden="true" /></Button>
       </form>
       {error && <div role="alert"><p>{t("Analyses are unavailable. Try refreshing the page.")}</p><details className="mt-2 text-sm"><summary>{t("Diagnostics")}</summary><pre className="whitespace-pre-wrap break-words">{error}</pre></details></div>}
@@ -125,21 +126,23 @@ export function AnalysesList() {
         {loading && <p role="status" className="text-sm muted">{t("Loading analyses…")}</p>}
         {!loading && !error && !data?.items.length && <p className="rounded-lg border p-6 muted">{t("No analyses match these filters.")}</p>}
         {!loading && !error && data?.items.map((item) => {
-          const Icon = item.workflow === "question" ? CircleHelp : FileText;
+          const Icon = MessageCircle;
+          const state = conversationState(item);
           const title = item.title || item.need.split("\n")[0];
           const prefix = title.replace(/…$/, "");
           const summary = (item.need.startsWith(prefix) ? item.need.slice(prefix.length) : item.need).replace(/^[\s.,:;!?-]+/, "").trim();
-          return <Link key={item.id} href={item.href} data-business-state={item.result_state || item.status} className="analysis-row block rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+          return <Link key={item.id} href={item.href + (state === "AWAITING_REPLY" ? "#conversation-clarification" : "")} data-business-state={state} className="analysis-row block rounded-lg border bg-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
             <div className="flex items-start gap-3"><span className="analysis-row-icon"><Icon size={19} aria-hidden="true" /></span>
               <div className="min-w-0 flex-1"><div className="title-tags"><h2 className="line-clamp-2 break-words font-semibold" title={title}>{title}</h2>
-                  <span className="badge analysis-state-pill" data-state={item.status}>{t(resultStates[item.result_state || ""] || statuses[item.status] || item.status)}</span>
-                  <span className="badge analysis-intent-pill">{t(!item.intent_resolved ? "Analysis" : item.workflow === "question" ? "Question" : "Change")}</span>
+                  <span className="badge analysis-state-pill" data-state={state}>{t(conversationLabels[state])}</span>
+                  {item.conversation_incident && <span className="badge" data-conversation-incident>{t(item.incident_kind === "CANCELLED" ? "Operation cancelled" : item.incident_kind === "ERROR" ? "Operation failed" : "Operation interrupted")}</span>}
+                  {item.archived_at && <span className="badge">{t("Archived")}</span>}
                   <span className="badge analysis-environment-pill">{item.environment_name}</span>
                 </div>
                 {summary && <p className="mt-1 line-clamp-2 break-words text-sm muted">{summary}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted">
                   <time dateTime={item.latest_activity_at}>{new Date(item.latest_activity_at).toLocaleString(dateLocale)}</time>
-                  {item.latest_version_number !== null && <span>{t("Version")} {item.latest_version_number}</span>}
+
                 </div>
               </div><ArrowRight size={16} className="shrink-0" aria-hidden="true" />
             </div>

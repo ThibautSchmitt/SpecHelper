@@ -56,6 +56,26 @@ A conversation accepts one active operation at a time; refresh before sending if
 browser has already changed it. There are no private user spaces or organization tenants;
 see [SECURITY](../SECURITY.md).
 
+## Find and organize conversations
+
+**Analyses** lists durable conversations by last activity. Search titles, message
+contents or result descriptions; filter by environment and one of four states:
+
+- **In discussion**: no active operation or pending clarification.
+- **In progress**: a message or deep analysis has been accepted and is being processed.
+- **Waiting for AI**: an operation has a recorded availability/capacity wait.
+- **Reply expected**: a clarification requires an answer.
+
+An incident indicator remains visible after an error, cancellation or interruption.
+Open the conversation to inspect the cause, retry safely or continue discussing.
+A completed or partial analysis is an operation outcome, not a closed conversation.
+
+Rename a conversation from its title. **Archive** removes it from the active list
+without deleting messages, native sessions, analyses, reports or tickets. Select
+**Archived conversations** to find it and **Unarchive** to resume. Archiving does
+not cancel an active operation or automatically delete anything. Confirmed deletion
+hides the conversation while preserving retained publication provenance.
+
 ## Follow the work
 
 The conversation, message composer and analysis/ticket actions share one card.
@@ -97,6 +117,12 @@ available safe retry. A waiting analysis does not reserve all future roles.
 ## Launch deep analysis
 
 Choose **Launch deep analysis** when the subject is ready for independent checks.
+Confirm the need and select the relevant user messages in the scope dialog. The most
+recent question is selected initially; unrelated earlier subjects remain excluded.
+You can run several cycles in the same conversation. Each keeps its own subject,
+role sessions, frozen Git references, evidence and results. New cycles do not replace
+previous results or close the conversation. One conversation per topic is often easier
+to follow, but is not required.
 The application captures the human need, factual answers, explicitly confirmed business
 decisions, attachments, environment documents and Git references for that cycle.
 Exploratory AI hypotheses are not promoted to verified facts.
@@ -170,6 +196,13 @@ status. Exports do not rerun investigations or queries, and saved documents keep
 their generated content when the conversation or environment later changes.
 
 ## Prepare and publish a ticket
+
+**Prepare a ticket** beside a result opens a draft bound to that exact analysis.
+The general conversation action lets you choose a source when several analyses exist,
+or keep an explicitly unverified draft. Each saved ticket has its own identity,
+subject and edits; it does not replace another ticket in the same conversation.
+Reopen it from its timeline entry or **Prepared tickets**. The **Tickets** page also
+lists unpublished preparations and external publication attempts.
 
 **Prepare a ticket** opens an editable draft in the conversation. It never starts
 the three roles or publishes anything. You can save, copy or download the draft

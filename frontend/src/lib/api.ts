@@ -114,6 +114,11 @@ export type RequestItem = {
   created_at: string;
   original_need?: string;
   result_state?: string;
+  conversation_state?: "DISCUSSION" | "IN_PROGRESS" | "WAITING_AI" | "AWAITING_REPLY";
+  conversation_incident?: boolean;
+  conversation_error?: string;
+  incident_kind?: "ERROR" | "CANCELLED" | "INTERRUPTED" | null;
+  archived_at?: string | null;
   result_limits?: string[];
   stage?: string;
   need_revision?: number;
@@ -125,6 +130,7 @@ export type RequestItem = {
   scope_revision?: number;
 };
 export type ResultVersion = {
+  workflow?: "request" | "question";
   id: string;
   number: number;
   format_version: string;
@@ -158,6 +164,7 @@ export type WorkUpdate = {
   progress_token:string; progress_cursor:string; work_progress:WorkExecution[]; unchanged?:boolean;
 };
 export type RequestDetail = RequestItem & {
+  conversation_tickets?: {id:string; title:string; source_version:number|null; topic_message_id:number|null; revision:number; status:string; created_at:string; updated_at:string}[];
   progress_token?:string;
   progress_cursor?:string;
   work_progress?:WorkExecution[];
@@ -257,7 +264,7 @@ export type RequestDetail = RequestItem & {
   ticket: Record<string, string | string[]> | null;
   markdown: string | null;
   latest_version: ResultVersion | null;
-  versions: { number: number; created_at: string; status: string }[];
+  versions: { number: number; created_at: string; status: string; run_number?:number; subject?:string; workflow?:"request"|"question" }[];
   publications?: { id: string; title: string; status: string; url: string; version_number: number; created_at: string }[];
   messages: {
     id: number;
