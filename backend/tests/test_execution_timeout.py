@@ -82,6 +82,7 @@ def test_timeout_is_explicit_and_retry_preserves_the_completed_requirement(
     assert StepExecution.objects.get(job=job, checkpoint="requirement").status == "DONE"
     assert run.steps[-1]["failure"] == "TIMEOUT" and run.steps[-1]["timeout_seconds"] == 3600
     frozen = run.context_snapshot.copy()
+    original_start, original_steps = run.started_at, run.steps.copy()
     accepted = run.orchestration["outputs"]["requirement"].copy()
     run.orchestration["config"]["tool_timeout_seconds"] = 300
     run.save(update_fields=["orchestration"])
@@ -90,6 +91,8 @@ def test_timeout_is_explicit_and_retry_preserves_the_completed_requirement(
     run.refresh_from_db()
     job.refresh_from_db()
     assert job.status == "QUEUED"
+    assert job.started_at is None and job.payload["retry_requested_at"]
+    assert run.started_at == original_start and run.steps == original_steps
     assert run.orchestration["config"]["tool_timeout_seconds"] == 3600
     assert run.orchestration["execution_policy_history"][-1]["previous_timeout_seconds"] == 300
     assert run.orchestration["outputs"]["requirement"] == accepted

@@ -6,6 +6,7 @@ import json
 import logging
 import time
 import uuid
+from types import SimpleNamespace
 from typing import Literal
 
 from django.db import transaction
@@ -173,17 +174,34 @@ def snapshot(value):
             "payload__next_checkpoint",
             "payload__assignment__connection_id",
             "analysis_run__number",
+            "analysis_run__steps",
+            "analysis_run__finished_at",
+            "analysis_run__orchestration__execution_policy_history",
+            "payload__retry_requested_at",
         )[:50]
     )
+    from .queue import analysis_timing
+
     jobs = []
-    user_texts = dict(RequestMessage.objects.filter(
-        request=value, pk__in=[row["payload__message_id"] for row in rows if row["kind"] == "discussion" and row["payload__message_id"]]
-    ).values_list("id", "content"))
+    user_texts = dict(
+        RequestMessage.objects.filter(
+            request=value,
+            pk__in=[
+                row["payload__message_id"]
+                for row in rows
+                if row["kind"] == "discussion" and row["payload__message_id"]
+            ],
+        ).values_list("id", "content")
+    )
     for row in reversed(rows):
         phases = copy.deepcopy(row["progress"].get("phases", []))
         for phase in phases:
             if row["kind"] == "discussion":
-                phase["preview"] = message_text(phase.get("preview", ""), value.need + "\n" + user_texts.get(row["payload__message_id"], ""), partial=True)
+                phase["preview"] = message_text(
+                    phase.get("preview", ""),
+                    value.need + "\n" + user_texts.get(row["payload__message_id"], ""),
+                    partial=True,
+                )
             phase["active"] = (
                 row["status"] == "RUNNING" and not phase.get("closed") and phase is phases[-1]
             )
@@ -193,12 +211,14 @@ def snapshot(value):
                 if event["state"] == "running" and not phase["active"]:
                     event["state"] = "unknown"
         causes = []
-        if row["status"] == "QUEUED" and row["payload__waiting_reason"] == "Waiting for an AI execution slot.":
+        if (
+            row["status"] == "QUEUED"
+            and row["payload__waiting_reason"] == "Waiting for an AI execution slot."
+        ):
             causes = ["busy"]
         if (
             not causes
-            and
-            row["status"] == "QUEUED"
+            and row["status"] == "QUEUED"
             and row["payload__waiting_reason"]
             and row["payload__assignment__connection_id"]
         ):
@@ -218,6 +238,31 @@ def snapshot(value):
                     causes.append(cause)
         jobs.append(
             {
+                **(
+                    analysis_timing(
+                        SimpleNamespace(
+                            status=row["status"],
+                            started_at=row["started_at"],
+                            finished_at=row["finished_at"],
+                            created_at=row["created_at"],
+                            payload={"retry_requested_at": row["payload__retry_requested_at"]},
+                        ),
+                        SimpleNamespace(
+                            steps=row["analysis_run__steps"] or [],
+                            finished_at=row["analysis_run__finished_at"],
+                            orchestration={
+                                "execution_policy_history": row[
+                                    "analysis_run__orchestration__execution_policy_history"
+                                ]
+                                or []
+                            },
+                        ),
+                        False,
+                        timezone.now(),
+                    )
+                    if row["kind"] == "analysis"
+                    else {}
+                ),
                 "id": row["id"],
                 "kind": row["kind"],
                 "status": row["status"],

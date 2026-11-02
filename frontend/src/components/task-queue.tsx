@@ -10,7 +10,8 @@ import {
 } from "react";
 import { ChevronDown } from "lucide-react";
 import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
-import { api, resultStates } from "@/lib/api";
+import { executionSeconds } from "@/lib/execution-clock";
+import { api, resultStates, type AnalysisClock } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { AnalysisWarning } from "@/lib/orchestration";
 import { roleLabels } from "@/lib/orchestration";
@@ -28,6 +29,7 @@ export type QueueJob = {
   stage_count?: number;
   elapsed_seconds?: number;
   active_analysis_seconds?: number | null;
+  analysis_clock?: AnalysisClock;
   clarification_since?: string | null;
   queued_since?: string | null;
   analysis_state?: string;
@@ -127,10 +129,12 @@ export function TaskQueueProvider({ children }: { children: React.ReactNode }) {
         });
     update();
     const timer = setInterval(update, 3000);
+    const clockTimer = setInterval(()=>setNow(Date.now()),1000);
     window.addEventListener("queue-updated", update);
     return () => {
       alive = false;
       clearInterval(timer);
+      clearInterval(clockTimer);
       window.removeEventListener("queue-updated", update);
     };
   }, []);
@@ -196,7 +200,7 @@ export function TaskQueue() {
           : state === "DONE" ? "Completed" : state === "CANCELLED" ? "Cancelled" : job.kind === "sync" ? "Updating" : job.kind === "publication" ? "Publishing ticket" : "Analysis in progress";
         const waiting = clarification ? waitingDuration(job.clarification_since || job.finished_at, now)
           : ["QUEUED", "WAITING_AI"].includes(state) ? waitingDuration(job.queued_since || (!job.started_at ? job.created_at : null), now) : null;
-        const active = job.kind === "analysis" ? job.active_analysis_seconds
+        const active = job.kind === "analysis" ? job.analysis_clock ? executionSeconds(job.analysis_clock,now,!!error) : job.active_analysis_seconds
           : job.started_at ? Math.max(0, Math.floor((now - Date.parse(job.started_at)) / 1000)) : null;
         const timing = clarification && waiting ? t("Waiting for your answer for {duration}", { duration: waiting })
           : waiting ? t("In queue for {duration}", { duration: waiting })

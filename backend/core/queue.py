@@ -22,30 +22,77 @@ RECENT_LIMIT = 15
 
 
 def analysis_timing(job, run, paused, now):
-    """Report recorded AI intervals; wall time includes user/resource waits."""
-    intervals = []
-    for step in (run.steps if run else []):
+    """A shared clock for the current retry; original intervals remain in history."""
+
+    def date(value):
         try:
-            start = parse_datetime(step.get("started_at") or "")
-            end = parse_datetime(step.get("finished_at") or "")
+            parsed = parse_datetime(value or "")
+            return parsed if parsed and timezone.is_aware(parsed) else None
         except (TypeError, ValueError):
-            continue
-        if not end and job.status == "RUNNING" and step.get("status") == "RUNNING":
+            return None
+
+    steps = run.steps if run else []
+    boundary = date(getattr(job, "payload", {}).get("retry_requested_at"))
+    if boundary is None:
+        # Compatibility for retries made before the explicit queue-admission stamp.
+        candidates = [
+            date(item.get("changed_at"))
+            for item in getattr(run, "orchestration", {}).get("execution_policy_history", [])
+            if item.get("reason") == "explicit_retry"
+        ]
+        for step in steps:
+            end = date(step.get("finished_at"))
+            if (
+                step.get("status") == "ERROR"
+                and end
+                and any((date(later.get("started_at")) or end) > end for later in steps)
+            ):
+                candidates.append(end)
+        boundary = max((d for d in candidates if d), default=None)
+    intervals = []
+    live = False
+    for step in steps:
+        start, end = date(step.get("started_at")), date(step.get("finished_at"))
+        running = job.status == "RUNNING" and step.get("status") == "RUNNING" and not end
+        if running:
             end = now
-        if start and end and timezone.is_aware(start) and timezone.is_aware(end) and end >= start:
-            intervals.append((start, end))
-    # Merge overlaps so one recorded interval cannot be counted twice.
+        if not start or not end or end < start:
+            continue
+        if boundary:
+            start = max(start, boundary)
+        if end <= start:
+            continue
+        intervals.append((start, end))
+        live = live or running
     merged = []
     for start, end in sorted(intervals):
         if merged and start <= merged[-1][1]:
             merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
         else:
             merged.append((start, end))
+    seconds = (
+        sum((end - start).total_seconds() for start, end in merged)
+        if merged
+        else 0
+        if boundary
+        else None
+    )
+    observed = (
+        now if live else merged[-1][1] if merged else boundary or job.started_at or job.created_at
+    )
     return {
-        "active_analysis_seconds": int(sum((end-start).total_seconds() for start, end in merged)) if merged else None,
-        "clarification_since": ((run.finished_at if run else None) or job.finished_at) if paused else None,
-        # A resumed job has no reliable timestamp for its latest queue admission.
-        "queued_since": job.created_at if job.status == "QUEUED" and not job.started_at else None,
+        "active_analysis_seconds": int(seconds) if seconds is not None else None,
+        "analysis_clock": {
+            "seconds": seconds,
+            "observed_at": observed.isoformat(),
+            "running": live,
+        },
+        "clarification_since": ((run.finished_at if run else None) or job.finished_at)
+        if paused
+        else None,
+        "queued_since": (boundary or job.created_at)
+        if job.status == "QUEUED" and not job.started_at
+        else None,
     }
 
 

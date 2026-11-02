@@ -135,6 +135,10 @@ Selected user-facing response prefixes can appear as drafts pending validation; 
 incomplete JSON object is never rendered as a final answer.
 Terminal cycles stay anchored to their recorded cycle/step timestamps rather than
 following later discussion inputs. Reopening the page preserves that ordering.
+The conversation and Activity share one clock for AI execution in the current retry.
+Explicit retries reset that clock; prior attempts and resource/clarification waits are
+excluded. Recorded step intervals remain available in history. A running clock advances
+locally between polls and stops when execution pauses, ends or tracking becomes unavailable.
 Persistent Antigravity turns require a native `finish` completion after the current
 input. A cached structured result without that completion is rejected and is not
 shown as a draft or saved as a new reply. Equal response text alone is not an error.

@@ -515,7 +515,9 @@ def retry_analysis(request_id):
     invalidate_superseded_steps(job, run.orchestration.get("outputs", {}))
     job.status, job.error, job.finished_at = "QUEUED", "", None
     job.payload["waiting_reason"] = ""
-    job.save(update_fields=["status", "error", "finished_at", "payload"])
+    job.payload["retry_requested_at"] = timezone.now().isoformat()
+    job.started_at = None
+    job.save(update_fields=["status", "error", "started_at", "finished_at", "payload"])
     AnalysisRun.objects.filter(job=job).update(status="QUEUED", error="", finished_at=None)
     request.status, request.error = "QUEUED", ""
     request.save(update_fields=["status", "error", "updated_at"])

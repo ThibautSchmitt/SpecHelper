@@ -155,7 +155,9 @@ export type WorkPhase = {
   activity:string; preview:string; seen_at:string; closed:boolean; active:boolean;
   events:{id:string; operation:string; state:"running"|"done"|"error"|"unknown"; observed_at:string}[];
 };
+export type AnalysisClock = { seconds:number|null; observed_at:string; running:boolean };
 export type WorkExecution = {
+  analysis_clock?:AnalysisClock;
   id:number; kind:"discussion"|"analysis"; status:string; revision?:number; run_number?:number;
   created_at:string; started_at?:string|null; finished_at?:string|null;
   waiting_reason:string; waiting_causes:string[]; phases:WorkPhase[];

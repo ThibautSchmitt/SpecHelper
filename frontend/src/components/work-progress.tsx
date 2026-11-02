@@ -2,8 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { AlertCircle, CheckCircle2, ChevronDown, Circle, Clock3, LoaderCircle } from "lucide-react";
-import { type WorkExecution, type WorkPhase } from "@/lib/api";
+import { type AnalysisClock, type WorkExecution, type WorkPhase } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { executionSeconds } from "@/lib/execution-clock";
 import { SafeMarkdown } from "@/components/safe-markdown";
 
 const activities:Record<string,string>={preparing:"Preparing the request…",processing:"AI is processing…",search:"Searching project sources…",read:"Reading source files…",git:"Inspecting Git history…",command:"Running a command…",tool:"Operation in progress…",plan:"Updating the work plan…",reference:"Looking up references…",writing:"Writing the response…"};
@@ -13,14 +14,14 @@ export function activityLabel(phases:WorkPhase[]) {
   return current ? activities[current.activity] || "AI is processing…" : phases.length ? "AI is processing…" : "Preparing the request…";
 }
 
-export function ProgressDisclosure({label,subtitle,active,complete=false,attention=false,partial=false,className="",cycle,startedAt,unavailable=false,expandable=true,children}:{
-  label:string;subtitle?:string;active:boolean;complete?:boolean;attention?:boolean;partial?:boolean;
+export function ProgressDisclosure({label,subtitle,active,complete=false,attention=false,partial=false,className="",cycle,startedAt,clock,unavailable=false,expandable=true,children}:{
+  clock?:AnalysisClock;label:string;subtitle?:string;active:boolean;complete?:boolean;attention?:boolean;partial?:boolean;
   className?:string;cycle?:number|string;startedAt?:string|null;unavailable?:boolean;expandable?:boolean;children:ReactNode;
 }) {
   const {t}=useI18n();
   const [now,setNow]=useState(()=>Date.now());
   useEffect(()=>{if(!active)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[active]);
-  const elapsed=startedAt ? Math.max(0,Math.floor((now-Date.parse(startedAt))/1000)) : null;
+  const elapsed=clock ? executionSeconds(clock,now,unavailable) : startedAt ? Math.max(0,Math.floor((now-Date.parse(startedAt))/1000)) : null;
   const Icon=unavailable ? Clock3 : active ? LoaderCircle : complete ? CheckCircle2 : attention ? AlertCircle : Clock3;
   const heading=<><Icon size={18} className={active&&!unavailable ? "investigation-active animate-spin motion-reduce:animate-none" : complete ? "work-complete" : attention ? "investigation-attention" : "muted"} aria-hidden="true"/>
       <span className="investigation-heading" role="status" aria-live="polite"><span>{t(unavailable ? "Progress updates unavailable" : label)}</span>{subtitle&&<span className="investigation-subtitle">{t(subtitle)}</span>}</span>

@@ -21,7 +21,7 @@ def test_active_time_excludes_thirteen_hours_of_clarification_and_resource_waits
         {"started_at": (end-timedelta(seconds=5)).isoformat(), "finished_at": end.isoformat(), "status": "DONE"},
     ])
     timing = analysis_timing(job, run, True, now)
-    assert timing == {"active_analysis_seconds": 75, "clarification_since": end, "queued_since": None}
+    assert timing == {"active_analysis_seconds": 75, "analysis_clock": {"seconds": 75, "observed_at": end.isoformat(), "running": False}, "clarification_since": end, "queued_since": None}
     assert analysis_timing(job, run, True, now+timedelta(days=2)) == timing
     job.status = "QUEUED"
     assert analysis_timing(job, run, False, now)["active_analysis_seconds"] == 75
