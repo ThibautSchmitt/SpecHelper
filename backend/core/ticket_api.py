@@ -1,13 +1,12 @@
 """Ticket connector administration and explicitly confirmed publication endpoints."""
 
 import math
-from datetime import timedelta
 from typing import Literal
 from uuid import UUID
 
 from django.db import transaction
-from django.db.models import Case, CharField, Exists, Max, OuterRef, Q, Value, When
-from django.db.models.functions import Coalesce, Greatest
+from django.db.models import Q
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router, Schema
@@ -288,179 +287,73 @@ def list_tickets(
     environment: str = "",
     search: str = "",
     page: int = 1,
-    status: str = "all",
+    status: str = "PUBLISHED",
 ):
+    """Local confirmed-publication history; drafts and operational states stay in conversations."""
     if status not in {"all", "DRAFT", *PublishedTicket.Status.values}:
         raise HttpError(422, "Unknown ticket publication status.")
-    # One internal document per row. Legacy publications without a document stay visible.
-    prepared = ConversationTicket.objects.select_related(
-        "request__environment", "source_version", "topic_message"
-    ).prefetch_related("publications__connector", "publications__version", "publications__request")
-    related = PublishedTicket.objects.filter(conversation_ticket=OuterRef("pk"))
-    stale = Q(status="PUBLISHING", updated_at__lt=timezone.now() - timedelta(seconds=90))
-    prepared = prepared.annotate(
-        uncertain=Exists(related.filter(Q(status="UNCERTAIN") | stale)),
-        publishing=Exists(related.filter(status="PUBLISHING").exclude(stale)),
-        failed=Exists(
-            related.filter(status="ERROR").exclude(
-                destination__in=PublishedTicket.objects.filter(
-                    conversation_ticket=OuterRef("conversation_ticket_id")
-                )
-                .exclude(status="ERROR")
-                .values("destination")
-            )
-        ),
-        published=Exists(related.filter(status="PUBLISHED")),
-    ).annotate(
-        ticket_status=Case(
-            When(uncertain=True, then=Value("UNCERTAIN")),
-            When(publishing=True, then=Value("PUBLISHING")),
-            When(failed=True, then=Value("ERROR")),
-            When(published=True, then=Value("PUBLISHED")),
-            default=Value("DRAFT"),
-            output_field=CharField(),
-        )
+    values = (
+        PublishedTicket.objects.filter(status="PUBLISHED")
+        .filter(Q(external_id__regex=r"\S") | Q(external_key__regex=r"\S"))
+        .select_related("connector", "version", "request")
     )
-    legacy = PublishedTicket.objects.filter(conversation_ticket__isnull=True).select_related(
-        "connector", "version", "request"
+    environments = list(
+        values.exclude(version__environment_name="")
+        .order_by("version__environment_name")
+        .values_list("version__environment_name", flat=True)
+        .distinct()
     )
-    environments = sorted(
-        (
-            set(PublishedTicket.objects.values_list("version__environment_name", flat=True))
-            | set(
-                ConversationTicket.objects.values_list(
-                    "request__environment_name_snapshot", flat=True
-                )
-            )
-            | set(ConversationTicket.objects.values_list("request__environment__name", flat=True))
-        )
-        - {None, ""}
-    )
-    if status != "all":
-        prepared = prepared.filter(ticket_status=status)
-        legacy = (
-            legacy.filter(Q(status="UNCERTAIN") | stale)
-            if status == "UNCERTAIN"
-            else legacy.filter(status=status)
-        )
-        if status == "PUBLISHING":
-            legacy = legacy.exclude(stale)
+    # Retain compatibility with older URLs without exposing failed/pending operations here.
+    if status not in {"all", "PUBLISHED"}:
+        values = values.none()
     if platform:
-        prepared = prepared.filter(publications__platform=platform).distinct()
-        legacy = legacy.filter(platform=platform)
+        values = values.filter(platform=platform)
     if environment:
-        prepared = prepared.filter(
-            Q(request__environment_name_snapshot=environment)
-            | Q(request__environment__name=environment)
-        )
-        legacy = legacy.filter(version__environment_name=environment)
+        values = values.filter(version__environment_name=environment)
     if search:
         search = search[:500]
-        prepared = prepared.filter(
-            Q(draft__title__icontains=search)
-            | Q(request__display_title__icontains=search)
-            | Q(request__need__icontains=search)
-            | Q(publications__external_key__icontains=search)
-            | Q(publications__external_id__icontains=search)
-            | Q(publications__project__icontains=search)
-        ).distinct()
-        legacy = legacy.filter(
+        values = values.filter(
             Q(title__icontains=search)
             | Q(external_key__icontains=search)
             | Q(external_id__icontains=search)
+            | Q(platform__icontains=search)
             | Q(project__icontains=search)
-            | Q(request__display_title__icontains=search)
-            | Q(request__need__icontains=search)
         )
-    legacy_drafts = (
-        TicketPublicationDraft.objects.filter(conversation_ticket__isnull=True)
-        .select_related("version__request", "connector")
-        .annotate(
-            delivered=Exists(
-                PublishedTicket.objects.filter(
-                    version_id=OuterRef("version_id"),
-                    connector_id=OuterRef("connector_id"),
-                    project=OuterRef("project"),
-                    conversation_ticket__isnull=True,
-                )
-            )
-        )
-        .filter(delivered=False)
-    )
-    if status not in {"all", "DRAFT"}:
-        legacy_drafts = legacy_drafts.none()
-    if platform:
-        legacy_drafts = legacy_drafts.filter(connector__platform=platform)
-    if environment:
-        legacy_drafts = legacy_drafts.filter(version__environment_name=environment)
-    if search:
-        legacy_drafts = legacy_drafts.filter(
-            Q(content__title__icontains=search)
-            | Q(project__icontains=search)
-            | Q(version__request__display_title__icontains=search)
-            | Q(version__request__need__icontains=search)
-        )
-    environments = sorted(
-        set(environments)
-        | set(
-            TicketPublicationDraft.objects.exclude(version__environment_name="").values_list(
-                "version__environment_name", flat=True
-            )
-        )
-    )
-    prepared = prepared.annotate(
-        sort_at=Greatest("updated_at", Coalesce(Max("publications__updated_at"), "updated_at"))
-    )
-    index = (
-        legacy.order_by()
-        .annotate(
-            kind=Value("publication", output_field=CharField()),
-            sort_at=Coalesce("updated_at", "created_at"),
-        )
-        .values("id", "sort_at", "kind")
-        .union(
-            prepared.order_by()
-            .annotate(kind=Value("preparation", output_field=CharField()))
-            .values("id", "sort_at", "kind"),
-            legacy_drafts.order_by()
-            .annotate(
-                kind=Value("publication_draft", output_field=CharField()),
-                sort_at=Coalesce("updated_at", "created_at"),
-            )
-            .values("id", "sort_at", "kind"),
-        )
-        .order_by("-sort_at", "id")
-    )
     page, size = max(1, page), 25
-    selected = list(index[(page - 1) * size : page * size])
-    publications = {
-        v.pk: v
-        for v in legacy.filter(pk__in=[r["id"] for r in selected if r["kind"] == "publication"])
-    }
-    preparations = {
-        v.pk: v
-        for v in prepared.filter(pk__in=[r["id"] for r in selected if r["kind"] == "preparation"])
-    }
-    destination_drafts = {
-        v.pk: v
-        for v in legacy_drafts.filter(
-            pk__in=[r["id"] for r in selected if r["kind"] == "publication_draft"]
-        )
-    }
+    values = values.annotate(publication_date=Coalesce("finished_at", "created_at")).order_by(
+        "-publication_date", "-created_at", "id"
+    )
     return {
-        "items": [
-            ticket_record(publications[r["id"]])
-            if r["kind"] == "publication"
-            else preparation_dict(preparations[r["id"]])
-            if r["kind"] == "preparation"
-            else destination_draft_dict(destination_drafts[r["id"]])
-            for r in selected
-        ],
-        "total": index.count(),
+        "items": [published_summary(value) for value in values[(page - 1) * size : page * size]],
+        "total": values.count(),
         "page": page,
         "page_size": size,
         "environments": environments,
-        "statuses": ["DRAFT", "PUBLISHING", "PUBLISHED", "ERROR", "UNCERTAIN"],
+    }
+
+
+def published_summary(value):
+    from .ticket_publication import stored_publication_url
+
+    return {
+        "id": str(value.pk),
+        "title": value.title,
+        "status": "PUBLISHED",
+        "platform": value.platform,
+        "project": value.project,
+        "external_id": value.external_id,
+        "external_key": value.external_key,
+        "url": stored_publication_url(value),
+        "environment_name": value.version.environment_name,
+        "published_at": value.finished_at or value.created_at,
+        "connector_id": value.connector_id,
+        "connector_name": value.connector.name,
+        "request_id": str(value.request_id),
+        "analysis_deleted": bool(value.request.deleted_at),
+        "version_number": value.version.number,
+        "conversation_ticket_id": str(value.conversation_ticket_id)
+        if value.conversation_ticket_id
+        else None,
     }
 
 

@@ -8,9 +8,12 @@ retain the prepared-ticket identity when known. The former selected preparation
 JSON remains mirrored for compatibility, but it is not the identity of every ticket.
 Reading or saving a preparation does not enqueue work. Row locks and revision guards
 prevent stale saves or a delayed drafting response from overwriting another ticket.
-Tickets browsing groups all destinations under their prepared document; legacy
-standalone publications remain readable. Summary states surface unresolved deliveries,
-with each destination's real outcome retained. Reconciliation only searches for the
+Tickets browsing reads individual `PublishedTicket` records only when their status is
+confirmed and an external identifier or reference exists. Its small projection excludes
+bodies, drafts and operational histories. Saved URLs are rechecked against the connection
+origin and supported provider ticket routes without contacting the provider; missing or
+unsafe links are not reconstructed. Drafts and operation details remain available from
+the conversation. Reconciliation only searches for the
 original external reference. A retry of a definitively rejected operation records its
 previous outcome in `PublishedTicket.attempt_history` before claiming another attempt.
 Published snapshots remain immutable, including when their source conversation is archived.

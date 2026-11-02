@@ -235,7 +235,7 @@ def test_multiple_tickets_have_explicit_sources_and_independent_edits(client, en
     assert save_draft(client, row, drafts[0], body="Stale edit").status_code == 409
     assert len(detail(client, row)["conversation_tickets"]) == 2
     listing = client.get("/api/tickets", {"status": "all"}).json()
-    assert listing["total"] == 2
+    assert listing["total"] == 0
     assert client.get(f"/api/tickets/{drafts[0]['id']}").json()["description"] == "Dates only"
     assert not Job.objects.exists()
     other = conversation(environment)

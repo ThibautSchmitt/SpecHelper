@@ -6,7 +6,7 @@ import re
 import unicodedata
 import uuid
 from datetime import timedelta
-from urllib.parse import unquote, urlsplit, urlunsplit
+from urllib.parse import parse_qs, unquote, urlsplit, urlunsplit
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -446,6 +446,64 @@ def validate_payload(payload, options):
             raise HttpError(422, "A selected label or assignee is unavailable.")
     if not payload["title"].strip() or not render_body(payload, options).strip():
         raise HttpError(422, "Enter a ticket title and description.")
+
+
+def stored_publication_url(record):
+    """Validate a saved link without contacting a provider or guessing an absent URL."""
+    value = record.url
+    try:
+        parsed, origin = urlsplit(value), urlsplit(record.connector.base_url)
+        host = (
+            "github.com"
+            if record.platform == "github" and origin.hostname == "api.github.com"
+            else origin.hostname
+        )
+        if (
+            not value
+            or not parsed.hostname
+            or not origin.hostname
+            or parsed.scheme not in {"http", "https"}
+            or parsed.scheme != origin.scheme
+            or (parsed.hostname, parsed.port) != (host, origin.port)
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+            or "\\" in value
+            or any(ord(char) < 33 for char in value)
+        ):
+            return ""
+        path = unquote(parsed.path)
+        if (
+            "\\" in path
+            or any(ord(char) < 33 for char in path)
+            or any(part in {".", ".."} for part in path.split("/"))
+        ):
+            return ""
+        # Only provider ticket routes are useful here, never arbitrary redirect/search URLs.
+        if record.platform in {"github", "gitlab"}:
+            pattern = (
+                r"/[^/]+/[^/]+/issues/[1-9]\d*"
+                if record.platform == "github"
+                else r"/.+/-/issues/[1-9]\d*"
+            )
+            return value if not parsed.query and re.fullmatch(pattern, path) else ""
+        if record.platform == "jira":
+            return (
+                value
+                if not parsed.query
+                and re.fullmatch(r".*/browse/[A-Za-z][A-Za-z0-9_]*-[1-9]\d*", path)
+                else ""
+            )
+        if record.platform == "glpi":
+            return (
+                value
+                if path.endswith("/front/ticket.form.php")
+                and parse_qs(parsed.query, keep_blank_values=True) == {"id": [record.external_id]}
+                else ""
+            )
+    except (TypeError, ValueError):
+        pass
+    return ""
 
 
 def store_success(record, result):

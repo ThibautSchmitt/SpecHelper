@@ -2358,5 +2358,11 @@
   "Resume": "Resume",
   "See error": "See error",
   "Refresh": "Refresh",
-  "Modify": "Modify"
+  "Modify": "Modify",
+  "Published tickets": "Published tickets",
+  "Find tickets created from SpecHelper on your external platforms.": "Find tickets created from SpecHelper on your external platforms.",
+  "Title, reference, platform or project": "Title, reference, platform or project",
+  "No published tickets yet.": "No published tickets yet.",
+  "Tickets published from your conversations will appear here.": "Tickets published from your conversations will appear here.",
+  "External link unavailable": "External link unavailable"
 }

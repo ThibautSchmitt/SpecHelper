@@ -201,9 +201,9 @@ their generated content when the conversation or environment later changes.
 The general conversation action lets you choose a source when several analyses exist,
 or keep an explicitly unverified draft. Each saved ticket has its own identity,
 subject and edits; it does not replace another ticket in the same conversation.
-Reopen it from its timeline entry, **Prepared tickets**, or **Resume** in **Tickets**.
-The editor opens directly from Tickets without leaving that page. Rewriting a saved
-document with AI requires confirmation; concurrent edits are rejected rather than overwritten.
+Reopen a draft from its conversation timeline or **Prepared tickets**. Preparation,
+editing and publication stay in that conversation. Rewriting a saved document with AI
+requires confirmation; concurrent edits are rejected rather than overwritten.
 
 **Prepare a ticket** opens an editable draft in the conversation. It never starts
 the three roles or publishes anything. You can save, copy or download the draft
@@ -291,25 +291,24 @@ transfer may resume against an existing issue without creating another issue.
 
 **Home** summarizes mutually exclusive work needing action, work in progress and
 available results. **Analyses** provides search, filters and the conversation history.
-**Tickets** lists drafts and published documents, with one row per internal ticket.
-Each ticket retains its subject, conversation and optional source analysis, and can
-have several destination-specific publications. Older standalone publications remain
-visible, as do saved destination drafts without an internal document. Resume those
-with their original connection and destination to restore the existing edits.
-Expand a ticket's publications to inspect each account, destination, external
-reference, submitted content, error and earlier attempts. A successful destination
-does not hide another destination's pending, failed or uncertain operation.
+**Tickets** is a compact history of confirmed external publications. Each row represents
+one external ticket, including when one conversation or prepared document has several
+publications. Rows show the title, platform, external reference, environment, publication
+date and optional connection name. **Open** goes directly to the saved external ticket
+in a new tab. An optional secondary link returns to the source conversation, including
+archived conversations.
 
-Search titles, external references, destinations or source conversation titles/needs.
-The status selector is always close to search; **Filters** exposes platform and
-environment. Pagination appears only when there is more than one page.
-Visible states are **Draft**, **Publication in progress**, **Published**, **Failed**
-and **Publication to verify**. Verification of an uncertain operation uses the original
-publication identity and searches the original destination; it never creates a new
-ticket when the outcome is unknown. Refresh only reads SpecHelper's saved records.
-Archived conversations and their tickets remain consultable. Publication still uses
-the selected external account and requires explicit human confirmation and the existing
-independent checks; no deep analysis starts automatically when preparing a ticket.
+Only confirmed publications with an external identifier or reference appear. Drafts,
+active operations, failures and uncertain publications stay in their conversation and
+existing operation details; they are not promoted to published tickets. Historical
+confirmed references with missing or unsafe URLs remain visible with **External link
+unavailable**. SpecHelper does not guess links or fetch external ticket content.
+
+Search published titles, references, platforms or projects. **Filters** exposes platform
+and environment; there is no status filter or selected-ticket preview. Pagination appears
+only for multiple pages. **Refresh** reloads local publication records, without synchronizing
+external workflow states. Preparing a ticket never launches a deep analysis automatically,
+and uncertain publications still require safe verification of the original operation.
 
 You can edit a short analysis title without replacing the original need. The history
 retains messages, need revisions, captured references and result versions.
