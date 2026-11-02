@@ -2244,5 +2244,13 @@
   "Five-hour limit reached": "Limite de cinq heures atteinte",
   "Another reported quota limit is blocking this connection. See quota details.": "Une autre limite de quota signalée bloque cette connexion. Consultez le détail des quotas.",
   "Quota limit reported": "Limite de quota signalée",
-  "The provider has not identified the quota period.": "Le fournisseur n’a pas précisé la période du quota."
+  "The provider has not identified the quota period.": "Le fournisseur n’a pas précisé la période du quota.",
+  "Connection failed": "Échec de connexion",
+  "Edit PostgreSQL connection": "Modifier la connexion PostgreSQL",
+  "Delete PostgreSQL connection": "Supprimer la connexion PostgreSQL",
+  "Leave the password blank to keep the saved password.": "Laissez le mot de passe vide pour conserver le mot de passe enregistré.",
+  "Connection deleted.": "Connexion supprimée.",
+  "Delete this PostgreSQL connection? Connections used by an environment or analysis history cannot be deleted.": "Supprimer cette connexion PostgreSQL ? Les connexions utilisées par un environnement ou un historique d’analyse ne peuvent pas être supprimées.",
+  "This PostgreSQL connection is used by an environment or analysis history.": "Cette connexion PostgreSQL est utilisée par un environnement ou un historique d’analyse.",
+  "Wait for analyses using this PostgreSQL connection to finish before editing it.": "Attendez la fin des analyses utilisant cette connexion PostgreSQL avant de la modifier."
 }

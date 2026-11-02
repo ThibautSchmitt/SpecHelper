@@ -10,6 +10,7 @@ export function ProviderLogo({ provider }: { provider?: string | null }) {
     </svg>
   );
   if (provider === "gitlab") return <img src="/gitlab.svg" width={18} height={18} className="shrink-0" data-provider="gitlab" alt="" aria-hidden="true" />;
+  if (provider === "postgresql") return <img src="/postgresql.png" width={18} height={18} className="shrink-0 object-contain" data-provider="postgresql" alt="" aria-hidden="true" />;
   if (provider === "jira" || provider === "glpi") return <img src={provider === "jira" ? "/jira.svg" : "/glpi.png"} width={18} height={18} className="shrink-0 object-contain" data-provider={provider} alt="" aria-hidden="true" />;
   return <Ticket size={18} className="shrink-0" data-provider={provider || "unknown"} aria-hidden="true" focusable="false" />;
 }

@@ -171,8 +171,7 @@ test("PostgreSQL: one test and three simple statuses", async ({ page }) => {
       },
     });
   });
-  await page.goto("/admin");
-  await page.getByRole("button", { name: "Environments", exact: true }).click();
+  await page.goto("/admin?tab=environments&sources=postgres");
   const database = page.getByRole("region", {
     name: "PostgreSQL connections",
     exact: true,
@@ -188,10 +187,10 @@ test("PostgreSQL: one test and three simple statuses", async ({ page }) => {
     .getByLabel("PostgreSQL URL", { exact: true })
     .fill("postgresql://reader:fixture-password@db.example/business");
   await expect(
-    database.getByRole("button", { name: "Test connection", exact: true }),
+    database.getByRole("button", { name: "Save", exact: true }),
   ).toHaveCount(1);
   await database
-    .getByRole("button", { name: "Test connection", exact: true })
+    .getByRole("button", { name: "Save", exact: true })
     .click();
   await expect(database.getByRole("status")).toContainText("Connection OK");
   await expect(database.getByRole("status")).toContainText("Read query OK");

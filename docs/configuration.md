@@ -83,6 +83,15 @@ Use **Environments → Manage PostgreSQL connections** to save and test a dedica
 then select that connection in an environment. This database is separate from
 SpecHelper's own application PostgreSQL.
 
+Each connection card shows the PostgreSQL elephant, its name, recorded status and
+server/database address. **Edit** opens the form inside that card; clicking it again
+or choosing **Cancel** discards unsaved edits. **Save** checks the proposed connection
+and read-only permissions before retaining it. Leave the password blank while editing
+to keep the saved secret. The **…** menu contains testing and confirmed deletion.
+An environment or analysis-history reference prevents deletion, and queued/running
+analyses prevent changing the connection they use. This also applies to direct
+PostgreSQL connections; no third-party administration service is required.
+
 The reader must not be an owner or superuser and must not have write or CREATE
 privileges. Testing checks connectivity, a read query and the required restrictions;
 it does not validate the whole schema or business data. Runtime queries additionally

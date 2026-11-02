@@ -2,7 +2,9 @@ import re
 from typing import Literal
 from uuid import UUID
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import Q
+from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 from ninja import File, NinjaAPI, Schema
@@ -522,7 +524,7 @@ def configure_ai(request, connection_id: int, payload: ConnectionOptionsIn):
     return edit_connection(request, connection_id, ConfigurationPatch(enabled=payload.enabled))
 
 
-def database_values(payload):
+def database_values(payload, *, require_password=True):
     values = payload.model_dump(exclude={"url", "password"})
     password = payload.password
     if payload.url:
@@ -546,7 +548,7 @@ def database_values(payload):
             password = password or parsed.get("password", "")
         except Exception:
             raise HttpError(422, "Invalid PostgreSQL URL.")
-    if not all(values.get(field) for field in ("host", "database", "username")) or not password:
+    if not all(values.get(field) for field in ("host", "database", "username")) or (require_password and not password):
         raise HttpError(422, "Enter the host, database, username and password.")
     if not 1 <= values["port"] <= 65535 or values["sslmode"] not in {
         "require",
@@ -582,19 +584,68 @@ def create_database(request, payload: DatabaseIn):
 
 @api.post("/connections/databases/{connection_id}/test")
 def test_database(request, connection_id: int):
-    connection = get_object_or_404(DatabaseConnection, pk=connection_id)
-    try:
-        check_connection(connection)
-    except ValueError:
-        connection.status = "ERROR"
+    failure = None
+    with transaction.atomic():
+        connection = get_object_or_404(DatabaseConnection.objects.select_for_update(), pk=connection_id)
+        try:
+            check_connection(connection)
+            connection.status = "CONNECTED"
+        except ValueError as exc:
+            connection.status = "ERROR"
+            failure = exc
         connection.save(update_fields=["status"])
-        raise
-    connection.status = "CONNECTED"
-    connection.save(update_fields=["status"])
+    if failure:
+        raise failure
     return {
         "status": connection.status,
         "checks": {"connection": True, "read": True, "read_only": True},
     }
+
+
+@api.put("/connections/databases/{connection_id}")
+@transaction.atomic
+def update_database(request, connection_id: int, payload: DatabaseIn):
+    # Coordinate with task admission: a running or queued investigation must not
+    # silently start using different database credentials or another target.
+    InstanceSettings.objects.get_or_create(pk=1)
+    InstanceSettings.objects.select_for_update().get(pk=1)
+    connection = get_object_or_404(DatabaseConnection.objects.select_for_update(), pk=connection_id)
+    affected = Request.objects.filter(Q(database_snapshot__id=connection_id) | Q(environment__database_id=connection_id))
+    if Job.objects.filter(target__in=[str(pk) for pk in affected.values_list("pk", flat=True)], status__in=["QUEUED", "RUNNING"]).exists():
+        raise HttpError(409, "Wait for analyses using this PostgreSQL connection to finish before editing it.")
+    if DatabaseConnection.objects.exclude(pk=connection_id).filter(name=payload.name).exists():
+        raise HttpError(409, "This name already exists")
+    values, password = database_values(payload, require_password=False)
+    for key, value in values.items():
+        setattr(connection, key, value)
+    if password:
+        connection.secret = encrypt(password)
+    check_connection(connection)
+    connection.status = "CONNECTED"
+    try:
+        with transaction.atomic():
+            connection.save()
+    except IntegrityError as exc:
+        raise HttpError(409, "This name already exists") from exc
+    return {"id":connection.pk, "name":connection.name, "status":connection.status,
+            "checks":{"connection":True, "read":True, "read_only":True}}
+
+
+@api.delete("/connections/databases/{connection_id}")
+@transaction.atomic
+def delete_database(request, connection_id: int):
+    InstanceSettings.objects.get_or_create(pk=1)
+    InstanceSettings.objects.select_for_update().get(pk=1)
+    connection = get_object_or_404(DatabaseConnection.objects.select_for_update(), pk=connection_id)
+    if (connection.environment_set.exists()
+            or Request.objects.filter(database_snapshot__id=connection_id).exists()
+            or ResultVersion.objects.filter(database_snapshot__id=connection_id).exists()):
+        raise HttpError(409, "This PostgreSQL connection is used by an environment or analysis history.")
+    try:
+        connection.delete()
+    except ProtectedError as exc:
+        raise HttpError(409, "This PostgreSQL connection is used by an environment or analysis history.") from exc
+    return {"deleted":True}
 
 
 @api.get("/environments")

@@ -35,6 +35,13 @@ Its binary/service is not relicensed under MIT. Antigravity identification uses 
 [press assets](https://www.antigravity.google/press). The mark belongs to Google,
 retains its brand terms, is not relicensed under MIT and does not imply endorsement.
 
+The PostgreSQL elephant identification mark is bundled unchanged from the
+[official press assets](https://www.postgresql.org/media/img/about/press/elephant.png)
+for PostgreSQL connections, including direct connections. PostgreSQL and the
+Slonik Logo are trademarks or registered trademarks of the PostgreSQL Community
+Association of Canada. Their [trademark policy](https://www.postgresql.org/about/policies/trademarks/)
+applies independently of SpecHelper's MIT license; no endorsement is implied.
+
 ## Adapted shadcn/ui components
 
 The components in `frontend/src/components/ui/` follow and adapt shadcn/ui
