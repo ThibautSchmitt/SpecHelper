@@ -77,9 +77,8 @@ def finish_context(row, output, check=None):
     job.save()
 
     def native(path, payload, **kwargs):
-        assert (
-            payload["session_id"]
-            == (AISession.objects.get(pk=row.discussion_state["session_pk"]).runtime_id or None)
+        assert payload["session_id"] == (
+            AISession.objects.get(pk=row.discussion_state["session_pk"]).runtime_id or None
         )
         assert "ContextSelection" in payload["schema"]["title"]
         assert payload["persistent_conversation"]
@@ -125,6 +124,7 @@ def test_native_hint_prefills_a_complete_need_after_yes(client, thread):
 def test_ambiguous_or_foreign_hint_never_prefills_an_old_subject(client, thread, environment):
     RequestMessage.objects.create(request=thread, role="user", kind="discussion", content="Yes")
     assert detail(client, thread)["deep_analysis_need"] == ""
+
     other = Request.objects.create(environment=environment, need="Other project")
     foreign = RequestMessage.objects.create(
         request=other, role="user", kind="discussion", content="Unrelated"
@@ -135,6 +135,26 @@ def test_ambiguous_or_foreign_hint_never_prefills_an_old_subject(client, thread,
         kind="discussion_reply",
         content="Uncertain",
         data={"analysis_context": {"need": "Invented need", "message_ids": [foreign.pk]}},
+    )
+    assert detail(client, thread)["deep_analysis_need"] == ""
+
+
+@pytest.mark.parametrize("reference", ["missing", "assistant_only"])
+def test_prefill_requires_an_actual_user_reference(client, thread, reference):
+    assistant = RequestMessage.objects.create(
+        request=thread, role="assistant", kind="discussion_reply", content="A possible approach"
+    )
+    RequestMessage.objects.create(
+        request=thread,
+        role="assistant",
+        kind="discussion_reply",
+        content="A suggestion",
+        data={
+            "analysis_context": {
+                "need": "Unconfirmed development requirement",
+                "message_ids": [assistant.pk] if reference == "assistant_only" else [],
+            },
+        },
     )
     assert detail(client, thread)["deep_analysis_need"] == ""
 

@@ -485,6 +485,7 @@ def run_job(job, caller=None):
         "continues that explicit ticket request; an unrelated question does not. Do not create an investigation/documentation task as a substitute for an unknown change. "
         "A draft never triggers publication or independent analysis. In all other cases return ticket=null. "
         "Optionally record analysis_context with a concise current need and the relevant actual message_ids. "
+        "Include at least one actual user message supporting that need; an assistant statement alone is insufficient. "
         "This only pre-fills a user-editable launch form: do not perform or start deep analysis. "
         "Interpret short replies in their preceding exchange. Never use yes/no alone as a need. "
         "Return analysis_context=null if the current subject is ambiguous or missing; never invent a need."

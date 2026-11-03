@@ -79,8 +79,10 @@ def checked_hint(value, hint, cutoff):
     ids = hint.message_ids
     references = messages(value, cutoff).filter(pk__in=ids)
     if (
-        len(set(ids)) != len(ids)
+        not ids
+        or len(set(ids)) != len(ids)
         or references.count() != len(ids)
+        or not references.filter(role="user").exists()
         or references.filter(data__response_status="stale").exists()
     ):
         return None

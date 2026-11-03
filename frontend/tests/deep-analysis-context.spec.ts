@@ -24,6 +24,7 @@ for (const theme of ['light', 'dark']) {
     let launched = 0;
     const value = thread();
     await page.emulateMedia({ colorScheme: theme as 'light' | 'dark' });
+    await page.addInitScript(value => localStorage.setItem('spechelper-theme', value), theme);
     await page.route('**/api/**', r => r.fulfill({ json: [] }));
     await page.route('**/api/access/session', r => r.fulfill({ json: { authenticated: true, mode: 'local' } }));
     await page.route('**/api/settings', r => r.fulfill({ json: { name: 'SpecHelper', language: 'fr' } }));
@@ -34,6 +35,7 @@ for (const theme of ['light', 'dark']) {
       return r.fulfill({ json: { ...value, status: 'QUEUED', conversation_state: 'IN_PROGRESS', discussion: { ...value.discussion, revision: 4, job: { id: 8, status: 'QUEUED', operation: 'analysis_preparation', created_at: at } } } });
     });
     await page.goto(`/analyses/${id}`);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await page.getByRole('button', { name: 'Analyse approfondie', exact: true }).click();
     const modal = page.getByRole('dialog', { name: 'Analyse approfondie', exact: true });
     await expect(modal).toContainText('Précisez le besoin à analyser. SpecHelper utilisera les échanges et les sources pertinents de votre environnement.');
