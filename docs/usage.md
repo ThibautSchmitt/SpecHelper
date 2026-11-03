@@ -197,49 +197,60 @@ their generated content when the conversation or environment later changes.
 
 ## Prepare and publish a ticket
 
-Use **⋯ → Prepare a ticket** on a SpecHelper response to start a draft for that
-exchange. The selected message and its nearby clarifications define the scope;
-unrelated questions elsewhere in a long conversation are excluded. This explicit
-action starts one queued drafting turn with the conversational assistant, never
-the three analysis roles. You can also ask for a ticket in the conversation. If the
-requested change is unclear, the assistant asks one clarification rather than
-inventing a change or offering every historical question in a selector.
+Choose **Prepare a ticket** in a conversation. SpecHelper asks the conversational
+assistant to write a title and description, then presents the draft in a centered
+modal. The genuine queued/running operation appears as **Preparing the ticket…**.
+This is one drafting turn in the existing native session, not an independent deep
+analysis. If essential information is missing, the assistant asks a short question
+instead of inventing a requested change.
 
-A right-side panel presents the editable **Ticket title** and **Ticket description**.
-The draft should explain the need, expected behavior and acceptance criteria, with
-technical details when requested or necessary. **Save** retains the draft without
-requiring a publication account. Reopen it from the conversation timeline or
-**Prepared tickets**: opening a saved draft never regenerates its content. Explicit
-rewriting asks before replacing saved content, and revision guards preserve
-concurrent manual edits. Sources and optional exports remain available in details.
+Each conversation has at most **one active unpublished draft**. Its discreet **Draft**
+action reopens it without regeneration. Saved corrections remain intact. If you want
+a ticket for another need while a draft exists, choose **Resume draft**, **Replace
+draft** or **Cancel**. Replacement requires explicit confirmation of the current
+draft and revision. Its content remains intact if generation fails. The interface
+does not list historical subjects or put draft cards into the message timeline.
 
-Deep analysis is optional for both preparation and publication. A relevant analysis
-can supply existing conclusions and evidence; later proposals are not independently
-verified merely because an earlier cycle completed. The panel shows one discreet
-verification indicator. An interrupted, partial or failed analysis does not certify
-the draft. You can explicitly launch an independent analysis, but preparation,
-saving and publication never start it automatically.
+The native session supplies continuity for returning to an earlier need. Recent
+exchanges, authorized reference documents and relevant analysis results can inform
+the writing; the last message alone does not define the subject. When a native
+session is lost, the existing reconstruction mechanism uses saved history. Missing
+essential context must be requested rather than fabricated.
 
-Choose **Continue to publication**, then an enabled, verified connection associated
-with the environment and a destination accessible with that account. No account is
-required before this step. Multiple accounts of the same provider remain separate
-choices; an unavailable account cannot be selected and a failure never switches
-accounts silently. If none is associated, follow the environment configuration link.
+Edit **Title** and **Description**, then **Save** or **Publish**. Closing warns about
+unsaved edits. **Update with AI** uses the current draft as its editing base and can
+integrate relevant later clarifications, new documents and late analysis results.
+Unrelated intervening subjects must not change the ticket's scope. The proposed
+update is shown for review: choose **Apply** or **Keep my draft**. The saved document
+is not overwritten before this choice. A failed or unnecessary update keeps it
+unchanged; a concurrent manual save invalidates a delayed proposal.
 
-Complete any mandatory destination fields and inspect the content to send. A new
-standard-format preview starts with the conversation draft; an existing destination
-draft keeps its edits. **Use prepared draft** explicitly replaces those destination
-edits. All publication still requires human confirmation. A ticket without complete
-independent verification asks **Publish anyway** or offers **Launch deep analysis**.
-This acknowledgement permits publication; it does not turn its contents into verified
-findings. Destination edits also require acknowledgement when they are not covered
-by the original analysis.
+Deep analysis remains optional for preparing, updating and publishing. A relevant
+analysis can supply existing conclusions and evidence, but new requirements are not
+independently verified merely because a prior cycle completed. The modal shows a
+short verification indication. Launching an independent analysis remains a separate,
+explicit action. After it completes, use **Update with AI** on the same draft.
 
-After confirmed creation, **Ticket published** appears permanently in the conversation
-with its platform, reference and direct external link. It remains after reloading or
-archiving. Each destination has its own event; retries do not duplicate it. Drafts,
-failed writes and uncertain writes never produce a success link. The **Tickets** page
-lists only confirmed external publications; preparation stays in the conversation.
+**Publish** opens account and destination selection in the same modal. Choose an
+enabled, verified connection associated with the environment and an accessible
+destination. Multiple accounts remain separate choices. A failure never switches
+accounts silently. Complete required provider fields and review the exact content.
+A new destination preview starts with the saved draft; an existing destination draft
+keeps its own edits until **Use prepared draft** explicitly replaces them.
+
+Publication always requires human confirmation. If independent verification is
+missing or the sent content is not covered by it, choose **Publish anyway** to
+acknowledge that limit. No agent publishes or launches the three roles automatically.
+A failed write retains the draft. An uncertain write must be verified with its
+original publication reference; it is never resent blindly.
+
+Confirmed creation frees the active draft and leaves **Ticket published** permanently
+in the conversation, with the platform, reference and **Open published ticket** link.
+Each successive publication has its own event, retained after reload or archive.
+Retries do not duplicate events, and failures never produce success links. The
+**Tickets** page contains only confirmed external publications. Historical document
+and publication records remain retained for traceability; they do not form a second
+draft-management interface.
 
 Destination-specific behavior matters:
 

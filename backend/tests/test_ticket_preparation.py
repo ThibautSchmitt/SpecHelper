@@ -221,12 +221,12 @@ def test_single_assistant_drafts_from_scoped_sources_and_resumes_its_session(cli
     assert response.status_code == 200, response.content
     job = Job.objects.get()
     assert job.kind == "discussion" and not AnalysisRun.objects.exists()
-    assert job.payload["ticket_preparation"]["inputs"]["topic"]["id"] == question.pk
+    assert f"message:{question.pk}" in {item["id"] for item in job.payload["ticket_preparation"]["inputs"]["observations"]}
     job.status = "RUNNING"
     job.save()
     def runtime(path, payload, **kwargs):
         assert payload["session_id"] == existing_session.runtime_id
-        assert "Draft a useful" in payload["prompt"]
+        assert "persistent conversation" in payload["prompt"]
         inputs = json.loads(payload["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
         assert "contracts.py:42" in str(inputs["observations"])
         assert "title" in payload["schema"]["properties"]
@@ -279,7 +279,7 @@ def test_generation_rejects_foreign_topic_and_unknown_sources(client, analysis, 
     job.save()
     with pytest.raises(ValueError, match="unknown conversation source"):
         run_job(job, lambda *args, **kwargs: {"session_id":str(uuid4()), "output":{"title":"False source", "body":"Claim", "sources":["message:9999999"]}})
-    assert "ticket_preparation" not in Request.objects.get(pk=analysis.pk).discussion_state
+    assert not Request.objects.get(pk=analysis.pk).discussion_state["ticket_preparation"]["body"]
 
 
 def test_cancelled_drafting_does_not_become_an_ordinary_discussion_retry(client, analysis):
@@ -314,5 +314,7 @@ def test_selected_answer_uses_its_own_clarifications_in_a_long_conversation(clie
     inputs=job.payload["ticket_preparation"]["inputs"]
     assert "Yes, archived records too." in str(inputs)
     assert "Period validation is missing" in str(inputs)
-    assert "UNRELATED_" not in str(inputs)
+    assert len(inputs["observations"]) <= 24
+    assert inputs["current_draft"]["body"] == saved["body"]
+    assert inputs["focus_message_id"] == anchor.pk
     assert not AnalysisRun.objects.exists() and not analysis.business_decisions.exists()

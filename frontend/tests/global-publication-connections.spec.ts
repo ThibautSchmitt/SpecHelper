@@ -152,7 +152,9 @@ for (const language of ["en", "fr"] as const) {
     await page.goto(`/${prepared ? 'analyses' : 'requests'}/${id}`);
     if(prepared){
       await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).last().click();
-      await page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true}).getByRole('button',{name:t('Continue to publication'),exact:true}).click();
+      const preparation=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
+      await preparation.getByRole('button',{name:t('Resume draft'),exact:true}).click();
+      await preparation.getByRole('button',{name:t('Publish'),exact:true}).click();
     }else await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
     const account = dialog.getByLabel(t("Publication connection"), { exact: true });
@@ -169,12 +171,12 @@ for (const language of ["en", "fr"] as const) {
     if(prepared){
       await dialog.getByRole('button',{name:t('Use prepared draft'),exact:true}).click();
       await expect(dialog.getByLabel(t('Ticket title'),{exact:true})).toHaveValue('Prepared correction');
-      await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toContainText('Later proposals remain unverified.');
+      await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toHaveValue('Reject invalid periods.');
     }
     expect(submitted).toBeUndefined();
     await dialog.getByRole("button", { name: t("Create ticket"), exact: true }).click();
     await expect.poll(() => submitted).toMatchObject({ connector_id: 4, project: "OTHER", confirmed: true });
-    if(prepared)expect(submitted.body).toContain('Later proposals remain unverified.');
+    if(prepared)expect(submitted.body).toBe('Reject invalid periods.');
     expect(selectedAccounts).toEqual(["4"]);
   });
 }

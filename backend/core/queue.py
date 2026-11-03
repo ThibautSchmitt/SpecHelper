@@ -522,7 +522,7 @@ def snapshot():
                     if stale
                     else ""
                 ),
-                "href": f"/analyses/{publication.request_id}" + (f"?version={publication.version.number}" if publication.version_id else ""),
+                "href": f"/analyses/{publication.request_id}" + (f"?ticket={publication.conversation_ticket_id}" if publication.conversation_ticket_id else f"?version={publication.version.number}" if publication.version_id else ""),
             }
         )
     for item in Request.objects.select_related("environment").filter(status__in=["DRAFT", "READY", "PARTIAL"], scope_assessment__status__in=["NEEDS_CLARIFICATION", "OUT_OF_SCOPE"]):

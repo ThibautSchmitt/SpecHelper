@@ -496,13 +496,16 @@ def test_separate_prepared_tickets_can_publish_to_same_destination(publication_c
     from core.models import ConversationTicket
     version, connector, provider, payload = publication_context
     first=ConversationTicket.objects.create(request=version.request,source_version=version,draft={"revision":1,"title":"First topic"})
-    second=ConversationTicket.objects.create(request=version.request,source_version=version,draft={"revision":1,"title":"Second topic"})
+    second=None
     provider.create.side_effect=[
         {"external_id":"201","external_key":"#201","url":"https://gitlab.example/team/project/-/issues/201"},
         {"external_id":"202","external_key":"#202","url":"https://gitlab.example/team/project/-/issues/202"},
     ]
     deliveries=[]
-    for ticket in [first,second]:
+    for index in range(2):
+        ticket=first if index==0 else ConversationTicket.objects.create(request=version.request,source_version=version,draft={"revision":1,"title":"Second topic"})
+        if index==1:
+            second=ticket
         values={**payload,"unverified_confirmed":True,"conversation_ticket_id":str(ticket.pk),"idempotency_key":uuid.uuid4(),"title":ticket.draft["title"]}
         deliveries.append(publish(version,connector,values))
     assert len({d.pk for d in deliveries}) == 2
@@ -628,7 +631,7 @@ def test_discussion_double_click_uses_one_persisted_claim_on_postgresql(discussi
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
 
-    from django.db import close_old_connections, connection
+    from django.db import close_old_connections, connection, connections
 
     from core.ticket_preparation import publication_source
     if connection.vendor != "postgresql":
@@ -645,7 +648,7 @@ def test_discussion_double_click_uses_one_persisted_claim_on_postgresql(discussi
         try:
             return publish(publication_source(request.pk, ticket_id=ticket.pk), TicketConnector.objects.get(pk=connector.pk), payload)
         finally:
-            close_old_connections()
+            connections.close_all()
     provider.create.side_effect = slow_provider
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(first_click)
@@ -667,7 +670,10 @@ def test_discussion_ticket_retains_two_destinations_and_links_when_archived(disc
     connector.save(update_fields=["projects"])
     first = publish(source, connector, payload)
     provider.create.return_value = {"external_id":"124", "external_key":"#2", "url":"https://gitlab.example/team/other/-/issues/2"}
-    second = publish(source, connector, {**payload,"project":"99","idempotency_key":uuid.uuid4()})
+    from core.models import ConversationTicket
+    from core.ticket_preparation import publication_source
+    next_ticket = ConversationTicket.objects.create(request=request, draft={"title":"Second ticket", "body":"Another need", "revision":1})
+    second = publish(publication_source(request.pk, ticket_id=next_ticket.pk), connector, {**payload,"conversation_ticket_id":str(next_ticket.pk),"project":"99","idempotency_key":uuid.uuid4()})
     assert first.pk != second.pk
     assert request.messages.filter(kind="ticket_publication").count() == 2
     request.archived_at = timezone.now()
@@ -675,6 +681,6 @@ def test_discussion_ticket_retains_two_destinations_and_links_when_archived(disc
     detail = client.get(f"/api/analyses/{request.pk}")
     assert detail.status_code == 200
     assert {item["url"] for item in detail.json()["publications"]} == {first.url,second.url}
-    assert len(detail.json()["conversation_tickets"]) == 1
+    assert len(detail.json()["conversation_tickets"]) == 2
     assert TestClient(router).get("/tickets").json()["total"] == 2
     assert not request.versions.exists()

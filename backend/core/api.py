@@ -377,6 +377,7 @@ def request_dict(value, full=False):
             for row in PublishedTicket.objects.filter(request=value).select_related("version").order_by("created_at", "id")
         ]
         result["conversation_tickets"] = summaries(value)
+        result["active_ticket"] = next((item for item in result["conversation_tickets"] if item["active"]), None)
         evidence = result["evidence"] or {}
         result["result_state"] = result_state(
             value.status, value.workflow,

@@ -126,6 +126,8 @@ export function PublishTicket({
   conversationTicketId,
   onClosed,
   onAnalyze,
+  embedded = false,
+  onPublished,
   preparedSource = false,
   autoOpen = false,
   hideTrigger = false,
@@ -137,6 +139,8 @@ export function PublishTicket({
   conversationTicketId?: string;
   onClosed?: () => void;
   onAnalyze?: () => void;
+  embedded?: boolean;
+  onPublished?: () => void;
   preparedSource?: boolean;
   autoOpen?: boolean;
   hideTrigger?: boolean;
@@ -148,7 +152,7 @@ export function PublishTicket({
   const [confirmation, setConfirmation] = useState<Payload | null>(null);
   const confirmationPanel = useRef<HTMLDivElement>(null);
   useEffect(()=>{if(confirmation){confirmationPanel.current?.focus();confirmationPanel.current?.scrollIntoView({block:"nearest"});}},[confirmation]);
-  useEffect(()=>{if(autoOpen)dialog.current?.showModal();},[autoOpen]);
+  useEffect(()=>{if(autoOpen&&!embedded)dialog.current?.showModal();},[autoOpen,embedded]);
   const [connectors, setConnectors] = useState<TicketConnector[]>([]);
   const [connector, setConnector] = useState("");
   const [projects, setProjects] = useState<Destination[]>([]);
@@ -456,6 +460,7 @@ export function PublishTicket({
         return;
       }
       setResult(data);
+      if(data.status === "PUBLISHED") onPublished?.();
       if (["PUBLISHED", "ERROR"].includes(data.status)) {
         setPending(null);
         remember(storageKey, null);
@@ -496,6 +501,7 @@ export function PublishTicket({
     setDraftSaveFailed(false);
     onClosed?.();
   }
+  const Surface = embedded ? "section" : "dialog";
   return (
     <>
       {!hideTrigger && <Button
@@ -507,16 +513,17 @@ export function PublishTicket({
       >
         {t(triggerLabel)}
       </Button>}
-      <dialog
-        ref={dialog}
-        className="publication-dialog"
-        aria-labelledby={`publication-title-${prefix}`}
+      <Surface
+        ref={embedded ? undefined : dialog}
+        className={embedded ? "" : "publication-dialog"}
+        aria-labelledby={embedded ? undefined : `publication-title-${prefix}`}
+        aria-label={embedded ? t("Publication destination") : undefined}
         onCancel={(event) => {
           event.preventDefault();
           close();
         }}
       >
-        <div className="flex items-start justify-between gap-4">
+        {!embedded && <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id={`publication-title-${prefix}`}>{t("Publish ticket")}</h2>
             <p className="mt-1 text-sm muted">
@@ -526,7 +533,7 @@ export function PublishTicket({
           <Button type="button" variant="ghost" onClick={close}>
             {t("Close")}
           </Button>
-        </div>
+        </div>}
         {error && (
           <p
             role="alert"
@@ -967,10 +974,10 @@ export function PublishTicket({
         </div>}
         <div className="mt-4 flex justify-end border-t pt-4">
           <Button type="button" variant="outline" disabled={busy} onClick={close}>
-            {t("Cancel")}
+            {t(embedded ? "Back to draft" : "Cancel")}
           </Button>
         </div>
-      </dialog>
+      </Surface>
     </>
   );
 }

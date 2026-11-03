@@ -195,60 +195,27 @@ def save_draft(client, row, draft, **changes):
     )
 
 
-def test_multiple_tickets_have_explicit_sources_and_independent_edits(client, environment):
+def test_one_active_ticket_keeps_its_source_and_manual_edits(client, environment):
     row = conversation(environment)
-    topics = [
-        row.messages.get(),
-        RequestMessage.objects.create(
-            request=row, role="user", kind="discussion", content="Explain rounding"
-        ),
-    ]
-    for n, topic in enumerate(topics, 1):
-        run = AnalysisRun.objects.create(request=row, number=n, status="PARTIAL")
-        ResultVersion.objects.create(
-            request=row,
-            run=run,
-            number=n,
-            status="PARTIAL",
-            context_snapshot={
-                "dossier": {
-                    "need": topic.content,
-                    "cycle_scope": {"message_ids": [topic.pk], "topic_message_id": topic.pk},
-                }
-            },
-            explanation={"summary": f"FINDING_{n}"},
-        )
+    topic = row.messages.get()
+    run = AnalysisRun.objects.create(request=row, number=1, status="PARTIAL")
+    ResultVersion.objects.create(request=row, run=run, number=1, status="PARTIAL",
+        context_snapshot={"dossier":{"need":topic.content,"cycle_scope":{"message_ids":[topic.pk],"topic_message_id":topic.pk}}},
+        explanation={"summary":"Frozen dates finding"})
     endpoint = f"/api/analyses/{row.pk}/ticket-preparation"
-    candidate = client.get(endpoint, {"new_ticket": True}).json()
-    assert candidate["needs_source_choice"] and candidate["source_version"] is None
-    drafts = []
-    for n in [1, 2]:
-        draft = client.get(endpoint, {"new_ticket": True, "source_version": n}).json()
-        assert draft["source_version"] == n
-        assert draft["verified_scope"] == topics[n - 1].content
-        assert topics[n - 1].content in draft["body"]
-        assert f"FINDING_{3 - n}" not in draft["body"]
-        response = save_draft(client, row, draft, title=f"Ticket {n}")
-        assert response.status_code == 200, response.content
-        drafts.append(response.json())
-    assert drafts[0]["id"] != drafts[1]["id"]
-    edited = save_draft(client, row, drafts[0], body="Dates only")
+    initial = client.get(endpoint, {"source_version":1}).json()
+    response = save_draft(client, row, initial, title="Dates ticket")
+    assert response.status_code == 200
+    draft = response.json()
+    edited = save_draft(client, row, draft, body="Dates only")
     assert edited.status_code == 200
-    assert client.get(endpoint, {"ticket_id": drafts[1]["id"]}).json()["body"] == drafts[1]["body"]
-    assert save_draft(client, row, drafts[0], body="Stale edit").status_code == 409
-    assert len(detail(client, row)["conversation_tickets"]) == 2
-    listing = client.get("/api/tickets", {"status": "all"}).json()
-    assert listing["total"] == 0
-    assert client.get(f"/api/tickets/{drafts[0]['id']}").json()["description"] == "Dates only"
+    assert client.get(endpoint).json()["body"] == "Dates only"
+    assert save_draft(client, row, draft, body="Stale edit").status_code == 409
+    # An older client cannot create a second active draft by setting new_ticket.
+    assert save_draft(client, row, initial, title="Another ticket", new_ticket=True).status_code == 409
+    assert ConversationTicket.objects.filter(request=row, active=True).count() == 1
+    assert client.get("/api/tickets").json()["total"] == 0
     assert not Job.objects.exists()
-    other = conversation(environment)
-    assert (
-        client.get(
-            f"/api/analyses/{other.pk}/ticket-preparation", {"ticket_id": drafts[0]["id"]}
-        ).status_code
-        == 404
-    )
-    assert ConversationTicket.objects.count() == 2
 
 
 def test_question_result_remains_readable_after_a_change_cycle(client, environment, storage):
@@ -305,7 +272,7 @@ def test_scoped_subject_can_exclude_all_previous_messages(client, environment, s
     assert snapshot["need"] == "Explain source imports"
 
 
-def test_delayed_generation_updates_only_its_original_ticket(environment):
+def test_delayed_generation_cannot_update_a_replaced_ticket(environment):
     from types import SimpleNamespace
 
     from core.ticket_preparation import complete_generation
@@ -313,7 +280,7 @@ def test_delayed_generation_updates_only_its_original_ticket(environment):
     row = conversation(environment)
     topic = row.messages.get()
     first = ConversationTicket.objects.create(
-        request=row, draft={"revision": 1, "title": "Dates", "body": "First"}
+        request=row, active=False, draft={"revision": 1, "title": "Dates", "body": "First"}
     )
     second = ConversationTicket.objects.create(
         request=row, draft={"revision": 1, "title": "Rounding", "body": "Keep second"}
@@ -335,12 +302,14 @@ def test_delayed_generation_updates_only_its_original_ticket(environment):
             }
         },
     )
-    assert complete_generation(
+    assert not complete_generation(
         row, job, SimpleNamespace(title="Dates draft", body="Generated dates", sources=[], clarification="")
     )
     first.refresh_from_db()
     second.refresh_from_db()
-    assert first.draft["body"] == "Generated dates" and first.draft["revision"] == 2
+    assert first.draft["body"] == "First" and first.draft["revision"] == 1
+    job.refresh_from_db()
+    assert job.status == "ERROR"
     assert second.draft["body"] == "Keep second" and second.draft["revision"] == 1
 
 

@@ -147,8 +147,10 @@ class TicketDraftGenerationIn(StrictSchema):
     expected_revision: int = Field(ge=0)
     expected_discussion_revision: int = Field(ge=0)
     source_version: int | None = Field(default=None, ge=1)
-    topic_message_id: int = Field(ge=1)
+    topic_message_id: int | None = Field(default=None, ge=1)
     anchor_message_id: int | None = Field(default=None, ge=1)
+    purpose: Literal["prepare", "refresh", "replace"] = "refresh"
+    replace_confirmed: bool = Field(default=False, strict=True)
 
 
 @router.post("/analyses/{analysis_id}/ticket-preparation/generate")
@@ -158,6 +160,21 @@ def generate_ticket_preparation(request, analysis_id: UUID, payload: TicketDraft
     from .ticket_preparation import generate
 
     return request_dict(generate(analysis_id, payload, actor(request)), full=True)
+
+
+class TicketProposalIn(StrictSchema):
+    ticket_id: UUID
+    proposal_id: UUID
+    expected_revision: int = Field(ge=1)
+    apply: bool = Field(strict=True)
+    replace_confirmed: bool = Field(default=False, strict=True)
+
+
+@router.post("/analyses/{analysis_id}/ticket-preparation/proposal")
+def apply_ticket_proposal(request, analysis_id: UUID, payload: TicketProposalIn):
+    from .ticket_preparation import decide_proposal
+
+    return decide_proposal(analysis_id, payload)
 
 
 def connector_values(payload, existing=None):

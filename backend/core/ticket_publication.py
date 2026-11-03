@@ -571,6 +571,9 @@ def store_success(record, result):
                 finished_at=timezone.now(),
             )
             request = Request.objects.select_for_update().get(pk=record.request_id)
+            if record.conversation_ticket_id:
+                from .models import ConversationTicket
+                ConversationTicket.objects.filter(pk=record.conversation_ticket_id, request=request).update(active=False)
             _, created = RequestMessage.objects.get_or_create(request=request, kind="ticket_publication", data__publication_id=str(record.pk),
                 defaults={"role":"assistant", "content":record.title, "version_id":record.version_id,
                     "data":{"publication_id":str(record.pk), "conversation_ticket_id":str(record.conversation_ticket_id) if record.conversation_ticket_id else None,
@@ -719,6 +722,8 @@ def publish(version, connector, payload):
             PublishedTicket.Status.UNCERTAIN,
         }
     )
+    if conversation_ticket and not conversation_ticket.active and not legacy_recovery:
+        raise HttpError(409, "This ticket is no longer the active draft.")
     if conversation_ticket and not legacy_recovery and publication_requires_ack(conversation_ticket,payload,version,payload) and payload.get("unverified_confirmed") is not True:
         raise HttpError(409, "Confirm publication without independent verification.")
     if blockers and not legacy_recovery:

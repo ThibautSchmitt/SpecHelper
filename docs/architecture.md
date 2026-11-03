@@ -2,8 +2,19 @@
 
 Conversation records reuse `Request`; each independently frozen investigation uses
 an `AnalysisRun` and immutable `ResultVersion`. `ConversationTicket` stores each
-editable ticket with an optional exact result, selected-message anchor and bounded
-context references. Drafting uses this scope instead of the entire conversation.
+editable ticket with an optional exact result and retained context references.
+A partial unique constraint permits one `active` ticket per conversation. Request row
+locks serialize preparation and explicit replacement. Confirmed publication releases
+that active slot; errors and uncertain writes retain it. Migration keeps all old
+records, preferring an unresolved publication or existing working draft for the slot.
+Retired records are retained technical history, not a user-facing draft archive.
+
+Drafting resumes the conversational native session. A bounded recent-history supplement,
+the current editable document, authorized reference files and candidate analysis results
+help it identify relevant additions without a subject-selection engine. Fresh document
+manifests do not move pinned Git references or reset native sessions. New initial
+content is saved directly. Updates are kept in one proposal within the existing draft
+JSON and require an explicit apply/discard choice with a base-revision guard.
 Destination-specific previews remain `TicketPublicationDraft`; publication records
 retain the prepared-ticket identity when known. The former selected preparation
 JSON remains mirrored for compatibility, but it is not the identity of every ticket.
@@ -30,7 +41,8 @@ keeps its original verification rules.
 A confirmed write records one durable `ticket_publication` message under the conversation
 lock, keyed by publication ID. The timeline renders the persisted publication once at its
 completion time; failed and uncertain writes do not create success messages. Natural ticket
-requests use the normal conversational turn and optional structured draft output. Ambiguity
+requests use the normal conversational turn and optional structured draft output; an
+existing draft receives a reviewable proposal rather than another active document. Ambiguity
 asks one question and retains bounded context for the answer; it does not enqueue deep roles.
 
 SpecHelper separates conversational exploration from independently checked analysis.

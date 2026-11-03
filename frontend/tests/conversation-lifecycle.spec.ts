@@ -58,37 +58,29 @@ for(const language of ['en','fr'] as const){
   await expect(modal).not.toBeVisible();expect(deep).toBe(1);
  });
 
- test(`two analysis results prepare separate tickets without triggering an analysis in ${language}`,async({page})=>{
-  let value:any={...conversation(),versions:[{number:1,status:'PARTIAL',created_at:at,subject:'Dates'},{number:2,status:'PARTIAL',created_at:at,subject:'Rounding'}]},deep=0,saves=0;
+ test(`analysis actions reopen one active draft without changing its source in ${language}`,async({page})=>{
+  const ticket='77777777-7777-4777-8777-777777777777';
+  const value:any={...conversation(),active_ticket:{id:ticket,title:'Dates ticket',status:'DRAFT'},versions:[{number:1,status:'PARTIAL',created_at:at,subject:'Dates'},{number:2,status:'PARTIAL',created_at:at,subject:'Rounding'}]};
+  let deep=0;
   await page.route('**/api/**',r=>r.fulfill({json:[]}));
   await page.route('**/api/access/session',r=>r.fulfill({json:{authenticated:true,mode:'local'}}));
   await page.route('**/api/settings',r=>r.fulfill({json:{name:'SpecHelper',language}}));
   await page.route(`**/api/analyses/${id}`,r=>r.fulfill({json:value}));
   await page.route(`**/api/analyses/${id}/deep-analyze`,r=>{deep++;return r.fulfill({json:value});});
-  await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),r=>{
-   const source=Number(new URL(r.request().url()).searchParams.get('source_version'))||null;
-   let draft:any={id:null,revision:0,discussion_revision:2,source_version:source,source_verified:false,analysis_state:source?'partial':'none',verified_scope:source===1?'Dates':'Rounding',limitations:[],has_new_messages:false,scope_choice:'unknown',title:source===1?'Dates ticket':'Rounding ticket',body:source===1?'DATES_PROOF':'ROUNDING_PROOF',publication_available:false,publication_allowed:false,topic_message_id:source===1?1:3,analyses:[{number:1,subject:'Dates',status:'PARTIAL'},{number:2,subject:'Rounding',status:'PARTIAL'}],topics:[]};
-   if(r.request().method()==='PUT'){
-    const body=r.request().postDataJSON();saves++;
-    expect(body.new_ticket).toBe(true);expect(body.source_version).toBe(saves);
-    draft={...draft,...body,id:`ticket-${saves}`,revision:1};
-    value={...value,conversation_tickets:[...value.conversation_tickets,{id:draft.id,title:draft.title,source_version:body.source_version,status:'DRAFT',created_at:at}]};
-   }
-   return r.fulfill({json:draft});
-  });
+  await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),r=>r.fulfill({json:{id:ticket,active:true,revision:1,discussion_revision:2,source_version:1,source_verified:false,scope_choice:'unknown',title:'Dates ticket',body:'DATES_PROOF',markdown:'DATES_PROOF',proposal:null}}));
   await page.goto(`/analyses/${id}`);
   const actions=page.getByRole('button',{name:t('Prepare a ticket'),exact:true});
   await expect(actions).toHaveCount(3);
   for(const n of [1,2]){
    await actions.nth(n-1).click();
    const modal=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
-   await expect(modal.locator("select")).toHaveCount(0);
-   await expect(modal.getByLabel(t('Ticket description'),{exact:true})).toHaveValue(n===1?'DATES_PROOF':'ROUNDING_PROOF');
-   await modal.getByRole('button',{name:t('Save'),exact:true}).click();
-   await expect(modal.getByText(t('Ticket draft saved.'),{exact:true})).toBeVisible();
-   await modal.getByRole('button',{name:t('Cancel'),exact:true}).click();
+   await modal.getByRole('button',{name:t('Resume draft'),exact:true}).click();
+   await expect(modal.locator('select')).toHaveCount(0);
+   await expect(modal.getByLabel(t('Description'),{exact:true})).toHaveValue('DATES_PROOF');
+   await modal.getByRole('button',{name:t('Close'),exact:true}).first().click();
   }
-  expect(deep).toBe(0);expect(saves).toBe(2);
-  await expect(page.getByRole('button',{name:t('Open ticket draft'),exact:true})).toHaveCount(2);
+  expect(deep).toBe(0);
+  await expect(page.getByRole('button',{name:t('Draft'),exact:true})).toHaveCount(1);
+  await expect(page.locator('[data-message^="ticket-"]')).toHaveCount(0);
  });
 }

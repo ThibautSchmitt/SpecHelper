@@ -549,8 +549,14 @@ class ConversationTicket(models.Model):
     source_version = models.ForeignKey(ResultVersion, null=True, on_delete=models.PROTECT)
     topic_message = models.ForeignKey(RequestMessage, null=True, on_delete=models.SET_NULL)
     draft = models.JSONField(default=dict)
+    active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["request"], condition=models.Q(active=True), name="one_active_conversation_ticket"),
+        ]
 
 
 class ConnectionAttempt(models.Model):

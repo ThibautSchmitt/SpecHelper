@@ -157,6 +157,7 @@ export type WorkPhase = {
 };
 export type AnalysisClock = { seconds:number|null; observed_at:string; running:boolean };
 export type WorkExecution = {
+  operation?:string;
   analysis_clock?:AnalysisClock;
   id:number; kind:"discussion"|"analysis"; status:string; revision?:number; run_number?:number;
   created_at:string; started_at?:string|null; finished_at?:string|null;
@@ -166,6 +167,7 @@ export type WorkUpdate = {
   progress_token:string; progress_cursor:string; work_progress:WorkExecution[]; unchanged?:boolean;
 };
 export type RequestDetail = RequestItem & {
+  active_ticket?: {id:string; title:string; revision:number; status:string} | null;
   conversation_tickets?: {id:string; title:string; source_version:number|null; topic_message_id:number|null; revision:number; status:string; created_at:string; updated_at:string}[];
   progress_token?:string;
   progress_cursor?:string;

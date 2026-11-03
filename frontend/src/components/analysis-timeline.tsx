@@ -63,7 +63,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   let latestUserText=value.need;
   const events: Event[] = messages.filter(message => {
     if (["result", "decision_revision", "error", "ticket_publication"].includes(message.kind)) return false;
-    if(message.role === "assistant" && message.kind === "ticket_preparation" && message.data?.conversation_ticket_id)return false;
+    if(message.kind === "ticket_preparation" || message.data?.ticket_preparation)return false;
     // Pending questions appear once, together with their real answer controls.
     return message.id !== pendingMessage?.id;
   }).map(message => {
@@ -107,7 +107,6 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
       subject:version.subject,
       label: version.status === "ERROR" ? "Deep analysis interrupted" : version.status === "PARTIAL" || displayed?.evidence?.blocking ? "Deep analysis finished with limits" : "Deep analysis completed" });
   }
-  for(const ticket of value.conversation_tickets || [])events.push({id:`ticket-${ticket.id}`,at:ticket.created_at,speaker:"assistant",content:ticket.title,ticketId:ticket.id,label:"Ticket draft"});
   for (const publication of value.publications || []) events.push({ id:`publication-${publication.id}`, at:publication.created_at, speaker:"assistant", content:publication.title,
     label:publication.status === "PUBLISHED" ? "Ticket published" : publication.status === "ERROR" ? "Ticket publication failed" : "Publication to verify",
     publicationMeta:[publication.platform,publication.external_key].filter(Boolean).join(" · "),
@@ -130,8 +129,8 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     events.push({id:`progress-${run.number}`,at,sortAt:latestInput + 1,speaker:"assistant",content:"",run});
   }
   if (!runs.length && (working || pending) && value.discussion?.mode !== "discussion") events.push({id:"progress-pending",at:value.created_at,sortAt:Math.max(new Date(value.created_at).getTime(),...events.filter(event=>event.speaker === "user").map(event=>new Date(event.at).getTime()))+1,speaker:"assistant",content:"",run:{number:0,status:value.status,steps:[]}});
-  for(const job of value.work_progress?.filter(job=>job.kind==="discussion") || [])events.push({id:`discussion-progress-job-${job.id}`,at:job.created_at,speaker:"assistant",content:"",work:job});
-  if (!value.work_progress?.some(job=>job.kind==="discussion") && value.discussion?.mode === "discussion" && value.discussion.job && ["QUEUED","RUNNING"].includes(value.discussion.job.status)) events.push({
+  for(const job of value.work_progress?.filter(job=>job.kind==="discussion"&&job.operation!=="ticket_preparation") || [])events.push({id:`discussion-progress-job-${job.id}`,at:job.created_at,speaker:"assistant",content:"",work:job});
+  if (!value.work_progress?.some(job=>job.kind==="discussion"&&job.operation!=="ticket_preparation") && value.discussion?.mode === "discussion" && value.discussion.job?.operation!=="ticket_preparation" && value.discussion.job && ["QUEUED","RUNNING"].includes(value.discussion.job.status)) events.push({
     id:`discussion-progress-${value.discussion.revision}`,at:value.discussion.job.created_at,speaker:"assistant",content:"",discussion:true,
     work:{...value.discussion.job,kind:"discussion",waiting_causes:[],phases:[]},
   });

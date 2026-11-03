@@ -463,6 +463,25 @@ dialog::backdrop {
   margin: auto;
   width: min(94vw, 850px);
 }
+.ticket-preparation-modal {
+  margin: auto;
+  width: min(94vw, 860px);
+  max-height: 92dvh;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ticket-modal-header, .ticket-modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--card);
+  position: sticky;
+  z-index: 2;
+}
+.ticket-modal-header { top: 0; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.ticket-modal-footer { bottom: 0; justify-content: flex-end; flex-wrap: wrap; border-top: 1px solid var(--border); }
 .skill-drawer {
   position: fixed;
   inset: 0 0 0 auto;

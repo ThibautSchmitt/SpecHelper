@@ -25,7 +25,8 @@ calls the final role **Validateur**.
   the whole environment without changing earlier analyses' frozen references.
 - Optionally inspect a business PostgreSQL database through restricted read-only access.
 - Follow observed work, answer clarifications and inspect a concise result or detailed report.
-- Prepare, save and export a ticket draft without launching verification. Reuse
+- Prepare a ticket directly in a centered modal using the conversational assistant.
+  Keep one active draft per conversation and review AI updates before applying them. Reuse
   existing findings, keep later proposals explicitly unverified and choose whether
   to update the analysis. Publish conversation drafts, with or without deep analysis,
   to GitHub Issues, GitLab
