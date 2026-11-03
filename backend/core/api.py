@@ -378,6 +378,8 @@ def request_dict(value, full=False):
         ]
         result["conversation_tickets"] = summaries(value)
         result["active_ticket"] = next((item for item in result["conversation_tickets"] if item["active"]), None)
+        from .deep_analysis_context import suggested_need
+        result["deep_analysis_need"] = suggested_need(value)
         evidence = result["evidence"] or {}
         result["result_state"] = result_state(
             value.status, value.workflow,

@@ -2401,5 +2401,11 @@
   "Apply": "Appliquer",
   "Publication destination": "Destination de publication",
   "The selected assistant is unavailable.": "L’assistant sélectionné est indisponible.",
-  "This ticket is no longer the active draft.": "Ce ticket n’est plus le brouillon actif."
+  "This ticket is no longer the active draft.": "Ce ticket n’est plus le brouillon actif.",
+  "Deep analysis": "Analyse approfondie",
+  "Need to analyze": "Besoin à analyser",
+  "Describe the need to investigate. SpecHelper will use relevant exchanges and sources from your environment.": "Précisez le besoin à analyser. SpecHelper utilisera les échanges et les sources pertinents de votre environnement.",
+  "Preparing analysis context…": "Préparation du contexte de l’analyse…",
+  "Deep analysis in progress…": "Analyse approfondie en cours…",
+  "Analysis preparation interrupted": "Préparation de l’analyse interrompue"
 }

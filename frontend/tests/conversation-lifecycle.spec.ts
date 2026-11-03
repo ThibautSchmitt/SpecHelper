@@ -8,7 +8,7 @@ function conversation(){return {
  created_at:at,latest_activity_at:at,analysis_protocol:'2.4',baseline:[],database:{},attachments:[],progress:[],error:'',understanding:'',
  questions:[],conversation:[],latest_version:null,versions:[],decision_revision:0,decisions:[],decision_history:[],validated_version:null,
  messages:[{id:1,role:'user',kind:'need',content:'Explain dates',created_at:at},{id:2,role:'assistant',kind:'discussion_reply',content:'Dates explanation',created_at:at},{id:3,role:'user',kind:'discussion',content:'Explain rounding',created_at:at}],
- discussion:{enabled:true,mode:'discussion',revision:2,connection_id:1,job:null},analysis_runs:[],conversation_tickets:[],
+ discussion:{enabled:true,mode:'discussion',revision:2,connection_id:1,job:null},analysis_runs:[],conversation_tickets:[],deep_analysis_need:'Explain rounding',
 };}
 
 for(const language of ['en','fr'] as const){
@@ -38,7 +38,7 @@ for(const language of ['en','fr'] as const){
   await page.route(`**/api/analyses/${id}`,r=>r.fulfill({json:value}));
   await page.route(`**/api/analyses/${id}/archive`,r=>{value={...value,archived_at:r.request().postDataJSON().archived?at:null};return r.fulfill({json:value});});
   await page.route(`**/api/analyses/${id}/deep-analyze`,r=>{
-   expect(r.request().postDataJSON()).toMatchObject({subject:'Explain rounding',message_ids:[3],topic_message_id:3,expected_revision:2});
+   expect(r.request().postDataJSON()).toEqual({subject:'Explain rounding',intent:'auto',expected_revision:2});
    deep++;return r.fulfill({json:{...value,conversation_state:'IN_PROGRESS',status:'QUEUED'}});
   });
   await page.goto(`/analyses/${id}`);
@@ -48,11 +48,11 @@ for(const language of ['en','fr'] as const){
   await expect(page.getByRole('button',{name:t('Unarchive'),exact:true})).toBeVisible();
   await page.getByRole('button',{name:t('Unarchive'),exact:true}).click();
   await expect(page.getByLabel(t('Your message'),{exact:true})).toBeEnabled();
-  await page.getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
-  const modal=page.getByRole('dialog',{name:t('Deep analysis scope'),exact:true});
-  await expect(modal.getByLabel(t('Need to investigate'),{exact:true})).toHaveValue('Explain rounding');
-  await expect(modal.getByRole('checkbox',{name:'Explain rounding',exact:true})).toBeChecked();
-  await expect(modal.getByRole('checkbox',{name:'Explain dates',exact:true})).not.toBeChecked();
+  await page.getByRole('button',{name:t('Deep analysis'),exact:true}).click();
+  const modal=page.getByRole('dialog',{name:t('Deep analysis'),exact:true});
+  await expect(modal.getByLabel(t('Need to analyze'),{exact:true})).toHaveValue('Explain rounding');
+  await expect(modal.getByRole('checkbox')).toHaveCount(0);
+  await expect(modal.locator('textarea')).toHaveCount(1);
   expect(deep).toBe(0);
   await modal.getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
   await expect(modal).not.toBeVisible();expect(deep).toBe(1);

@@ -63,7 +63,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   let latestUserText=value.need;
   const events: Event[] = messages.filter(message => {
     if (["result", "decision_revision", "error", "ticket_publication"].includes(message.kind)) return false;
-    if(message.kind === "ticket_preparation" || message.data?.ticket_preparation)return false;
+    if(["ticket_preparation","analysis_preparation"].includes(message.kind) || message.data?.ticket_preparation)return false;
     // Pending questions appear once, together with their real answer controls.
     return message.id !== pendingMessage?.id;
   }).map(message => {
@@ -129,7 +129,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     events.push({id:`progress-${run.number}`,at,sortAt:latestInput + 1,speaker:"assistant",content:"",run});
   }
   if (!runs.length && (working || pending) && value.discussion?.mode !== "discussion") events.push({id:"progress-pending",at:value.created_at,sortAt:Math.max(new Date(value.created_at).getTime(),...events.filter(event=>event.speaker === "user").map(event=>new Date(event.at).getTime()))+1,speaker:"assistant",content:"",run:{number:0,status:value.status,steps:[]}});
-  for(const job of value.work_progress?.filter(job=>job.kind==="discussion"&&job.operation!=="ticket_preparation") || [])events.push({id:`discussion-progress-job-${job.id}`,at:job.created_at,speaker:"assistant",content:"",work:job});
+  for(const job of value.work_progress?.filter(job=>job.kind==="discussion"&&job.operation!=="ticket_preparation"&&!(job.operation==="analysis_preparation"&&job.status==="DONE")) || [])events.push({id:`discussion-progress-job-${job.id}`,at:job.created_at,speaker:"assistant",content:"",work:job});
   if (!value.work_progress?.some(job=>job.kind==="discussion"&&job.operation!=="ticket_preparation") && value.discussion?.mode === "discussion" && value.discussion.job?.operation!=="ticket_preparation" && value.discussion.job && ["QUEUED","RUNNING"].includes(value.discussion.job.status)) events.push({
     id:`discussion-progress-${value.discussion.revision}`,at:value.discussion.job.created_at,speaker:"assistant",content:"",discussion:true,
     work:{...value.discussion.job,kind:"discussion",waiting_causes:[],phases:[]},

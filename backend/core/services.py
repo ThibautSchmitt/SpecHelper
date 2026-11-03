@@ -16,7 +16,7 @@ from .models import (
 )
 
 
-def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_text=None, scope_operation="analyze", ticket_proposal=None, cycle_scope=None):
+def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_text=None, scope_operation="analyze", ticket_proposal=None, cycle_scope=None, frozen_context=None):
     from .orchestration import require_role_coverage
     from .scope_service import assess
 
@@ -60,7 +60,7 @@ def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_te
         else None
     )
     run = AnalysisRun.objects.create(request=request, job=job, number=number)
-    freeze_context(request, run, reuse=reuse)
+    freeze_context(request, run, reuse=frozen_context if frozen_context is not None else reuse)
     if request.analysis_protocol == "2.4":
         from .orchestration_settings import get_config
 

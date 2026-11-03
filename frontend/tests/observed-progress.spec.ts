@@ -99,7 +99,7 @@ for(const language of ['en','fr'] as const){
   await expect(block.getByText(t('No detailed work event has been reported.'),{exact:true})).toHaveCount(0);
   const surface=page.getByRole('region',{name:t('Conversation'),exact:true});
   await expect(surface).toHaveAttribute('data-slot','card');
-  await expect(surface.getByRole('button',{name:t('Launch deep analysis'),exact:true})).toBeVisible();
+  await expect(surface.getByRole('button',{name:t('Deep analysis'),exact:true})).toBeVisible();
   await expect(surface.getByRole('button',{name:t('Prepare a ticket'),exact:true})).toBeVisible();
   await expect(surface.getByRole('button',{name:t('Cancel'),exact:true})).toBeVisible();
   const readsAfterAccept=fullReads;

@@ -2401,5 +2401,11 @@
   "Apply": "Apply",
   "Publication destination": "Publication destination",
   "The selected assistant is unavailable.": "The selected assistant is unavailable.",
-  "This ticket is no longer the active draft.": "This ticket is no longer the active draft."
+  "This ticket is no longer the active draft.": "This ticket is no longer the active draft.",
+  "Deep analysis": "Deep analysis",
+  "Need to analyze": "Need to analyze",
+  "Describe the need to investigate. SpecHelper will use relevant exchanges and sources from your environment.": "Describe the need to investigate. SpecHelper will use relevant exchanges and sources from your environment.",
+  "Preparing analysis context…": "Preparing analysis context…",
+  "Deep analysis in progress…": "Deep analysis in progress…",
+  "Analysis preparation interrupted": "Analysis preparation interrupted"
 }

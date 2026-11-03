@@ -14,6 +14,7 @@ from ninja.errors import HttpError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .agent import RULES, ProviderUnavailable, output_language_instruction, runtime_call
+from .deep_analysis_context import ContextSelection, NeedHint, checked_hint
 from .discussion_access import actor
 from .models import AIConnection, AISession, Job, Request, RequestMessage
 from .sensitive_data import configured_secrets, redact
@@ -75,6 +76,7 @@ class Reply(BaseModel):
     message: str = Field(min_length=1, max_length=12000)
     ticket: ConversationTicketReply | None = None
     ticket_clarification: bool = False
+    analysis_context: NeedHint | None = None
 
 
 def describe(value):
@@ -98,7 +100,7 @@ def describe(value):
             "created_at": job.created_at,
             "error": job.error,
             "waiting_reason": job.payload.get("waiting_reason", ""),
-            "operation": "ticket_preparation" if job.payload.get("ticket_preparation") else "discussion",
+            "operation": "analysis_preparation" if job.payload.get("analysis_preparation") else "ticket_preparation" if job.payload.get("ticket_preparation") else "discussion",
         }
         if job and job.payload.get("revision") == revision
         else None,
@@ -147,7 +149,7 @@ def pin_environment(value):
 
 
 @transaction.atomic
-def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None):
+def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None, analysis_preparation=None):
     from .library_assistant import connection_snapshot, safe_text
     from .providers import bind_session, candidates
 
@@ -257,7 +259,7 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
         RequestMessage.objects.create(
             request=value,
             role="user",
-            kind="ticket_preparation" if preparation else "discussion",
+            kind="analysis_preparation" if analysis_preparation else "ticket_preparation" if preparation else "discussion",
             content=text,
             data={"actor": browser_actor},
         )
@@ -269,13 +271,14 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
     value.save(update_fields=["discussion_state", "status", "error", "updated_at"])
     assignment = connection_snapshot(connection, "discussion")
     assignment["public_role"] = "discussion"
-    turn_snapshot = state["snapshot"]
-    if preparation or "ticket" in text.lower() or "issue" in text.lower() or state.get("pending_ticket_clarification"):
+    turn_snapshot = analysis_preparation["snapshot"] if analysis_preparation else state["snapshot"]
+    if analysis_preparation or preparation or "ticket" in text.lower() or "issue" in text.lower() or state.get("pending_ticket_clarification"):
         from .environment_context import freeze_context
         # New documents are available for this drafting turn without moving
         # the conversation's pinned Git baseline or resetting its native session.
-        turn_snapshot = freeze_context(value)
-        turn_snapshot["dossier"]["user_messages"] = list(value.messages.filter(role="user").exclude(kind="ticket_preparation").order_by("-id").values("id", "kind", "content")[:24])[::-1]
+        if not analysis_preparation:
+            turn_snapshot = freeze_context(value)
+            turn_snapshot["dossier"]["user_messages"] = list(value.messages.filter(role="user").exclude(kind__in=["ticket_preparation","analysis_preparation"]).order_by("-id").values("id", "kind", "content")[:24])[::-1]
         turn_snapshot.pop("sha256", None)
         turn_snapshot["sha256"] = hashlib.sha256(json.dumps(turn_snapshot, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         value.context_snapshot = turn_snapshot
@@ -299,6 +302,7 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
             "waiting_reason": "",
             "current_role": "analyst",
             **({"ticket_preparation": preparation} if preparation else {}),
+            **({"analysis_preparation": {key:item for key,item in analysis_preparation.items() if key != "snapshot"}} if analysis_preparation else {}),
         },
     )
     return value
@@ -376,7 +380,7 @@ def live(job):
 
 
 def run_job(job, caller=None):
-    """Native history remains in a private context; no analysis run or result is created."""
+    """Resume a private discussion, or prepare context for an explicitly requested analysis."""
     from .orchestration_settings import get_config
 
     timeout = get_config("2.4")["tool_timeout_seconds"]
@@ -418,8 +422,11 @@ def run_job(job, caller=None):
     latest = value.versions.order_by("-number").first()
     data = {
         "message": message.content,
+        "message_id":message.pk,
         "attachments": list(value.attachments.values("name", "content_type")),
     }
+    from .deep_analysis_context import messages as context_messages
+    data["context_exchanges"] = [{"id":m.pk,"role":m.role,"content":m.content[:1800]} for m in list(context_messages(value, message.pk).order_by("-id")[:16])[::-1] if m.data.get("response_status") != "stale"]
     if latest and session.usage.get("last_result") != latest.number:
         data["previous_analysis"] = {
             "version": latest.number,
@@ -476,9 +483,14 @@ def run_job(job, caller=None):
         "If the requested change or subject is ambiguous, return ticket=null and ask ONE focused question "
         "in message and set ticket_clarification=true. A relevant answer to pending_ticket_clarification "
         "continues that explicit ticket request; an unrelated question does not. Do not create an investigation/documentation task as a substitute for an unknown change. "
-        "A draft never triggers publication or independent analysis. In all other cases return ticket=null."
+        "A draft never triggers publication or independent analysis. In all other cases return ticket=null. "
+        "Optionally record analysis_context with a concise current need and the relevant actual message_ids. "
+        "This only pre-fills a user-editable launch form: do not perform or start deep analysis. "
+        "Interpret short replies in their preceding exchange. Never use yes/no alone as a need. "
+        "Return analysis_context=null if the current subject is ambiguous or missing; never invent a need."
     )
     preparation = job.payload.get("ticket_preparation")
+    analysis_preparation = job.payload.get("analysis_preparation")
     if preparation:
         data = preparation["inputs"]
         data["available_reference_files"] = resources
@@ -506,6 +518,10 @@ def run_job(job, caller=None):
             "analysis you actually used and cite analysis:<number> in sources; do not attach the latest result by default. "
             "Return title, body and sources matching the schema."
         )
+    if analysis_preparation:
+        from .deep_analysis_context import INSTRUCTIONS
+        data, instructions = analysis_preparation["inputs"], INSTRUCTIONS
+    reply_schema = ContextSelection if analysis_preparation else TicketDraftReply if preparation else Reply
     db = frozen.get("dossier", {}).get("database", {})
     database = parameters(DatabaseConnection.objects.get(pk=db["id"])) if db.get("id") else None
     skills = catalog(session.connection, has_database=bool(database), available_capabilities={
@@ -518,8 +534,14 @@ def run_job(job, caller=None):
             return
         turn = copy.deepcopy(data)
         if not native:
+            recovery = recovery_messages(value, message.pk) if not analysis_preparation else {
+                "messages": data["exchanges"],
+                "bounded_saved_context": True,
+                "older_context_may_be_missing": True,
+                "assistant_messages_are_unverified": True,
+            }
             turn.update(
-                recovery=recovery_messages(value, message.pk), frozen_project_context=context
+                recovery=recovery, frozen_project_context=context
             )
         prompt = redact(
             RULES
@@ -562,7 +584,7 @@ def run_job(job, caller=None):
                     "database": database,
                     "skill_definitions": redact(skills.get("definitions", []), secrets),
                     "prompt": prompt,
-                    "schema": (TicketDraftReply if preparation else Reply).model_json_schema(),
+                    "schema": reply_schema.model_json_schema(),
                     "timeout": timeout,
                 },
                 timeout=timeout + 15,
@@ -586,10 +608,10 @@ def run_job(job, caller=None):
             return
         if result.get("timed_out"):
             raise TimeoutError("Discussion response interrupted")
-        output = (TicketDraftReply if preparation else Reply).model_validate(redact(result.get("output"), secrets))
+        output = reply_schema.model_validate(redact(result.get("output"), secrets))
         from .discussion_output import message_text
 
-        if not preparation:
+        if not preparation and not analysis_preparation:
             output.message = message_text(output.message, value.need + "\n" + message.content)
         # A successful conversational response must carry a real resumable identity.
         native_result = str(uuid.UUID(result.get("session_id") or ""))
@@ -612,6 +634,10 @@ def run_job(job, caller=None):
                     locked,
                     "The provider returned a different native session. The application history is preserved; native continuity could not be confirmed.",
                 )
+            if analysis_preparation:
+                from .deep_analysis_context import complete
+                complete(locked, locked_job, output)
+                return
             if preparation:
                 from .ticket_preparation import complete_generation
 
@@ -633,6 +659,7 @@ def run_job(job, caller=None):
                 kind="discussion_reply",
                 content=output.message,
                 data={
+                    **({"analysis_context":checked_hint(locked,output.analysis_context,locked.messages.order_by("-id").values_list("id",flat=True).first())} if "analysis_context" in output.model_fields_set else {}),
                     "session_pk": session.pk,
                     "revision": job.payload["revision"],
                     "native_resumed": bool(native and native_result == native),
@@ -766,7 +793,7 @@ def activity_snapshot():
                 "queue_position": None,
                 "assignments": [],
                 "environment_name": value.environment_name_snapshot,
-                "operation": "Discussion",
+                "operation": "Deep analysis" if job.payload.get("analysis_preparation") else "Discussion",
                 "agent": None,
             }
         )
@@ -784,8 +811,6 @@ def message(request, analysis_id: uuid.UUID, payload: MessageIn):
 @transaction.atomic
 def deepen(request, analysis_id: uuid.UUID, payload: DeepIn):
     from .api import request_dict
-    from .services import queue_run
-
     value = get_object_or_404(
         Request.objects.select_for_update(of=("self",)).select_related("environment__database"),
         pk=analysis_id,
@@ -798,14 +823,17 @@ def deepen(request, analysis_id: uuid.UUID, payload: DeepIn):
     if payload.preparation_revision is not None:
         from .ticket_preparation import selected
         _, draft = selected(value, payload.ticket_id)
-        if (draft.get("revision") != payload.preparation_revision
-                or draft.get("discussion_revision") != state.get("revision", 0)):
+        if draft.get("revision") != payload.preparation_revision:
             raise HttpError(409, "The ticket draft changed. Reload it before starting deep analysis.")
         proposal = {key: draft.get(key) for key in ("revision", "source_version", "title", "body")}
         proposal["verification_status"] = "unverified"
         proposal["user_message_id_at_submission"] = value.messages.filter(role="user").order_by("-id").values_list("id", flat=True).first()
+    if "message_ids" not in payload.model_fields_set and payload.topic_message_id is None:
+        from .deep_analysis_context import start
+        return request_dict(start(value, payload, actor(request), proposal), full=True)
+    from .deep_analysis_context import EXCLUDED, short_reply
     from .ticket_preparation import user_text
-    users = value.messages.filter(role="user").exclude(kind__in=["ticket_preparation", "derived_request"])
+    users = value.messages.filter(role="user").exclude(kind__in=EXCLUDED)
     topic = get_object_or_404(users, pk=payload.topic_message_id) if payload.topic_message_id else users.order_by("-id").first()
     ids = payload.message_ids if "message_ids" in payload.model_fields_set else ([topic.pk] if topic else [])
     if not ids and "message_ids" in payload.model_fields_set:
@@ -815,25 +843,33 @@ def deepen(request, analysis_id: uuid.UUID, payload: DeepIn):
     if len(set(ids)) != len(ids) or users.filter(pk__in=ids).count() != len(ids):
         raise HttpError(422, "Choose messages belonging to this conversation.")
     subject = payload.subject.strip() or (user_text(topic) if topic else value.need)
-    if not subject.strip() or "\x00" in subject:
+    if not subject.strip() or short_reply(subject) or "\x00" in subject:
         raise HttpError(422, "Describe the need to investigate.")
     from .environment_context import reject_credentials
     reject_credentials(subject)
     cycle_scope = {"subject":subject, "topic_message_id":topic.pk if topic else None, "message_ids":ids,
                    "answer_offset":len(value.conversation),
                    "decision_sequence":value.business_decisions.order_by("-sequence").values_list("sequence", flat=True).first() or 0}
-    if payload.intent == "change":
+    return request_dict(launch_deep_analysis(value, payload.intent, cycle_scope, proposal), full=True)
+
+
+def launch_deep_analysis(value, intent, cycle_scope, proposal=None, *, frozen=None):
+    from .services import queue_run
+    if intent == "change":
         value.workflow, value.intent_mode = "request", "explicit"
     else:
         value.workflow, value.intent_mode = "question", "auto"
-    pin_environment(value)
+    if frozen is None:
+        pin_environment(value)
+    else:
+        value.baseline = frozen["dossier"]["baseline"]
+        value.database_snapshot = frozen["dossier"]["database"]
+        value.environment_name_snapshot = frozen.get("environment", {}).get("name", value.environment_name_snapshot)
     value.analysis_protocol, value.confrontation, value.status = "2.4", True, "DRAFT"
     value.validated_version, value.understanding, value.questions = None, "", []
-    state.update(enabled=True, mode="analysis", analyzed_revision=state.get("revision", 0))
-    value.discussion_state = state
+    value.discussion_state = {**value.discussion_state, "enabled":True,"mode":"analysis","analyzed_revision":value.discussion_state.get("revision", 0)}
     value.save()
-    value = queue_run(value, ticket_proposal=proposal, cycle_scope=cycle_scope, scope_text=subject)
-    return request_dict(value, full=True)
+    return queue_run(value, ticket_proposal=proposal, cycle_scope=cycle_scope, scope_text=cycle_scope["subject"], frozen_context=frozen)
 
 
 @router.post("/analyses/{analysis_id}/cancel")

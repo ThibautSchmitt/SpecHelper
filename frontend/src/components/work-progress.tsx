@@ -73,8 +73,9 @@ export function DiscussionProgress({job,unavailable=false}:{job:WorkExecution;un
   const waiting=job.status==="QUEUED"&&!!job.waiting_reason;
   const active=job.status==="RUNNING";
   const cause=job.waiting_causes?.[0];
-  const label=job.status==="DONE" ? "Reply completed" : job.status==="ERROR" ? "Response interrupted" : job.status==="CANCELLED" ? "Response cancelled" : waiting ? cause==="quota" ? "Quota limit reported" : cause==="busy" ? "Assistant busy" : cause==="connection_missing" ? "No authenticated connection" : cause==="model_unavailable" ? "Model unavailable" : "Waiting for the selected AI connection." : active ? activityLabel(job.phases) : "I’m on it…";
-  return <><ProgressDisclosure label={label} active={active} complete={job.status==="DONE"} attention={waiting||job.status==="ERROR"} className="discussion-progress" startedAt={job.started_at} unavailable={unavailable&&active} expandable={job.phases.some(phase=>phase.events.length>0)}>
+  const preparingAnalysis=job.operation==="analysis_preparation";
+  const label=job.status==="DONE" ? "Reply completed" : job.status==="ERROR" ? preparingAnalysis ? "Analysis preparation interrupted" : "Response interrupted" : job.status==="CANCELLED" ? "Response cancelled" : waiting ? cause==="quota" ? "Quota limit reported" : cause==="busy" ? "Assistant busy" : cause==="connection_missing" ? "No authenticated connection" : cause==="model_unavailable" ? "Model unavailable" : "Waiting for the selected AI connection." : preparingAnalysis ? "Deep analysis in progress…" : active ? activityLabel(job.phases) : "I’m on it…";
+  return <><ProgressDisclosure label={label} subtitle={preparingAnalysis&&!waiting?["QUEUED","RUNNING"].includes(job.status)?"Preparing analysis context…":undefined:undefined} active={active} complete={job.status==="DONE"} attention={waiting||job.status==="ERROR"} className="discussion-progress" startedAt={job.started_at} unavailable={unavailable&&active} expandable={job.phases.some(phase=>phase.events.length>0)}>
     <WorkSteps phases={job.phases} unavailable={unavailable&&active}/>
-  </ProgressDisclosure><ResponsePreview phases={job.phases}/></>;
+  </ProgressDisclosure>{!preparingAnalysis&&<ResponsePreview phases={job.phases}/>}</>;
 }

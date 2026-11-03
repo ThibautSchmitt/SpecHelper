@@ -120,7 +120,10 @@ def test_other_analysis_versions_and_deleted_conversations_are_not_available(cli
     assert save(client, analysis, draft).status_code == 404
 
 
-def test_only_explicit_update_freezes_edited_draft_as_unverified_input(client, analysis):
+def test_only_explicit_update_freezes_edited_draft_as_unverified_input(client, analysis, storage, monkeypatch):
+    from tests.test_deep_analysis_context import finish_context
+
+    monkeypatch.setattr("core.git.request_workspace", lambda value: storage)
     draft = client.get(endpoint(analysis)).json()
     saved = save(client, analysis, draft, body="Prevent invalid contract dates with an error.").json()
     assert not Job.objects.exists()
@@ -128,6 +131,8 @@ def test_only_explicit_update_freezes_edited_draft_as_unverified_input(client, a
         "expected_revision": 1, "intent": "change", "preparation_revision": saved["revision"],
     }, content_type="application/json")
     assert response.status_code == 200, response.content
+    analysis.refresh_from_db()
+    finish_context(analysis, {"message_ids": []})
     run = AnalysisRun.objects.get()
     proposal = run.context_snapshot["dossier"]["ticket_proposal"]
     assert proposal["verification_status"] == "unverified" and proposal["revision"] == 1
@@ -137,9 +142,10 @@ def test_only_explicit_update_freezes_edited_draft_as_unverified_input(client, a
     assert "Prevent invalid contract dates" in inputs["need"]
     assert "body" not in inputs["ticket_proposal"]
     assert "unverified inputs" in inputs["latest_user_message"]
-    assert not inputs["confirmed_decisions"] and not AISession.objects.exists()
+    assert not inputs["confirmed_decisions"] and AISession.objects.count() == 1
     # Editing the draft later cannot change the frozen analysis context.
-    assert save(client, analysis, saved, body="A later proposal.").status_code == 200
+    current = client.get(endpoint(analysis)).json()
+    assert save(client, analysis, current, body="A later proposal.").status_code == 200
     run.refresh_from_db()
     assert run.context_snapshot["dossier"]["ticket_proposal"] == proposal
     assert Job.objects.filter(kind="analysis").count() == 1

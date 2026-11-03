@@ -481,7 +481,7 @@ def test_wrapped_reply_is_saved_and_exposed_as_text_without_mutating_old_records
 
 
 def test_deep_analysis_freezes_human_context_and_uses_distinct_role_sessions(
-    client, environment, native
+    client, environment, native, monkeypatch
 ):
     from core.orchestration import assign_role
 
@@ -499,12 +499,18 @@ def test_deep_analysis_freezes_human_context_and_uses_distinct_role_sessions(
         content_type="application/json",
     )
     assert response.status_code == 200, response.content
+    user_message = row.messages.filter(role="user").first()
+    monkeypatch.setattr(discussion, "runtime_call", lambda path, payload, **kwargs: {
+        "session_id": chat_session.runtime_id,
+        "output": {"message_ids": [user_message.pk]},
+    })
+    finish()
     job = claim_job()
     assert job.kind == "analysis"
     run = AnalysisRun.objects.get(job=job)
     row.refresh_from_db()
     frozen = run.context_snapshot["dossier"]
-    assert frozen["discussion_revision"] == 1
+    assert frozen["discussion_revision"] == 2
     assert all("UNVERIFIED_CHAT_HYPOTHESIS" not in json.dumps(m) for m in frozen["user_messages"])
     assert "UNVERIFIED_CHAT_HYPOTHESIS" not in json.dumps(context(row, run))
     role_sessions = [AISession.objects.get(pk=run.orchestration["sessions"]["analyst"])]

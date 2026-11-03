@@ -6,8 +6,9 @@ agent. It is intended for business users, analysts and developers working with a
 trusted team, across different applications and technology stacks.
 
 Start in **Analyses** with one conversational assistant. Ask about the existing
-code, add documents and clarify the need. When you choose **Launch deep analysis**,
-SpecHelper runs an Analyst, an independent Counter-analyst and a Validator in
+code, add documents and clarify the need. Choose **Deep analysis**, review or edit
+the need in a centered modal, and confirm the launch. SpecHelper selects relevant
+context with the conversational session, then runs an Analyst, an independent Counter-analyst and a Validator in
 separate sessions. Results retain sources, frozen Git references and unresolved
 limits. A conversation stays open after a response or a result: it can contain
 several independent deep analyses and several tickets. Archive conversations to

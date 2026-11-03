@@ -104,10 +104,31 @@ The UI retains recorded connection/model/reasoning history. A user-confirmed tra
 after quota exhaustion creates a new native session with bounded saved context; it
 does not migrate the provider's private session state. See [Usage](usage.md#start-a-discussion).
 
-**Launch deep analysis** asks for the subject and relevant user messages, then captures
-a separate need and resource baseline for each cycle. Its frozen dossier contains
-only those selected exchanges and that cycle's subsequent answers/decisions. Other
-cycles' conclusions are not injected as verified facts. Old results remain accessible
+**Deep analysis** opens a centered modal with one editable need. Opening it is read-only:
+an optional structured hint saved with a conversational reply can prefill the need;
+historical records use a conservative literal fallback. An isolated acknowledgement
+or an ambiguous follow-up leaves the field empty.
+
+Explicit launch reuses the existing discussion queue and native session for a short
+context-selection turn, before queuing the independent analysis. It supplies at most
+40 recent exchanges, 16 older hinted references and six previous scope references.
+Native-session recovery uses that bounded supplement rather than replaying the entire
+conversation. The assistant can request one missing clarification instead of starting
+the roles. Only a later explicit launch starts work after that clarification.
+
+`deep_analysis_context.py` validates selected message IDs against the conversation and
+launch cutoff, pairs selected acknowledgements with their preceding exchange, and
+rejects unavailable or stale references. It preserves the exact human-submitted need.
+Git and document manifests are frozen at launch, before context preparation. The
+resulting `cycle_scope` records retained exchanges, their contextual classifications,
+prior analysis references, and the preparation job ID. All conversation excerpts are
+marked as non-evidence. Other cycles' conclusions are not injected as verified facts.
+The independent roles still consult authorized sources; custom instructions cannot
+grant additional access. Row locks, revisions and cancellation checks prevent concurrent
+launches or late context responses from creating overlapping cycles. No new tables or
+migration are required. Legacy explicit message-ID API payloads remain accepted.
+
+Each cycle retains its own frozen dossier and subsequent answers/decisions. Old results remain accessible
 and the discussion session is retained. Human
 statements and confirmed decisions are distinguished from exploratory AI hypotheses.
 The discussion's native session is never reused as an Analyst or Counter-analyst session.

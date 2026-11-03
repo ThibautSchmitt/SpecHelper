@@ -96,7 +96,7 @@ for(const language of ['en','fr'] as const){
    await route.fulfill({json:value});
   });
   await page.route(`**/api/analyses/${id}/deep-analyze`,async route=>{
-   expect(route.request().postDataJSON()).toMatchObject({expected_revision:2,intent:'auto',subject:'Explain that exception.',message_ids:[11]});deep++;
+   expect(route.request().postDataJSON()).toEqual({expected_revision:2,intent:'auto',subject:'Explain that exception.'});deep++;
    value={...value,status:'ANALYZING',discussion:{...value.discussion,mode:'analysis',has_new_messages:false},analysis_runs:[{number:1,status:'RUNNING',steps:[],execution:{status:'ANALYZING',current_role:'analyst',checkpoint:'analyst',waiting_reason:'',waiting_causes:[],all_stages_done:false,stages:[{role:'analyst',status:'running'},{role:'counter_analyst',status:'waiting'},{role:'verifier',status:'waiting'}]}}]};
    await route.fulfill({json:value});
   });
@@ -108,17 +108,17 @@ for(const language of ['en','fr'] as const){
   await expect(page.locator('.investigation-progress')).toHaveCount(0);
   await expect(page.locator('#analysis-report')).toHaveCount(0);
   await page.getByLabel(t('Your message'),{exact:true}).fill('Explain that exception.');
-  await expect(page.getByRole('button',{name:t('Launch deep analysis'),exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:t('Deep analysis'),exact:true})).toBeDisabled();
   await page.getByRole('button',{name:t('Send message'),exact:true}).click();
   await expect(page.getByLabel(t('Your message'),{exact:true})).toBeDisabled();
   expect(turns).toBe(1);expect(deep).toBe(0);
-  value={...value,status:'DISCUSSING',result_state:'discussion',messages:[...value.messages,{id:20,role:'assistant',kind:'discussion_reply',content:'The exception needs a source check.',created_at:later}],discussion:{...value.discussion,job:{...value.discussion.job,status:'DONE'}}};
+  value={...value,deep_analysis_need:'Explain that exception.',status:'DISCUSSING',result_state:'discussion',messages:[...value.messages,{id:20,role:'assistant',kind:'discussion_reply',content:'The exception needs a source check.',created_at:later}],discussion:{...value.discussion,job:{...value.discussion.job,status:'DONE'}}};
   await expect(page.getByText('The exception needs a source check.',{exact:true})).toBeVisible();
   await page.reload();
   await expect(page.getByText('The exception needs a source check.',{exact:true})).toBeVisible();
   expect(turns).toBe(1);expect(deep).toBe(0);
-  await page.getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
-  await page.getByRole('dialog',{name:t('Deep analysis scope'),exact:true}).getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
+  await page.getByRole('button',{name:t('Deep analysis'),exact:true}).click();
+  await page.getByRole('dialog',{name:t('Deep analysis'),exact:true}).getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
   await expect(page.locator('.investigation-progress')).toHaveCount(1);
   const version={id:'version',number:1,status:'PARTIAL',format_version:'2.9',language,created_at:'2026-10-30T10:04:00Z',run_number:1,explanation:{title:'Benefit conditions',summary:'The source defines an exception. Database behavior remains unverified.'},ticket:{},markdown:'Detailed findings',goal_markdown:'',evidence:{claims:[],blocking:true,limitations:['Database behavior remains unverified.'],database:{status:'not_configured',limitations:[],checks:[],scope:''}}};
   value={...value,status:'PARTIAL',latest_version:version,versions:[{number:1,status:'PARTIAL',created_at:version.created_at}],analysis_runs:[{...value.analysis_runs[0],status:'PARTIAL',execution:{...value.analysis_runs[0].execution,status:'PARTIAL',all_stages_done:true,stages:['analyst','counter_analyst','verifier'].map(role=>({role,status:'done'}))}}]};

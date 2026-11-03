@@ -116,16 +116,28 @@ available safe retry. A waiting analysis does not reserve all future roles.
 
 ## Launch deep analysis
 
-Choose **Launch deep analysis** when the subject is ready for independent checks.
-Confirm the need and select the relevant user messages in the scope dialog. The most
-recent question is selected initially; unrelated earlier subjects remain excluded.
+Choose **Deep analysis** when the subject is ready for independent checks. A centered
+modal contains one editable **Need to analyze** field. Review its suggested wording,
+or enter the need if the current subject is ambiguous, then choose **Launch deep analysis**.
+There is no manual message selection. Opening the modal does not call an AI or start work.
+
+After confirmation, the conversational session selects relevant exchanges from its
+available context and a bounded supplement of saved messages. Short confirmations
+such as “yes” stay with the exchange they answer; they are never standalone needs.
+The exact submitted need remains authoritative. If essential context is missing,
+SpecHelper asks a short question in the conversation without starting the three roles.
+Answer it, then explicitly launch the analysis when the need is clear.
+
 You can run several cycles in the same conversation. Each keeps its own subject,
 role sessions, frozen Git references, evidence and results. New cycles do not replace
 previous results or close the conversation. One conversation per topic is often easier
 to follow, but is not required.
-The application captures the human need, factual answers, explicitly confirmed business
-decisions, attachments, environment documents and Git references for that cycle.
-Exploratory AI hypotheses are not promoted to verified facts.
+The application freezes the submitted need, retained exchanges, attachments,
+environment documents and Git references for that cycle. Documents remain available
+for targeted consultation rather than all being read at launch. User declarations,
+clarifications and assistant hypotheses are labelled as context, not technical proof.
+Relevant earlier analyses are references to recheck, not facts to inherit blindly.
+Source claims still require the roles' own authorized verification.
 
 The roles execute sequentially inside the analysis:
 

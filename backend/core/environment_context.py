@@ -318,6 +318,8 @@ def freeze_context(request, run=None, reuse=None):
             Q(pk__in=cycle_scope["message_ids"]) | Q(kind__in=["answer", "answers", "decision_revision"], created_at__gte=run.job.created_at)
         ).order_by("id")
         snapshot["dossier"]["user_messages"] = list(users.values("id", "kind", "content"))
+        snapshot["dossier"]["context_exchanges"] = copy.deepcopy(cycle_scope.get("context_exchanges", []))
+        snapshot["dossier"]["analysis_references"] = copy.deepcopy(cycle_scope.get("analysis_references", []))
     proposal = run.job.payload.get("ticket_proposal") if run and run.job_id else None
     if proposal:
         snapshot["dossier"]["ticket_proposal"] = copy.deepcopy(proposal)

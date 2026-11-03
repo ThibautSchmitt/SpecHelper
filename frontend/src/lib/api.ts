@@ -167,6 +167,7 @@ export type WorkUpdate = {
   progress_token:string; progress_cursor:string; work_progress:WorkExecution[]; unchanged?:boolean;
 };
 export type RequestDetail = RequestItem & {
+  deep_analysis_need?: string;
   active_ticket?: {id:string; title:string; revision:number; status:string} | null;
   conversation_tickets?: {id:string; title:string; source_version:number|null; topic_message_id:number|null; revision:number; status:string; created_at:string; updated_at:string}[];
   progress_token?:string;

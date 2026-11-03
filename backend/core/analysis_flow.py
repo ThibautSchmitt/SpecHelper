@@ -168,7 +168,7 @@ class RepeatedBusinessQuestion(ValueError):
 
 
 def context(request, run=None):
-    latest = request.messages.filter(role="user").order_by("-id").values("id", "content", "data").first()
+    latest = request.messages.filter(role="user").exclude(kind__in=["ticket_preparation", "analysis_preparation", "derived_request"]).order_by("-id").values("id", "content", "data").first()
     latest_answers = (latest.get("data") or {}).get("answers") if latest else None
     latest_text = "\n\n".join(value for value in latest_answers.values() if isinstance(value, str)) if isinstance(latest_answers, dict) else latest["content"] if latest else request.need
     messages = list(request.messages.order_by("-id").values("role", "kind", "content")[:12])
@@ -243,6 +243,9 @@ def context(request, run=None):
                     latest_user_message_id=selected[-1]["id"] if selected else None,
                     previous_result=None, question_source=None,
                     baseline=dossier.get("baseline", request.baseline))
+        data["context_exchanges"] = dossier.get("context_exchanges", [])
+        data["analysis_references"] = dossier.get("analysis_references", [])
+        data["conversation_context_is_not_evidence"] = True
     proposal = dossier.get("ticket_proposal")
     if proposal:
         data["ticket_proposal"] = {key: value for key, value in proposal.items() if key != "body"}
