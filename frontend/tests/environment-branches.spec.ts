@@ -43,6 +43,13 @@ for (const language of ["en", "fr"] as const) {
     await expect(card.getByRole("columnheader",{name:"SHA",exact:true})).toHaveCount(0);
     const localVersion=rows.filter({hasText:"team/api"}).locator(".repository-version");
     await expect(localVersion.locator("code")).toBeVisible();
+    const table=card.locator('[data-environment-git-table]');
+    const tableBox=await table.boundingBox();
+    const branchHeader=await table.getByRole('columnheader',{name:t('Branch / tag'),exact:true}).boundingBox();
+    expect(Math.abs(branchHeader!.x-(tableBox!.x+tableBox!.width/2))).toBeLessThan(1);
+    const branchBox=await rows.filter({hasText:'team/api'}).locator('[data-repository-branch]').boundingBox();
+    const shaBox=await localVersion.boundingBox();
+    expect(shaBox!.y).toBeGreaterThanOrEqual(branchBox!.y+branchBox!.height);
     await expect(localVersion.locator("summary")).toHaveCount(0);
     await card.screenshot({path:`../.local/git-freshness-${language}-${info.project.name}.png`});
     await expect(localVersion.locator("code")).toHaveText("a".repeat(10));

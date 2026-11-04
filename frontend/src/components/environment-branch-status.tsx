@@ -46,9 +46,9 @@ export function EnvironmentLocalVersion({repository}:{repository:Environment["re
   const [copyFailed,setCopyFailed]=useState(false);
   useEffect(()=>{setCopied(false);setCopyFailed(false);},[repository.sha]);
   useEffect(()=>{if(copied){const timer=setTimeout(()=>setCopied(false),2000);return()=>clearTimeout(timer);}},[copied]);
-  return <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-local-version-row>
-    <span className="break-words">{repository.branch}</span>
-    {!!repository.sha&&<><span className="muted" aria-hidden="true">-</span><div className="repository-version text-xs muted">
+  return <div className="min-w-0 text-sm" data-local-version-row>
+    <span className="block break-words" data-repository-branch>{repository.branch}</span>
+    {!!repository.sha&&<div className="repository-version mt-1 text-xs muted">
         <div className="flex flex-wrap items-center gap-2">
           <code title={repository.sha}>{repository.sha.slice(0,10)||"—"}</code>
           <Button type="button" variant="ghost" size="sm" aria-label={t("Copy full local commit")} onClick={async()=>{
@@ -57,6 +57,6 @@ export function EnvironmentLocalVersion({repository}:{repository:Environment["re
         </div>
       {copied&&<span role="status" className="sr-only">{t("Full local commit copied.")}</span>}
       {copyFailed&&<label className="mt-2 block">{t("Copy this full local commit manually")}<input readOnly className="mt-1 w-full rounded border bg-background p-2" value={repository.sha} onFocus={event=>event.target.select()}/></label>}
-    </div></>}
+    </div>}
   </div>;
 }

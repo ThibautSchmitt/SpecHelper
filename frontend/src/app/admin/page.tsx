@@ -248,7 +248,8 @@ function AdminPanel() {
               <section className="mt-5 border-t pt-4" aria-label={t("Git sources")}>
                 <h3 className="text-sm font-medium">{t("Git sources")}</h3>
               <div className="mt-3 overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full table-fixed text-left text-sm" data-environment-git-table>
+                  <colgroup><col className="w-1/2"/><col className="w-1/2"/></colgroup>
                   <thead className="muted">
                     <tr>
                       <th className="pb-2 pr-4">{t("Project")}</th>
