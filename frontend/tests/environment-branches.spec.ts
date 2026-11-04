@@ -41,16 +41,15 @@ for (const language of ["en", "fr"] as const) {
     await expect(card.getByRole("columnheader",{name:t("Code freshness"),exact:true})).toBeVisible();
     await expect(card.getByRole("columnheader",{name:"SHA",exact:true})).toHaveCount(0);
     const localVersion=rows.filter({hasText:"team/api"}).locator(".repository-version");
-    await expect(localVersion.locator("code")).not.toBeVisible();
-    await localVersion.locator("summary").click();
+    await expect(localVersion.locator("code")).toBeVisible();
+    await expect(localVersion.locator("summary")).toHaveCount(0);
     await card.screenshot({path:`../.local/git-freshness-${language}-${info.project.name}.png`});
     await expect(localVersion.locator("code")).toHaveText("a".repeat(10));
     await page.context().grantPermissions(["clipboard-read","clipboard-write"]);
     await localVersion.getByRole("button",{name:t("Copy full local commit"),exact:true}).click();
     await expect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toBe("a".repeat(40));
-    await expect(localVersion).toContainText(t("Last successful remote check"));
-    await expect(localVersion).toContainText(t("Last local update"));
-    await localVersion.locator("summary").click();
+    for(const label of ["Local version details","Local commit","Last successful remote check","Last local update"])
+      await expect(localVersion).not.toContainText(t(label));
     await expect(rows.filter({ hasText: "team/api" })).toContainText(t("1 commit behind"));
     await expect(rows.filter({ hasText: "team/web" })).toContainText(t("Up to date"));
     await expect(card.getByRole("button", { name: /team\/web/ })).toHaveCount(0);

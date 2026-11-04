@@ -466,10 +466,6 @@ dialog::backdrop {
 .application-knowledge > summary { list-style: none; }
 .application-knowledge > summary::-webkit-details-marker { display: none; }
 .application-knowledge > summary::marker { content: ""; }
-.repository-version > summary { list-style: none; }
-.repository-version > summary::-webkit-details-marker { display: none; }
-.repository-version > summary::marker { content: ""; }
-.repository-version[open] > summary > svg { transform: rotate(180deg); }
 
 /* Shared reading views for retained evidence and editable ticket previews. */
 .reader-field-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }

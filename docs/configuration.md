@@ -64,14 +64,12 @@ separates this observation from the selected branch and local version.
 Queued/running updates and update errors take priority in the card tag.
 Updates preserve the frozen commits and workspaces of existing analyses.
 
-Expand **Local version details** under a branch to inspect its abbreviated **Local
-commit**, copy the complete SHA and see **Last successful remote check** and
-**Last local update**. The local commit is the version SpecHelper can investigate,
-not an assertion about the remote head. A failed remote check does not replace the
-last successful check date or claim the source is current. Unknown dates remain
-**Not recorded**; the environment-wide **Last successful environment update** is not substituted
-for individual repository dates. Checks never advance local-update timestamps;
-a selective update records a timestamp only for the repositories actually refreshed.
+Each branch shows its abbreviated local SHA and a **Copy** action for the complete
+SHA. This is the version SpecHelper can investigate, not an assertion about the
+remote head. Per-repository check and update dates remain stored without adding
+details to the card. A failed remote check does not claim the source is current.
+Checks never advance local-update timestamps; a selective update records a
+timestamp only for the repositories actually refreshed.
 
 Saved context text is used automatically when nonempty; clear the field to omit it
 from future analyses. Existing frozen analysis contexts retain their original content.
