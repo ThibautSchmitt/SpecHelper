@@ -95,14 +95,14 @@ export function OrchestrationSettingsForm() {
         const status = value.role_coverage!.roles[role];
         const availability = status.configured.map(id => connections.find(item => item.id === id)).map(connection => connection && !connectionsError ? connectionAvailability(connection).key : "unknown");
         const count = status.available.filter(id => availability[status.configured.indexOf(id)] === "available").length;
-        const capacity = count === 1 ? "One connection available now" : count > 1 ? "{count} connections available now" : availability.includes("unknown") ? "Availability not confirmed" : "No connection available now";
+        const capacity = availability.includes("unknown") ? "Availability not confirmed" : "No connection available now";
         const Icon = role === "analyst" ? UserRound : role === "counter_analyst" ? ScanEye : ShieldCheck;
         return <article key={role} className="orchestration-role-card min-w-0 rounded-xl border p-4" data-role={role} aria-labelledby={`coverage-${role}`}>
           <header className="title-tags">
             <h4 id={`coverage-${role}`} className="flex items-center gap-2 text-sm font-semibold"><Icon size={18} aria-hidden="true" />{t(roleLabels[role])}</h4>
             <span className="badge" data-state={status.configured.length ? "READY" : "ERROR"}>{t(status.configured.length ? "Covered" : "Not covered")}</span>
           </header>
-          {!!status.configured.length && <p className="mt-3 text-xs muted">{t(capacity, { count })}</p>}
+          {!!status.configured.length && count === 0 && <p className="mt-3 text-xs muted">{t(capacity)}</p>}
           {status.configured.length ? <ul className="mt-3 space-y-3">{status.configured.map(id => {
             const connection = connections.find(item => item.id === id);
             return <li key={id} className="flex min-w-0 items-start gap-2" data-connection-id={id}>
