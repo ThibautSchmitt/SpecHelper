@@ -347,7 +347,9 @@ def normalize_selection(selection):
 
 
 def repository_snapshot(repo):
-    result = {"repository": repo.repository, "branch": repo.branch, "sha": repo.sha}
+    # Unlinked repositories use the original GitHub-only source path. Keep that
+    # identity explicit for clients, without rewriting their stored references.
+    result = {"repository": repo.repository, "branch": repo.branch, "sha": repo.sha, "provider": "github"}
     if repo.git_repository_id:
         source = repo.git_repository
         result.update(

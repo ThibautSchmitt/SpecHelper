@@ -18,6 +18,26 @@ from core.secrets import decrypt, encrypt
 pytestmark = pytest.mark.django_db
 
 
+def test_environment_discloses_legacy_github_and_linked_gitlab_without_migrating_sources(client):
+    from core.models import GitRepository
+
+    env = Environment.objects.create(name="Mixed source formats")
+    legacy = EnvironmentRepository.objects.create(environment=env, repository="team/legacy", branch="release", sha="a" * 40)
+    conn = GitConnection.objects.create(name="GitLab", provider="gitlab", base_url="https://gitlab.example.test")
+    source = GitRepository.objects.create(connection=conn, provider="gitlab", instance=conn.base_url,
+        remote_id="17", path="team/current", name="current", clone_url=conn.base_url+"/team/current.git")
+    EnvironmentRepository.objects.create(environment=env, git_repository=source, repository="team/current", branch="main", sha="b" * 40)
+    response = client.get("/api/environments")
+    assert response.status_code == 200
+    rows = next(item for item in response.json() if item["id"] == env.pk)["repositories"]
+    by_name = {row["repository"]: row for row in rows}
+    assert by_name["team/legacy"]["provider"] == "github"
+    assert by_name["team/current"]["provider"] == "gitlab"
+    assert by_name["team/legacy"]["branch"] == "release" and by_name["team/legacy"]["sha"] == "a" * 40
+    legacy.refresh_from_db()
+    assert legacy.git_repository_id is None and GitRepository.objects.count() == 1
+
+
 def test_changing_unused_gitlab_server_clears_discovery_and_requires_new_token(storage):
     from django.utils import timezone
 
