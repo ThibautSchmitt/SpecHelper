@@ -75,9 +75,12 @@ for(const language of ["en","fr"] as const) {
   await sources.locator('.source-record > summary').filter({hasText:'rules.py'}).click();
   await expect(sources.locator('pre').filter({hasText:'CHECKED = True'})).toBeVisible();
   await sources.locator('.source-record > summary').filter({hasText:'Public reference'}).click();
-  await expect(sources.locator('pre').filter({hasText:'The exact recorded passage.'})).toBeVisible();
+  const webSource=sources.locator('.source-record').filter({hasText:'Public reference'});
+  await expect(webSource.locator('.markdown-reader')).toContainText('The exact recorded passage.');
+  await webSource.getByRole('button',{name:t('Source text'),exact:true}).click();
+  await expect(webSource.locator('pre')).toContainText('<script>window.sourceInjected=true</script>');
   await sources.locator('.source-record > summary').filter({hasText:'rules.md'}).click();
-  await expect(sources.locator('pre').filter({hasText:'Frozen document passage'})).toBeVisible();
+  await expect(sources.locator('.markdown-reader').filter({hasText:'Frozen document passage'})).toBeVisible();
   expect(await page.evaluate(()=>('sourceInjected' in window))).toBe(false);
   await expect(answer.locator('pre > code').filter({hasText:literal})).toHaveText(literal);
   await expect(answer.locator('button.sql-reference-link')).toHaveCount(2);
@@ -138,7 +141,7 @@ for(const language of ["en","fr"] as const) {
   await expect(metadata.locator("time").first()).toHaveAttribute("datetime",at);
   await expect(metadata.locator("time").last()).toHaveAttribute("datetime",later);
   await expect(thread.locator("time")).toHaveCount(2);
-  await expect(thread.locator("header, .conversation-avatar, .conversation-pending-author")).toHaveCount(0);
+  await expect(thread.locator("header:visible, .conversation-avatar, .conversation-pending-author")).toHaveCount(0);
   await expect(thread).not.toContainText("Acme");
   await expect(thread).not.toContainText(t("Business conversation"));
   current={...current,status:"PARTIAL",questions:[],latest_version:source._version,versions:[{number:1,status:"PARTIAL",created_at:source._version.created_at}]};
@@ -173,7 +176,7 @@ for(const language of ["en","fr"] as const) {
   if(language === 'fr')expect(t('Verifier')).toBe('Validateur');
   await expect(final.locator('code')).toHaveText('Analyst');
   await expect(page.locator('.conversation-user .conversation-role-mention')).toHaveCount(0);
-  await expect(final.locator('header')).toHaveCount(0);
+  await expect(final.locator('header:visible')).toHaveCount(0);
  });
  test(`individual reports are optional downloads outside the ticket in ${language}`,async({page})=>{
   const source=dossier();
@@ -257,7 +260,7 @@ for(const language of ["en","fr"] as const) {
    const progress=thread.locator('[data-cycle="1"]');
    await expect(thread.locator(".investigation-progress")).toHaveCount(1);
    await expect(thread.locator('.conversation-user .conversation-avatar')).toHaveCount(0);
-   await expect(thread.locator('header')).toHaveCount(0);
+   await expect(thread.locator('header:visible')).toHaveCount(0);
    await page.screenshot({path:`../.local/single-assistant-compact-${language}-${theme}-${info.project.name}.png`,fullPage:true});
    await progress.locator(":scope > summary").click();
    const handle=await progress.elementHandle();
@@ -348,7 +351,7 @@ for(const language of ["en","fr"] as const) {
   }
  });
  test(`final drafting remains separate from completed roles and waiting tags match in ${language}`,async({page})=>{
-  let current:any={...dossier(),status:"QUEUED",result_state:"waiting_ai",questions:[],messages:[dossier().messages[0]],analysis_runs:[{number:1,status:"QUEUED",steps:[],execution:{...execution("QUEUED","verifier",["done","done","done"],["unavailable"]),checkpoint:"writer"}}]};
+  let current:any={...dossier(),status:"QUEUED",conversation_state:"WAITING_AI",result_state:"waiting_ai",questions:[],messages:[dossier().messages[0]],analysis_runs:[{number:1,status:"QUEUED",steps:[],execution:{...execution("QUEUED","verifier",["done","done","done"],["unavailable"]),checkpoint:"writer"}}]};
   await setup(page,language,()=>current);
   await page.route('**/api/queue',route=>route.fulfill({json:[{id:65,kind:'analysis',request_id:id,title:'Benefit dates',status:'QUEUED',queue_state:'WAITING_AI',analysis_state:'waiting_ai',request_status:'QUEUED',href:`/analyses/${id}`,created_at:at}]}));
   await page.goto(`/analyses/${id}`);
@@ -367,13 +370,13 @@ for(const language of ["en","fr"] as const) {
   expect(await activityBadge.evaluate(node=>{
    const s=getComputedStyle(node);return [s.color,s.backgroundColor,s.borderRadius,s.padding,s.fontSize,s.fontWeight];
   })).toEqual(style);
-  current={...current,status:'ANALYZING',analysis_runs:[{...current.analysis_runs[0],status:'ANALYZING',execution:{...current.analysis_runs[0].execution,status:'ANALYZING',waiting_reason:'',waiting_causes:[]}}]};
+  current={...current,status:'ANALYZING',conversation_state:'IN_PROGRESS',analysis_runs:[{...current.analysis_runs[0],status:'ANALYZING',execution:{...current.analysis_runs[0].execution,status:'ANALYZING',waiting_reason:'',waiting_causes:[]}}]};
   await expect(progress.locator(':scope > summary')).toContainText(t('Preparing final response…'));
   await expect(progress.locator('[data-stage-status="done"]')).toHaveCount(3);
-  await page.route('**/api/analyses?**',route=>route.fulfill({json:{items:[{...current,status:'QUEUED',result_state:'waiting_ai',href:`/analyses/${id}`,latest_activity_at:at,latest_version_number:null,intent_resolved:true}],total:1,page:1,pages:1,has_previous:false,has_next:false}}));
+  await page.route('**/api/analyses?**',route=>route.fulfill({json:{items:[{...current,status:'QUEUED',conversation_state:'WAITING_AI',result_state:'waiting_ai',href:`/analyses/${id}`,latest_activity_at:at,latest_version_number:null,intent_resolved:true}],total:1,page:1,pages:1,has_previous:false,has_next:false}}));
   await page.goto('/analyses');
   const badge=page.locator('.analysis-state-pill');
-  await expect(badge).toHaveText(t('Waiting for an AI resource'));
+  await expect(badge).toHaveText(t('Waiting for AI'));
   expect(await badge.evaluate(node=>{
    const s=getComputedStyle(node);return [s.color,s.backgroundColor,s.borderRadius,s.padding,s.fontSize,s.fontWeight];
   })).toEqual(style);

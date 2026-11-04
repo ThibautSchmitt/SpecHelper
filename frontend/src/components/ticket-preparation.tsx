@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PublishTicket } from "@/components/publish-ticket";
+import { MarkdownReader } from "@/components/markdown-reader";
 
 type Proposal = {id:string; title:string; body:string; replacement?:boolean};
 type Draft = {
@@ -34,6 +35,7 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
   const [choice,setChoice]=useState(false);
   const [showProposal,setShowProposal]=useState(true);
   const [publishing,setPublishing]=useState(false);
+  const [bodyView,setBodyView]=useState<"preview"|"edit">("preview");
   const endpoint=`/analyses/${value.id}/ticket-preparation`;
   const working=!!value.archived_at || (value.conversation_state ? value.conversation_state!=="DISCUSSION" : ["QUEUED","UNDERSTANDING","ANALYZING","REVIEWING","GENERATING_RESULT","NEEDS_CLARIFICATION"].includes(value.status));
   const generating=!!draft?.generation&&["QUEUED","RUNNING"].includes(draft.generation.status);
@@ -64,7 +66,7 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
     finally {setBusy(false);}
   }
   async function show() {
-    dialog.current?.showModal();setOpen(true);setBusy(true);setError("");setPublishing(false);setShowProposal(true);
+    dialog.current?.showModal();setOpen(true);setBusy(true);setError("");setPublishing(false);setShowProposal(true);setBodyView("preview");
     try {
       const next=await load(ticketId);
       if(next.read_only||value.archived_at) {
@@ -179,7 +181,16 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
             {draft.proposal&&<div className="text-sm space-y-2"><p>{t("AI update ready. Your draft is unchanged until you apply it.")}</p><Button variant="ghost" size="sm" onClick={()=>setShowProposal(!showProposal)}>{t(showProposal?"See my draft":"See proposed update")}</Button></div>}
             {draft.unchanged&&<p role="status" className="text-sm muted">{t("No relevant changes were found. Your draft was kept.")}</p>}
             <div className="field"><label htmlFor={prefix+"-title"}>{t("Title")}</label><Input id={prefix+"-title"} value={proposed?proposed.title:draft.title} maxLength={200} readOnly={!!draft.proposal} disabled={readonly} onChange={event=>edit({title:event.target.value})}/></div>
-            <div className="field"><label htmlFor={prefix+"-body"}>{t("Description")}</label><Textarea id={prefix+"-body"} rows={14} value={proposed?proposed.body:draft.body} maxLength={30000} readOnly={!!draft.proposal} disabled={readonly} onChange={event=>edit({body:event.target.value})}/></div>
+            <div className="field">
+              <div className="reader-field-heading">
+                {bodyView==="edit"?<label htmlFor={prefix+"-body"}>{t("Description")}</label>:<span className="font-medium">{t("Description")}</span>}
+                <div className="reader-view-switch" role="group" aria-label={t("Ticket display")}>
+                  <button type="button" aria-pressed={bodyView==="preview"} onClick={()=>setBodyView("preview")}>{t("Preview")}</button>
+                  <button type="button" aria-pressed={bodyView==="edit"} onClick={()=>setBodyView("edit")}>{t("Edit")}</button>
+                </div>
+              </div>
+              {bodyView==="edit"?<Textarea id={prefix+"-body"} rows={14} value={proposed?proposed.body:draft.body} maxLength={30000} readOnly={!!draft.proposal} disabled={readonly} onChange={event=>edit({body:event.target.value})}/>:<section className="ticket-description-reader" aria-label={t("Description")}><MarkdownReader>{proposed?proposed.body:draft.body}</MarkdownReader></section>}
+            </div>
             {saved&&<p role="status" className="text-sm">{t("Ticket draft saved.")}</p>}
           </>}
         </>}

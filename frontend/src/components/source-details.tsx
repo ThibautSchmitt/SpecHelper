@@ -5,12 +5,27 @@ import {ChevronDown,LoaderCircle} from "lucide-react";
 import {api} from "@/lib/api";
 import {useI18n} from "@/lib/i18n";
 import type {SQLReceipt} from "@/lib/analysis-evidence";
+import {CodeBlock,sourceLanguage} from "@/components/code-block";
+import {MarkdownReader} from "@/components/markdown-reader";
 
 type Source = Partial<SQLReceipt> & {
   id:string;kind:"sql"|"git"|"web"|"document";number?:number;title?:string;url?:string;
   excerpt?:string;note?:string;repository?:string;commit?:string;line_start?:number;line_end?:number;version?:number;
 };
 const labels={sql:"Database check",git:"Source code",web:"Web reference",document:"Document"};
+
+function SourceExcerpt({source}:{source:Source}) {
+  const {t}=useI18n();
+  const [raw,setRaw]=useState(false);
+  if(source.kind==="sql"||source.kind==="git")return <CodeBlock code={source.sql||source.excerpt||""} language={source.kind==="sql"?"sql":sourceLanguage(source.title)}/>;
+  return <div className="source-reader">
+    <div className="reader-view-switch" role="group" aria-label={t("Source display")}>
+      <button type="button" aria-pressed={!raw} onClick={()=>setRaw(false)}>{t("Read")}</button>
+      <button type="button" aria-pressed={raw} onClick={()=>setRaw(true)}>{t("Source text")}</button>
+    </div>
+    {raw?<CodeBlock code={source.excerpt||""}/>:<MarkdownReader>{source.excerpt||""}</MarkdownReader>}
+  </div>;
+}
 
 export function SourceDetails({url,checks,referenceIds,selected,onSelect}:{url?:string;checks:SQLReceipt[];referenceIds:string[];selected:string[];onSelect:Dispatch<SetStateAction<string[]>>}){
   const {t}=useI18n();
@@ -50,7 +65,7 @@ export function SourceDetails({url,checks,referenceIds,selected,onSelect}:{url?:
           {source.line_start&&<p className="text-xs muted">{t("Lines {start}–{end}",{start:source.line_start,end:source.line_end||source.line_start})}</p>}
           {source.version&&<p className="text-xs muted">{t("Version")} {source.version}</p>}
           {safeLink(source.url)&&<a className="text-xs underline break-all" href={safeLink(source.url)} rel="noopener noreferrer" referrerPolicy="no-referrer">{source.kind==='document'?t("Download source document"):source.url}</a>}
-          {(source.sql||source.excerpt)&&<pre><code>{source.sql||source.excerpt}</code></pre>}
+          {(source.sql||source.excerpt)&&<SourceExcerpt source={source}/>}
           {typeof source.row_count==='number'&&<p className="text-xs muted">{t("Returned rows: {count}",{count:source.row_count})}{source.truncated?` · ${t("Result limited")}`:""}</p>}
           {source.note&&<p className="text-xs muted">{t(source.note)}</p>}
         </div>

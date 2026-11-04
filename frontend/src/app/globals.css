@@ -463,6 +463,49 @@ dialog::backdrop {
   margin: auto;
   width: min(94vw, 850px);
 }
+
+/* Shared reading views for retained evidence and editable ticket previews. */
+.reader-field-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.reader-view-switch { display: inline-flex; align-items: center; gap: 2px; width: fit-content; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--muted); font-size: 12px; }
+.reader-view-switch button { padding: 4px 10px; min-height: 30px; border-radius: 5px; color: var(--muted-foreground); font-weight: 600; white-space: nowrap; }
+.reader-view-switch button[aria-pressed="true"] { background: var(--card); color: var(--foreground); box-shadow: var(--surface-shadow); }
+.reader-view-switch button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.ticket-description-reader { min-height: 12rem; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.source-reader { min-width: 0; }
+.source-reader > .reader-view-switch { margin-bottom: 12px; }
+.markdown-reader { min-width: 0; color: var(--foreground); font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+.markdown-reader > :first-child { margin-top: 0; }
+.markdown-reader > :last-child { margin-bottom: 0; }
+.markdown-reader :is(h1,h2,h3,h4,h5,h6) { color: var(--foreground); font-weight: 700; line-height: 1.4; margin: 24px 0 10px; }
+.markdown-reader h1 { font-size: 24px; }
+.markdown-reader h2 { font-size: 19px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.markdown-reader h3 { font-size: 16px; }
+.markdown-reader :is(h4,h5,h6) { font-size: 14px; }
+.markdown-reader :is(p,ul,ol,blockquote) { margin-block: 12px; }
+.markdown-reader p { white-space: pre-wrap; }
+.markdown-reader ul { list-style: disc; padding-left: 24px; }
+.markdown-reader ol { list-style: decimal; padding-left: 24px; }
+.markdown-reader li { padding-left: 3px; margin-block: 4px; }
+.markdown-reader li::marker { color: var(--primary-ink, var(--foreground)); }
+.markdown-reader :is(strong,b) { font-weight: 700; }
+.markdown-reader a { color: var(--primary-ink, var(--foreground)); text-decoration: underline; text-underline-offset: 3px; }
+.markdown-reader blockquote { padding: 8px 14px; border-left: 3px solid var(--primary); border-radius: 0 6px 6px 0; background: var(--muted); color: var(--muted-foreground); }
+.markdown-reader blockquote > :is(p:first-child,p:last-child) { margin-block: 0; }
+.markdown-reader :not(pre) > code { padding: 2px 5px; border-radius: 4px; background: var(--muted); font-size: 0.9em; }
+.markdown-reader hr { margin-block: 20px; border-color: var(--border); }
+.markdown-reader input[type="checkbox"] { margin-right: 6px; accent-color: var(--primary); }
+.code-reader { --code-keyword: #6d28d9; --code-string: #047857; --code-number: #b45309; --code-comment: #64748b; --code-title: #1d4ed8; --code-variable: #be185d; min-width: 0; max-width: 100%; margin-block: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--muted); overflow: hidden; }
+[data-theme="dark"] .code-reader { --code-keyword: #c4b5fd; --code-string: #6ee7b7; --code-number: #fdba74; --code-comment: #a8b7ce; --code-title: #93c5fd; --code-variable: #f9a8d4; }
+.code-reader-heading { padding: 6px 14px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.code-reader > pre[tabindex] { max-width: 100%; margin: 0; padding: 14px 16px; border: 0; border-radius: 0; background: transparent; color: var(--foreground); overflow-x: auto; font-size: 12px; line-height: 1.7; white-space: pre; overflow-wrap: normal; }
+.code-reader > pre:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.code-reader > pre > code { padding: 0; border: 0; background: transparent; color: inherit; font-size: inherit; white-space: pre; overflow-wrap: normal; }
+.code-reader :is(.hljs-keyword,.hljs-selector-tag,.hljs-type,.hljs-meta) { color: var(--code-keyword); }
+.code-reader :is(.hljs-string,.hljs-regexp,.hljs-addition) { color: var(--code-string); }
+.code-reader :is(.hljs-number,.hljs-literal,.hljs-symbol) { color: var(--code-number); }
+.code-reader :is(.hljs-comment,.hljs-quote) { color: var(--code-comment); font-style: italic; }
+.code-reader :is(.hljs-title,.hljs-section,.hljs-attribute,.hljs-attr,.hljs-built_in) { color: var(--code-title); }
+.code-reader :is(.hljs-variable,.hljs-template-variable,.hljs-name,.hljs-deletion) { color: var(--code-variable); }
 .ticket-preparation-modal {
   margin: auto;
   width: min(94vw, 860px);

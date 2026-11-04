@@ -2407,5 +2407,13 @@
   "Describe the need to investigate. SpecHelper will use relevant exchanges and sources from your environment.": "Précisez le besoin à analyser. SpecHelper utilisera les échanges et les sources pertinents de votre environnement.",
   "Preparing analysis context…": "Préparation du contexte de l’analyse…",
   "Deep analysis in progress…": "Analyse approfondie en cours…",
-  "Analysis preparation interrupted": "Préparation de l’analyse interrompue"
+  "Analysis preparation interrupted": "Préparation de l’analyse interrompue",
+  "Plain text": "Texte brut",
+  "Code excerpt": "Extrait de code",
+  "Image": "Image",
+  "Source display": "Affichage de la source",
+  "Read": "Lecture",
+  "Source text": "Texte source",
+  "Ticket display": "Affichage du ticket",
+  "Preview": "Aperçu"
 }

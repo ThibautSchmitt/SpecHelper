@@ -194,7 +194,11 @@ or an active agent's worktree. Web references show retained page text or an exac
 recorded quotation. Documents show the retained version, a text preview when
 available and a source download. A preview is distinguished from an exact cited
 passage; missing excerpts remain explicitly unavailable. Source content is treated
-as text, never executed. Tables have shared cell spacing, borders and their own
+as untrusted information, never executed. SQL and code excerpts have local syntax
+highlighting. Documents and web excerpts open in a Markdown reading view with
+headings, lists and tables; **Source text** shows the exact retained text. Switching
+views does not refetch a source, rerun a query or invoke an AI. Raw HTML is not
+rendered and remote Markdown images are not loaded. Tables have shared cell spacing, borders and their own
 horizontal scrolling when needed on a small screen.
 
 Generated documentation reuses these recorded sources from the selected answer
@@ -229,7 +233,10 @@ the writing; the last message alone does not define the subject. When a native
 session is lost, the existing reconstruction mechanism uses saved history. Missing
 essential context must be requested rather than fabricated.
 
-Edit **Title** and **Description**, then **Save** or **Publish**. Closing warns about
+The description opens in **Preview**, with formatted headings, lists, tables and code.
+Choose **Edit** to change the Markdown, then **Preview** to check it. Switching views
+preserves unsaved corrections and makes no AI or save request. Edit **Title** and
+**Description**, then **Save** or **Publish**. Closing warns about
 unsaved edits. **Update with AI** uses the current draft as its editing base and can
 integrate relevant later clarifications, new documents and late analysis results.
 Unrelated intervening subjects must not change the ticket's scope. The proposed

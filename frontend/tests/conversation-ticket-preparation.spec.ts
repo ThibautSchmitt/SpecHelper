@@ -81,6 +81,7 @@ for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
   const modal=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
   await expect(modal).toHaveClass(/ticket-preparation-modal/);
   await expect(modal.getByText(t('Preparing the ticket…'),{exact:true})).toBeVisible();
+  await modal.getByRole('button',{name:t('Edit'),exact:true}).click();
   await expect(modal.getByLabel(t('Description'),{exact:true})).toHaveValue(body);
   await expect(modal.locator('select')).toHaveCount(0);
   if(language==='fr'){await expect(modal.getByLabel('Titre',{exact:true})).toBeVisible();await expect(modal.getByRole('button',{name:'Publier',exact:true})).toBeVisible();}
@@ -94,6 +95,7 @@ for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
   await expect(modal.getByLabel(t('Title'),{exact:true})).toHaveValue('My correction');
   expect(fixture.generations).toBe(1);
   await modal.getByRole('button',{name:t('Update with AI'),exact:true}).click();
+  await modal.getByRole('button',{name:t('Edit'),exact:true}).click();
   await expect(modal.getByLabel(t('Description'),{exact:true})).toHaveValue('Round the total including the new contribution rule.');
   await modal.getByRole('button',{name:t('Keep my draft'),exact:true}).click();
   await expect(modal.getByLabel(t('Title'),{exact:true})).toHaveValue('My correction');
@@ -128,6 +130,7 @@ test('existing draft requires an explicit choice to replace and failed refresh k
  const modal=page.getByRole('dialog',{name:'Prepare a ticket',exact:true});
  await expect(modal.getByText(/A draft already exists/)).toBeVisible();expect(fixture.generations).toBe(0);
  await modal.getByRole('button',{name:'Resume draft',exact:true}).click();
+ await modal.getByRole('button',{name:'Edit',exact:true}).click();
  await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);
  fixture.fail();await modal.getByRole('button',{name:'Update with AI',exact:true}).click();
  await expect(modal.getByRole('alert')).toBeVisible();await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);
@@ -135,6 +138,7 @@ test('existing draft requires an explicit choice to replace and failed refresh k
  await page.getByRole('button',{name:'Prepare a ticket',exact:true}).last().click();
  fixture.fail();await modal.getByRole('button',{name:'Replace draft',exact:true}).click();
  await expect(modal.getByRole('alert')).toBeVisible();
+ await modal.getByRole('button',{name:'Edit',exact:true}).click();
  await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);
  await modal.getByRole('button',{name:'Retry',exact:true}).click();
  await expect(modal.getByLabel('Title',{exact:true})).toHaveValue('Export contracts');
@@ -164,10 +168,12 @@ for(const outcome of ['ERROR','UNCERTAIN'])test(`a ${outcome} write keeps the dr
  await page.getByRole('alertdialog').getByRole('button',{name:'Publish anyway',exact:true}).click();
  await expect.poll(()=>fixture.posts.length).toBe(1);
  await publication.getByRole('button',{name:'Back to draft',exact:true}).click();
+  await modal.getByRole('button',{name:'Edit',exact:true}).click();
  await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);
  await modal.getByRole('button',{name:'Close',exact:true}).first().click();await page.reload();
  await expect(page.getByRole('link',{name:'Open published ticket',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Draft',exact:true}).click();
+  await modal.getByRole('button',{name:'Edit',exact:true}).click();
  await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);expect(fixture.generations).toBe(0);
  if(outcome==='UNCERTAIN'){
   await modal.getByRole('button',{name:'Verify publication',exact:true}).click();

@@ -7,6 +7,7 @@ import { RoleMentions } from "@/components/role-mentions";
 import { useI18n } from "@/lib/i18n";
 import type { SQLReceipt } from "@/lib/analysis-evidence";
 import { SourceDetails } from "@/components/source-details";
+import { markdownComponents } from "@/components/markdown-reader";
 
 function sqlReferences(markdown:string){
   let fence="",length=0;
@@ -30,7 +31,7 @@ export function SafeMarkdown({ children, roleMentions=false, compactSqlReference
   const reference=(raw:string,id:string)=><button key={id} id={id} type="button" className="sql-reference-link" aria-expanded={selected.includes(raw)} onClick={()=>{focus.current=id;setSelected(current=>current.includes(raw)?current.filter(id=>id!==raw):[...current,raw]);}}>{t("SQL check {number}",{number:references.indexOf(raw)+1})}<ChevronDown size={12} aria-hidden="true"/></button>;
   const text=(children:ReactNode,offset=0)=>Children.map(children,(child,part)=>typeof child === "string" ? child.split(/(sql-[a-f\d]{32}-[a-f\d]{12})/gi).map((piece,index)=>compactSqlReferences&&references.includes(piece)?reference(piece,`${prefix}-text-${offset}-${part}-${index}`):roleMentions?<RoleMentions key={index}>{piece}</RoleMentions>:piece) : child);
   return <><ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{
-    table: ({children})=><div className="safe-markdown-table" role="region" aria-label={t("Data table")} tabIndex={0}><table>{children}</table></div>,
+    ...markdownComponents(t),
     code: ({children,node,className,...props})=>{
       const raw=String(children).trim();
       const index=references.indexOf(raw);
@@ -45,11 +46,6 @@ export function SafeMarkdown({ children, roleMentions=false, compactSqlReference
       strong: ({children,node})=><strong>{text(children,node?.position?.start.offset)}</strong>,
       em: ({children,node})=><em>{text(children,node?.position?.start.offset)}</em>,
     } : {}),
-    img: ({ alt }) => <span className="muted">{alt || "[image]"}</span>,
-    a: ({ href, children }) => {
-      const safe = href && (/^https?:\/\//i.test(href) || href.startsWith("/") && !href.startsWith("//") || href.startsWith("#"));
-      return safe ? <a href={href} rel="noopener noreferrer" referrerPolicy="no-referrer">{children}</a> : <span>{children}</span>;
-    },
   }}>{children}</ReactMarkdown>
   {(sourcesUrl||compactSqlReferences&&(references.length>0||sqlChecks.length>0))&&<SourceDetails url={sourcesUrl} checks={sqlChecks} referenceIds={references} selected={selected} onSelect={setSelected}/>}
   </>;
