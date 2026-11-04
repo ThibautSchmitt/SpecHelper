@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Send, Square, Sparkles, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { api, send, type RequestDetail } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { conversationState } from "@/lib/conversation-state";
+import { DeepAnalysisDialog } from "@/components/deep-analysis-dialog";
 
 export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpdated:(value:RequestDetail)=>void}) {
   const {t}=useI18n();
@@ -15,12 +16,11 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
   const [error,setError]=useState("");
   const [files,setFiles]=useState<File[]>([]);
   const [uploaded,setUploaded]=useState(0);
-  const scopeDialog=useRef<HTMLDialogElement>(null);
-  const [subject,setSubject]=useState("");
+  const [scopeOpen,setScopeOpen]=useState(false);
   const activeOperation=["IN_PROGRESS","WAITING_AI"].includes(conversationState(value));
   const working=!!value.archived_at || activeOperation;
   const deepRetry=value.discussion?.mode === "analysis" && !!value.analysis_runs?.length;
-  async function action(operation:"message"|"deep"|"cancel"|"retry"|"start") {
+  async function action(operation:"message"|"cancel"|"retry"|"start") {
     setBusy(true);setError("");
     try {
       if(operation === "retry" && value.discussion?.job?.operation === "analysis_preparation"){
@@ -38,13 +38,12 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
         const body=new FormData();body.append("file",files[index]);
         await api(`/analyses/${value.id}/attachments`,{method:"POST",body});setUploaded(index+1);
       }
-      const updated=await send<RequestDetail>(`/analyses/${value.id}/${operation === "start" ? "analyze" : operation === "cancel" ? value.discussion?.mode === "discussion" ? "discussion/cancel" : "cancel" : operation === "deep" ? "deep-analyze" : "discussion"}`,
-        operation === "cancel" || operation === "start" ? {} : operation === "deep" ? {expected_revision:revision,intent:"auto",subject} : {
+      const updated=await send<RequestDetail>(`/analyses/${value.id}/${operation === "start" ? "analyze" : operation === "cancel" ? value.discussion?.mode === "discussion" ? "discussion/cancel" : "cancel" : "discussion"}`,
+        operation === "cancel" || operation === "start" ? {} : {
           message:text,expected_revision:revision,
           restart_session:operation === "retry",
         });
       onUpdated(updated);setText("");setFiles([]);setUploaded(0);
-      if(operation === "deep")scopeDialog.current?.close();
       window.dispatchEvent(new Event("queue-updated"));
     } catch (failure) {setError((failure as Error).message);} finally {setBusy(false);}
   }
@@ -64,20 +63,12 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
     <div className="flex flex-wrap items-center gap-2">
       {value.status === "DRAFT" && value.discussion?.enabled && value.discussion.revision === 0 && <Button size="sm" disabled={busy||working||!!text.trim()||!!files.length} onClick={()=>action("start")}>{t("Start discussion")}</Button>}
       <Button size="sm" variant="outline" disabled={busy || working || !!text.trim() || !!files.length} title={text.trim() || files.length ? t("Send your draft before starting deep analysis.") : undefined} onClick={()=>{
-        setSubject(value.deep_analysis_need||"");setError("");scopeDialog.current?.showModal();
+        setError("");setScopeOpen(true);
       }}><Sparkles size={15} aria-hidden="true"/>{t("Deep analysis")}</Button>
       {activeOperation && <Button size="sm" variant="ghost" disabled={busy} onClick={()=>action("cancel")}><Square size={13} aria-hidden="true"/>{t("Cancel")}</Button>}
       {((["ERROR","CANCELLED"].includes(value.status) && (deepRetry || value.discussion?.job?.operation !== "ticket_preparation")) || error === "The selected AI configuration changed. Start a new discussion session explicitly.") && <Button size="sm" variant="outline" disabled={busy || !!value.archived_at || (deepRetry && (!!text.trim() || !!files.length))} onClick={()=>action("retry")}>{t("Retry")}</Button>}
     </div>
-    <dialog ref={scopeDialog} className="publication-dialog" aria-labelledby="deep-scope-title" onCancel={event=>{if(busy)event.preventDefault();}}>
-      <h2 id="deep-scope-title">{t("Deep analysis")}</h2>
-      <p className="mt-2 text-sm muted">{t("Describe the need to investigate. SpecHelper will use relevant exchanges and sources from your environment.")}</p>
-      <form className="mt-4 space-y-4" onSubmit={event=>{event.preventDefault();void action("deep");}}>
-        <div className="field"><label htmlFor="deep-subject">{t("Need to analyze")}</label><Textarea id="deep-subject" rows={4} maxLength={30000} required disabled={busy} value={subject} onChange={event=>setSubject(event.target.value)}/></div>
+    {scopeOpen&&<DeepAnalysisDialog value={value} initialSubject={value.deep_analysis_need||""} onUpdated={onUpdated} onClosed={()=>setScopeOpen(false)}/>}
 
-        {error&&<p role="alert" className="text-sm text-red-700">{t(error)}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={()=>scopeDialog.current?.close()}>{t("Cancel")}</Button><Button disabled={busy||!subject.trim()}>{t("Launch deep analysis")}</Button></div>
-      </form>
-    </dialog>
   </div>;
 }

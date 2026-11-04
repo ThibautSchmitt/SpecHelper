@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import { ProviderLogo } from "@/components/provider-logo";
-import { SafeMarkdown } from "@/components/safe-markdown";
+import { MarkdownReader } from "@/components/markdown-reader";
 import { secureFetch } from "@/lib/access";
 import { api, send } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -161,7 +161,6 @@ export function PublishTicket({
   const [issueType, setIssueType] = useState("");
   const [presentation, setPresentation] = useState<Presentation>(defaultPresentation);
   const previewGeneration = useRef(0);
-  const [saved, setSaved] = useState(false);
   const [draftSaveFailed, setDraftSaveFailed] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [title, setTitle] = useState("");
@@ -283,7 +282,6 @@ export function PublishTicket({
     setLabels(value.defaults?.labels || []);
     setAssignees(value.defaults?.assignees || []);
     setDirty(false);
-    setSaved(false);
     setDraftSaveFailed(false);
   }
   useEffect(() => {
@@ -325,25 +323,11 @@ export function PublishTicket({
       const value = await send<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}${ticketQuery}`, draftPayload(), "PUT");
       setPreview(value);
       setDirty(false);
-      setSaved(true);
       setDraftSaveFailed(false);
       return value;
     } catch (error) {
       setDraftSaveFailed(true);
       throw error;
-    }
-  }
-  async function reloadDraft() {
-    const generation = ++previewGeneration.current;
-    setBusy(true);
-    setError("");
-    try {
-      const value = await api<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}${ticketQuery}`);
-      if (generation === previewGeneration.current) applyPreview(value);
-    } catch (error) {
-      if (generation === previewGeneration.current) setError((error as Error).message);
-    } finally {
-      if (generation === previewGeneration.current) setBusy(false);
     }
   }
   const fieldBody = preview?.render_fields
@@ -368,9 +352,10 @@ export function PublishTicket({
   const referencePattern = reference
     ? new RegExp(`(?<![\\w:.-])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w:.-])`)
     : null;
-  const renderedBody = reference && !referencePattern?.test(fieldBody)
-    ? `${fieldBody}\n\n${reference}`.trim()
-    : fieldBody.trim();
+  // Correlation stays in the publication metadata/provider payload, outside the reading view.
+  const renderedBody = (referencePattern ? fieldBody.replace(referencePattern, "") : fieldBody)
+    .replace(/^\s*spechelper:[0-9a-f-]{36}\s*$/gmi, "").trim();
+  const shortPreview = renderedBody.split(/\n\s*\n/).slice(0,2).join("\n\n").slice(0,360);
   const publicationIssues = preview ? [
     ...(preview.publication_allowed === false
       ? (preview.publication_blockers?.length ? preview.publication_blockers : ["Required independent checks are incomplete. Publication is blocked."]).map(reason => t(reason))
@@ -515,7 +500,7 @@ export function PublishTicket({
       </Button>}
       <Surface
         ref={embedded ? undefined : dialog}
-        className={embedded ? "" : "publication-dialog"}
+        className={embedded ? "publication-surface" : "publication-dialog publication-surface"}
         aria-labelledby={embedded ? undefined : `publication-title-${prefix}`}
         aria-label={embedded ? t("Publication destination") : undefined}
         onCancel={(event) => {
@@ -523,7 +508,7 @@ export function PublishTicket({
           close();
         }}
       >
-        {!embedded && <div className="flex items-start justify-between gap-4">
+        {!embedded && <div className="ticket-modal-header flex items-start justify-between gap-4">
           <div>
             <h2 id={`publication-title-${prefix}`}>{t("Publish ticket")}</h2>
             <p className="mt-1 text-sm muted">
@@ -595,7 +580,7 @@ export function PublishTicket({
             </Button>
           </div>
         ) : (
-          <form
+          <form id={`publication-form-${prefix}`}
             onSubmit={async (event) => {
               event.preventDefault();
               if (!preview || preview.publication_allowed === false || confirmation) return;
@@ -621,7 +606,7 @@ export function PublishTicket({
                 idempotency_key: crypto.randomUUID(),
                 confirmed: true,
               };
-              if(current.requires_unverified_confirmation){setConfirmation(candidate);setBusy(false);}else void publish(candidate);
+              setConfirmation(candidate);setBusy(false);
             }}
           >
             {!connectors.length && (
@@ -631,7 +616,6 @@ export function PublishTicket({
               </p>
             )}
             <fieldset disabled={busy||!!confirmation} className="grid gap-x-4 sm:grid-cols-2">
-              <p className="mt-3 text-xs muted sm:col-span-2">{t("The selected external account publishes the ticket; it does not identify the person using SpecHelper.")}</p>
               <div className="field">
                 <label htmlFor={prefix+"-publish-connector"}>{t("Publication connection")}</label>
                 <select
@@ -672,7 +656,7 @@ export function PublishTicket({
                   ))}
                 </select>
               </div>
-              {preview && <div className="field sm:col-span-2">
+              {preview && !!preview.templates.length && <div className="field sm:col-span-2">
                 <label htmlFor="publish-format">{t("Ticket format")}</label>
                 <select id="publish-format" value={presentation.ticket_format || "standard"} onChange={event => change(() => { void recompose({ ticket_format: event.target.value as "project" | "standard", ...(event.target.value === "project" ? { include_diagrams: false } : {}) }); })}>
                   <option value="project" disabled={!preview.templates.length}>{t("Project template")}</option>
@@ -745,38 +729,6 @@ export function PublishTicket({
                     {t(preview.notice)}
                   </p>
                 )}
-                {!!version && <fieldset className="mt-5 space-y-3 rounded-lg border p-4">
-                  <legend className="px-1 text-sm font-semibold">{t("Optional ticket content")}</legend>
-                  {([["include_business_analysis", "Include detailed business analysis"], ["include_technical_analysis", "Include detailed technical analysis"]] as const).map(([key, label]) => <label key={key} className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation[key]} onChange={event => change(() => { void recompose({ [key]: event.target.checked }); })} />{t(label)}</label>)}
-                  <p className="text-xs muted">{t("These options change only the ticket presentation. The verified analysis and detailed goal.md remain unchanged.")}</p>
-                </fieldset>}
-                <div className="field">
-                  <label htmlFor={prefix+"-publish-title"}>{t("Ticket title")}</label>
-                  <Input
-                    id={prefix+"-publish-title"}
-                    required
-                    value={title}
-                    onChange={(e) => {
-                      setTitle(e.target.value);
-                      setDirty(true);
-                    }}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor={prefix+"-publish-body"}>
-                    {t("Ticket description")}
-                  </label>
-                  <Textarea
-                    id={prefix+"-publish-body"}
-                    required={!preview.render_fields}
-                    className="min-h-52"
-                    value={body}
-                    onChange={(e) => {
-                      setBody(e.target.value);
-                      setDirty(true);
-                    }}
-                  />
-                </div>
                 {preview.fields.map((field) => (
                   <div key={field.id} className="field">
                     <label htmlFor={`${prefix}-publish-field-${field.id}`}>
@@ -912,10 +864,8 @@ export function PublishTicket({
                     </select>
                   </div>
                 )}
-                <fieldset className="mt-5 space-y-3 rounded-lg border p-4">
-                  <legend className="px-1 text-sm font-semibold">{t("Files to transfer")}</legend>
-                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false, include_diagrams: false }) }); })} />{t("Include attachments")}</label>
-                  <p className="text-xs muted">{presentation.include_attachments ? t("Selected files will be sent to {destination}.", { destination: projects.find(item => item.id === project)?.name || project }) : t("No file will be sent to the external platform.")}</p>
+                {(!!preview.available_attachments?.length||presentation.include_attachments)&&<fieldset className="mt-4 space-y-2 text-sm">
+                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false, include_diagrams: false }) }); })} />{t("Include attachments")}{!!preview.available_attachments?.length&&<span className="muted"> · {preview.available_attachments.length}</span>}</label>
                   {presentation.include_attachments && <div className="space-y-3">
                     <p className="text-xs muted">{t("Select each file to transfer. Original files and generated goal.md are separate choices.")}</p>
                     {(preview.available_attachments || []).map(file => <div key={file.id}>
@@ -924,58 +874,34 @@ export function PublishTicket({
                     </div>)}
                     {!preview.available_attachments?.length && <p className="text-xs muted">{t("No transferable files are available.")}</p>}
                   </div>}
-                </fieldset>
+                </fieldset>}
                 <h3 className="mt-6">{t("Publication preview")}</h3>
                 <p className="mt-2 break-words text-sm font-semibold">{title}</p>
                 <p className="mt-1 flex items-center gap-2 text-xs muted"><ProviderLogo provider={connectors.find(item => String(item.id) === connector)?.platform} />{version ? t("Analysis version {number}", { number: version }) : t("Conversation draft")} · {projects.find(item => item.id === project)?.name || project}</p>
-                <div className="markdown-preview mt-3 rounded border bg-muted p-4">
-                  {preview.format === "markdown" ? (
-                    <SafeMarkdown>
-                      {renderedBody}
-                    </SafeMarkdown>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{renderedBody}</p>
-                  )}
-                </div>
-                <p className="my-4 text-xs muted">
-                  {t(
-                    "Creating this ticket sends the reviewed content to the selected service. No source code will be modified.",
-                  )}
-                </p>
-                <div className="mb-4 text-xs muted" aria-label={t("Attachment transfer preview")}>
-                  <p>{t("Files to transfer")}: {presentation.include_attachments ? (preview.selected_attachments || []).map(file => file.name).join(", ") || t("None") : t("None")}</p>
-                </div>
+                <div className="mt-3 text-sm"><MarkdownReader>{shortPreview}</MarkdownReader></div>
+                <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("See full content")}</summary><div className="mt-3"><MarkdownReader>{renderedBody}</MarkdownReader></div></details>
+                <p className="my-4 text-xs muted">{t("The ticket will be created on the selected platform. No source code will be modified.")}</p>
                 {!!publicationIssues.length && <div id={`publication-issues-${prefix}`} role="status" className="mb-4 rounded-lg border border-amber-500/50 p-4 text-sm">
                   <p className="font-semibold">{t("Publication is blocked")}</p>
                   <ul className="mt-2 list-disc pl-5">{publicationIssues.map((reason, index) => <li key={index}>{reason}</li>)}</ul>
                   {preview.publication_allowed === false && <p className="mt-2 muted">{t("You can review and save this draft. Exporting it does not complete the missing checks.")}</p>}
                 </div>}
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button type="button" variant="outline" disabled={busy} onClick={async () => { setBusy(true); setError(""); try { await saveDraft(); } catch (error) { setError((error as Error).message); } finally { setBusy(false); } }}>{t("Save publication draft")}</Button>
-                  <Button type="button" variant="ghost" disabled={busy} onClick={() => change(() => { void reloadDraft(); })}>{t("Reload saved draft")}</Button>
-                  {draftSaveFailed && <Button type="button" variant="ghost" disabled={busy} onClick={finishClose}>{t("Close without saving")}</Button>}
-                  {saved && !dirty && <p role="status" className="text-xs muted">{t("Publication draft saved.")}</p>}
-                <Button
-                  disabled={busy || publicationIssues.length > 0}
-                  aria-describedby={publicationIssues.length ? `publication-issues-${prefix}` : undefined}
-                >
-                  {t("Create ticket")}
-                </Button>
-                </div>
               </fieldset>
             )}
           </form>
         )}
-        {confirmation&&<div ref={confirmationPanel} tabIndex={-1} className="mt-4 rounded-md border p-4 space-y-3" role="alertdialog" aria-label={t("Publish without independent verification")}>
-          <p>{t("This ticket has not been verified by a deep analysis. Publish it anyway?")}</p>
-          <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>{const payload=confirmation;setConfirmation(null);void publish({...payload,unverified_confirmed:true});}}>{t("Publish anyway")}</Button>
-          {onAnalyze&&<Button variant="outline" disabled={busy} onClick={()=>{finishClose();onAnalyze();}}>{t("Launch deep analysis")}</Button>}
+        {confirmation&&<div ref={confirmationPanel} tabIndex={-1} className="mt-4 rounded-md border p-4 space-y-3" role="alertdialog" aria-label={t(preview?.requires_unverified_confirmation?"Publish without independent verification":"Confirm publication")}>
+          <p>{t(preview?.requires_unverified_confirmation?"This ticket has not been verified by a deep analysis. Publish it anyway?":"Confirm creation of this ticket on the selected platform?")}</p>
+          <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>{const payload=confirmation;setConfirmation(null);void publish({...payload,unverified_confirmed:!!preview?.requires_unverified_confirmation});}}>{t(preview?.requires_unverified_confirmation?"Publish anyway":"Confirm publication")}</Button>
+          {onAnalyze&&preview?.requires_unverified_confirmation&&<Button variant="outline" disabled={busy} onClick={()=>{finishClose();onAnalyze();}}>{t("Launch deep analysis")}</Button>}
           <Button variant="ghost" disabled={busy} onClick={()=>setConfirmation(null)}>{t("Cancel")}</Button></div>
         </div>}
-        <div className="mt-4 flex justify-end border-t pt-4">
+        <div className="ticket-modal-footer mt-4">
           <Button type="button" variant="outline" disabled={busy} onClick={close}>
-            {t(embedded ? "Back to draft" : "Cancel")}
+            {t("Back")}
           </Button>
+          {draftSaveFailed&&<Button type="button" variant="ghost" disabled={busy} onClick={finishClose}>{t("Close without saving")}</Button>}
+          {preview&&!pending&&(!result||result.status==="ERROR")&&!recovering&&!recoveryFailed&&!confirmation&&<Button type="submit" form={`publication-form-${prefix}`} disabled={busy||publicationIssues.length>0} aria-describedby={publicationIssues.length?`publication-issues-${prefix}`:undefined}>{t("Publish")}</Button>}
         </div>
       </Surface>
     </>

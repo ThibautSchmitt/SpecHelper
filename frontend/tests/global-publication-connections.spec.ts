@@ -167,14 +167,15 @@ for (const language of ["en", "fr"] as const) {
     await expect(project.locator('option[value="OTHER"]')).toHaveText("Another accessible project");
     await expect(project).toHaveValue("");
     await project.selectOption("OTHER");
-    await expect(dialog.getByLabel(t("Ticket description"), { exact: true })).toHaveValue("Short verified description");
+    await expect(dialog.getByText("Short verified description", { exact: true }).first()).toBeVisible();
     if(prepared){
       await dialog.getByRole('button',{name:t('Use prepared draft'),exact:true}).click();
-      await expect(dialog.getByLabel(t('Ticket title'),{exact:true})).toHaveValue('Prepared correction');
-      await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toHaveValue('Reject invalid periods.');
+      await expect(dialog.getByText('Prepared correction',{exact:true})).toBeVisible();
+      await expect(dialog.getByText('Reject invalid periods.',{exact:true}).first()).toBeVisible();
     }
     expect(submitted).toBeUndefined();
-    await dialog.getByRole("button", { name: t("Create ticket"), exact: true }).click();
+    await dialog.getByRole("button", { name: t("Publish"), exact: true }).click();
+    await dialog.getByRole("alertdialog").getByRole("button", { name: t("Confirm publication"), exact: true }).click();
     await expect.poll(() => submitted).toMatchObject({ connector_id: 4, project: "OTHER", confirmed: true });
     if(prepared)expect(submitted.body).toBe('Reject invalid periods.');
     expect(selectedAccounts).toEqual(["4"]);

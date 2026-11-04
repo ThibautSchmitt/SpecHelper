@@ -36,6 +36,24 @@ from .ticket_publication import (
 router = Router(tags=["Ticket publication"])
 
 
+@router.get("/analyses/{analysis_id}/versions/{number}/reports/{kind}")
+def analysis_report(request, analysis_id: UUID, number: int, kind: Literal["business", "technical"]):
+    from .deliverables import result_report
+    return result_report(analysis_id, number, kind)
+
+
+@router.get("/analyses/{analysis_id}/runs/{number}/reports/{kind}")
+def partial_analysis_report(request, analysis_id: UUID, number: int, kind: Literal["business", "technical"]):
+    from .deliverables import interrupted_report
+    return interrupted_report(analysis_id, number, kind)
+
+
+@router.get("/analyses/{analysis_id}/goal")
+def analysis_goal(request, analysis_id: UUID, ticket_id: UUID | None = None, source_version: int | None = None):
+    from .deliverables import goal_document
+    return goal_document(analysis_id, ticket_id, source_version)
+
+
 class StrictSchema(Schema):
     model_config = ConfigDict(extra="forbid")
 

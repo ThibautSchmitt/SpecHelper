@@ -2415,5 +2415,22 @@
   "Read": "Read",
   "Source text": "Source text",
   "Ticket display": "Ticket display",
-  "Preview": "Preview"
+  "Preview": "Preview",
+  "Need verification": "Need verification",
+  "Business report": "Business report",
+  "Technical report": "Technical report",
+  "View business report": "View business report",
+  "View technical report": "View technical report",
+  "Generate goal.md": "Generate goal.md",
+  "See full content": "See full content",
+  "Confirm publication": "Confirm publication",
+  "Confirm creation of this ticket on the selected platform?": "Confirm creation of this ticket on the selected platform?",
+  "The ticket will be created on the selected platform. No source code will be modified.": "The ticket will be created on the selected platform. No source code will be modified.",
+  "Partial or independently unverified deliverable. Review the limits before implementation.": "Partial or independently unverified deliverable. Review the limits before implementation.",
+  "Need and acceptance criteria": "Need and acceptance criteria",
+  "Implementation constraints": "Implementation constraints",
+  "Source analysis": "Source analysis",
+  "Derive tests from the stated acceptance criteria. Missing criteria must be clarified before implementation.": "Derive tests from the stated acceptance criteria. Missing criteria must be clarified before implementation.",
+  "This document restates the selected need; it does not establish new technical facts. Clarify missing scope, behavior and decisions. Recheck sources before implementation.": "This document restates the selected need; it does not establish new technical facts. Clarify missing scope, behavior and decisions. Recheck sources before implementation.",
+  "Back": "Back"
 }

@@ -1,5 +1,21 @@
 # Architecture
 
+## Ticket views and analysis deliverables
+
+The centered preparation modal owns title/Markdown editing and explicit AI revision
+acceptance. Publication owns destination metadata, optional file consent and explicit
+confirmation. Destination changes retain their existing validation and reconciliation
+rules. Deep analysis can be launched from preparation through the shared editable
+need dialog, after saving the draft; it does not rewrite that draft on completion.
+
+`core/deliverables.py` produces read-only Markdown from a selected saved ticket,
+immutable result or recorded interrupted-cycle findings. Report APIs scope every ID
+to its conversation and retain verification limits. Audience-specific source annexes
+reuse recorded receipts and frozen Git/document material. They never execute agents
+or business SQL. The common Markdown reader supplies view/download controls for
+business reports, technical reports and optional `goal.md`. No new storage tables
+or migrations are needed; existing artifacts and publication histories remain intact.
+
 Conversation records reuse `Request`; each independently frozen investigation uses
 an `AnalysisRun` and immutable `ResultVersion`. `ConversationTicket` stores each
 editable ticket with an optional exact result and retained context references.

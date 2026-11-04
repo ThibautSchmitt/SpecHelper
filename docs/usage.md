@@ -169,6 +169,14 @@ must not be read as a fully verified answer even when every role has finished.
 Open **Analysis report** for detailed business/technical sections, evidence, frozen
 Git references, decisions and provenance. Optional individual role reports can be
 downloaded as Markdown; they are not automatically included in tickets.
+Each result also offers **View business report**, **View technical report** and
+**Generate goal.md** beside **Prepare a ticket**. Each deliverable opens in the same
+safe Markdown reader and can be downloaded separately. It belongs to that exact
+cycle/version, including when later conversation topics have changed. Business
+reports emphasize functional conclusions; technical reports include retained source
+excerpts and executed SQL. These views read saved evidence, without new AI calls or
+business queries. An interrupted cycle with recorded findings can expose partial
+reports; its findings remain explicitly without complete independent verification.
 Reviewed explanatory diagrams may be expanded where useful. Unchecked relationships
 are omitted rather than presented as established behavior.
 
@@ -248,12 +256,26 @@ Deep analysis remains optional for preparing, updating and publishing. A relevan
 analysis can supply existing conclusions and evidence, but new requirements are not
 independently verified merely because a prior cycle completed. The modal shows a
 short verification indication. Launching an independent analysis remains a separate,
-explicit action. After it completes, use **Update with AI** on the same draft.
+explicit action under **Need verification**. It saves current edits, opens an editable
+need prefilled from the ticket and starts only after confirmation. The draft remains
+available during analysis. After it completes, use **Update with AI** on the same draft.
+
+**Generate goal.md** is also available from the draft or conversation without a deep
+analysis. It saves pending draft edits first and restates only the selected need,
+acceptance criteria and implementation constraints. It does not invent technical
+facts, auto-create a ticket or start agents. Missing information and the verification
+level remain explicit. An existing goal from a selected analysis retains its content.
 
 **Publish** opens account and destination selection in the same modal. Choose an
 enabled, verified connection associated with the environment and an accessible
 destination. Multiple accounts remain separate choices. A failure never switches
 accounts silently. Complete required provider fields and review the exact content.
+The publication view contains destination-specific inputs and a short formatted
+preview. **See full content** expands the complete content only when requested.
+Editing stays in preparation: **Back** returns there; destination options are saved
+on return or confirmation. Detailed report inclusion controls and repeated save/reload
+actions are omitted. Internal reconciliation markers stay out of the reading view;
+the provider payload and stored publication reference retain duplicate protection.
 A new destination preview starts with the saved draft; an existing destination draft
 keeps its own edits until **Use prepared draft** explicitly replaces them.
 
@@ -284,8 +306,10 @@ Destination-specific behavior matters:
 ### Optional files
 
 **Include attachments** starts unchecked. Select originals and `goal.md` individually
-when the destination supports uploads. `goal.md`, analysis reports and diagram annexes
-require a real source analysis; discussion-only drafts do not fabricate them. A detailed diagram annex is separately selectable
+when the destination supports uploads. Automatically attaching a frozen analysis's
+`goal.md` or a diagram annex still requires that source result. A discussion-only
+goal can be read and downloaded separately; it is not silently attached to a ticket.
+A detailed diagram annex is separately selectable
 for supported standard-format publications. Up to 20 selected files and 50 MB total
 are accepted; each original file must also meet the 25 MB safety limit. Preview hashes,
 sizes and types are rechecked before transfer.

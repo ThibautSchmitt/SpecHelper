@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PublishTicket } from "@/components/publish-ticket";
 import { MarkdownReader } from "@/components/markdown-reader";
+import { DeepAnalysisDialog } from "@/components/deep-analysis-dialog";
+import { DeliverableViewer } from "@/components/deliverable-viewer";
 
 type Proposal = {id:string; title:string; body:string; replacement?:boolean};
 type Draft = {
@@ -24,6 +26,7 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
 }) {
   const {t}=useI18n();
   const dialog=useRef<HTMLDialogElement>(null);
+  const bodyEditor=useRef<HTMLTextAreaElement>(null);
   const prefix=useId();
   const lastPurpose=useRef<"prepare"|"refresh"|"replace">("prepare");
   const [open,setOpen]=useState(false);
@@ -35,12 +38,17 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
   const [choice,setChoice]=useState(false);
   const [showProposal,setShowProposal]=useState(true);
   const [publishing,setPublishing]=useState(false);
+  const [analysisDraft,setAnalysisDraft]=useState<Draft|null>(null);
   const [bodyView,setBodyView]=useState<"preview"|"edit">("preview");
   const endpoint=`/analyses/${value.id}/ticket-preparation`;
   const working=!!value.archived_at || (value.conversation_state ? value.conversation_state!=="DISCUSSION" : ["QUEUED","UNDERSTANDING","ANALYZING","REVIEWING","GENERATING_RESULT","NEEDS_CLARIFICATION"].includes(value.status));
   const generating=!!draft?.generation&&["QUEUED","RUNNING"].includes(draft.generation.status);
   const proposed=showProposal&&draft?.proposal;
   const readonly=!!draft?.read_only||generating||busy;
+  useEffect(()=>{
+    const input=bodyEditor.current;
+    if(input){input.style.height="auto";input.style.height=`${input.scrollHeight}px`;}
+  },[bodyView,draft?.body,proposed&&proposed.body]);
 
   async function refreshConversation() {
     onUpdated(await api<RequestDetail>(`/analyses/${value.id}`));
@@ -127,11 +135,7 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
       if(kind==="refresh")await generate(current,"refresh");
       if(kind==="publish")setPublishing(true);
       if(kind==="analyze") {
-        onUpdated(await send<RequestDetail>(`/analyses/${value.id}/deep-analyze`,{
-          expected_revision:current.discussion_revision, intent:"change", preparation_revision:current.revision,
-          ticket_id:current.id, subject:current.title, topic_message_id:current.topic_message_id,
-        }));
-        dialog.current?.close();window.dispatchEvent(new Event("queue-updated"));
+        setAnalysisDraft(current);
       }
     } catch(failure) {setError((failure as Error).message);}
     finally {setBusy(false);}
@@ -157,7 +161,7 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
       onClose={()=>{setOpen(false);setChoice(false);onClosed?.();}}
       onCancel={event=>{event.preventDefault();if(!publishing)close();}}>
       <header className="ticket-modal-header">
-        <h2 id={prefix+"-heading"}>{t(publishing?"Publish ticket":"Prepare a ticket")}</h2>
+        <div className="flex flex-wrap items-center gap-2"><h2 id={prefix+"-heading"}>{t(publishing?"Publish ticket":"Prepare a ticket")}</h2>{!publishing&&<span className="badge">{t("Draft")}</span>}</div>
         {!publishing&&<Button variant="ghost" size="sm" aria-label={t("Close")} disabled={busy} onClick={close}><X size={18} aria-hidden="true"/></Button>}
       </header>
       <div className="p-5 space-y-4">
@@ -177,7 +181,6 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
           {(busy&&!draft||generating)&&<p role="status" className="flex items-center gap-2 text-sm"><LoaderCircle size={16} className="animate-spin" aria-hidden="true"/>{t(generating&&draft?.body?"Updating the draft…":"Preparing the ticket…")}</p>}
           {draft?.clarification&&<p role="status" className="text-sm">{draft.clarification}</p>}
           {draft&&!draft.initial_pending&&<>
-            <p className="text-xs muted">{t(draft.source_verified?"Relevant deep analysis available":"Without deep verification")}</p>
             {draft.proposal&&<div className="text-sm space-y-2"><p>{t("AI update ready. Your draft is unchanged until you apply it.")}</p><Button variant="ghost" size="sm" onClick={()=>setShowProposal(!showProposal)}>{t(showProposal?"See my draft":"See proposed update")}</Button></div>}
             {draft.unchanged&&<p role="status" className="text-sm muted">{t("No relevant changes were found. Your draft was kept.")}</p>}
             <div className="field"><label htmlFor={prefix+"-title"}>{t("Title")}</label><Input id={prefix+"-title"} value={proposed?proposed.title:draft.title} maxLength={200} readOnly={!!draft.proposal} disabled={readonly} onChange={event=>edit({title:event.target.value})}/></div>
@@ -189,8 +192,15 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
                   <button type="button" aria-pressed={bodyView==="edit"} onClick={()=>setBodyView("edit")}>{t("Edit")}</button>
                 </div>
               </div>
-              {bodyView==="edit"?<Textarea id={prefix+"-body"} rows={14} value={proposed?proposed.body:draft.body} maxLength={30000} readOnly={!!draft.proposal} disabled={readonly} onChange={event=>edit({body:event.target.value})}/>:<section className="ticket-description-reader" aria-label={t("Description")}><MarkdownReader>{proposed?proposed.body:draft.body}</MarkdownReader></section>}
+              {bodyView==="edit"?<Textarea ref={bodyEditor} className="ticket-description-editor" id={prefix+"-body"} rows={6} value={proposed?proposed.body:draft.body} maxLength={30000} readOnly={!!draft.proposal} disabled={readonly} onChange={event=>edit({body:event.target.value})}/>:<section className="ticket-description-reader" aria-label={t("Description")}><MarkdownReader>{proposed?proposed.body:draft.body}</MarkdownReader></section>}
             </div>
+            <section className="text-xs muted" aria-label={t("Need verification")}>
+              <p className="font-medium">{t("Need verification")} · {t(draft.source_verified?"Relevant deep analysis available":"Without deep verification")}</p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Button type="button" variant="ghost" size="sm" disabled={readonly||working||!!draft.proposal} onClick={()=>void action("analyze")}>{t("Launch deep analysis")}</Button>
+                {!!draft.id&&<DeliverableViewer url={`/analyses/${value.id}/goal?ticket_id=${draft.id}`} title="goal.md" label="Generate goal.md" disabled={readonly||!!draft.proposal} beforeOpen={async()=>{setBusy(true);try{await persist();}finally{setBusy(false);}}}/>}
+              </div>
+            </section>
             {saved&&<p role="status" className="text-sm">{t("Ticket draft saved.")}</p>}
           </>}
         </>}
@@ -202,10 +212,11 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
           <Button disabled={busy||generating||dirty||!showProposal} onClick={()=>void decide(true)}>{t(draft.proposal.replacement?"Replace draft":"Apply")}</Button>
         </>:<>
           <Button variant="ghost" disabled={readonly||working||draft?.initial_pending||!draft?.id} onClick={()=>void action("refresh")}>{t("Update with AI")}</Button>
-          <Button variant="outline" disabled={readonly||!draft?.title.trim()||!draft.body.trim()||draft.initial_pending} onClick={()=>void action("save")}>{t("Save")}</Button>
+          <Button variant="outline" disabled={readonly||!dirty||!draft?.title.trim()||!draft.body.trim()||draft.initial_pending} onClick={()=>void action("save")}>{t("Save")}</Button>
           <Button disabled={busy||generating||draft?.active===false&&!draft.can_recover_publication||!draft?.title.trim()||!draft.body.trim()||draft.initial_pending} onClick={()=>void action("publish")}>{t(draft?.can_recover_publication?"Verify publication":"Publish")}</Button>
         </>}
       </footer>}
     </dialog>
+    {analysisDraft?.id&&<DeepAnalysisDialog value={value} initialSubject={analysisDraft.title} preparation={{id:analysisDraft.id,revision:analysisDraft.revision,discussion_revision:analysisDraft.discussion_revision}} onUpdated={onUpdated} onClosed={()=>setAnalysisDraft(null)} onStarted={()=>{setPublishing(false);dialog.current?.close();}}/>}
   </>;
 }

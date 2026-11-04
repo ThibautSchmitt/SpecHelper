@@ -7,6 +7,7 @@ import { SafeMarkdown } from "@/components/safe-markdown";
 import { RoleMentions } from "@/components/role-mentions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DeliverableViewer } from "@/components/deliverable-viewer";
 import { type RequestDetail, type ResultVersion, type WorkExecution } from "@/lib/api";
 import { activityLabel, DiscussionProgress, ProgressDisclosure, ResponsePreview, WorkSteps } from "@/components/work-progress";
 import { useI18n } from "@/lib/i18n";
@@ -151,6 +152,10 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
       {events.map(event => <li key={event.id} id={event.id} className={`conversation-message conversation-${event.speaker}`} data-message={event.id}>
         <article className="conversation-bubble">
           {event.run && <InvestigationProgress run={event.run} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
+          {event.run&&["ERROR","CANCELLED","PARTIAL","READY"].includes(event.run.status)&&event.run.role_reviews?.some(review=>review.summary||review.findings.length||review.issues.length||review.limits.length)&&!versions.some(version=>version.run_number===event.run!.number)&&<div className="mt-2 flex flex-wrap gap-2">
+            <DeliverableViewer url={`/analyses/${value.id}/runs/${event.run.number}/reports/business`} title="Business report" label="View business report"/>
+            <DeliverableViewer url={`/analyses/${value.id}/runs/${event.run.number}/reports/technical`} title="Technical report" label="View technical report"/>
+          </div>}
           {event.work&&<DiscussionProgress job={event.work} unavailable={trackingUnavailable}/>}
           {event.label && <p className="mb-2 flex items-center gap-2 text-xs font-medium text-primary">{event.discussion && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true"/>}{t(event.label)}{event.version ? ` · v${event.version}` : ""}</p>}
           {event.subject && <p className="mb-2 text-xs muted">{t("Subject")}: {event.subject}</p>}

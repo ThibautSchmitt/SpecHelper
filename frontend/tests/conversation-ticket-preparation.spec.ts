@@ -53,7 +53,7 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
  await page.route(`**${endpoint}/publications*`,r=>{
   if(r.request().method()==='GET')return r.fulfill({json:attempts});
   const payload=r.request().postDataJSON();posts.push(payload);
-  expect(payload.confirmed).toBe(true);expect(payload.unverified_confirmed).toBe(true);
+  expect(payload.confirmed).toBe(true);expect(payload.unverified_confirmed).toBe(target.requires_unverified_confirmation);
   const publication={id:'publication-1',connector_id:4,project:'TEAM',idempotency_key:payload.idempotency_key,snapshot:{...payload,conversation_ticket_revision:1,version_id:null,baseline:[],selected_attachments:[]},title:payload.title,status:outcome,url:outcome==='PUBLISHED'?'https://jira.example.test/browse/TEAM-14':'',platform:'jira',external_key:'TEAM-14',created_at:at};
   value={...value,publications:[publication]};attempts=[publication];
   if(outcome==='PUBLISHED'){
@@ -69,14 +69,26 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
   }else target={...target,title:draft.title,body:draft.body};
   return r.fulfill({json:target});
  });
- return {get generations(){return generations;},get deep(){return deep;},posts,generated,fail(){failNext=true;},archive(){value={...value,archived_at:at};}};
+ const reportReads:string[]=[];
+ await page.route(`**/api/analyses/${id}/versions/1/reports/*`,r=>{
+  const kind=r.request().url().split('/').at(-1)!;reportReads.push(kind);
+  return r.fulfill({json:{name:`analysis-1-${kind}.md`,content:`# ${kind==='business'?'Functional conclusions':'Technical observations'}\n\n${kind==='business'?'Keep adjustments.':'Inspect \`rounding.py\`.'}\n\n## Limits\n\nImport not checked.`}});
+ });
+ await page.route(`**/api/analyses/${id}/goal?*`,r=>r.fulfill({json:{name:'goal.md',content:`# Goal\n\n${draft.title}\n\n${draft.body}\n\nWithout deep verification`}}));
+ return {get generations(){return generations;},get deep(){return deep;},posts,generated,reportReads,
+  verifiedPublication(){target.requires_unverified_confirmation=false;},
+  finishAnalysis(){
+   const result={id:'result-1',number:1,run_number:1,status:'PARTIAL',created_at:at,workflow:'request',language:'en',artifacts:{},ticket:{title:'Contribution rounding'},markdown:'Partial findings.',goal_markdown:'',evidence:{blocking:true,claims:[],limitations:['Import not checked.']}};
+   value={...value,latest_version:result,versions:[result],analysis_runs:[{number:1,status:'PARTIAL',steps:[],started_at:at,finished_at:at}],conversation_state:'DISCUSSION'};
+  },fail(){failNext=true;},archive(){value={...value,archived_at:at};}};
 }
 
 for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
  const t=(key:string)=>translate(key,language);
- test(`one centered ticket modal prepares updates and publishes in ${language} ${theme}`,async({page})=>{
+ test(`one centered ticket modal prepares updates and publishes in ${language} ${theme}`,async({page},info)=>{
   const fixture=await setup(page,language);
-  await page.goto(`/analyses/${id}`);await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+  await page.addInitScript(theme=>localStorage.setItem('spechelper-theme',theme),theme);
+  await page.goto(`/analyses/${id}`);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
   await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).last().click();
   const modal=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
   await expect(modal).toHaveClass(/ticket-preparation-modal/);
@@ -103,12 +115,16 @@ for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
   if(language==='fr')await expect(modal.getByRole('button',{name:'Appliquer',exact:true})).toBeVisible();
   await modal.getByRole('button',{name:t('Apply'),exact:true}).click();
   await expect(modal.getByLabel(t('Description'),{exact:true})).toHaveValue('Round the total including the new contribution rule.');
+  await modal.screenshot({path:`../.local/ticket-ui/${language}-${theme}-${info.project.name}-prepare.png`});
   await modal.getByRole('button',{name:t('Publish'),exact:true}).click();
   const publication=page.getByRole('dialog',{name:t('Publish ticket'),exact:true});
   await expect(page.locator('dialog[open]')).toHaveCount(1);
   await publication.getByLabel(t('Publication connection'),{exact:true}).selectOption('4');
   await publication.getByLabel(t('Project / repository'),{exact:true}).selectOption('TEAM');
-  await publication.getByRole('button',{name:t('Create ticket'),exact:true}).click();
+  await publication.screenshot({path:`../.local/ticket-ui/${language}-${theme}-${info.project.name}-publish.png`});
+  await publication.getByRole('button',{name:t('Publish'),exact:true}).click();
+  await expect(publication.getByLabel(t('Ticket description'),{exact:true})).toHaveCount(0);
+  await expect(publication.getByRole('button',{name:t('Reload saved draft'),exact:true})).toHaveCount(0);
   const confirmation=page.getByRole('alertdialog');
   await expect(confirmation).toBeInViewport();expect(fixture.posts).toHaveLength(0);expect(fixture.deep).toBe(0);
   await confirmation.getByRole('button',{name:t('Publish anyway'),exact:true}).click();
@@ -164,10 +180,10 @@ for(const outcome of ['ERROR','UNCERTAIN'])test(`a ${outcome} write keeps the dr
  const publication=page.getByRole('dialog',{name:'Publish ticket',exact:true});
  await publication.getByLabel('Publication connection',{exact:true}).selectOption('4');
  await publication.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
- await publication.getByRole('button',{name:'Create ticket',exact:true}).click();
+ await publication.getByRole('button',{name:'Publish',exact:true}).click();
  await page.getByRole('alertdialog').getByRole('button',{name:'Publish anyway',exact:true}).click();
  await expect.poll(()=>fixture.posts.length).toBe(1);
- await publication.getByRole('button',{name:'Back to draft',exact:true}).click();
+ await publication.getByRole('button',{name:'Back',exact:true}).click();
   await modal.getByRole('button',{name:'Edit',exact:true}).click();
  await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);
  await modal.getByRole('button',{name:'Close',exact:true}).first().click();await page.reload();
@@ -183,4 +199,67 @@ for(const outcome of ['ERROR','UNCERTAIN'])test(`a ${outcome} write keeps the dr
   expect(fixture.posts[1]).not.toHaveProperty('conversation_ticket_revision');
  }
  expect(fixture.deep).toBe(0);
+});
+
+test('saved draft survives explicit deep analysis, reports and a reviewed update',async({page})=>{
+ const fixture=await setup(page,'en',true);await page.goto(`/analyses/${id}`);
+ await page.getByRole('button',{name:'Draft',exact:true}).click();
+ const draft=page.getByRole('dialog',{name:'Prepare a ticket',exact:true});
+ await draft.getByLabel('Title',{exact:true}).fill('Keep manual rounding rules');
+ await draft.getByRole('button',{name:'Launch deep analysis',exact:true}).click();
+ const scope=page.getByRole('dialog',{name:'Deep analysis',exact:true});
+ await expect(scope.getByLabel('Need to analyze',{exact:true})).toHaveValue('Keep manual rounding rules');
+ expect(fixture.deep).toBe(0);
+ await scope.getByLabel('Need to analyze',{exact:true}).fill('Check rounding and adjustments in imports.');
+ await scope.getByRole('button',{name:'Launch deep analysis',exact:true}).click();
+ await expect(scope).not.toBeVisible();expect(fixture.deep).toBe(1);
+ fixture.finishAnalysis();await page.reload();
+ await page.getByRole('button',{name:'View business report',exact:true}).click();
+ const business=page.getByRole('dialog',{name:'Business report',exact:true});
+ await expect(business.getByRole('heading',{name:'Functional conclusions'})).toBeVisible();
+ await expect(business).toContainText('Import not checked.');
+ const download=page.waitForEvent('download');await business.getByRole('button',{name:/Download/}).click();
+ expect((await download).suggestedFilename()).toBe('analysis-1-business.md');
+ await business.getByRole('button',{name:'Close',exact:true}).click();
+ await page.getByRole('button',{name:'View technical report',exact:true}).click();
+ const technical=page.getByRole('dialog',{name:'Technical report',exact:true});
+ await expect(technical.locator('code')).toContainText('rounding.py');
+ await technical.getByRole('button',{name:'Close',exact:true}).click();
+ await page.getByRole('button',{name:'Draft',exact:true}).click();
+ await expect(draft.getByLabel('Title',{exact:true})).toHaveValue('Keep manual rounding rules');
+ await draft.getByRole('button',{name:'Update with AI',exact:true}).click();
+ await draft.getByRole('button',{name:'Apply',exact:true}).click();
+ await expect(draft.getByLabel('Title',{exact:true})).toHaveValue('Contribution rounding');
+ expect(fixture.deep).toBe(1);expect(fixture.reportReads).toEqual(['business','technical']);
+});
+
+test('goal export preserves unsaved draft edits without starting an analysis',async({page})=>{
+ const fixture=await setup(page,'fr',true);await page.goto(`/analyses/${id}`);
+ await page.getByRole('button',{name:translate('Draft','fr'),exact:true}).click();
+ const draft=page.getByRole('dialog',{name:translate('Prepare a ticket','fr'),exact:true});
+ await draft.getByLabel('Titre',{exact:true}).fill('Ma règle métier corrigée');
+ await draft.getByRole('button',{name:'Générer goal.md',exact:true}).click();
+ const goal=page.getByRole('dialog',{name:'goal.md',exact:true});
+ await expect(goal.getByRole('heading',{name:'Goal'})).toBeVisible();
+ await expect(goal).toContainText('Ma règle métier corrigée');
+ await goal.getByRole('button',{name:'Fermer',exact:true}).click();
+ await expect(draft.getByRole('button',{name:'Enregistrer',exact:true})).toBeDisabled();
+ expect(fixture.deep).toBe(0);expect(fixture.generations).toBe(0);
+});
+
+test('verified publication also requires confirmation and has a compact preview',async({page})=>{
+ const fixture=await setup(page,'en',true);fixture.verifiedPublication();
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
+ await page.getByRole('dialog',{name:'Prepare a ticket'}).getByRole('button',{name:'Publish',exact:true}).click();
+ const publication=page.getByRole('dialog',{name:'Publish ticket',exact:true});
+ await publication.getByLabel('Publication connection',{exact:true}).selectOption('4');
+ await publication.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
+ const full=publication.locator('details').filter({hasText:'See full content'});
+ await expect(full).not.toHaveAttribute('open','');
+ await full.locator('summary').click();await expect(full.getByRole('heading',{name:'Need',exact:true})).toBeVisible();
+ await publication.getByRole('button',{name:'Publish',exact:true}).click();
+ expect(fixture.posts).toHaveLength(0);
+ const confirmation=page.getByRole('alertdialog',{name:'Confirm publication',exact:true});
+ await confirmation.getByRole('button',{name:'Confirm publication',exact:true}).click();
+ await expect.poll(()=>fixture.posts.length).toBe(1);expect(fixture.deep).toBe(0);
 });
