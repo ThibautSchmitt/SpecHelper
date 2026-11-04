@@ -60,8 +60,12 @@ only that repository; it does not merge or push changes to the remote.
 These states describe the latest successful remote observations. Missing branches,
 failed access and observations older than fifteen minutes show an unverified state
 instead of claiming the branches are up to date. The branch column starts halfway
-across each environment card. Each repository shows its branch, local SHA, then
-freshness and a compact **Update** action on three separate lines.
+across each environment card. Each repository shows its branch with a green
+**Up to date** badge or a yellow **Behind** badge, followed by its local SHA.
+Behind repositories also show the commit count and a compact **Update** action
+below. Unknown and unavailable states remain explicit without a misleading badge.
+Scheduling an update uses the card status without a redundant success banner;
+errors remain visible.
 Queued/running updates and update errors take priority in the card tag.
 Updates preserve the frozen commits and workspaces of existing analyses.
 

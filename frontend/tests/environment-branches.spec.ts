@@ -39,6 +39,15 @@ for (const language of ["en", "fr"] as const) {
     await expect(tag).toHaveAttribute("data-state", "PARTIAL");
     await expect(tag).toHaveCSS("color", language === "fr" ? "rgb(250, 204, 21)" : "rgb(133, 77, 14)");
     const rows = card.getByRole("row");
+    const behindBadge=rows.filter({hasText:'team/api'}).locator('[data-repository-freshness-badge]');
+    const currentBadge=rows.filter({hasText:'team/web'}).locator('[data-repository-freshness-badge]');
+    await expect(behindBadge).toHaveText(t('Behind'));
+    await expect(behindBadge).toHaveAttribute('data-state','PARTIAL');
+    await expect(behindBadge).toHaveCSS('color',await tag.evaluate(node=>getComputedStyle(node).color));
+    await expect(behindBadge).toHaveCSS('background-color',await tag.evaluate(node=>getComputedStyle(node).backgroundColor));
+    await expect(currentBadge).toHaveText(t('Up to date'));
+    await expect(currentBadge).toHaveAttribute('data-state','READY');
+    await expect(rows.filter({hasText:'team/web'}).locator('[data-branch-update-row]')).toHaveCount(0);
     await expect(card.getByRole("columnheader",{name:t("Code freshness"),exact:true})).toHaveCount(0);
     await expect(card.getByRole("columnheader",{name:"SHA",exact:true})).toHaveCount(0);
     const localVersion=rows.filter({hasText:"team/api"}).locator(".repository-version");
@@ -63,6 +72,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(card.getByRole("button", { name: /team\/web/ })).toHaveCount(0);
     await card.getByRole("button", { name: t("Update {repository} · {branch}").replace("{repository}", "team/api").replace("{branch}", "main"), exact: true }).click();
     await expect(tag).toHaveText(t("Update scheduled"));
+    await expect(page.getByText(t('Update scheduled.'),{exact:true})).toHaveCount(0);
     await expect(card.getByRole("button", { name: /team\/api/ })).toBeDisabled();
     expect(writes).toEqual([{ url: "/api/environments/1/repositories/11/sync", payload: { expected_revision: 4 } }]);
     environment = { ...environment, status: "READY", git_sync_status: "SYNCED", repositories: environment.repositories.map(repo => ({ ...repo, git_status: { status: "CURRENT", behind: 0 } })) };
@@ -78,6 +88,8 @@ for (const language of ["en", "fr"] as const) {
     });
     await expect(tag).toHaveCSS("color", success.color);
     await expect(tag).toHaveCSS("background-color", success.background);
+    await expect(currentBadge).toHaveCSS('color',success.color);
+    await expect(currentBadge).toHaveCSS('background-color',success.background);
     await expect(card.getByRole("button", { name: /team\/api/ })).toHaveCount(0);
     environment = { ...environment, git_sync_status: "OUTDATED", repositories: environment.repositories.map(repo => ({ ...repo, git_status: { status: "BEHIND", behind: 3 } })) };
     await expect(tag).toHaveText(t("Update needed"), { timeout: 10000 });
@@ -107,6 +119,7 @@ for (const language of ["en", "fr"] as const) {
     expect(writes).toHaveLength(1);
     environment = {...environment,repositories:environment.repositories.map(repo=>({...repo,git_status:{status:"UNAVAILABLE",behind:0}}))};
     await expect(rows.filter({hasText:"team/api"})).toContainText(t("Unknown state"),{timeout:10000});
+    await expect(card.locator('[data-repository-freshness-badge]')).toHaveCount(0);
     await card.getByLabel(t("More actions for {name}").replace("{name}","Staging"),{exact:true}).click();
     await card.getByRole("button",{name:t("Check for updates"),exact:true}).click();
     await expect.poll(()=>checks.length).toBe(1);

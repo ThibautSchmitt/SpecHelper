@@ -122,7 +122,7 @@ function AdminPanel() {
     }, 3000);
     return () => clearInterval(timer);
   }, [tab]);
-  async function action(task: () => Promise<unknown>, message: string) {
+  async function action(task: () => Promise<unknown>, message = "") {
     setBusy(true);
     setError("");
     setNotice("");
@@ -223,7 +223,6 @@ function AdminPanel() {
                     disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
                     onSynchronize={() => action(
                       () => send(`/environments/${e.id}/sync`),
-                      t("Update scheduled."),
                     )}
                     onCheckUpdates={() => action(
                       () => send(`/environments/${e.id}/check-updates`, {expected_revision:e.revision}),
@@ -281,7 +280,6 @@ function AdminPanel() {
                           disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
                           onUpdate={() => action(
                             () => send(`/environments/${e.id}/repositories/${r.id}/sync`, { expected_revision: e.revision }),
-                            t("Update scheduled."),
                           )} /></td>
                       </tr>
                     ))}
