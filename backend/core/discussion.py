@@ -100,7 +100,7 @@ def describe(value):
             "created_at": job.created_at,
             "error": job.error,
             "waiting_reason": job.payload.get("waiting_reason", ""),
-            "operation": "analysis_preparation" if job.payload.get("analysis_preparation") else "ticket_preparation" if job.payload.get("ticket_preparation") else "discussion",
+            "operation": "goal_generation" if job.payload.get("goal_generation") else "analysis_preparation" if job.payload.get("analysis_preparation") else "ticket_preparation" if job.payload.get("ticket_preparation") else "discussion",
         }
         if job and job.payload.get("revision") == revision
         else None,
@@ -149,7 +149,7 @@ def pin_environment(value):
 
 
 @transaction.atomic
-def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None, analysis_preparation=None):
+def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None, analysis_preparation=None, goal_generation=None):
     from .library_assistant import connection_snapshot, safe_text
     from .providers import bind_session, candidates
 
@@ -218,6 +218,7 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
             )
     if "analyst" not in connection.roles:
         raise HttpError(409, "Choose an AI connection allowed to act as analyst.")
+    separate_goal_writer = bool(goal_generation and payload.connection_id)
     if not state.get("snapshot"):
         latest = value.versions.order_by("-number").first()
         state["snapshot"] = (
@@ -240,7 +241,9 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
         )
     if payload.restart_session or changed:
         previous = None
-    if payload.restart_session or changed:
+    if separate_goal_writer:
+        session = bind_session(value, connection, "g-goal")
+    elif payload.restart_session or changed:
         session = AISession.objects.create(
             request=value,
             role="d-shared",
@@ -253,32 +256,35 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
         )
     else:
         session = previous or bind_session(value, connection, "d-shared")
-    owner_sessions[browser_actor] = session.pk
-    state["session_pk"] = session.pk
+    if not separate_goal_writer:
+        owner_sessions[browser_actor] = session.pk
+        state["session_pk"] = session.pk
     if not initial and not retry:
         RequestMessage.objects.create(
             request=value,
             role="user",
-            kind="analysis_preparation" if analysis_preparation else "ticket_preparation" if preparation else "discussion",
+            kind="goal_generation" if goal_generation else "analysis_preparation" if analysis_preparation else "ticket_preparation" if preparation else "discussion",
             content=text,
             data={"actor": browser_actor},
         )
     revision = state.get("revision", 0) + 1
-    if changed or payload.restart_session:
+    if (changed or payload.restart_session) and not separate_goal_writer:
         notice(value, "A new discussion session was started with the selected AI configuration.")
-    state.update(enabled=True, mode="discussion", revision=revision, connection_id=connection.pk)
+    state.update(enabled=True, mode="discussion", revision=revision)
+    if not separate_goal_writer:
+        state["connection_id"] = connection.pk
     value.discussion_state, value.status, value.error = state, "QUEUED", ""
     value.save(update_fields=["discussion_state", "status", "error", "updated_at"])
     assignment = connection_snapshot(connection, "discussion")
     assignment["public_role"] = "discussion"
     turn_snapshot = analysis_preparation["snapshot"] if analysis_preparation else state["snapshot"]
-    if analysis_preparation or preparation or "ticket" in text.lower() or "issue" in text.lower() or state.get("pending_ticket_clarification"):
+    if goal_generation or analysis_preparation or preparation or "ticket" in text.lower() or "issue" in text.lower() or state.get("pending_ticket_clarification"):
         from .environment_context import freeze_context
         # New documents are available for this drafting turn without moving
         # the conversation's pinned Git baseline or resetting its native session.
         if not analysis_preparation:
             turn_snapshot = freeze_context(value)
-            turn_snapshot["dossier"]["user_messages"] = list(value.messages.filter(role="user").exclude(kind__in=["ticket_preparation","analysis_preparation"]).order_by("-id").values("id", "kind", "content")[:24])[::-1]
+            turn_snapshot["dossier"]["user_messages"] = list(value.messages.filter(role="user").exclude(kind__in=["ticket_preparation","analysis_preparation","goal_generation"]).order_by("-id").values("id", "kind", "content")[:24])[::-1]
         turn_snapshot.pop("sha256", None)
         turn_snapshot["sha256"] = hashlib.sha256(json.dumps(turn_snapshot, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         value.context_snapshot = turn_snapshot
@@ -302,6 +308,7 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
             "waiting_reason": "",
             "current_role": "analyst",
             **({"ticket_preparation": preparation} if preparation else {}),
+            **({"goal_generation": goal_generation} if goal_generation else {}),
             **({"analysis_preparation": {key:item for key,item in analysis_preparation.items() if key != "snapshot"}} if analysis_preparation else {}),
         },
     )
@@ -492,6 +499,7 @@ def run_job(job, caller=None):
     )
     preparation = job.payload.get("ticket_preparation")
     analysis_preparation = job.payload.get("analysis_preparation")
+    goal_generation = job.payload.get("goal_generation")
     if preparation:
         data = preparation["inputs"]
         data["available_reference_files"] = resources
@@ -523,8 +531,12 @@ def run_job(job, caller=None):
         from .deep_analysis_context import INSTRUCTIONS
         data, instructions = analysis_preparation["inputs"], INSTRUCTIONS
     reply_schema = ContextSelection if analysis_preparation else TicketDraftReply if preparation else Reply
+    if goal_generation:
+        from .goal_generation import INSTRUCTIONS, GoalReply
+        data, instructions, reply_schema = goal_generation["inputs"], INSTRUCTIONS, GoalReply
+        data["available_reference_files"] = resources
     db = frozen.get("dossier", {}).get("database", {})
-    database = parameters(DatabaseConnection.objects.get(pk=db["id"])) if db.get("id") else None
+    database = parameters(DatabaseConnection.objects.get(pk=db["id"])) if db.get("id") and not goal_generation else None
     skills = catalog(session.connection, has_database=bool(database), available_capabilities={
         "read_sources", "read_attachments", "read_web", "structured_output",
         *({"read_database"} if database else set()),
@@ -541,6 +553,9 @@ def run_job(job, caller=None):
                 "older_context_may_be_missing": True,
                 "assistant_messages_are_unverified": True,
             }
+            if goal_generation:
+                recovery = {"exchanges":[row for row in data["observations"] if row["id"].startswith("message:") and "role" in row],
+                            "bounded_saved_context":True,"older_context_may_be_missing":True,"assistant_messages_are_unverified":True}
             turn.update(
                 recovery=recovery, frozen_project_context=context
             )
@@ -582,7 +597,7 @@ def run_job(job, caller=None):
                     "repositories": [r["repository"] for r in scoped.baseline],
                     "context_dir": directory,
                     "context_resources": resources,
-                    "database": database,
+                    "database": None if goal_generation else database,
                     "skill_definitions": redact(skills.get("definitions", []), secrets),
                     "prompt": prompt,
                     "schema": reply_schema.model_json_schema(),
@@ -612,7 +627,7 @@ def run_job(job, caller=None):
         output = reply_schema.model_validate(redact(result.get("output"), secrets))
         from .discussion_output import message_text
 
-        if not preparation and not analysis_preparation:
+        if not preparation and not analysis_preparation and not goal_generation:
             output.message = message_text(output.message, value.need + "\n" + message.content)
         # A successful conversational response must carry a real resumable identity.
         native_result = str(uuid.UUID(result.get("session_id") or ""))
@@ -635,6 +650,10 @@ def run_job(job, caller=None):
                     locked,
                     "The provider returned a different native session. The application history is preserved; native continuity could not be confirmed.",
                 )
+            if goal_generation:
+                from .goal_generation import complete
+                complete(locked, locked_job, output)
+                return
             if analysis_preparation:
                 from .deep_analysis_context import complete
                 complete(locked, locked_job, output)

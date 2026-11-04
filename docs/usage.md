@@ -174,8 +174,9 @@ Each result also offers **View business report**, **View technical report** and
 safe Markdown reader and can be downloaded separately. It belongs to that exact
 cycle/version, including when later conversation topics have changed. Business
 reports emphasize functional conclusions; technical reports include retained source
-excerpts and executed SQL. These views read saved evidence, without new AI calls or
-business queries. An interrupted cycle with recorded findings can expose partial
+excerpts and executed SQL. Reports read saved evidence without new AI calls or
+business queries; generating `goal.md` explicitly requests an AI writing turn.
+An interrupted cycle with recorded findings can expose partial
 reports; its findings remain explicitly without complete independent verification.
 Reviewed explanatory diagrams may be expanded where useful. Unchecked relationships
 are omitted rather than presented as established behavior.
@@ -261,10 +262,20 @@ need prefilled from the ticket and starts only after confirmation. The draft rem
 available during analysis. After it completes, use **Update with AI** on the same draft.
 
 **Generate goal.md** is also available from the draft or conversation without a deep
-analysis. It saves pending draft edits first and restates only the selected need,
-acceptance criteria and implementation constraints. It does not invent technical
-facts, auto-create a ticket or start agents. Missing information and the verification
-level remain explicit. An existing goal from a selected analysis retains its content.
+analysis. It saves pending draft edits first, then asks the conversation's AI to
+write an implementation brief using the ticket, relevant exchanges, recorded source
+findings, documents and selected analysis. The result includes a cautious plan,
+potential impacts, justified tests and acceptance criteria, investigations, missing
+information and blocking decisions. Discussion claims and possible impacts are not
+presented as verified facts. This does not launch independent analysis, create a
+ticket, query business data or modify source code. A real queued/running state is
+shown until the document is ready. Identical inputs reuse the saved result; changed
+drafts or reference context can produce a new brief without overwriting the ticket
+or the previous analysis artefacts. Read-only exports remain available separately.
+Generation uses the authorized conversation assistant and preserves its role checks.
+If it cannot be used, choose another authorized analyst explicitly in the goal modal.
+That writer receives the saved ticket and bounded context in a separate writing
+session; the conversation's selected AI, native session and roles stay unchanged.
 
 **Publish** opens account and destination selection in the same modal. Choose an
 enabled, verified connection associated with the environment and an accessible

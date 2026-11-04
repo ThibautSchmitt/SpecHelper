@@ -408,7 +408,7 @@ function RequestContent({
         controls={<>
           {(unified || value.discussion?.enabled) && <TicketPreparation value={value} ticketId={search.get("ticket") || undefined} autoOpen={!!search.get("ticket")} onUpdated={setValue}/ >}
           {value.active_ticket && <TicketPreparation value={value} ticketId={value.active_ticket.id} resume triggerLabel="Draft" onUpdated={setValue}/>}
-          {!value.active_ticket&&<DeliverableViewer url={`/analyses/${value.id}/goal`} title="goal.md" label="Generate goal.md"/>}
+          {!value.active_ticket&&<DeliverableViewer generate url={`/analyses/${value.id}/goal`} title="goal.md" label="Generate goal.md"/>}
           {!unified && !value.discussion?.enabled && value.analysis_protocol === "2.4" && active.includes(value.status) && <AnalysisCancelButton requestId={id} workflow={isQuestion ? "question" : "request"} onCancelled={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} />}
           {!unified && !value.discussion?.enabled && value.analysis_protocol === "2.4" && ["ERROR","CANCELLED"].includes(value.status) && <AnalysisRetryButton requestId={id} workflow={isQuestion ? "question" : "request"} onRetried={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} />}
         </>}

@@ -345,6 +345,31 @@ def test_glpi_v2_rejected():
         adapters.provider_for(value)
 
 
+def test_glpi_accepts_browser_root_url_and_only_transport_uses_docker_host(transport,monkeypatch):
+    monkeypatch.setattr("core.ticket_urls.in_container",lambda:True)
+    calls=transport(glpi_routes())
+    value=connector("glpi")
+    value.base_url="http://localhost:9080"
+    provider=adapters.provider_for(value)
+    provider.projects()
+    assert all(call.url.host=="host.docker.internal" and call.url.port==9080 for call in calls)
+    assert calls[0].url.path=="/apirest.php/initSession"
+    assert provider.external(2)["url"]=="http://localhost:9080/front/ticket.form.php?id=2"
+    assert value.base_url=="http://localhost:9080"
+    monkeypatch.setattr("core.ticket_urls.in_container",lambda:False)
+    from core.ticket_urls import transport_url
+    assert transport_url(value.base_url)==value.base_url
+
+
+def test_local_aliases_do_not_allow_retargeting_a_connector(monkeypatch):
+    from core.ticket_urls import same_instance
+    monkeypatch.setattr("core.ticket_urls.in_container",lambda:True)
+    old="http://host.docker.internal:9080/apirest.php"
+    assert same_instance(old,"http://localhost:9080/","glpi")
+    for changed in ["http://localhost:9090/","https://localhost:9080/","http://elsewhere.test:9080/","http://localhost:9080/other"]:
+        assert not same_instance(old,changed,"glpi")
+
+
 def test_timeout_after_post_is_uncertain_without_retry(transport):
     routes = github_routes()
 

@@ -75,6 +75,7 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
   return r.fulfill({json:{name:`analysis-1-${kind}.md`,content:`# ${kind==='business'?'Functional conclusions':'Technical observations'}\n\n${kind==='business'?'Keep adjustments.':'Inspect \`rounding.py\`.'}\n\n## Limits\n\nImport not checked.`}});
  });
  await page.route(`**/api/analyses/${id}/goal?*`,r=>r.fulfill({json:{name:'goal.md',content:`# Goal\n\n${draft.title}\n\n${draft.body}\n\nWithout deep verification`}}));
+ await page.route(`**/api/analyses/${id}/goal/generate?*`,r=>r.fulfill({json:{generation_id:55,status:'QUEUED'}}));
  return {get generations(){return generations;},get deep(){return deep;},posts,generated,reportReads,
   publications(items:any[]){value={...value,publications:items};},
   verifiedPublication(){target.requires_unverified_confirmation=false;},
@@ -261,6 +262,24 @@ test('goal export preserves unsaved draft edits without starting an analysis',as
  await goal.getByRole('button',{name:'Fermer',exact:true}).click();
  await expect(draft.getByRole('button',{name:'Enregistrer',exact:true})).toBeDisabled();
  expect(fixture.deep).toBe(0);expect(fixture.generations).toBe(0);
+});
+
+test('goal can explicitly use ChatGPT when the conversation assistant has no analyst role',async({page})=>{
+ const fixture=await setup(page,'fr',true);let selected:string|null=null;
+ await page.route(`**/api/analyses/${id}/goal/generate?*`,r=>{
+  selected=new URL(r.request().url()).searchParams.get('connection_id');
+  return r.fulfill(selected==='1'?{json:{name:'goal.md',content:'# Plan d’implémentation\n\nRédigé avec ChatGPT à partir du ticket enregistré.'}}:{status:409,json:{detail:'Choose an AI connection allowed to act as analyst.'}});
+ });
+ await page.route(`**/api/analyses/${id}/goal/assistants`,r=>r.fulfill({json:[{connection_id:1,name:'ChatGPT',agent:'codex',model:'gpt-5.6-luna'}]}));
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:translate('Draft','fr'),exact:true}).click();
+ await page.getByRole('button',{name:'Générer goal.md',exact:true}).click();
+ const goal=page.getByRole('dialog',{name:'goal.md',exact:true});
+ await expect(goal.getByLabel('IA de rédaction')).toBeVisible();
+ await expect(goal).toContainText('L’IA de la conversation reste inchangée.');
+ expect(selected).toBeNull();
+ await goal.getByRole('button',{name:'Rédiger avec l’IA sélectionnée',exact:true}).click();
+ await expect(goal.getByRole('heading',{name:'Plan d’implémentation'})).toBeVisible();
+ expect(selected).toBe('1');expect(fixture.deep).toBe(0);expect(fixture.posts).toHaveLength(0);
 });
 
 test('verified publication also requires confirmation and has a compact preview',async({page})=>{

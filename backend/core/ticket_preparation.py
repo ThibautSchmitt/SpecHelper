@@ -384,7 +384,7 @@ def generate(analysis_id, payload, browser_actor):
                                "scope_choice":"unknown", "context_message_ids":[]})
         purpose = "prepare"
     draft = ticket.draft
-    messages = list(value.messages.exclude(kind__in=["ticket_preparation", "ticket_publication", "error", "decision_revision"])
+    messages = list(value.messages.exclude(kind__in=["ticket_preparation", "ticket_publication", "goal_generation", "error", "decision_revision"])
                     .order_by("-id")[:24])[::-1]
     messages = [message for message in messages if message.data.get("response_status") != "stale" and not message.data.get("ticket_preparation")]
     secrets = configured_secrets()

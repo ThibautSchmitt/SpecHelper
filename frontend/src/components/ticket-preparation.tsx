@@ -198,7 +198,7 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
               <p className="font-medium">{t("Need verification")} · {t(draft.source_verified?"Relevant deep analysis available":"Without deep verification")}</p>
               <div className="mt-1 flex flex-wrap gap-2">
                 <Button type="button" variant="ghost" size="sm" disabled={readonly||working||!!draft.proposal} onClick={()=>void action("analyze")}>{t("Launch deep analysis")}</Button>
-                {!!draft.id&&<DeliverableViewer url={`/analyses/${value.id}/goal?ticket_id=${draft.id}`} title="goal.md" label="Generate goal.md" disabled={readonly||!!draft.proposal} beforeOpen={async()=>{setBusy(true);try{await persist();}finally{setBusy(false);}}}/>}
+                {!!draft.id&&<DeliverableViewer generate url={`/analyses/${value.id}/goal?ticket_id=${draft.id}`} title="goal.md" label="Generate goal.md" disabled={readonly||!!draft.proposal} beforeOpen={async()=>{setBusy(true);try{await persist();}finally{setBusy(false);}}}/>}
               </div>
             </section>
             {saved&&<p role="status" className="text-sm">{t("Ticket draft saved.")}</p>}

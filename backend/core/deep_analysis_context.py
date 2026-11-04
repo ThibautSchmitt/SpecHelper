@@ -18,6 +18,7 @@ EXCLUDED = {
     "ticket_preparation",
     "ticket_publication",
     "analysis_preparation",
+    "goal_generation",
     "derived_request",
     "result",
 }

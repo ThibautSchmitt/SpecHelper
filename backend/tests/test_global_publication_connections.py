@@ -157,6 +157,24 @@ def test_history_and_connection_identity_survive_rename_disable_and_unlink(publi
     assert provider.create.call_count == 1
 
 
+def test_alias_edit_preserves_existing_destination_hashes(publication_context,monkeypatch):
+    version,connector,provider,payload=publication_context
+    connector.base_url="http://host.docker.internal:9080"
+    connector.save()
+    provider.create.return_value["url"]="http://host.docker.internal:9080/team/project/-/issues/1"
+    monkeypatch.setattr("core.ticket_urls.in_container",lambda:True)
+    record=publish(version,connector,payload)
+    before=(record.destination,record.snapshot,record.url,record.payload_hash)
+    response=TestClient(router).put(f"/ticket-connectors/{connector.pk}",json={"name":connector.name,"platform":connector.platform,"base_url":"http://localhost:9080/"})
+    assert response.status_code==200,response.json()
+    connector.refresh_from_db()
+    assert connector.base_url=="http://host.docker.internal:9080"
+    record.refresh_from_db()
+    assert (record.destination,record.snapshot,record.url,record.payload_hash)==before
+    assert publish(version,connector,payload).pk==record.pk
+    assert provider.create.call_count==1
+
+
 def test_unused_connection_can_be_deleted_only_after_unlinking(environment):
     api = TestClient(router)
     value = create_account(api, 1)

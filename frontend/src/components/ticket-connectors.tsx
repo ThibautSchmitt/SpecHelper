@@ -3,6 +3,7 @@ import { ProviderLogo } from "@/components/provider-logo";
 import { useEffect, useState } from "react";
 import { api, send, statuses } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useTicketUrlResolver } from "@/lib/ticket-links";
 import { Button } from "@/components/ui/button";
 import { Ticket, Trash2, Plus, Pencil, RefreshCw, Power } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -45,6 +46,7 @@ const empty = {
 export function TicketConnectors() {
   const prefix = "publication-connection";
   const { t, dateLocale } = useI18n();
+  const publicUrl = useTicketUrlResolver();
   const [items, setItems] = useState<TicketConnector[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -73,8 +75,9 @@ export function TicketConnectors() {
     setDestinations([]);
     setError("");
     setNotice("");
+    const url=item?(publicUrl(item.base_url)||item.base_url):empty.base_url;
     setForm(
-      item ? { ...empty, ...item, secret: "", app_token: "" } : { ...empty },
+      item ? { ...empty, ...item, base_url:item.platform==="glpi"?url.replace(/\/apirest\.php\/?$/,""):url, secret: "", app_token: "" } : { ...empty },
     );
   }
   async function action(task: () => Promise<unknown>) {

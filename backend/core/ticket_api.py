@@ -49,9 +49,28 @@ def partial_analysis_report(request, analysis_id: UUID, number: int, kind: Liter
 
 
 @router.get("/analyses/{analysis_id}/goal")
-def analysis_goal(request, analysis_id: UUID, ticket_id: UUID | None = None, source_version: int | None = None):
+def analysis_goal(request, analysis_id: UUID, ticket_id: UUID | None = None, source_version: int | None = None, generation_id: int | None = None):
+    if generation_id is not None:
+        from .goal_generation import result
+        get_object_or_404(Request, pk=analysis_id, deleted_at__isnull=True)
+        return result(analysis_id, generation_id)
     from .deliverables import goal_document
     return goal_document(analysis_id, ticket_id, source_version)
+
+
+@router.post("/analyses/{analysis_id}/goal/generate")
+def generate_goal(request, analysis_id: UUID, ticket_id: UUID | None = None, source_version: int | None = None, connection_id: int | None = None):
+    from .discussion_access import actor
+    from .goal_generation import generate
+    return generate(analysis_id, actor(request), ticket_id, source_version, connection_id)
+
+
+@router.get("/analyses/{analysis_id}/goal/assistants")
+def goal_assistants(request, analysis_id: UUID):
+    from .discussion_continuation import option
+    from .providers import candidates
+    get_object_or_404(Request,pk=analysis_id,deleted_at__isnull=True)
+    return [option(connection) for connection in candidates() if "analyst" in connection.roles]
 
 
 class StrictSchema(Schema):
@@ -204,6 +223,11 @@ def connector_values(payload, existing=None):
             if key not in payload.model_fields_set:
                 values[key] = getattr(existing, key)
     values["base_url"] = validate_base_url(values["base_url"])
+    if existing and existing.published_tickets.exists():
+        from .ticket_urls import same_instance
+        if same_instance(values["base_url"], existing.base_url, existing.platform):
+            # Keep old destination hashes and recovery URLs stable for an alias edit.
+            values["base_url"] = existing.base_url
     projects = values["projects"]
     if any(not item or len(item) > 255 for item in projects) or len(set(projects)) != len(projects):
         raise HttpError(422, "Enter unique project identifiers of at most 255 characters.")

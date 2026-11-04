@@ -14,6 +14,7 @@ import yaml
 
 from . import github
 from .secrets import decrypt
+from .ticket_urls import transport_url
 
 MAX_BYTES = 2_000_000
 MAX_PAGES = 10
@@ -201,7 +202,7 @@ class Provider:
                 content_arguments = {"files": files, "data": data} if files else {"json": data}
                 with client.stream(
                     method,
-                    self.base + path,
+                    transport_url(self.base + path),
                     headers=headers,
                     auth=self.auth,
                     params=params,

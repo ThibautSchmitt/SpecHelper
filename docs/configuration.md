@@ -341,6 +341,14 @@ the scheme, port, path and reference. The connector endpoint and saved publicati
 URL remain unchanged. Public platform URLs are preserved. Remote browser hosts
 are not guessed as replacements for a Docker-only address.
 
+For a local GLPI instance, enter its browser root URL, for example
+`http://localhost:9080/`. The adapter adds `/apirest.php` itself. Inside Docker,
+loopback connector hosts use `host.docker.internal` only for HTTP transport;
+outside Docker, loopback addresses stay unchanged. Editing an equivalent local
+alias of an existing connection preserves its stored destination identity and
+publication history. Changes to a different host, port, protocol or instance path
+still require a separate connection when publication history exists.
+
 ## Appearance and language
 
 Under **Appearance**, configure the instance name, optional subtitle, primary color

@@ -47,6 +47,14 @@ async function setup(page: Page, language: "en" | "fr") {
   return { changes };
 }
 
+test('GLPI configuration displays the local browser root URL',async({page})=>{
+ await setup(page,'fr');
+ await page.route(/\/api\/ticket-connectors(?:\?.*)?$/,route=>route.fulfill({json:[{...accounts()[0],platform:'glpi',base_url:'http://host.docker.internal:9080/apirest.php'}]}));
+ await page.goto('/admin?tab=connectors');
+ await page.getByRole('button',{name:'Modifier Account 1',exact:true}).click();
+ await expect(page.getByLabel('URL de l’instance',{exact:true})).toHaveValue(`http://${new URL(page.url()).hostname}:9080`);
+});
+
 for (const language of ["en", "fr"] as const) {
   const t = (key: string) => translate(key, language);
 
@@ -89,7 +97,7 @@ for (const language of ["en", "fr"] as const) {
     const menu = actions.locator("details.action-menu");
     const more = actions.getByLabel(t("More actions for {name}").replace("{name}", "Staging"), { exact: true });
     await more.click();
-    await expect(menu.getByRole("button")).toHaveText([t("Update"), t("Delete")]);
+    await expect(menu.getByRole("button")).toHaveText([t("Check for updates"), t("Update"), t("Delete")]);
     await menu.getByRole("button", { name: t("Update"), exact: true }).focus();
     await page.keyboard.press("Escape");
     await expect(menu).not.toHaveAttribute("open", "");
