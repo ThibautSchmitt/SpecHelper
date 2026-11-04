@@ -117,7 +117,8 @@ def update(environment_id, payload):
                 repo.git_repository_id = getattr(selection, "git_repository_id", None)
                 repo.sha = ""
                 repo.git_status = {}
-                repo.save(update_fields=["branch", "sha", "git_repository", "git_status"])
+                repo.synced_at = None
+                repo.save(update_fields=["branch", "sha", "git_repository", "git_status", "synced_at"])
                 changed.append(name)
         environment.name = payload.name
         environment.database_id = payload.database_id

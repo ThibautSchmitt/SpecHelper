@@ -68,6 +68,8 @@ export type Environment = {
     parent?: { path: string; url: string } | null;
     branch: string;
     sha: string;
+    synced_at?: string | null;
+    last_checked_at?: string | null;
     git_status?: {
       status: string;
       checked_at?: string;

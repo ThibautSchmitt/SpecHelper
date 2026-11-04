@@ -2,7 +2,7 @@
 import { useI18n } from "@/lib/i18n";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowDownToLine, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, send, type Environment } from "@/lib/api";
@@ -22,6 +22,7 @@ export function EnvironmentActions({
   disabled,
   onChanged,
   onSynchronize,
+  onCheckUpdates,
   children,
 }: {
   children: (actions: ReactNode) => ReactNode;
@@ -30,6 +31,7 @@ export function EnvironmentActions({
   disabled: boolean;
   onChanged: (message: string) => Promise<void>;
   onSynchronize: () => void;
+  onCheckUpdates: () => void;
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -252,8 +254,11 @@ export function EnvironmentActions({
             }
           }
         }}>
-          <Button type="button" variant="ghost" size="sm" disabled={disabled || busy} onClick={onSynchronize}>
-            <RefreshCw size={16} aria-hidden="true" />{t("Update")}
+          <Button type="button" variant="ghost" size="sm" disabled={disabled || busy || value.git_check_running} onClick={onCheckUpdates} title={t("Check the remote repositories without changing the local code.")}>
+            <RefreshCw size={16} aria-hidden="true" />{t("Check for updates")}
+          </Button>
+          <Button type="button" variant="ghost" size="sm" disabled={disabled || busy} onClick={onSynchronize} title={t("Update the local code for future investigations.")}>
+            <ArrowDownToLine size={16} aria-hidden="true" />{t("Update")}
           </Button>
           <Button
             type="button"

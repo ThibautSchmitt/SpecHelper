@@ -189,7 +189,7 @@ def settings_dict():
 
 
 def environment_dict(environment):
-    from .branch_checks import describe, summary
+    from .branch_checks import describe, last_successful_check, summary
     from .git_sources import repository_snapshot
     from .ticket_publication import connector_dict
     connections = list(environment.publication_connections.all())
@@ -212,7 +212,8 @@ def environment_dict(environment):
         "publication_connection_ids": [item.pk for item in connections],
         "publication_connections": [connector_dict(item) for item in connections],
         "repositories": [
-            {"id": repo.pk, **repository_snapshot(repo), "git_status": describe(repo)}
+            {"id": repo.pk, **repository_snapshot(repo), "git_status": describe(repo),
+             "synced_at": repo.synced_at, "last_checked_at": last_successful_check(repo)}
             for repo in repositories
         ],
     }
@@ -744,6 +745,12 @@ def sync(request, environment_id: int):
 @api.post("/environments/{environment_id}/repositories/{repository_id}/sync")
 def sync_branch(request, environment_id: int, repository_id: int, payload: BranchSyncIn):
     return environment_actions.queue_sync(environment_id, repository_id, payload.expected_revision)
+
+
+@api.post("/environments/{environment_id}/check-updates")
+def check_environment_updates(request, environment_id: int, payload: BranchSyncIn):
+    from .branch_checks import queue_check
+    return queue_check(environment_id, payload.expected_revision)
 
 
 @api.patch("/environments/{environment_id}")

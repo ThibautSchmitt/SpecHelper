@@ -26,7 +26,7 @@ import {
   type DatabaseConnection,
 } from "@/components/database-connections";
 import { EnvironmentActions } from "@/components/environment-actions";
-import { EnvironmentBranchStatus, EnvironmentSyncBadge } from "@/components/environment-branch-status";
+import { EnvironmentBranchStatus, EnvironmentLocalVersion, EnvironmentSyncBadge } from "@/components/environment-branch-status";
 import { EnvironmentContext, KnowledgePanel, emptyKnowledge, uploadCreationDocuments, type KnowledgeDraft } from "@/components/environment-context";
 import { api, send, statuses, type Environment } from "@/lib/api";
 
@@ -225,6 +225,10 @@ function AdminPanel() {
                       () => send(`/environments/${e.id}/sync`),
                       t("Update scheduled."),
                     )}
+                    onCheckUpdates={() => action(
+                      () => send(`/environments/${e.id}/check-updates`, {expected_revision:e.revision}),
+                      t("Update check scheduled."),
+                    )}
                     onChanged={async (message) => {
                       await refresh();
                       setNotice(message);
@@ -240,7 +244,7 @@ function AdminPanel() {
                   {actions}
                 </div>
               </div>
-              {e.synced_at && <p className="mt-2 text-xs muted">{t("Last update")}: {new Date(e.synced_at).toLocaleString(dateLocale)}</p>}
+              {e.synced_at && <p className="mt-2 text-xs muted">{t("Last successful environment update")}: {new Date(e.synced_at).toLocaleString(dateLocale)}</p>}
               <section className="mt-5 border-t pt-4" aria-label={t("Git sources")}>
                 <h3 className="text-sm font-medium">{t("Git sources")}</h3>
               <div className="mt-3 overflow-x-auto">
@@ -249,13 +253,13 @@ function AdminPanel() {
                     <tr>
                       <th className="pb-2 pr-4">{t("Project")}</th>
                       <th className="pb-2 pr-4">{t("Branch / tag")}</th>
-                      <th className="pb-2">SHA</th>
+                      <th className="pb-2">{t("Code freshness")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {e.repositories.map((r) => (
                       <tr key={r.id}>
-                        <td className="py-2 pr-4">
+                        <td className="py-2 pr-4 align-top">
                           <div className="title-tags">
                             <span className="flex min-w-0 items-center gap-2 font-medium">{r.provider === "github" || r.provider === "gitlab" ? <ProviderLogo provider={r.provider}/> : <GitBranch size={18} className="shrink-0" aria-hidden="true"/>}<span className="break-words">{r.path || r.repository}</span></span>
                             {(r.provider === "github" || r.provider === "gitlab")&&<span className="badge">{r.provider === "github" ? "GitHub" : "GitLab"}</span>}
@@ -272,15 +276,13 @@ function AdminPanel() {
                             </small>
                           )}
                         </td>
-                        <td className="pr-4"><EnvironmentBranchStatus environment={e} repository={r}
+                        <td className="py-2 pr-4 align-top"><EnvironmentLocalVersion repository={r}/></td>
+                        <td className="py-2 align-top"><EnvironmentBranchStatus environment={e} repository={r}
                           disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
                           onUpdate={() => action(
                             () => send(`/environments/${e.id}/repositories/${r.id}/sync`, { expected_revision: e.revision }),
                             t("Update scheduled."),
                           )} /></td>
-                        <td>
-                          <code title={r.sha}>{r.sha.slice(0, 10) || "—"}</code>
-                        </td>
                       </tr>
                     ))}
                   </tbody>

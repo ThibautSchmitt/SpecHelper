@@ -7,8 +7,15 @@ import pytest
 from django.utils import timezone
 
 from core import branch_checks
-from core.git import mirror_path, sync_environment
-from core.models import Environment, EnvironmentRepository, Job, Request
+from core.git import mirror_path, request_workspace, sync_environment
+from core.models import (
+    Environment,
+    EnvironmentRepository,
+    GeneratedArtifact,
+    Job,
+    Request,
+    ResultVersion,
+)
 from core.worker import claim_job, perform_job, recover_stale_jobs
 
 pytestmark = pytest.mark.django_db
@@ -74,6 +81,10 @@ def test_real_remote_counts_and_selective_sync_preserve_analysis(storage, remote
         need="Explain",
         baseline=[{"repository": repo.repository, "sha": original}],
     )
+    analysis_workspace = request_workspace(request)
+    original_content = (analysis_workspace / repo.repository / "source.txt").read_text()
+    version = ResultVersion.objects.create(request=request, number=1, baseline=request.baseline)
+    proof = GeneratedArtifact.objects.create(version=version, name="goal.md", content="Frozen source: " + original)
     advance(source, "second")
     latest = advance(source, "third")
 
@@ -85,12 +96,17 @@ def test_real_remote_counts_and_selective_sync_preserve_analysis(storage, remote
         branch_checks.check_environment(environment.pk)
     repo.refresh_from_db()
     assert repo.sha == original
+    assert repo.synced_at is None
+    last_checked = repo.git_status["checked_at"]
+    assert branch_checks.last_successful_check(repo) == last_checked
     assert branch_checks.describe(repo)["behind"] == 2
     assert branch_checks.summary(environment.repositories.all()) == "PARTIAL"
     assert branch_checks.describe(environment.repositories.get(pk=other.pk))["status"] == "CURRENT"
     data = client.get("/api/environments").json()[0]
     assert data["git_sync_status"] == "PARTIAL"
     assert data["repositories"][0]["git_status"]["behind"] == 2
+    assert data["repositories"][0]["last_checked_at"] == last_checked
+    assert data["repositories"][0]["synced_at"] is None
     response = client.post(
         f"/api/environments/{environment.pk}/repositories/{repo.pk}/sync",
         data=json.dumps({"expected_revision": 1}),
@@ -106,8 +122,15 @@ def test_real_remote_counts_and_selective_sync_preserve_analysis(storage, remote
     other.refresh_from_db()
     request.refresh_from_db()
     assert repo.sha == latest
+    assert repo.synced_at is not None
     assert other.sha == original
+    assert other.synced_at is None
     assert request.baseline[0]["sha"] == original
+    assert (analysis_workspace / repo.repository / "source.txt").read_text() == original_content
+    version.refresh_from_db()
+    proof.refresh_from_db()
+    assert version.baseline[0]["sha"] == original
+    assert proof.content == "Frozen source: " + original
     assert branch_checks.summary(environment.repositories.all()) == "SYNCED"
     advance(source, "fourth")
     git(source, "checkout", "stable")
@@ -140,12 +163,15 @@ def test_force_push_deleted_branch_and_failed_fetch_are_not_current(environment,
         branch_checks.check_environment(environment.pk)
     repo.refresh_from_db()
     assert repo.git_status["status"] == "MISSING"
+    last_success = branch_checks.last_successful_check(repo)
     assert branch_checks.summary([repo]) == "UNKNOWN"
     with patch("core.git.fetch", side_effect=ValueError("synthetic private token")):
         branch_checks.check_environment(environment.pk)
     repo.refresh_from_db()
     environment.refresh_from_db()
     assert repo.git_status["status"] == "UNAVAILABLE"
+    assert branch_checks.last_successful_check(repo) == last_success
+    assert branch_checks.summary([repo]) == "UNKNOWN"
     assert "private" not in json.dumps(repo.git_status)
     assert environment.status == "READY"
 
@@ -160,6 +186,40 @@ def test_cached_observation_is_invalid_after_branch_change_or_expiration(environ
         repo, "CURRENT", checked_at=(timezone.now() - timedelta(minutes=16)).isoformat()
     )
     assert branch_checks.summary([repo]) == "UNKNOWN"
+
+
+def test_manual_check_only_queues_a_deduplicated_observation(client, environment):
+    environment.status = "READY"
+    environment.save()
+    repo = environment.repositories.get()
+    original = (repo.sha, repo.workspace, repo.synced_at)
+    endpoint = f"/api/environments/{environment.pk}/check-updates"
+    with patch("core.git.fetch") as fetch:
+        assert client.post(endpoint, {"expected_revision":environment.revision + 1}, content_type="application/json").status_code == 409
+        assert not Job.objects.exists()
+        for _ in range(2):
+            response = client.post(endpoint, {"expected_revision":environment.revision}, content_type="application/json")
+            assert response.status_code == 200, response.content
+        fetch.assert_not_called()
+    assert Job.objects.count() == 1
+    assert Job.objects.get().kind == "branch_check"
+    repo.refresh_from_db()
+    environment.refresh_from_db()
+    assert environment.status == "READY"
+    assert (repo.sha, repo.workspace, repo.synced_at) == original
+    Job.objects.create(kind="sync", target=str(environment.pk))
+    assert client.post(endpoint, {"expected_revision":environment.revision}, content_type="application/json").status_code == 409
+    assert client.post("/api/environments/999999/check-updates", {"expected_revision":1}, content_type="application/json").status_code == 404
+
+
+def test_successful_check_date_is_not_reused_for_a_different_branch(environment):
+    repo = environment.repositories.get()
+    repo.git_status = branch_checks.observation(repo, "CURRENT")
+    assert branch_checks.last_successful_check(repo)
+    repo.branch = "different"
+    assert branch_checks.last_successful_check(repo) is None
+    repo.git_status = {"branch":repo.branch,"local_sha":repo.sha,"status":"CURRENT","checked_at":"2026-99-01T10:00:00Z"}
+    assert branch_checks.last_successful_check(repo) is None
 
 
 def test_scheduler_is_persistent_deduplicated_and_reuses_one_job(environment):
@@ -229,3 +289,33 @@ def test_check_worker_dispatch_failure_recovery_and_capacity(environment):
     assert claim_job() is None
     queued.refresh_from_db()
     assert queued.status == "QUEUED"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_repository_date_migration_preserves_references_without_inventing_a_date():
+    from django.db import connection
+    from django.db.migrations.executor import MigrationExecutor
+
+    latest = MigrationExecutor(connection).loader.graph.leaf_nodes("core")
+    old = [("core", "0052_single_active_ticket")]
+    try:
+        executor = MigrationExecutor(connection)
+        executor.migrate(old)
+        apps = executor.loader.project_state(old).apps
+        stamp = timezone.now()
+        environment = apps.get_model("core", "Environment").objects.create(name="Preserved dates", synced_at=stamp)
+        observation = {"branch":"main", "local_sha":"a"*40, "status":"CURRENT", "checked_at":stamp.isoformat()}
+        repo = apps.get_model("core", "EnvironmentRepository").objects.create(environment=environment,
+            repository="team/preserved",branch="main",sha="a"*40,workspace="/retained/workspace",git_status=observation)
+        analysis = apps.get_model("core", "Request").objects.create(environment=environment,
+            need="Frozen investigation",baseline=[{"repository":repo.repository,"sha":repo.sha}])
+        executor = MigrationExecutor(connection)
+        executor.migrate(latest)
+        current = executor.loader.project_state(latest).apps
+        migrated = current.get_model("core", "EnvironmentRepository").objects.get(pk=repo.pk)
+        assert migrated.synced_at is None
+        assert (migrated.sha, migrated.workspace, migrated.git_status) == (repo.sha, repo.workspace, observation)
+        assert current.get_model("core", "Environment").objects.get(pk=environment.pk).synced_at == stamp
+        assert current.get_model("core", "Request").objects.get(pk=analysis.pk).baseline == analysis.baseline
+    finally:
+        MigrationExecutor(connection).migrate(latest)

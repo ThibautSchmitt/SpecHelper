@@ -191,6 +191,7 @@ class EnvironmentRepository(models.Model):
     sha = models.CharField(max_length=40, blank=True)
     workspace = models.TextField(blank=True)
     git_status = models.JSONField(default=dict)
+    synced_at = models.DateTimeField(null=True)
 
     class Meta:
         constraints = [

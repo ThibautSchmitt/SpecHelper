@@ -42,7 +42,9 @@ uses a frozen baseline rather than a branch that can move during investigation.
 Git updates are performed by the source service, never by an analysis agent.
 
 Environment cards keep **Edit** and a **…** menu at the top right; the menu contains
-**Update** (all repositories) and **Delete**. The worker checks remote branch
+**Check for updates**, **Update** (all repositories) and **Delete**. Checking only
+observes remote references; updating explicitly prepares the local code for future
+investigations. There is no second bulk-update button. The worker checks remote branch
 heads about every five minutes, with at most two environment checks running at once.
 Checks fetch into the shared Git cache without updating the environment's selected
 commits. Each branch shows its last observed state, including the number of commits
@@ -57,9 +59,19 @@ only that repository; it does not merge or push changes to the remote.
 
 These states describe the latest successful remote observations. Missing branches,
 failed access and observations older than fifteen minutes show an unverified state
-instead of claiming the branches are up to date. Hover a branch state to see its check time.
+instead of claiming the branches are up to date. The **Code freshness** column
+separates this observation from the selected branch and local version.
 Queued/running updates and update errors take priority in the card tag.
 Updates preserve the frozen commits and workspaces of existing analyses.
+
+Expand **Local version details** under a branch to inspect its abbreviated **Local
+commit**, copy the complete SHA and see **Last successful remote check** and
+**Last local update**. The local commit is the version SpecHelper can investigate,
+not an assertion about the remote head. A failed remote check does not replace the
+last successful check date or claim the source is current. Unknown dates remain
+**Not recorded**; the environment-wide **Last successful environment update** is not substituted
+for individual repository dates. Checks never advance local-update timestamps;
+a selective update records a timestamp only for the repositories actually refreshed.
 
 Saved context text is used automatically when nonempty; clear the field to omit it
 from future analyses. Existing frozen analysis contexts retain their original content.

@@ -278,7 +278,8 @@ def sync_environment(environment_id, changed_repositories=None):
                         from .branch_checks import observation
 
                         repo.git_status = observation(repo, "CURRENT", remote_sha=sha, ahead=0, behind=0)
-                    repo.save(update_fields=["sha", "workspace", "git_status"])
+                        repo.synced_at = timezone.now()
+                    repo.save(update_fields=["sha", "workspace", "git_status", "synced_at"])
                 Environment.objects.filter(pk=environment_id).update(
                     status="READY", error="", synced_at=timezone.now(), retired_worktrees=[]
                 )

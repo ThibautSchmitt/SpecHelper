@@ -5,8 +5,10 @@ import time
 from datetime import timedelta
 
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from ninja.errors import HttpError
 
 from . import git
 from .models import Environment, EnvironmentRepository, Job
@@ -16,13 +18,29 @@ ACTIVE = ["QUEUED", "RUNNING"]
 
 
 def observation(repo, status, **details):
-    return {
+    result = {
         "branch": repo.branch,
         "local_sha": repo.sha,
         "status": status,
         "checked_at": timezone.now().isoformat(),
         **details,
     }
+    result["last_successful_check_at"] = last_successful_check(repo) if status == "UNAVAILABLE" else result["checked_at"]
+    return result
+
+
+def last_successful_check(repo):
+    value = repo.git_status or {}
+    if value.get("branch") != repo.branch or value.get("local_sha") != repo.sha:
+        return None
+    stamp = value.get("last_successful_check_at")
+    if not stamp and value.get("status") in {"CURRENT", "BEHIND", "AHEAD", "DIVERGED", "MISSING", "UNINITIALIZED"}:
+        stamp = value.get("checked_at")
+    try:
+        parsed = parse_datetime(stamp) if isinstance(stamp, str) else None
+    except ValueError:
+        return None
+    return stamp if parsed and timezone.is_aware(parsed) else None
 
 
 def describe(repo):
@@ -47,6 +65,35 @@ def summary(repositories):
     return "SYNCED" if current == len(states) else "PARTIAL" if current else "OUTDATED"
 
 
+def enqueue(environment, now):
+    job = Job.objects.filter(kind="branch_check", target=str(environment.pk)).first()
+    if job:
+        job.status, job.error, job.payload = "QUEUED", "", {}
+        job.started_at = job.finished_at = None
+        job.created_at = now
+        job.save()
+    else:
+        Job.objects.create(kind="branch_check", target=str(environment.pk))
+    environment.next_git_check_at = now + CHECK_INTERVAL
+    environment.save(update_fields=["next_git_check_at"])
+
+
+@transaction.atomic
+def queue_check(environment_id, expected_revision):
+    environment = get_object_or_404(Environment.objects.select_for_update(), pk=environment_id)
+    if environment.revision != expected_revision:
+        raise HttpError(409, "The environment has changed. Refresh the page before confirming.")
+    if environment.status in {"PENDING", "SYNCING"} or Job.objects.filter(
+        kind="sync", target=str(environment_id), status__in=ACTIVE
+    ).exists():
+        raise HttpError(409, "Wait for the current update to finish.")
+    active = Job.objects.filter(kind="branch_check", target=str(environment_id), status__in=ACTIVE).first()
+    if active:
+        return {"status": active.status}
+    enqueue(environment, timezone.now())
+    return {"status": "QUEUED"}
+
+
 def schedule_due():
     """One reusable queue entry per environment, coordinated by its row lock."""
     now = timezone.now()
@@ -69,16 +116,7 @@ def schedule_due():
                 ).exists()
             ):
                 continue
-            job = Job.objects.filter(kind="branch_check", target=str(environment_id)).first()
-            if job:
-                job.status, job.error, job.payload = "QUEUED", "", {}
-                job.started_at = job.finished_at = None
-                job.created_at = now
-                job.save()
-            else:
-                Job.objects.create(kind="branch_check", target=str(environment_id))
-            environment.next_git_check_at = now + CHECK_INTERVAL
-            environment.save(update_fields=["next_git_check_at"])
+            enqueue(environment, now)
 
 
 def check_environment(environment_id):

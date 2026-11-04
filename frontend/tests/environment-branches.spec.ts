@@ -3,7 +3,7 @@ import fr from "../src/locales/fr.json";
 
 for (const language of ["en", "fr"] as const) {
   const t = (key: string) => language === "fr" ? (fr as Record<string, string>)[key] || key : key;
-  test(`remote branch status and targeted update in ${language}`, async ({ page }) => {
+  test(`remote branch status and targeted update in ${language}`, async ({ page }, info) => {
     await page.addInitScript(theme => localStorage.setItem("spechelper-theme", theme), language === "fr" ? "dark" : "light");
     await page.route("**/api/**", route => route.fulfill({ json: [] }));
     await page.route("**/api/access/session", route => route.fulfill({ json: { mode: "local", authenticated: true } }));
@@ -14,12 +14,18 @@ for (const language of ["en", "fr"] as const) {
       id: 1, name: "Staging", revision: 4, status: "READY", error: "", database_id: null, database_name: null,
       git_sync_status: "PARTIAL", git_check_running: false,
       repositories: [
-        { id: 11, repository: "team/api", branch: "main", sha: "a".repeat(40), git_status: { status: "BEHIND", behind: 1 } },
+        { id: 11, repository: "team/api", branch: "main", sha: "a".repeat(40), last_checked_at:"2026-11-04T06:00:00Z", synced_at:"2026-11-03T05:00:00Z", git_status: { status: "BEHIND", behind: 1 } },
         { id: 12, repository: "team/web", branch: "release/2026.11/long-branch", sha: "b".repeat(40), git_status: { status: "CURRENT", behind: 0 } },
       ],
     };
     await page.route("**/api/environments", route => route.fulfill({ json: [environment] }));
     const writes: { url: string; payload: unknown }[] = [];
+    const checks: unknown[] = [];
+    await page.route("**/api/environments/1/check-updates", route => {
+      checks.push(route.request().postDataJSON());
+      environment = {...environment,git_check_running:true};
+      return route.fulfill({json:{status:"QUEUED"}});
+    });
     await page.route("**/api/environments/1/repositories/*/sync", route => {
       writes.push({ url: new URL(route.request().url()).pathname, payload: route.request().postDataJSON() });
       environment = { ...environment, status: "PENDING" };
@@ -32,6 +38,19 @@ for (const language of ["en", "fr"] as const) {
     await expect(tag).toHaveAttribute("data-state", "PARTIAL");
     await expect(tag).toHaveCSS("color", language === "fr" ? "rgb(250, 204, 21)" : "rgb(133, 77, 14)");
     const rows = card.getByRole("row");
+    await expect(card.getByRole("columnheader",{name:t("Code freshness"),exact:true})).toBeVisible();
+    await expect(card.getByRole("columnheader",{name:"SHA",exact:true})).toHaveCount(0);
+    const localVersion=rows.filter({hasText:"team/api"}).locator(".repository-version");
+    await expect(localVersion.locator("code")).not.toBeVisible();
+    await localVersion.locator("summary").click();
+    await card.screenshot({path:`../.local/git-freshness-${language}-${info.project.name}.png`});
+    await expect(localVersion.locator("code")).toHaveText("a".repeat(10));
+    await page.context().grantPermissions(["clipboard-read","clipboard-write"]);
+    await localVersion.getByRole("button",{name:t("Copy full local commit"),exact:true}).click();
+    await expect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toBe("a".repeat(40));
+    await expect(localVersion).toContainText(t("Last successful remote check"));
+    await expect(localVersion).toContainText(t("Last local update"));
+    await localVersion.locator("summary").click();
     await expect(rows.filter({ hasText: "team/api" })).toContainText(t("1 commit behind"));
     await expect(rows.filter({ hasText: "team/web" })).toContainText(t("Up to date"));
     await expect(card.getByRole("button", { name: /team\/web/ })).toHaveCount(0);
@@ -74,6 +93,14 @@ for (const language of ["en", "fr"] as const) {
     await expect(rows.filter({ hasText: "team/api" })).toContainText(t("Remote branch not found"));
     await expect(card.getByRole("button", { name: /team\/api/ })).toHaveCount(0);
     expect(writes).toHaveLength(1);
+    environment = {...environment,repositories:environment.repositories.map(repo=>({...repo,git_status:{status:"UNAVAILABLE",behind:0}}))};
+    await expect(rows.filter({hasText:"team/api"})).toContainText(t("Unknown state"),{timeout:10000});
+    await card.getByLabel(t("More actions for {name}").replace("{name}","Staging"),{exact:true}).click();
+    await card.getByRole("button",{name:t("Check for updates"),exact:true}).click();
+    await expect.poll(()=>checks.length).toBe(1);
+    expect(checks).toEqual([{expected_revision:4}]);
+    expect(writes).toHaveLength(1);
+    await expect(rows.filter({hasText:"team/api"})).toContainText(t("Unknown state"));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
