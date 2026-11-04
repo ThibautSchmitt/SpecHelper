@@ -59,7 +59,8 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Open <http://localhost:3000>. Select **Administration** at the bottom left:
+Open <http://localhost:3000>, or enable [HTTPS with Caddy](docs/https.md) for
+`https://localhost` or your own domain. Select **Administration** at the bottom left:
 
 1. Under **Environments → Manage Git connections**, connect GitHub or GitLab.
 2. Under **AI & Agents → Connections**, connect an eligible AI account and select

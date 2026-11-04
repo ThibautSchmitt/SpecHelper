@@ -28,6 +28,13 @@ invalidate access sessions. `SPECHELPER_SESSION_SECONDS` accepts 300–86400 sec
 the default is eight hours. These access sessions differ from browser conversation
 attribution and native AI sessions.
 
+The optional [Caddy deployment](docs/https.md) removes the frontend's published
+port, derives HTTPS hosts/origins from one hostname and enables secure cookies and
+trusted TLS forwarding. Its ports use the same `BIND_ADDRESS` checked by local-only
+access. Caddy's administrator API remains container-local. Protect the persistent
+`caddy-data` volume: it contains certificate and local CA private keys. Trust a local
+root certificate only after reviewing it; keep that trust scoped to the intended use.
+
 A separate signed HttpOnly cookie provides pseudonymous browser attribution only.
 It does not restrict analysis visibility. Clearing it or switching browsers preserves
 access to shared histories and the conversation’s native AI session. One active operation

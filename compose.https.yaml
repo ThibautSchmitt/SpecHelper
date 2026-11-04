@@ -1,0 +1,46 @@
+# Enable with: docker compose -f compose.yaml -f compose.https.yaml up -d
+# SPECHELPER_DOMAIN is a hostname, without a scheme, path or port.
+x-https-environment: &https-environment
+  ALLOWED_HOSTS: ${SPECHELPER_DOMAIN:?Set SPECHELPER_DOMAIN to the HTTPS hostname},backend,localhost,127.0.0.1
+  TRUSTED_ORIGINS: https://${SPECHELPER_DOMAIN:?Set SPECHELPER_DOMAIN to the HTTPS hostname}
+  SPECHELPER_REQUIRE_HTTPS: "1"
+  SPECHELPER_TRUST_PROXY: "1"
+
+services:
+  backend:
+    environment: *https-environment
+  worker:
+    environment: *https-environment
+  frontend:
+    # Caddy is the only published entry point in HTTPS mode.
+    ports: !reset []
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      SPECHELPER_DOMAIN: ${SPECHELPER_DOMAIN:?Set SPECHELPER_DOMAIN to the HTTPS hostname}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:80:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:443:443"
+      - "${BIND_ADDRESS:-127.0.0.1}:443:443/udp"
+    volumes:
+      - ./deploy/caddy:/etc/caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [web-ingress]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=16m"]
+    depends_on:
+      frontend: {condition: service_started}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:2019/config/]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    restart: unless-stopped
+
+volumes:
+  caddy-data: {}
+  caddy-config: {}

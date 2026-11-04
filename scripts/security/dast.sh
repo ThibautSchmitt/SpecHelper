@@ -17,6 +17,7 @@ cleanup() {
   "${compose[@]}" logs --no-color > "$report_dir/target.log" 2>&1 || true
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -f "$SPECHELPER_DAST_PASSWORD_FILE"
+  rm -f "$secret_dir/caddy-root.crt"
   rmdir "$secret_dir"
 }
 trap cleanup EXIT
@@ -24,17 +25,22 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 if [[ "$mode" == https ]]; then
   export SPECHELPER_DAST_REQUIRE_HTTPS=1 SPECHELPER_DAST_TRUST_PROXY=1
-  export SPECHELPER_DAST_ORIGINS=https://localhost:8443
+  export SPECHELPER_DAST_ORIGINS=https://localhost SPECHELPER_DOMAIN=localhost
+  compose+=(-f "$repo/security/compose.caddy.yml")
 fi
 "${compose[@]}" up --build -d --wait --wait-timeout 180
 network="${project}_scan"
 if [[ "$mode" == https ]]; then
   image="$("${compose[@]}" images -q backend)"
-  docker run --rm --network "$network" --read-only --cap-drop ALL \
+  caddy="$("${compose[@]}" ps -q caddy)"
+  "${compose[@]}" cp caddy:/data/caddy/pki/authorities/local/root.crt "$secret_dir/caddy-root.crt"
+  chmod 644 "$secret_dir/caddy-root.crt"
+  docker run --rm --network "container:$caddy" --read-only --cap-drop ALL \
     --security-opt no-new-privileges:true --tmpfs /tmp:rw,nosuid,nodev,size=32m \
     -v "${project}_scan-auth:/auth:ro" \
+    -v "$secret_dir/caddy-root.crt:/ca.crt:ro" \
     -v "$repo/scripts/security/https_probe.py:/probe.py:ro" \
-    "$image" python /probe.py > "$report_dir/https.json"
+    "$image" python /probe.py --caddy > "$report_dir/https.json"
   exit 0
 fi
 scan="zap-baseline.py"

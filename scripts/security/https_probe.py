@@ -5,6 +5,7 @@ import http.cookiejar
 import json
 import ssl
 import subprocess
+import sys
 import tempfile
 import threading
 import urllib.error
@@ -24,7 +25,8 @@ class Proxy(BaseHTTPRequestHandler):
         connection = http.client.HTTPConnection("frontend", 3000, timeout=10)
         try:
             headers = {
-                key: value for key, value in self.headers.items()
+                key: value
+                for key, value in self.headers.items()
                 if key.lower() in {"cookie", "content-type", "origin", "x-csrftoken"}
             }
             headers.update(Host="localhost:8443")
@@ -49,15 +51,16 @@ class Proxy(BaseHTTPRequestHandler):
     do_PUT = dispatch
 
 
-def exercise(certificate):
+def exercise(certificate, base_url=ORIGIN):
     jar = http.cookiejar.CookieJar()
     context = ssl.create_default_context(cafile=str(certificate))
     opener = urllib.request.build_opener(
         urllib.request.HTTPSHandler(context=context), urllib.request.HTTPCookieProcessor(jar)
     )
 
-    def request(path, method="GET", data=None, csrf=None, origin=ORIGIN, cookie=None):
+    def request(path, method="GET", data=None, csrf=None, origin=base_url, cookie=None, extra=None):
         headers = {"Origin": origin}
+        headers.update(extra or {})
         if cookie:
             headers["Cookie"] = cookie
         if data is not None:
@@ -65,7 +68,9 @@ def exercise(certificate):
         if csrf:
             headers["X-CSRFToken"] = csrf
         req = urllib.request.Request(
-            ORIGIN + path, method=method, headers=headers,
+            base_url + path,
+            method=method,
+            headers=headers,
             data=json.dumps(data).encode() if data is not None else None,
         )
         try:
@@ -74,10 +79,26 @@ def exercise(certificate):
             response = error
         with response:
             body = response.read()
-            value = json.loads(body) if body and "json" in response.headers.get("Content-Type", "") else None
+            value = (
+                json.loads(body)
+                if body and "json" in response.headers.get("Content-Type", "")
+                else None
+            )
             return response.status, value, response.headers
 
     assert request("/api/settings")[0] == 401, "Anonymous settings access was not denied"
+    assert (
+        request(
+            "/api/settings",
+            extra={
+                "X-Forwarded-Proto": "http",
+                "X-Forwarded-Host": "evil.invalid",
+                "Forwarded": "host=evil.invalid;proto=http",
+                "X-Real-IP": "203.0.113.77",
+            },
+        )[0]
+        == 401
+    ), "The TLS proxy trusted client-supplied forwarding headers"
     assert request("/api/requests/00000000-0000-4000-8000-000000000000")[0] == 401
     status, session, headers = request("/api/access/session")
     assert status == 200 and session["mode"] == "password" and not session["authenticated"]
@@ -86,7 +107,9 @@ def exercise(certificate):
     assert csrf_cookie.get_nonstandard_attr("SameSite") == "Strict"
     password = Path("/auth/access-password").read_text().strip()
     assert request("/api/access/login", "POST", {"password": password})[0] == 403
-    status, authenticated, headers = request("/api/access/login", "POST", {"password": password}, session["csrf_token"])
+    status, authenticated, headers = request(
+        "/api/access/login", "POST", {"password": password}, session["csrf_token"]
+    )
     assert status == 200 and authenticated["authenticated"] and authenticated["expires_at"]
     assert authenticated["csrf_token"] != session["csrf_token"]
     access_cookie = next(cookie for cookie in jar if cookie.name == "spechelper_session")
@@ -95,7 +118,16 @@ def exercise(certificate):
     old_session = "spechelper_session=" + access_cookie.value
     status, settings, headers = request("/api/settings")
     assert status == 200 and POLICY in headers.get("Content-Security-Policy", "")
-    assert request("/api/settings", "PUT", {**settings, "name": "Forbidden mutation"}, authenticated["csrf_token"], "https://evil.invalid")[0] == 403
+    assert (
+        request(
+            "/api/settings",
+            "PUT",
+            {**settings, "name": "Forbidden mutation"},
+            authenticated["csrf_token"],
+            "https://evil.invalid",
+        )[0]
+        == 403
+    )
     assert request("/api/settings")[1] == settings
     assert request("/api/access/logout", "POST", {})[0] == 403
     assert request("/api/access/logout", "POST", {}, authenticated["csrf_token"])[0] == 200
@@ -108,22 +140,67 @@ def exercise(certificate):
     else:
         raise AssertionError("Cleartext authentication was not refused")
     return {
-        "tls_certificate_verified": True, "anonymous_admin_denied": True,
-        "secure_httponly_samesite_cookies": True, "csrf_required": True,
-        "login_rotates_csrf": True, "hostile_origin_rejected": True,
-        "logout_revokes_access": True, "cleartext_auth_refused": True,
+        "tls_certificate_verified": True,
+        "anonymous_admin_denied": True,
+        "secure_httponly_samesite_cookies": True,
+        "csrf_required": True,
+        "login_rotates_csrf": True,
+        "hostile_origin_rejected": True,
+        "logout_revokes_access": True,
+        "cleartext_auth_refused": True,
+        "forwarded_header_spoofing_rejected": True,
     }
 
 
 def main():
+    if sys.argv[1:] == ["--caddy"]:
+        # The disposable probe shares only Caddy's network namespace. These
+        # loopback endpoints cannot select a production server or external URL.
+        connection = http.client.HTTPConnection("localhost", 80, timeout=10)
+        connection.request("GET", "/api/health")
+        response = connection.getresponse()
+        assert response.status == 308
+        assert response.getheader("Location") == "https://localhost/api/health"
+        connection.close()
+        result = exercise(Path("/ca.crt"), base_url="https://localhost")
+        context = ssl.create_default_context(cafile="/ca.crt")
+        connection = http.client.HTTPSConnection("localhost", 443, context=context, timeout=10)
+        try:
+            connection.request("POST", "/api/health", body=b"x" * (26 * 1024 * 1024 + 1))
+        except BrokenPipeError:
+            # A proxy may reject the known length before the complete body arrives.
+            pass
+        assert connection.getresponse().status == 413
+        connection.close()
+        result.update(http_redirects_to_https=True, oversized_request_rejected=True, proxy="caddy")
+        print(json.dumps(result))
+        return
     with tempfile.TemporaryDirectory(prefix="spechelper-tls-") as temporary:
         root = Path(temporary)
         certificate, key = root / "certificate.pem", root / "private.key"
-        subprocess.run([
-            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
-            "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost",
-            "-keyout", str(key), "-out", str(certificate),
-        ], check=True, capture_output=True, timeout=15)
+        subprocess.run(
+            [
+                "openssl",
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-days",
+                "1",
+                "-subj",
+                "/CN=localhost",
+                "-addext",
+                "subjectAltName=DNS:localhost",
+                "-keyout",
+                str(key),
+                "-out",
+                str(certificate),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=15,
+        )
         key.chmod(0o600)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(certificate, key)

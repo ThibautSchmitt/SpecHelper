@@ -20,6 +20,7 @@ The lock files record dependency versions; they do not relicense dependencies.
 | react-markdown / remark-gfm | MIT; render the Markdown publication preview. Preserve their notices when distributing installed packages. |
 | lowlight / highlight.js | MIT / BSD-3-Clause; render syntax highlighting locally as React elements. Their notices are retained below. |
 | Mermaid | MIT; renders reviewed explanatory diagrams in the browser. Preserve its upstream notice and dependency licenses when distributing built packages. |
+| Caddy official Docker image | Apache-2.0; optional HTTPS reverse proxy. Preserve upstream image notices and dependency licenses. See the [Caddy license](https://github.com/caddyserver/caddy/blob/master/LICENSE). |
 
 Other dependencies include software under MIT, BSD, Apache and PostgreSQL
 licenses. Preserve the licenses and notices supplied with installed packages.

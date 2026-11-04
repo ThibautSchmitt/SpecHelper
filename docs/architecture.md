@@ -51,11 +51,13 @@ implemented reference deployment, not a proposed architecture.
 
 ## Services and runtime
 
-The [Compose file](../compose.yaml) is the deployment authority.
+The [Compose file](../compose.yaml) is the deployment authority. The optional
+[HTTPS override](../compose.https.yaml) adds Caddy; see [HTTPS setup](https.md).
 
 | Component | Responsibility |
 | --- | --- |
-| Frontend | Next.js/React UI and same-origin proxy to the backend; only published host port |
+| Frontend | Next.js/React UI and same-origin proxy to the backend; published directly only in local HTTP mode |
+| Caddy (optional) | HTTPS entry point, persistent certificates, HTTP redirect and forwarding to the private frontend |
 | Backend | Django/Ninja API, access checks, configuration, stored conversations, results and publication |
 | Application PostgreSQL | Durable application records, task queue, reservations and transaction locks |
 | Worker | Queue admission, checkpoint orchestration, runtime gateway and supervision of independent job subprocesses |

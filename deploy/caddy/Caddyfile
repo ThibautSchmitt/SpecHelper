@@ -1,0 +1,21 @@
+{
+	# The container cannot install a CA into the host's trust store.
+	skip_install_trust
+}
+
+{$SPECHELPER_DOMAIN} {
+	encode zstd gzip
+
+	# Match the application's 26 MiB request limit, including multipart overhead.
+	request_body {
+		max_size 26MiB
+	}
+
+	reverse_proxy frontend:3000 {
+		# Caddy replaces X-Forwarded-* using the actual connection by default.
+		# Other untrusted proxy claims must not reach the application.
+		header_up -Forwarded
+		header_up -X-Real-IP
+		flush_interval -1
+	}
+}

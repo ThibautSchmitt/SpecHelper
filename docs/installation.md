@@ -58,6 +58,10 @@ Keep the loopback bind for local use. Remote deployment requires the shared acce
 password, HTTPS and appropriate host/origin settings described in [SECURITY.md](../SECURITY.md).
 Do not publish backend, database, worker-control or runtime ports to users.
 
+For a Caddy-managed HTTPS entry point, follow [HTTPS with Caddy](https.md).
+It supports local certificates for `https://localhost` and automatically renewed
+public certificates for a configured domain.
+
 ## Concurrent work
 
 Set these deployment variables before recreating backend and worker:

@@ -1,0 +1,19 @@
+# Disposable HTTPS target, combined with compose.dast.yml by scripts/security/dast.sh.
+# Reuse the production Caddy service and Caddyfile; publish no test host ports.
+services:
+  frontend:
+    networks: [scan, web-ingress]
+  caddy:
+    extends:
+      file: ../compose.https.yaml
+      service: caddy
+    ports: !reset []
+    volumes:
+      - ../deploy/caddy:/etc/caddy:ro
+
+networks:
+  web-ingress: {internal: true}
+
+volumes:
+  caddy-data: {}
+  caddy-config: {}

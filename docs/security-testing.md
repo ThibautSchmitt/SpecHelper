@@ -72,9 +72,13 @@ script for current values. Login/logout are excluded to preserve that synthetic
 session. Deliberate rate limiting can return 429.
 
 HTTP DAST inside the disposable Docker network does not establish production TLS.
-The `https` mode uses a certificate-verified internal proxy to check Secure/HttpOnly/
-SameSite cookies, CSRF, logout/replay rejection and cleartext refusal. Application
-tests additionally cover Host/Origin rejection and session changes.
+The `https` mode reuses the production Caddy service and Caddyfile, with a disposable
+local CA and no published host ports. Its client verifies that certificate and checks
+HTTP-to-HTTPS redirection, Secure/HttpOnly/SameSite cookies, CSRF, logout/replay rejection,
+forged forwarding headers, request-size limits and cleartext authentication refusal.
+It does not install the test CA on the host. Application tests additionally cover
+Host/Origin rejection and session changes; Compose tests verify host/origin derivation
+and the absence of direct frontend ports.
 
 Reports may contain synthetic payloads and temporary sessions. Keep artifacts private
 until reviewed; do not attach them unexamined to public issues. Temporary sessions
