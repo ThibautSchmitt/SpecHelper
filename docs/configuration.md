@@ -59,13 +59,13 @@ only that repository; it does not merge or push changes to the remote.
 
 These states describe the latest successful remote observations. Missing branches,
 failed access and observations older than fifteen minutes show an unverified state
-instead of claiming the branches are up to date. The **Code freshness** column
-separates this observation from the selected branch and local version.
+instead of claiming the branches are up to date. Under each branch and local SHA,
+a second line shows freshness and a compact **Update** action when needed.
 Queued/running updates and update errors take priority in the card tag.
 Updates preserve the frozen commits and workspaces of existing analyses.
 
-Each branch shows its abbreviated local SHA and a **Copy** action for the complete
-SHA. This is the version SpecHelper can investigate, not an assertion about the
+Each branch shows its abbreviated local SHA and a **Copy** action on the same line
+for the complete SHA. This is the version SpecHelper can investigate, not an assertion about the
 remote head. Per-repository check and update dates remain stored without adding
 details to the card. A failed remote check does not claim the source is current.
 Checks never advance local-update timestamps; a selective update records a

@@ -1,8 +1,9 @@
 import { expect, test } from "./fixtures";
 import fr from "../src/locales/fr.json";
+import en from "../src/locales/en.json";
 
 for (const language of ["en", "fr"] as const) {
-  const t = (key: string) => language === "fr" ? (fr as Record<string, string>)[key] || key : key;
+  const t = (key: string) => ((language === "fr" ? fr : en) as Record<string, string>)[key] || key;
   test(`remote branch status and targeted update in ${language}`, async ({ page }, info) => {
     await page.addInitScript(theme => localStorage.setItem("spechelper-theme", theme), language === "fr" ? "dark" : "light");
     await page.route("**/api/**", route => route.fulfill({ json: [] }));
@@ -38,7 +39,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(tag).toHaveAttribute("data-state", "PARTIAL");
     await expect(tag).toHaveCSS("color", language === "fr" ? "rgb(250, 204, 21)" : "rgb(133, 77, 14)");
     const rows = card.getByRole("row");
-    await expect(card.getByRole("columnheader",{name:t("Code freshness"),exact:true})).toBeVisible();
+    await expect(card.getByRole("columnheader",{name:t("Code freshness"),exact:true})).toHaveCount(0);
     await expect(card.getByRole("columnheader",{name:"SHA",exact:true})).toHaveCount(0);
     const localVersion=rows.filter({hasText:"team/api"}).locator(".repository-version");
     await expect(localVersion.locator("code")).toBeVisible();
@@ -83,9 +84,14 @@ for (const language of ["en", "fr"] as const) {
     });
     await expect(tag).toHaveCSS("color", danger);
     await expect(rows.filter({ hasText: "team/api" })).toContainText(t("{count} commits behind").replace("{count}", "3"));
-    const positions = await card.locator("[data-branch-update-row] button").evaluateAll(elements => elements.map(element => element.getBoundingClientRect().x));
-    expect(positions).toHaveLength(2);
-    expect(Math.abs(positions[0] - positions[1])).toBeLessThan(1);
+    const repositoryRow=rows.filter({hasText:"team/api"});
+    const version=repositoryRow.locator('[data-local-version-row]');
+    const freshness=repositoryRow.locator('[data-branch-update-row]');
+    const versionBox=await version.boundingBox();
+    const freshnessBox=await freshness.boundingBox();
+    expect(freshnessBox!.y).toBeGreaterThanOrEqual(versionBox!.y+versionBox!.height);
+    await expect(freshness.getByRole('button')).toContainText(t('Update source'));
+    await expect(freshness.getByRole('button')).toHaveClass(/underline/);
     await expect(page.locator("body")).not.toContainText(/synchronis|synchroniz/i);
     environment = { ...environment, git_sync_status: "UNKNOWN", repositories: environment.repositories.map(repo => ({ ...repo, git_status: { status: "MISSING", behind: 0 } })) };
     await expect(tag).toHaveText(t("Branch status not verified"), { timeout: 10000 });

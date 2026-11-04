@@ -2449,6 +2449,7 @@
   "Copy this full local commit manually": "Copy this full local commit manually",
   "This is the local code available for new investigations. Existing analyses keep their recorded commit.": "This is the local code available for new investigations. Existing analyses keep their recorded commit.",
   "Code freshness": "Code freshness",
+  "Update source": "Update",
   "No local commit is available yet. Update this source before starting an investigation.": "No local commit is available yet. Update this source before starting an investigation.",
   "Last successful environment update": "Last successful environment update"
 }

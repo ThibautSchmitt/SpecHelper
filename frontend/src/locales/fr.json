@@ -2449,6 +2449,7 @@
   "Copy this full local commit manually": "Copiez ce commit local complet manuellement",
   "This is the local code available for new investigations. Existing analyses keep their recorded commit.": "Cette version locale est disponible pour les prochaines investigations. Les analyses déjà lancées conservent leur commit de référence.",
   "Code freshness": "Fraîcheur du code",
+  "Update source": "Mise à jour",
   "No local commit is available yet. Update this source before starting an investigation.": "Aucun commit local n’est encore disponible. Mettez cette source à jour avant de lancer une investigation.",
   "Last successful environment update": "Dernière mise à jour réussie de l’environnement"
 }

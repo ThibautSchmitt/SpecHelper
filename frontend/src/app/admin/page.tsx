@@ -253,7 +253,6 @@ function AdminPanel() {
                     <tr>
                       <th className="pb-2 pr-4">{t("Project")}</th>
                       <th className="pb-2 pr-4">{t("Branch / tag")}</th>
-                      <th className="pb-2">{t("Code freshness")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -276,8 +275,8 @@ function AdminPanel() {
                             </small>
                           )}
                         </td>
-                        <td className="py-2 pr-4 align-top"><EnvironmentLocalVersion repository={r}/></td>
-                        <td className="py-2 align-top"><EnvironmentBranchStatus environment={e} repository={r}
+                        <td className="py-2 align-top"><EnvironmentLocalVersion repository={r}/>
+                          <EnvironmentBranchStatus environment={e} repository={r}
                           disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
                           onUpdate={() => action(
                             () => send(`/environments/${e.id}/repositories/${r.id}/sync`, { expected_revision: e.revision }),
