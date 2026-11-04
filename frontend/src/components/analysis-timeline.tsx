@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronDown, LoaderCircle, CheckCircle2, Clock3, CircleHelp, AlertCircle, Circle, MessageCircle } from "lucide-react";
 import { SafeMarkdown } from "@/components/safe-markdown";
+import { ProviderLogo } from "@/components/provider-logo";
+import { useTicketUrlResolver } from "@/lib/ticket-links";
 import { RoleMentions } from "@/components/role-mentions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,7 +32,7 @@ type Event = {
   compactSqlReferences?:boolean;
   subject?:string;
   ticketId?:string;
-  messageId?:number; publicationMeta?:string;
+  messageId?:number; publicationMeta?:string; publicationPlatform?:string;
 };
 
 export function AnalysisConversation({ value, result, reply, actions, controls, resultActions, ticketActions, messageActions, onSelectVersion, trackingUnavailable=false }: {
@@ -42,6 +44,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   messageActions?: (id:number)=>ReactNode;
 }) {
   const { t, dateLocale } = useI18n();
+  const ticketUrl = useTicketUrlResolver();
   const runs = value.analysis_runs || [];
   const working = ["IN_PROGRESS", "WAITING_AI"].includes(conversationState(value));
   const pending = value.status === "NEEDS_CLARIFICATION";
@@ -110,8 +113,9 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
   }
   for (const publication of value.publications || []) events.push({ id:`publication-${publication.id}`, at:publication.created_at, speaker:"assistant", content:publication.title,
     label:publication.status === "PUBLISHED" ? "Ticket published" : publication.status === "ERROR" ? "Ticket publication failed" : "Publication to verify",
-    publicationMeta:[publication.platform,publication.external_key].filter(Boolean).join(" · "),
-    url:publication.status === "PUBLISHED" && /^https?:\/\//i.test(publication.url) ? publication.url : undefined });
+    publicationPlatform:publication.platform,
+    publicationMeta:[({github:"GitHub",gitlab:"GitLab",jira:"Jira",glpi:"GLPI"} as Record<string,string>)[publication.platform||""]||publication.platform,publication.external_key].filter(Boolean).join(" · "),
+    url:publication.status === "PUBLISHED" ? ticketUrl(publication.url)||undefined : undefined });
   for (const run of runs) {
     const at=run.started_at || run.steps.find(step=>step.started_at)?.started_at || value.created_at;
     const start=new Date(at).getTime();
@@ -161,7 +165,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
           {event.subject && <p className="mb-2 text-xs muted">{t("Subject")}: {event.subject}</p>}
           {event.content && (event.version || event.markdown ? <div className="conversation-answer break-words text-sm leading-7"><SafeMarkdown roleMentions compactSqlReferences={event.compactSqlReferences!==false} sqlChecks={event.sqlChecks} sourcesUrl={event.sourcesUrl}>{event.content}</SafeMarkdown></div> : <p className="conversation-message-text whitespace-pre-wrap break-words text-sm leading-7">{event.speaker === "assistant" ? <RoleMentions>{event.content}</RoleMentions> : event.content}</p>)}
           {event.child && <Link className="mt-3 inline-block text-sm text-primary underline" href={`/analyses/${event.child}`}>{t("Open linked change")}</Link>}
-          {event.publicationMeta&&<p className="mt-1 text-xs muted">{event.publicationMeta}</p>}
+          {event.publicationMeta&&<p className="mt-1 flex items-center gap-2 text-xs muted"><ProviderLogo provider={event.publicationPlatform}/>{event.publicationMeta}</p>}
           {event.messageId&&messageActions&&<details className="action-menu conversation-message-actions mt-2 w-fit" onKeyDown={event=>{if(event.key==="Escape"){event.currentTarget.open=false;event.currentTarget.querySelector("summary")?.focus();}}}><summary aria-label={t("Message actions")}>⋯</summary><div className="action-menu-items">{messageActions(event.messageId)}</div></details>}
           {event.url && <a className="mt-3 inline-block text-sm text-primary underline" href={event.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{t("Open published ticket")}</a>}
           {event.version && event.version !== result?.number && <Button variant="ghost" size="sm" className="mt-3" onClick={()=>onSelectVersion?.(event.version!)}>{t("Read result version {number}", {number:event.version})}</Button>}

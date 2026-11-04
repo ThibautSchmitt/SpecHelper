@@ -5,6 +5,7 @@ import { MarkdownReader } from "@/components/markdown-reader";
 import { secureFetch } from "@/lib/access";
 import { api, send } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useTicketUrlResolver } from "@/lib/ticket-links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -146,6 +147,7 @@ export function PublishTicket({
   hideTrigger?: boolean;
 }) {
   const { t } = useI18n();
+  const ticketUrl = useTicketUrlResolver();
   const dialog = useRef<HTMLDialogElement>(null);
   const prefix = useId();
   const [open, setOpen] = useState(autoOpen);
@@ -552,10 +554,10 @@ export function PublishTicket({
               <h3>{t("Attachment transfer results")}</h3>
               {result.attachment_delivery.map(file => <div key={file.id} className="rounded border p-3"><p className="break-words font-medium">{file.name} · {t(file.status === "TRANSFERRED" ? "File transferred" : file.status === "TRANSFERRING" ? "File transfer in progress" : "File transfer outcome unknown")}</p>{file.error && <p role="alert" className="mt-1 break-words">{t(file.error)}</p>}{file.status === "UNCERTAIN" && <p className="mt-1 muted">{t("Check the destination before transferring this file again.")}</p>}</div>)}
             </section>}
-            {result.url && (
+            {ticketUrl(result.url) && (
               <a
                 className="mt-4 inline-block text-primary underline"
-                href={result.url}
+                href={ticketUrl(result.url)!}
                 target="_blank"
                 rel="noopener noreferrer"
               >

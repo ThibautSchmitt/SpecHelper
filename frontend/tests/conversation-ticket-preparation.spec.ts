@@ -76,12 +76,27 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
  });
  await page.route(`**/api/analyses/${id}/goal?*`,r=>r.fulfill({json:{name:'goal.md',content:`# Goal\n\n${draft.title}\n\n${draft.body}\n\nWithout deep verification`}}));
  return {get generations(){return generations;},get deep(){return deep;},posts,generated,reportReads,
+  publications(items:any[]){value={...value,publications:items};},
   verifiedPublication(){target.requires_unverified_confirmation=false;},
   finishAnalysis(){
    const result={id:'result-1',number:1,run_number:1,status:'PARTIAL',created_at:at,workflow:'request',language:'en',artifacts:{},ticket:{title:'Contribution rounding'},markdown:'Partial findings.',goal_markdown:'',evidence:{blocking:true,claims:[],limitations:['Import not checked.']}};
    value={...value,latest_version:result,versions:[result],analysis_runs:[{number:1,status:'PARTIAL',steps:[],started_at:at,finished_at:at}],conversation_state:'DISCUSSION'};
   },fail(){failNext=true;},archive(){value={...value,archived_at:at};}};
 }
+
+test('published conversation links use the browser host and show every platform logo',async({page})=>{
+ const fixture=await setup(page,'fr');
+ const urls={glpi:'http://host.docker.internal:9080/front/ticket.form.php?id=2',gitlab:'https://gitlab.example/team/app/-/issues/42',jira:'https://jira.example/browse/TEAM-14',github:'https://github.com/team/app/issues/3'};
+ fixture.publications(Object.entries(urls).map(([platform,url])=>({id:platform,platform,url,status:'PUBLISHED',title:`Published ${platform}`,external_key:'2',created_at:at})));
+ await page.goto(`/analyses/${id}`);
+ for(const [platform,url] of Object.entries(urls)){
+  const event=page.locator(`[data-message="publication-${platform}"]`);
+  await expect(event.locator(`[data-provider="${platform}"]`)).toBeVisible();
+  await expect(event.getByRole('link',{name:'Ouvrir le ticket publié'})).toHaveAttribute('href',platform==='glpi'?`http://${new URL(page.url()).hostname}:9080/front/ticket.form.php?id=2`:url);
+ }
+ await page.reload();await expect(page.locator('[data-message="publication-glpi"]')).toHaveCount(1);
+ expect(fixture.posts).toHaveLength(0);expect(fixture.generations).toBe(0);expect(fixture.deep).toBe(0);
+});
 
 for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
  const t=(key:string)=>translate(key,language);
@@ -131,6 +146,7 @@ for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
   await expect(page.locator('dialog[open]')).toHaveCount(0);
   const link=page.getByRole('link',{name:t('Open published ticket'),exact:true});
   await expect(link).toHaveAttribute('href','https://jira.example.test/browse/TEAM-14');
+  await expect(page.locator('[data-message="publication-publication-1"] [data-provider="jira"]')).toBeVisible();
   await page.reload();await expect(link).toHaveCount(1);
   await expect(page.getByRole('button',{name:t('Draft'),exact:true})).toHaveCount(0);
   fixture.archive();await page.reload();await expect(link).toHaveCount(1);

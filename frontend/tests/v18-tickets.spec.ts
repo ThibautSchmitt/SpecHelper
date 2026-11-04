@@ -1,6 +1,7 @@
 import {test,expect} from './fixtures';
 import {translate} from '../src/lib/i18n';
 import type {Page} from '@playwright/test';
+import {browserTicketUrl} from '../src/lib/ticket-links';
 const at='2026-11-02T12:00:00Z';
 const records=[
  {id:'publication-1',title:'Check contract dates',platform:'jira',project:'TEAM',connector_name:'Publishing account',external_id:'14',external_key:'TEAM-14',url:'https://tickets.example/browse/TEAM-14',environment_name:'Staging',published_at:at,request_id:'conversation-one'},
@@ -25,6 +26,7 @@ for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
   await expect(list).toContainText('TEAM-14');await expect(list).toContainText('#42');
   for(const item of records){
    const row=page.locator(`[data-ticket="${item.id}"]`);
+   await expect(row.locator(`[data-provider="${item.platform}"]`)).toBeVisible();
    await expect(row.getByRole('link',{name:t('Open'),exact:true})).toHaveAttribute('href',item.url);
    await expect(row.getByRole('link',{name:t('Open'),exact:true})).toHaveAttribute('target','_blank');
    await expect(row.getByRole('link',{name:item.title,exact:true})).toHaveAttribute('href',item.url);
@@ -56,6 +58,34 @@ test('search and folded filters query only publication history',async({page})=>{
  await page.getByLabel('Search tickets',{exact:true}).fill('missing');
  await expect(page.getByText('No published tickets match these filters.',{exact:true})).toBeVisible();
  expect(Object.fromEntries(queries.at(-1)!)).toEqual({platform:'gitlab',environment:'Production',search:'missing',page:'1'});
+});
+
+test('local Docker publication links preserve the ticket route without changing public URLs',async()=>{
+ const docker='http://host.docker.internal:9080/front/ticket.form.php?id=2';
+ for(const hostname of ['localhost','127.0.0.1','[::1]','spechelper.localhost']){
+  const result=new URL(browserTicketUrl(docker,hostname)!);
+  expect(result.hostname).toBe(hostname);expect(result.port).toBe('9080');
+  expect(result.pathname+result.search).toBe('/front/ticket.form.php?id=2');
+ }
+ expect(browserTicketUrl(docker,'spechelper.example')).toBeNull();
+ expect(browserTicketUrl(docker,'')).toBeNull();
+ expect(browserTicketUrl(records[0].url,'localhost')).toBe(records[0].url);
+ for(const unsafe of ['javascript:alert(1)','//elsewhere.test/ticket','https://user:secret@example.test/ticket','http://localhost:9080/\\evil','http://localhost:9080/\nticket'])expect(browserTicketUrl(unsafe,'localhost')).toBeNull();
+});
+
+test('GLPI Docker links open locally with the platform logo',async({page})=>{
+ await base(page);
+ const record={...records[0],platform:'glpi',external_id:'2',external_key:'2',url:'http://host.docker.internal:9080/front/ticket.form.php?id=2'};
+ await page.route('**/api/tickets?*',r=>r.fulfill({json:{items:[record],total:1,page:1,page_size:25,environments:[]}}));
+ await page.goto('/tickets');
+ const row=page.locator('[data-ticket="publication-1"]');
+ await expect(row.locator('[data-provider="glpi"]')).toBeVisible();
+ const link=row.getByRole('link',{name:'Open',exact:true});
+ const hostname=new URL(page.url()).hostname;
+ await expect(link).toHaveAttribute('href',`http://${hostname}:9080/front/ticket.form.php?id=2`);
+ await page.context().route(`http://${hostname}:9080/front/ticket.form.php?id=2`,r=>r.fulfill({contentType:'text/html',body:'<h1>Published GLPI ticket 2</h1>'}));
+ const opened=page.waitForEvent('popup');await link.click();
+ const popup=await opened;await expect(popup.getByRole('heading',{name:'Published GLPI ticket 2'})).toBeVisible();
 });
 
 test('empty history stays compact and loading failures can be refreshed',async({page})=>{

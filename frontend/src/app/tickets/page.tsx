@@ -8,6 +8,8 @@ import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ProviderLogo } from "@/components/provider-logo";
+import { useTicketUrlResolver } from "@/lib/ticket-links";
 
 type Publication = {
   id:string; title:string; platform:string; project:string; connector_name:string;
@@ -16,15 +18,10 @@ type Publication = {
 };
 type TicketList = {items:Publication[];total:number;page:number;page_size:number;environments:string[]};
 const platformName=(value:string)=>({github:"GitHub",gitlab:"GitLab",jira:"Jira",glpi:"GLPI"})[value]||value;
-function safeUrl(value:string) {
-  try {
-    const url=new URL(value);
-    return ["http:","https:"].includes(url.protocol)&&!url.username&&!url.password&&!/[\\\s]/.test(value)?url.href:null;
-  }catch{return null;}
-}
 
 export default function TicketsPage() {
   const {t,dateLocale}=useI18n();
+  const ticketUrl=useTicketUrlResolver();
   const [data,setData]=useState<TicketList>({items:[],total:0,page:1,page_size:25,environments:[]});
   const [platform,setPlatform]=useState("");
   const [environment,setEnvironment]=useState("");
@@ -65,12 +62,12 @@ export default function TicketsPage() {
     {!loading&&!error&&!data.items.length&&<div className="text-sm muted"><p>{t(filtered?"No published tickets match these filters.":"No published tickets yet.")}</p>{!filtered&&<p className="mt-1">{t("Tickets published from your conversations will appear here.")}</p>}</div>}
     {!!data.items.length&&<Card className="overflow-hidden p-0">
       <ul className="divide-y" aria-label={t("Published tickets")} aria-busy={loading}>{data.items.map(ticket=>{
-        const url=safeUrl(ticket.url);
+        const url=ticketUrl(ticket.url);
         return <li key={ticket.id} data-ticket={ticket.id} className="p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-semibold break-words [overflow-wrap:anywhere]">{url?<a className="text-primary hover:underline" href={url} target="_blank" rel="noopener noreferrer">{ticket.title}</a>:ticket.title}</h2>
-              <p className="mt-1 text-xs muted break-words">{[platformName(ticket.platform),ticket.external_key||ticket.external_id,ticket.environment_name].filter(Boolean).join(" · ")}</p>
+              <p className="mt-1 flex items-center gap-2 text-xs muted"><ProviderLogo provider={ticket.platform}/><span className="min-w-0 break-words">{[platformName(ticket.platform),ticket.external_key||ticket.external_id,ticket.environment_name].filter(Boolean).join(" · ")}</span></p>
               <p className="mt-1 text-xs muted">{new Date(ticket.published_at).toLocaleString(dateLocale)}{ticket.connector_name&&` · ${ticket.connector_name}`}</p>
               {!ticket.analysis_deleted&&<Link className="mt-2 inline-block text-xs muted underline" href={`/analyses/${ticket.request_id}`}>{t("Source conversation")}</Link>}
             </div>

@@ -334,6 +334,13 @@ performs publication; it need not identify the person operating SpecHelper. No n
 individual SpecHelper account or per-connection user permission is introduced.
 See [Usage](usage.md#prepare-and-publish-a-ticket) for previews, templates and attachments.
 
+Published tickets show their platform logo in the conversation and publication
+history. When SpecHelper is opened on a local browser address, ticket links using
+Docker's `host.docker.internal` alias use the browser hostname instead, preserving
+the scheme, port, path and reference. The connector endpoint and saved publication
+URL remain unchanged. Public platform URLs are preserved. Remote browser hosts
+are not guessed as replacements for a Docker-only address.
+
 ## Appearance and language
 
 Under **Appearance**, configure the instance name, optional subtitle, primary color
