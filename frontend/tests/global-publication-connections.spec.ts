@@ -107,7 +107,7 @@ for (const language of ["en", "fr"] as const) {
     await dialog.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => changes[0]?.publication_connection_ids).toEqual([1, 2, 3, 4]);
     expect(changes).toHaveLength(1);
-    const summary = card.getByRole("region", { name: t("Publication destinations"), exact: true });
+    const summary = card.getByRole("region", { name: t("Publication connections"), exact: true });
     await expect(summary.getByRole("listitem")).toHaveCount(4);
     await card.getByRole("button", { name: t("Edit {name}").replace("{name}", "Staging"), exact: true }).click();
     await dialog.getByRole("checkbox", { name: /Account 2/ }).uncheck();

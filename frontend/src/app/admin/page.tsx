@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { TicketConnectors } from "@/components/ticket-connectors";
 import { PublicationConnectionPicker, PublicationConnectionsSummary } from "@/components/publication-connections";
 import { GitSources } from "@/components/git-sources";
+import { ProviderLogo } from "@/components/provider-logo";
 import {
   RepositoryPicker,
   duplicateSources,
@@ -212,7 +213,9 @@ function AdminPanel() {
             </div>
             <p className="mt-2 text-sm muted">{t("Prepare the repositories, branches and optional resources used by your analyses.")}</p>
             <div className="mt-5 space-y-4">
-          {environments.map((e) => (
+          {environments.map((e) => {
+            const database=connections?.databases.find(database=>database.id === e.database_id);
+            return (
             <Card key={e.id} className="environment-card">
                   <EnvironmentActions
                     value={e}
@@ -238,7 +241,9 @@ function AdminPanel() {
                 </div>
               </div>
               {e.synced_at && <p className="mt-2 text-xs muted">{t("Last update")}: {new Date(e.synced_at).toLocaleString(dateLocale)}</p>}
-              <div className="mt-4 overflow-x-auto">
+              <section className="mt-5 border-t pt-4" aria-label={t("Git sources")}>
+                <h3 className="text-sm font-medium">{t("Git sources")}</h3>
+              <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="muted">
                     <tr>
@@ -251,18 +256,19 @@ function AdminPanel() {
                     {e.repositories.map((r) => (
                       <tr key={r.id}>
                         <td className="py-2 pr-4">
-                          {r.path || r.repository}
+                          <div className="title-tags">
+                            <span className="flex min-w-0 items-center gap-2 font-medium">{r.provider === "github" || r.provider === "gitlab" ? <ProviderLogo provider={r.provider}/> : <GitBranch size={18} className="shrink-0" aria-hidden="true"/>}<span className="break-words">{r.path || r.repository}</span></span>
+                            {(r.provider === "github" || r.provider === "gitlab")&&<span className="badge">{r.provider === "github" ? "GitHub" : "GitLab"}</span>}
+                            {r.is_fork&&<span className="badge">{t("Fork")}</span>}
+                          </div>
                           {r.connection_name && (
                             <small className="mt-1 block muted">
                               {r.connection_name}
                             </small>
                           )}
-                          {r.is_fork && (
+                          {r.is_fork && r.parent?.path && (
                             <small className="mt-1 block muted">
-                              {t("Fork")}
-                              {r.parent?.path
-                                ? ` · ${t("Parent repository")}: ${r.parent.path}`
-                                : ""}
+                              {t("Parent repository")}: {r.parent.path}
                             </small>
                           )}
                         </td>
@@ -280,9 +286,15 @@ function AdminPanel() {
                   </tbody>
                 </table>
               </div>
-              <p className="mt-3 text-xs muted">
-                {t("Database:")} {e.database_name || t("None")}
-              </p>
+              </section>
+              <section className="mt-5 border-t pt-4" aria-label={t("PostgreSQL connections")}>
+                <h3 className="text-sm font-medium">{t("PostgreSQL connections")}</h3>
+                {e.database_id || e.database_name ? <div className="title-tags mt-3 text-sm">
+                  <span className="flex min-w-0 items-center gap-2 font-medium"><ProviderLogo provider="postgresql"/><span className="break-words">{e.database_name || database?.name || "PostgreSQL"}</span></span>
+                  <span className="badge">PostgreSQL</span>
+                  <span className="badge" data-state={database?.status||"UNKNOWN"}>{t(database?.status === "ERROR" ? "Connection failed" : statuses[database?.status||""] || "Unknown")}</span>
+                </div> : <p className="mt-2 text-xs muted">{t("None")}</p>}
+              </section>
               {e.error && (
                 <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("Update failed")}</summary><pre className="mt-2 whitespace-pre-wrap break-words text-xs">{t(e.error)}</pre></details>
               )}
@@ -292,7 +304,7 @@ function AdminPanel() {
                     </>}
                   </EnvironmentActions>
             </Card>
-          ))}
+          );})}
           {showEnvironmentForm && <Card id="environment-create-form">
             <h2 className="flex items-center gap-2">
               <GitBranch size={20} /> {t("New environment")}

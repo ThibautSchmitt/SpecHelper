@@ -8,15 +8,15 @@ import { publicationPlatforms, type TicketConnector } from "@/components/ticket-
 
 function ConnectionLabel({ value }: { value: TicketConnector }) {
   const { t } = useI18n();
-  return <><ProviderLogo provider={value.platform} /><span className="break-words">{value.name}</span>
+  return <><span className="flex min-w-0 items-center gap-2 font-medium"><ProviderLogo provider={value.platform} /><span className="break-words">{value.name}</span></span>
     <span className="badge">{publicationPlatforms[value.platform] || value.platform}</span>
     <span className="badge" data-state={!value.enabled ? "DISABLED" : value.status}>{t(!value.enabled ? "Disabled" : value.status === "CONNECTED" ? "Connected" : value.status === "UNKNOWN" ? "Not tested" : value.status === "ERROR" ? "Failed" : value.status === "UNAVAILABLE" ? "Verification unavailable" : value.status)}</span></>;
 }
 
 export function PublicationConnectionsSummary({ values }: { values: TicketConnector[] }) {
   const { t } = useI18n();
-  return <section className="mt-5 border-t pt-4" aria-label={t("Publication destinations")}>
-    <h3 className="text-sm font-medium">{t("Publication destinations")}</h3>
+  return <section className="mt-5 border-t pt-4" aria-label={t("Publication connections")}>
+    <h3 className="text-sm font-medium">{t("Publication connections")}</h3>
     {values.length ? <ul className="mt-3 space-y-2">{values.map(value => <li key={value.id} className="title-tags text-sm"><ConnectionLabel value={value} /></li>)}</ul>
       : <p className="mt-2 text-xs muted">{t("No publication connection associated. You can still discuss and analyse.")}</p>}
   </section>;
@@ -38,7 +38,7 @@ export function PublicationConnectionPicker({ selected, onChange, disabled = fal
     return () => { alive = false; window.removeEventListener("publication-connections-updated", refresh); };
   }, []);
   return <fieldset className="mt-5 min-w-0 border-t pt-4" disabled={disabled}>
-    <legend className="text-sm font-medium">{t("Publication destinations")}</legend>
+    <legend className="text-sm font-medium">{t("Publication connections")}</legend>
     <p className="mt-2 text-xs muted">{t("Optional: choose the publication accounts this environment can use. Several accounts of the same provider are allowed.")}</p>
     {error && <p role="alert" className="mt-2 text-sm">{t("Publication connections could not be loaded. Existing selections are preserved.")}</p>}
     {items === null && !error && <p role="status" className="mt-2 text-xs muted">{t("Loading…")}</p>}

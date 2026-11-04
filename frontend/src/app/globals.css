@@ -463,6 +463,9 @@ dialog::backdrop {
   margin: auto;
   width: min(94vw, 850px);
 }
+.application-knowledge > summary { list-style: none; }
+.application-knowledge > summary::-webkit-details-marker { display: none; }
+.application-knowledge > summary::marker { content: ""; }
 
 /* Shared reading views for retained evidence and editable ticket previews. */
 .reader-field-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
