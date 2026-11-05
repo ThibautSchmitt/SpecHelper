@@ -2,17 +2,24 @@
 
 import hashlib
 import json
+import re
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja.errors import HttpError
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import ConversationTicket, Job, Request
 from .sensitive_data import configured_secrets, redact
 
 INSTRUCTIONS = """Write goal.md for an implementation AI using this persistent conversation.
+Return the FULL Markdown document in the JSON content field. Do NOT create or edit any file,
+including goal.md, and do not use an editing tool. The workspace is deliberately read-only;
+SpecHelper stores and exports your returned content. A filesystem-write refusal is NOT a blocker
+and must never replace the requested document with a status summary. Return at least five
+meaningful Markdown sections covering the requested implementation brief, even when some
+sections must explicitly describe missing information or decisions rather than invent details.
 The selected ticket is the authoritative requested change, including manual edits. Keep its scope.
 If ticket_candidate_only is true, the last publication is a possible reference, not an instruction
 to reuse an unrelated old subject. Check it against the current exchanges; state any scope ambiguity.
@@ -41,8 +48,21 @@ Return content as well-structured Markdown and sources matching the schema."""
 
 class GoalReply(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    content: str = Field(min_length=100, max_length=50000)
+    content: str = Field(
+        min_length=100,
+        max_length=50000,
+        description="The complete Markdown implementation brief with at least five sections, returned as text, never a file-write status report.",
+    )
     sources: list[str] = Field(default_factory=list, max_length=60)
+
+    @field_validator("content")
+    @classmethod
+    def complete_document(cls, value):
+        if len(re.findall(r"^#{1,3}\s+\S", value, re.MULTILINE)) < 5:
+            raise ValueError(
+                "Return the complete multi-section implementation brief, not a status summary"
+            )
+        return value
 
 
 def inputs(value, ticket_id=None, source_version=None):
@@ -175,6 +195,7 @@ def generate(analysis_id, browser_actor, ticket_id=None, source_version=None, co
         value.save(update_fields=["discussion_state"])
     data = inputs(value, ticket_id, source_version)
     data["writer_connection_id"] = connection_id
+    data["writer_schema_version"] = 2
     key = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     previous = (
         Job.objects.filter(

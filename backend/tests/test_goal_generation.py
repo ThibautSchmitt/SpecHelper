@@ -71,7 +71,7 @@ def finish(value, check=None, sources=None):
         return {
             "session_id": payload["session_id"],
             "output": {
-                "content": "# Objectif\n\nImplémenter la synchronisation décrite dans le ticket.\n\n## Investigations préalables\n\nDéfinir la fréquence avant de choisir un mécanisme de planification.\n\n## Impacts possibles\n\nVérifier la concurrence sans présumer de la solution.",
+                "content": "# Objectif\n\nImplémenter la synchronisation décrite dans le ticket.\n\n## Investigations préalables\n\nDéfinir la fréquence avant de choisir un mécanisme de planification.\n\n## Impacts possibles\n\nVérifier la concurrence sans présumer de la solution.\n\n## Périmètre\n\nRespecter le ticket.\n\n## Tests\n\nVérifier la synchronisation.",
                 "sources": sources or [],
             },
         }
@@ -196,7 +196,7 @@ def test_explicit_writer_preserves_conversation_session_and_roles(client, thread
         return {
             "session_id": str(uuid4()),
             "output": {
-                "content": "# Objectif\n\nPréparer une implémentation ciblée sans modifier la conversation.\n\n## Décisions manquantes\n\nLa fréquence doit être précisée avant de choisir la stratégie technique.",
+                "content": "# Objectif\n\nPréparer une implémentation ciblée sans modifier la conversation.\n\n## Décisions manquantes\n\nLa fréquence doit être précisée avant de choisir la stratégie technique.\n\n## Périmètre\n\nRespecter le ticket.\n\n## Impacts\n\nVérifier la concurrence.\n\n## Tests\n\nVérifier les critères définis.",
                 "sources": [],
             },
         }
@@ -220,3 +220,14 @@ def test_explicit_writer_cannot_bypass_role_authorization(client, thread):
         content_type="application/json",
     )
     assert response.status_code == 409 and not Job.objects.exists()
+
+
+def test_goal_cannot_be_a_file_write_failure_report():
+    from pydantic import ValidationError
+
+    from core.goal_generation import GoalReply
+
+    with pytest.raises(ValidationError, match="complete multi-section"):
+        GoalReply(
+            content="## Synthèse\n\nLe fichier goal.md n’a pas pu être écrit car l’outil d’édition a refusé la création du fichier dans cet espace de travail."
+        )
