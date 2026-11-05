@@ -88,6 +88,7 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
  await page.route(`**/api/analyses/${id}/goal/generate?*`,r=>r.fulfill({json:{generation_id:55,status:'QUEUED'}}));
  return {get generations(){return generations;},get deep(){return deep;},posts,generated,reportReads,documentRequests,destinationSaves,
   failSave(){failSave=true;}, options(options:any){target={...target,...options};},
+  longDescription(){draft={...draft,body:Array.from({length:50},(_,i)=>`## Requirement ${i+1}\n\nKeep all relevant business rules and acceptance criteria.`).join('\n\n')};},
   unsupportedFiles(){target.document_attachment_policy.enabled=false;},
   publications(items:any[]){value={...value,publications:items};},
   verifiedPublication(){target.requires_unverified_confirmation=false;},
@@ -416,4 +417,14 @@ test('cancelling after document generation sends nothing and keeps the draft',as
  await page.getByRole('button',{name:'Draft',exact:true}).click();
  await expect(modal.getByLabel('Title',{exact:true})).toHaveValue('Contribution rounding');
  expect(fixture.posts).toHaveLength(0);expect(fixture.deep).toBe(0);
+});
+
+test('save and publish stay accessible above a long description',async({page})=>{
+ const fixture=await setup(page,'en',true);fixture.longDescription();
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
+ const modal=page.getByRole('dialog',{name:'Create ticket',exact:true});
+ await expect(modal.getByRole('button',{name:'Save',exact:true})).toBeInViewport();
+ await expect(modal.getByRole('button',{name:'Publish',exact:true})).toBeInViewport();
+ await expect(modal.getByRole('button',{name:'Close',exact:true}).first()).toBeInViewport();
+ expect(fixture.posts).toHaveLength(0);expect(fixture.generations).toBe(0);
 });

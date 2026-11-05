@@ -530,6 +530,9 @@ dialog::backdrop {
 .ticket-modal-footer { bottom: 0; justify-content: flex-end; flex-wrap: wrap; border-top: 1px solid var(--border); }
 .ticket-description-editor { min-height: 8rem; overflow-y: hidden; resize: none; }
 .publication-surface > .ticket-modal-footer { margin-inline: -1.25rem; margin-bottom: -1.25rem; }
+/* The unified footer sticks across the entire draft, including a long description. */
+.publication-unified { display: contents; }
+.publication-unified > form { margin-top: 1rem; }
 .publication-dialog.publication-surface > .ticket-modal-header { margin: -1.5rem -1.5rem 1rem; }
 .skill-drawer {
   position: fixed;

@@ -727,7 +727,7 @@ const renderFields=(items:Field[])=>items.map((field) => (
       </Button>}
       <Surface
         ref={embedded ? undefined : dialog}
-        className={embedded ? "publication-surface" : "publication-dialog publication-surface"}
+        className={embedded ? `publication-surface${unified?" publication-unified":""}` : "publication-dialog publication-surface"}
         aria-labelledby={embedded ? undefined : `publication-title-${prefix}`}
         aria-label={embedded ? t("Publication destination") : undefined}
         onCancel={(event) => {
