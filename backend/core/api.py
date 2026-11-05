@@ -582,6 +582,8 @@ def database_values(payload, *, require_password=True):
             password = password or parsed.get("password", "")
         except Exception:
             raise HttpError(422, "Invalid PostgreSQL URL.")
+    if "://" in values.get("host", ""):
+        raise HttpError(422, "Enter a PostgreSQL host, not an Adminer HTTP URL.")
     if not all(values.get(field) for field in ("host", "database", "username")) or (require_password and not password):
         raise HttpError(422, "Enter the host, database, username and password.")
     if not 1 <= values["port"] <= 65535 or values["sslmode"] not in {

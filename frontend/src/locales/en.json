@@ -376,6 +376,8 @@
   "Unknown analysis option.": "Unknown analysis option.",
   "Unknown provider": "Unknown provider",
   "Use a PostgreSQL URL": "Use a PostgreSQL URL",
+  "Use the PostgreSQL host and port, such as localhost:5432. Adminer is a separate web interface.": "Use the PostgreSQL host and port, such as localhost:5432. Adminer is a separate web interface.",
+  "Enter a PostgreSQL host, not an Adminer HTTP URL.": "Enter a PostgreSQL host, not an Adminer HTTP URL.",
   "Use a valid PostgreSQL URL.": "Use a valid PostgreSQL URL.",
   "Use this assistant for requests": "Use this assistant for analyses",
   "User": "User",

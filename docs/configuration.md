@@ -126,6 +126,14 @@ An environment or analysis-history reference prevents deletion, and queued/runni
 analyses prevent changing the connection they use. This also applies to direct
 PostgreSQL connections; no third-party administration service is required.
 
+For a database exposed on the local machine, enter **Host** `localhost` and its
+PostgreSQL port (commonly `5432`), or a `postgresql://` connection URL. In Docker,
+SpecHelper maps the loopback host internally without changing the saved host or
+credentials. Existing `host.docker.internal` addresses appear as the local browser
+host in the local UI. Remote server names are preserved.
+An Adminer address such as `http://localhost:8080/` belongs to the web administration
+interface; its HTTP port is not the database port and is not a PostgreSQL URL.
+
 The reader must not be an owner or superuser and must not have write or CREATE
 privileges. Testing checks connectivity, a read query and the required restrictions;
 it does not validate the whole schema or business data. Runtime queries additionally

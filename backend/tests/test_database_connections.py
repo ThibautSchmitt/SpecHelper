@@ -135,3 +135,41 @@ def test_successful_probe_refreshes_verification_date(client, database, monkeypa
     assert client.post(endpoint(database) + "/test").status_code == 200
     database.refresh_from_db()
     assert database.status == "CONNECTED" and database.checked_at == moment
+
+
+@pytest.mark.parametrize("host",["localhost","127.0.0.1","::1"])
+def test_local_host_is_mapped_only_for_docker_transport(database,monkeypatch,host):
+    from core.postgres import parameters
+    database.host=host
+    monkeypatch.setattr("core.ticket_urls.in_container",lambda:True)
+    config=parameters(database)
+    assert config["host"]=="host.docker.internal" and config["port"]==5432
+    assert database.host==host and config["sslmode"]=="require"
+    assert "default_transaction_read_only=on" in config["options"]
+    monkeypatch.setattr("core.ticket_urls.in_container",lambda:False)
+    assert parameters(database)["host"]==host
+    database.host="db.example"
+    monkeypatch.setattr("core.ticket_urls.in_container",lambda:True)
+    assert parameters(database)["host"]=="db.example"
+
+
+def test_http_adminer_host_is_rejected_before_opening_a_connection(client,database,monkeypatch):
+    monkeypatch.setattr("core.api.check_connection",lambda connection:pytest.fail("Adminer HTTP is not a PostgreSQL endpoint"))
+    response=client.put(endpoint(database),payload(database,host="http://localhost:8080/"),content_type="application/json")
+    assert response.status_code==422
+    assert "Adminer" in response.json()["detail"]
+    database.refresh_from_db()
+    assert database.host=="db.example"
+
+
+def test_postgresql_local_url_keeps_the_saved_secret_and_logical_host(client,database,monkeypatch):
+    from core.postgres import parameters
+    monkeypatch.setattr("core.ticket_urls.in_container",lambda:True)
+    checked=[]
+    monkeypatch.setattr("core.api.check_connection",lambda connection:checked.append(parameters(connection)["host"]))
+    original_secret=database.secret
+    response=client.put(endpoint(database),payload(database,host="",username="",url="postgresql://reader@localhost:5432/business?sslmode=require"),content_type="application/json")
+    assert response.status_code==200,response.content
+    database.refresh_from_db()
+    assert database.host=="localhost" and database.secret==original_secret
+    assert checked==["host.docker.internal"]

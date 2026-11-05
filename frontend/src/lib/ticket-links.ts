@@ -19,8 +19,18 @@ export function browserTicketUrl(value: string | undefined, browserHostname: str
   }
 }
 
-export function useTicketUrlResolver() {
+function useBrowserHostname() {
   const [hostname, setHostname] = useState("");
   useEffect(() => { setHostname(window.location.hostname); }, []);
+  return hostname;
+}
+
+export function useLocalConnectionHost() {
+  const hostname=useBrowserHostname();
+  return (host:string)=>host==="host.docker.internal"&&(/^(localhost|127\.0\.0\.1|\[::1\])$/.test(hostname)||hostname.endsWith(".localhost"))?(hostname==="[::1]"?"::1":hostname):host;
+}
+
+export function useTicketUrlResolver() {
+  const hostname=useBrowserHostname();
   return (value?: string) => browserTicketUrl(value, hostname);
 }

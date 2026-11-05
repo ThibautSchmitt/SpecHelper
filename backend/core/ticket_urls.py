@@ -8,9 +8,13 @@ def in_container():
     return Path("/.dockerenv").exists()
 
 
+def transport_host(value):
+    return "host.docker.internal" if in_container() and value in {"localhost", "127.0.0.1", "::1"} else value
+
+
 def transport_url(value):
     parsed = urlsplit(value)
-    if in_container() and parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+    if transport_host(parsed.hostname) != parsed.hostname:
         parsed = parsed._replace(
             netloc="host.docker.internal" + (f":{parsed.port}" if parsed.port else "")
         )

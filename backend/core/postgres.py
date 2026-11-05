@@ -4,11 +4,12 @@ import psycopg
 from pglast import ast, parse_sql
 
 from .secrets import decrypt
+from .ticket_urls import transport_host
 
 
 def parameters(connection):
     return {
-        "host": connection.host,
+        "host": transport_host(connection.host),
         "port": connection.port,
         "dbname": connection.database,
         "user": connection.username,

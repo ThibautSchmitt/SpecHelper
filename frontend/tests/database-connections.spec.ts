@@ -5,7 +5,7 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
   const t = (key: string, parameters: Record<string, string | number> = {}) => translate(key, language, parameters);
   test(`PostgreSQL cards, inline edits and real actions in ${language} ${theme}`, async ({ page }, info) => {
     let databases = [
-      { id: 1, name: "Business reader", status: "CONNECTED", host: "db.example", port: 5432, database: "business", username: "readonly", sslmode: "require", checked_at: "2026-11-02T05:31:03Z" as string | null },
+      { id: 1, name: "Business reader", status: "CONNECTED", host: "host.docker.internal", port: 5432, database: "business", username: "readonly", sslmode: "require", checked_at: "2026-11-02T05:31:03Z" as string | null },
       { id: 2, name: "Direct PostgreSQL", status: "ERROR", host: "db.local", port: 5433, database: "direct", username: "reader", sslmode: "disable", checked_at: null },
     ];
     const writes: { method: string; id?: number; body?: Record<string, unknown> }[] = [];
@@ -44,6 +44,8 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
     const first = section.getByRole("region", { name: "Business reader", exact: true });
     const second = section.getByRole("region", { name: "Direct PostgreSQL", exact: true });
     await expect(first.locator(".badge")).toHaveText(t("Connected"));
+    await expect(first).toContainText(`${new URL(page.url()).hostname}:5432`);
+    await expect(first).not.toContainText('host.docker.internal');
     await expect(second.locator(".badge")).toHaveText(t("Connection failed"));
     const dateLocale = language === "fr" ? "fr-FR" : "en-US";
     const dateText = await page.evaluate(({ date, dateLocale }) => new Date(date).toLocaleString(dateLocale), { date: "2026-11-02T05:31:03Z", dateLocale });
@@ -60,6 +62,7 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
     }
     await first.getByRole("button", { name: t("Edit"), exact: true }).click();
     await expect(first.locator("form")).toBeVisible();
+    await expect(first.getByLabel(t('Host'),{exact:true})).toHaveValue(new URL(page.url()).hostname);
     await expect(second.locator("form")).toHaveCount(0);
     await expect(first.getByLabel(t("PostgreSQL username"), { exact: true })).toHaveValue("readonly");
     await expect(first.getByLabel(t("Password"), { exact: true })).toHaveValue("");

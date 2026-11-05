@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProviderLogo } from "@/components/provider-logo";
 import { send, statuses } from "@/lib/api";
+import { useLocalConnectionHost } from "@/lib/ticket-links";
 
 export type DatabaseConnection = {
   id: number;
@@ -28,6 +29,7 @@ export function DatabaseConnections({ values, onChanged }: {
   values: DatabaseConnection[]; onChanged: () => Promise<void>;
 }) {
   const { t, dateLocale } = useI18n();
+  const localHost=useLocalConnectionHost();
   const [show, setShow] = useState(false);
   const [editing, setEditing] = useState<DatabaseConnection | null>(null);
   const [removing, setRemoving] = useState<DatabaseConnection | null>(null);
@@ -157,6 +159,7 @@ export function DatabaseConnections({ values, onChanged }: {
               ))}
             </div>
           )}
+          <p className="mt-2 text-xs muted">{t("Use the PostgreSQL host and port, such as localhost:5432. Adminer is a separate web interface.")}</p>
           <div className="grid gap-x-5 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="db-username">{t("PostgreSQL username")}</label>
@@ -235,7 +238,7 @@ export function DatabaseConnections({ values, onChanged }: {
             aria-controls="database-connection-editor" onClick={() => {
               if (show && editing?.id === database.id) { reset(); return; }
               setChecks(null); setError(""); setNotice(""); setUseURL(false); setEditing(database); setShow(true);
-              setValue({ ...empty, name: database.name, host: database.host, port: database.port ?? 5432,
+              setValue({ ...empty, name: database.name, host: localHost(database.host), port: database.port ?? 5432,
                 database: database.database, username: database.username || "", sslmode: database.sslmode || "require" });
             }}><Pencil size={16} aria-hidden="true" />{t("Edit")}</Button>
           <details className="action-menu" onKeyDown={event => {
@@ -257,7 +260,7 @@ export function DatabaseConnections({ values, onChanged }: {
           </details>
         </div>
       </div>
-      <p className="mt-2 break-words text-sm muted">{database.host}:{database.port ?? 5432} · {database.database}</p>
+      <p className="mt-2 break-words text-sm muted">{localHost(database.host)}:{database.port ?? 5432} · {database.database}</p>
       <p className="mt-1 text-xs muted">{t("Last checked")}: {database.checked_at ? new Date(database.checked_at).toLocaleString(dateLocale) : t("Verification date not recorded")}</p>
       {show && editing?.id === database.id && connectionForm}
     </section>)}</div>
