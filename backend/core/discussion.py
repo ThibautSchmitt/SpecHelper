@@ -239,10 +239,6 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
         or previous.reasoning_effort_snapshot != connection.reasoning_effort
         or previous.identity_snapshot != identity_for(connection).pk
     )
-    if changed and not (payload.connection_id or payload.restart_session):
-        raise HttpError(
-            409, "The selected AI configuration changed. Start a new discussion session explicitly."
-        )
     if payload.restart_session or changed:
         previous = None
     if separate_goal_writer:

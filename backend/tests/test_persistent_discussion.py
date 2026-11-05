@@ -255,16 +255,15 @@ def test_provider_error_does_not_fabricate_a_reply_or_loop(
     assert row.messages.filter(role="user").count() == 1
 
 
-def test_no_silent_switch_on_quota_or_configuration_change(client, environment, native):
+def test_configuration_change_recovers_automatically_without_switching_connection_on_quota(client, environment, native):
     value = create(client, environment)
     launch(client, value)
     finish()
     chosen = AISession.objects.get().connection
     chosen.model = "new-model"
     chosen.save(update_fields=["model"])
-    assert turn(client, value, 1).status_code == 409
-    assert RequestMessage.objects.filter(role="user").count() == 1
-    assert turn(client, value, 1, restart_session=True).status_code == 200
+    assert turn(client, value, 1).status_code == 200
+    assert RequestMessage.objects.filter(role="user").count() == 2
     finish()
     assert len(set(call["context_id"] for call in native)) == 2
     AIConnection.objects.create(
@@ -278,6 +277,47 @@ def test_no_silent_switch_on_quota_or_configuration_change(client, environment, 
     assert turn(client, value, 2).status_code == 200
     assert claim_job() is None
     assert Job.objects.latest("id").payload["assignment"]["connection_id"] == chosen.pk
+
+
+@pytest.mark.parametrize("change", ["model", "reasoning_effort", "identity"])
+def test_updated_configuration_starts_one_shared_session_with_recorded_history(client, environment, native, change):
+    from core.models import AIIdentity
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    original = AISession.objects.get()
+    original_runtime = original.runtime_id
+    source = original.connection
+    if change == "identity":
+        source.identity = AIIdentity.objects.create(agent=source.agent, credential_id=uuid4(), status="CONNECTED", availability="AVAILABLE")
+    else:
+        setattr(source, change, "new-model" if change == "model" else "medium")
+    source.save()
+    another_browser = Client()
+    assert another_browser.get(f"/api/analyses/{value['id']}").status_code == 200
+    assert turn(another_browser, value, 1, message="Keep the original question and inspect the exception.").status_code == 200
+    # A stale browser cannot create a competing session or duplicate the message.
+    assert turn(client, value, 1).status_code == 409
+    assert AISession.objects.count() == 2
+    finish()
+    current = AISession.objects.latest("id")
+    assert current.connection_id == original.connection_id
+    assert current.context_id != original.context_id
+    assert native[1]["session_id"] is None
+    assert "recovery" in native[1]["prompt"] and "Keep the original question" in native[1]["prompt"]
+    assert current.model_snapshot == source.model
+    assert current.reasoning_effort_snapshot == source.reasoning_effort
+    assert current.identity_snapshot == source.identity_id
+    original.refresh_from_db()
+    assert original.runtime_id == original_runtime
+    assert RequestMessage.objects.filter(kind="session_notice").count() == 1
+    assert turn(client, value, 2).status_code == 200
+    finish()
+    assert AISession.objects.count() == 2
+    assert native[2]["session_id"] == current.runtime_id
+    assert Request.objects.get(pk=value["id"]).discussion_state["session_pk"] == current.pk
+    assert not AnalysisRun.objects.exists()
 
 
 def test_browsers_share_conversations_and_activity_but_distinct_requests_keep_sessions(

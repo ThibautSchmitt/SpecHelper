@@ -18,7 +18,11 @@ The assistant keeps its selected provider, model and native session where suppor
 Reloading or reopening in another authorized browser preserves the application history. If
 native resumption becomes impossible, the application reports a new session and
 reconstructs bounded context from saved messages instead of claiming unchanged continuity.
-A configuration change requires explicit session recovery; no silent account switch occurs.
+A change to the selected connection's model, reasoning or identity automatically starts
+a new session on the next requested turn, using the saved conversation history. The
+new session is shared across authorized browsers and recorded in the conversation;
+existing sessions and answers remain intact. No response is generated just by opening
+the page, and selecting a different connection remains an explicit choice.
 
 If a turn fails, use **Retry** after checking the reported cause. This explicitly
 starts a new native session with saved, bounded context; it does not change the selected
