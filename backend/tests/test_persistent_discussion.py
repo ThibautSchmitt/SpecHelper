@@ -443,6 +443,109 @@ def test_header_preserves_recorded_model_and_effort_after_settings_change(client
     assert data["model"] == "recorded-model" and data["reasoning_effort"] == "low"
 
 
+@pytest.mark.parametrize("change", ["role", "disabled", "deleted", "disconnected"])
+def test_unusable_selected_assistant_can_be_replaced_explicitly(client, environment, native, change):
+    from core.models import AIIdentity
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    original_session = AISession.objects.get()
+    source = original_session.connection
+    original_runtime = original_session.runtime_id
+    source.name = "Antigravity"
+    source.save()
+    if change == "deleted":
+        source.delete()
+    else:
+        if change == "role":
+            source.roles = []
+        elif change == "disabled":
+            source.enabled = False
+        else:
+            source.status = "DISCONNECTED"
+        source.save()
+    target = AIConnection.objects.create(
+        agent="codex", name="ChatGPT", model="target-model", roles=["analyst"],
+        status="CONNECTED", availability="AVAILABLE",
+        identity=AIIdentity.objects.create(agent="codex", credential_id=uuid4(), status="CONNECTED", availability="AVAILABLE"),
+    )
+    if change != "disconnected":
+        assert turn(client, value, 1).status_code == 409
+    assert Job.objects.count() == 1 and RequestMessage.objects.filter(role="user").count() == 1
+    detail = client.get(f"/api/analyses/{value['id']}").json()["discussion"]
+    assert detail["connection_id"] == source.pk or change == "deleted"
+    assert detail["assistant"]["continuation_reason"] == ("analyst_role_removed" if change == "role" else "connection_unavailable")
+    if change == "role":
+        assert detail["assistant"]["availability"] == "AVAILABLE"  # Authorization is not a quota failure.
+    choices = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()
+    assert choices["can_continue"]
+    choice = next(row for row in choices["options"] if row["connection_id"] == target.pk)
+    payload = {"connection_id":target.pk, "configuration_token":choice["configuration_token"], "expected_revision":1}
+    response = client.post(f"/api/analyses/{value['id']}/discussion/continue-with", payload, content_type="application/json")
+    assert response.status_code == 200, response.content
+    assert response.json()["discussion"]["connection_id"] == target.pk
+    assert response.json()["discussion"]["assistant"]["continuation_reason"] == ""
+    assert Job.objects.count() == 1 and len(native) == 1  # Selecting an assistant does not generate an answer.
+    original_session.refresh_from_db()
+    assert original_session.runtime_id == original_runtime
+    notice = RequestMessage.objects.filter(kind="session_notice").get()
+    assert notice.data["native_session_transferred"] is False
+    assert turn(client, value, 2).status_code == 200
+    finish()
+    assert native[-1]["session_id"] is None and native[-1]["model"] == target.model
+    assert "recovery" in native[-1]["prompt"]
+    assert not AnalysisRun.objects.exists()
+    if change != "deleted":
+        source.refresh_from_db()
+        assert source.roles == ([] if change == "role" else ["analyst", "counter_analyst", "verifier"])
+
+
+def test_restored_analyst_role_invalidates_transfer_without_changing_session(client, environment, native):
+    from core.models import AIIdentity
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    source = AISession.objects.get().connection
+    source.roles = []
+    source.save()
+    target = AIConnection.objects.create(agent="claude", roles=["analyst"], status="CONNECTED", availability="AVAILABLE",
+        identity=AIIdentity.objects.create(agent="claude", credential_id=uuid4(), status="CONNECTED", availability="AVAILABLE"))
+    choice = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()["options"][0]
+    source.roles = ["analyst"]
+    source.save()
+    response = client.post(f"/api/analyses/{value['id']}/discussion/continue-with", {
+        "connection_id":target.pk,"configuration_token":choice["configuration_token"],"expected_revision":1,
+    }, content_type="application/json")
+    assert response.status_code == 409
+    assert AISession.objects.count() == 1 and Job.objects.count() == 1
+
+
+@pytest.mark.parametrize("operation", ["goal_generation", "ticket_preparation", "analysis_preparation"])
+def test_changing_assistant_does_not_replay_failed_drafting_as_a_discussion(client, environment, native, operation):
+    from core.models import AIIdentity
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    source = AISession.objects.get().connection
+    source.roles = []
+    source.save()
+    job = Job.objects.latest("id")
+    job.status = "ERROR"
+    job.payload[operation] = {"inputs": {}}
+    job.save()
+    target = AIConnection.objects.create(agent="claude", roles=["analyst"], status="CONNECTED", availability="AVAILABLE",
+        identity=AIIdentity.objects.create(agent="claude", credential_id=uuid4(), status="CONNECTED", availability="AVAILABLE"))
+    choice = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()["options"][0]
+    response = client.post(f"/api/analyses/{value['id']}/discussion/continue-with", {
+        "connection_id":target.pk,"configuration_token":choice["configuration_token"],"expected_revision":1,
+    }, content_type="application/json")
+    assert response.status_code == 200, response.content
+    assert Job.objects.count() == 1 and len(native) == 1
+
+
 def test_completed_discussion_can_select_new_session_without_repeating_an_answer(client, environment, native):
     from core.models import AIIdentity
 

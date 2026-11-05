@@ -907,5 +907,9 @@
   "Derive tests from the stated acceptance criteria. Missing criteria must be clarified before implementation.": "Définir les tests à partir des critères d’acceptation indiqués. Les critères manquants doivent être précisés avant l’implémentation.",
   "This document restates the selected need; it does not establish new technical facts. Clarify missing scope, behavior and decisions. Recheck sources before implementation.": "Ce document reprend le besoin sélectionné, sans établir de nouveaux faits techniques. Préciser le périmètre, les comportements et les décisions manquants. Revérifier les sources avant l’implémentation.",
   "Relevant deep analysis available": "Analyse approfondie pertinente disponible",
-  "Without deep verification": "Sans vérification approfondie"
+  "Without deep verification": "Sans vérification approfondie",
+  "The selected assistant no longer has the Analyst role. Choose another assistant to continue.": "Cette IA n’a plus le rôle Analyste. Choisissez une autre IA pour poursuivre la conversation.",
+  "The selected AI connection is no longer available. Choose another assistant to continue.": "Cette connexion IA n’est plus disponible. Choisissez une autre IA pour poursuivre la conversation.",
+  "The current assistant can continue again. Refresh the conversation.": "L’IA actuelle peut de nouveau poursuivre la conversation. Actualisez la conversation.",
+  "The selected assistant is no longer available. Choose another assistant.": "L’IA sélectionnée n’est plus disponible. Choisissez une autre IA."
 }

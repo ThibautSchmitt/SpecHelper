@@ -2459,5 +2459,9 @@
   "Update source": "Update",
   "Behind": "Behind",
   "No local commit is available yet. Update this source before starting an investigation.": "No local commit is available yet. Update this source before starting an investigation.",
-  "Last successful environment update": "Last successful environment update"
+  "Last successful environment update": "Last successful environment update",
+  "The selected assistant no longer has the Analyst role. Choose another assistant to continue.": "The selected assistant no longer has the Analyst role. Choose another assistant to continue.",
+  "The selected AI connection is no longer available. Choose another assistant to continue.": "The selected AI connection is no longer available. Choose another assistant to continue.",
+  "The current assistant can continue again. Refresh the conversation.": "The current assistant can continue again. Refresh the conversation.",
+  "The selected assistant is no longer available. Choose another assistant.": "The selected assistant is no longer available. Choose another assistant."
 }

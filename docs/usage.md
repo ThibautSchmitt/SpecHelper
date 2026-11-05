@@ -37,7 +37,8 @@ An **AI history** line retains previous connections with their recorded model an
 reasoning settings. The current connection is identified separately; repeated native
 session restarts with the same configuration do not add duplicate entries.
 
-If its quota is exhausted, **Continue the analysis with…** opens a list of currently
+If its quota is exhausted, or its connection is removed, disabled, disconnected or
+no longer authorized for the Analyst role, **Continue the analysis with…** opens a list of currently
 available Analyst connections. Choose a connection and inspect its model and reasoning
 before selecting **Continue**. Leaving the selection or choosing **Cancel** keeps the
 original connection and pending request. SpecHelper never transfers it automatically.

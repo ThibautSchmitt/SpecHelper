@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Send, Square, Sparkles, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,7 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
   const [text,setText]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+  useEffect(()=>{setError("");},[value.discussion?.connection_id]);
   const [files,setFiles]=useState<File[]>([]);
   const [uploaded,setUploaded]=useState(0);
   const [scopeOpen,setScopeOpen]=useState(false);

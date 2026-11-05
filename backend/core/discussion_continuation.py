@@ -1,4 +1,4 @@
-"""Explicit, quota-triggered conversation transfers; never migrate native sessions."""
+"""Explicit conversation transfers when the selected assistant cannot continue."""
 
 import copy
 import hashlib
@@ -58,6 +58,14 @@ def assistant(value, job=None):
     else:
         observed = {"status":"DISCONNECTED", "enabled":False}
         availability = "DISCONNECTED"
+    if not connection or not connection.enabled or connection.status != "CONNECTED" or observed["status"] != "CONNECTED":
+        continuation_reason = "connection_unavailable"
+    elif "analyst" not in connection.roles:
+        continuation_reason = "analyst_role_removed"
+    elif availability == "QUOTA_EXHAUSTED":
+        continuation_reason = "quota_exhausted"
+    else:
+        continuation_reason = ""
     reply = (
         value.messages.filter(kind="discussion_reply", data__session_pk=session.pk)
         .order_by("-id")
@@ -71,6 +79,7 @@ def assistant(value, job=None):
         "model": (reply.data.get("model") if reply else None) or session.model_snapshot,
         "reasoning_effort": session.reasoning_effort_snapshot,
         "availability": availability,
+        "continuation_reason": continuation_reason,
         **{key:observed[key] for key in ("status", "enabled", "quota_windows", "quota_status", "availability_issue") if key in observed},
     }
 
@@ -124,7 +133,7 @@ def options(value):
     source = assistant(value)
     allowed = bool(
         source
-        and source["availability"] == "QUOTA_EXHAUSTED"
+        and source["continuation_reason"]
         and value.discussion_state.get("mode", "discussion") == "discussion"
     )
     return {
@@ -156,9 +165,9 @@ def continue_with(analysis_id, payload, browser_actor):
     source = assistant(value, job)
     if not state.get("enabled") or state.get("mode", "discussion") != "discussion" or not source:
         raise HttpError(409, "This conversation cannot change assistant at this stage.")
-    if source["availability"] != "QUOTA_EXHAUSTED":
+    if not source["continuation_reason"]:
         raise HttpError(
-            409, "The current assistant no longer has an exhausted quota. Refresh the conversation."
+            409, "The current assistant can continue again. Refresh the conversation."
         )
     target = get_object_or_404(AIConnection.objects.select_for_update(), pk=payload.connection_id)
     choices = {item["connection_id"]: item for item in available_options(value)}
@@ -185,7 +194,10 @@ def continue_with(analysis_id, payload, browser_actor):
     idle(value)
     # Retry the preserved pending/failed message. A completed conversation only
     # changes its session; it must not generate a duplicate answer on transfer.
-    retry = bool(pending or (job and job.status == "ERROR"))
+    drafting = job and any(job.payload.get(key) for key in (
+        "ticket_preparation", "analysis_preparation", "goal_generation"
+    ))
+    retry = bool(not drafting and (pending or (job and job.status == "ERROR")))
     if retry:
         value = enqueue(
             value.pk,

@@ -192,10 +192,14 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
         )
     previous = AISession.objects.filter(pk=session_pk, request=value, role__startswith="d-").first()
     connection_id = payload.connection_id or (
-        previous.connection_id if previous else state.get("connection_id")
+        (previous.connection_id or state.get("connection_id")) if previous else state.get("connection_id")
     )
+    if previous and not connection_id:
+        raise HttpError(409, "The selected assistant is no longer available. Choose another assistant.")
     if connection_id:
-        connection = get_object_or_404(AIConnection, pk=connection_id, enabled=True)
+        connection = AIConnection.objects.filter(pk=connection_id, enabled=True).first()
+        if connection is None:
+            raise HttpError(409, "The selected assistant is no longer available. Choose another assistant.")
     else:
         available = [c for c in candidates() if "analyst" in c.roles]
         connection = (

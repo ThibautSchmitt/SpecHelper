@@ -20,8 +20,10 @@ export function ConversationAssistantControl({value,onUpdated}:{value:RequestDet
   const [error,setError]=useState("");
   if(!current)return null;
   const exhausted=current.availability === "QUOTA_EXHAUSTED";
+  const unavailable=current.continuation_reason === "connection_unavailable";
+  const unauthorized=current.continuation_reason === "analyst_role_removed";
   const previous=value.discussion?.assistant_history?.filter(item=>!item.current) || [];
-  const canChoose=exhausted && value.discussion?.mode === "discussion" && value.discussion.job?.status !== "RUNNING";
+  const canChoose=(exhausted || unavailable || unauthorized) && !value.archived_at && value.discussion?.mode === "discussion" && value.discussion.job?.status !== "RUNNING";
   const model=(item:Pick<ConversationAssistant,"agent"|"model"|"reasoning_effort">)=>`${item.model || t("Provider default model")}${item.agent !== "antigravity" && item.reasoning_effort ? ` ${item.reasoning_effort}` : ""}`;
   async function load() {
     setBusy(true);setError("");setSelected("");
@@ -60,10 +62,11 @@ export function ConversationAssistantControl({value,onUpdated}:{value:RequestDet
         <span className="badge connection-tag connection-model-tag">{model(item)}</span>
       </li>)}</ol>
     </div>}
+    {(unauthorized || unavailable) && <p className="text-xs muted">{t(unauthorized ? "The selected assistant no longer has the Analyst role. Choose another assistant to continue." : "The selected AI connection is no longer available. Choose another assistant to continue.")}</p>}
     {error && <p role="alert" className="text-sm text-red-700">{t(error)}</p>}
     {options && canChoose && <div className="space-y-2">
       <p className="text-xs muted">{t("A new session will receive the recorded history and project context. Its model and reasoning may interpret them differently.")}</p>
-      {!options.can_continue ? <p className="text-sm muted">{t("The current assistant no longer has an exhausted quota. Refresh the conversation.")}</p> : !options.options.length ? <p className="text-sm muted">{t("No other assistant with the Analyst role is currently available.")}</p> :
+      {!options.can_continue ? <p className="text-sm muted">{t("The current assistant can continue again. Refresh the conversation.")}</p> : !options.options.length ? <p className="text-sm muted">{t("No other assistant with the Analyst role is currently available.")}</p> :
         <form className="flex flex-wrap items-end gap-2" onSubmit={event=>{event.preventDefault();void resume();}}>
           <div className="field min-w-0 max-w-full flex-1"><label htmlFor="continuation-assistant">{t("Available assistant")}</label>
             <select id="continuation-assistant" disabled={busy} value={selected} onChange={event=>setSelected(event.target.value)}>

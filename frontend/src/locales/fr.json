@@ -2459,5 +2459,9 @@
   "Update source": "Mise à jour",
   "Behind": "En retard",
   "No local commit is available yet. Update this source before starting an investigation.": "Aucun commit local n’est encore disponible. Mettez cette source à jour avant de lancer une investigation.",
-  "Last successful environment update": "Dernière mise à jour réussie de l’environnement"
+  "Last successful environment update": "Dernière mise à jour réussie de l’environnement",
+  "The selected assistant no longer has the Analyst role. Choose another assistant to continue.": "Cette IA n’a plus le rôle Analyste. Choisissez une autre IA pour poursuivre la conversation.",
+  "The selected AI connection is no longer available. Choose another assistant to continue.": "Cette connexion IA n’est plus disponible. Choisissez une autre IA pour poursuivre la conversation.",
+  "The current assistant can continue again. Refresh the conversation.": "L’IA actuelle peut de nouveau poursuivre la conversation. Actualisez la conversation.",
+  "The selected assistant is no longer available. Choose another assistant.": "L’IA sélectionnée n’est plus disponible. Choisissez une autre IA."
 }
