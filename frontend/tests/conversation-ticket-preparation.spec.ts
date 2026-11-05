@@ -12,7 +12,8 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
   messages:Array.from({length:80},(_,index)=>({id:index+1,role:index%2?'assistant':'user',kind:index%2?'discussion_reply':'discussion',content:`OTHER_SUBJECT_${index}`,created_at:at})),discussion:{enabled:true,mode:'discussion',revision:3,job:null},
   // Compatibility records must never become a list of draft cards.
   conversation_tickets:[{id:'old-draft',title:'Historical draft',active:false,created_at:at}],active_ticket:seeded?{id:ticket,title:draft.title,status:'DRAFT'}:null};
- let generations=0,deep=0,pendingReads=0,failNext=false;
+ let generations=0,deep=0,pendingReads=0,failNext=false,failSave=false;
+ const destinationSaves:any[]=[];
  const posts:any[]=[];const generated:any[]=[];const documentRequests:any[]=[];let attempts:any[]=[];
  function setActive(){value={...value,active_ticket:draft.id?{id:draft.id,title:draft.title,status:'DRAFT'}:null};}
  await page.route('**/api/**',r=>r.fulfill({json:[]}));
@@ -24,6 +25,7 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
  const prep=`/api/analyses/${id}/ticket-preparation`;
  await page.route(new RegExp(`${prep}(?:\\?.*)?$`),r=>{
   if(r.request().method()==='PUT'){
+   if(failSave){failSave=false;return r.fulfill({status:503,json:{detail:'Draft could not be saved.'}});}
    const payload=r.request().postDataJSON();
    expect(payload.expected_revision).toBe(draft.revision);
    draft={...draft,...payload,revision:draft.revision+1,markdown:payload.body,proposal:null};setActive();
@@ -65,7 +67,10 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
   publication_allowed:true,publication_blockers:[],template_id:'',issue_type:'',fields:[],values:{},labels:[],assignees:[],templates:[],issue_types:[],defaults:{},revision:'options',options_revision:'options',format:'markdown',available_attachments:[],selected_attachments:[]};
  await page.route(`**${endpoint}/publication-draft*`,r=>{
   if(r.request().method()==='PUT'){
-   const {fields,...payload}=r.request().postDataJSON();target={...target,...payload,values:fields,draft_revision:target.draft_revision+1};
+   const data=r.request().postDataJSON();destinationSaves.push(data);
+   for(const key of ['id','revision','discussion_revision','source_verified','documents','markdown','proposal','generation'])expect(data).not.toHaveProperty(key);
+   const {fields,labels,assignees,...payload}=data;
+   target={...target,...payload,values:fields,defaults:{...target.defaults,labels,assignees},draft_revision:target.draft_revision+1};
   }else target={...target,title:draft.title,body:draft.body};
   return r.fulfill({json:target});
  });
@@ -81,7 +86,8 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
  });
  await page.route(`**/api/analyses/${id}/goal?*`,r=>r.fulfill({json:{name:'goal.md',content:`# Goal\n\n${draft.title}\n\n${draft.body}\n\nWithout deep verification`}}));
  await page.route(`**/api/analyses/${id}/goal/generate?*`,r=>r.fulfill({json:{generation_id:55,status:'QUEUED'}}));
- return {get generations(){return generations;},get deep(){return deep;},posts,generated,reportReads,documentRequests,
+ return {get generations(){return generations;},get deep(){return deep;},posts,generated,reportReads,documentRequests,destinationSaves,
+  failSave(){failSave=true;}, options(options:any){target={...target,...options};},
   unsupportedFiles(){target.document_attachment_policy.enabled=false;},
   publications(items:any[]){value={...value,publications:items};},
   verifiedPublication(){target.requires_unverified_confirmation=false;},
@@ -112,12 +118,12 @@ for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
   await page.addInitScript(theme=>localStorage.setItem('spechelper-theme',theme),theme);
   await page.goto(`/analyses/${id}`);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
   await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).last().click();
-  const modal=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
+  const modal=page.getByRole('dialog',{name:t('Create ticket'),exact:true});
   await expect(modal).toHaveClass(/ticket-preparation-modal/);
   await expect(modal.getByText(t('Preparing the ticket…'),{exact:true})).toBeVisible();
   await modal.getByRole('button',{name:t('Edit'),exact:true}).click();
   await expect(modal.getByLabel(t('Description'),{exact:true})).toHaveValue(body);
-  await expect(modal.locator('select')).toHaveCount(0);
+  await expect(modal.getByLabel(t('Publication connection'),{exact:true})).toBeVisible();
   if(language==='fr'){await expect(modal.getByLabel('Titre',{exact:true})).toBeVisible();await expect(modal.getByRole('button',{name:'Publier',exact:true})).toBeVisible();}
   const box=(await modal.boundingBox())!;
   expect(Math.abs(box.x+box.width/2-page.viewportSize()!.width/2)).toBeLessThan(3);
@@ -128,18 +134,17 @@ for(const language of ['en','fr'] as const)for(const theme of ['light','dark']){
   await page.getByRole('button',{name:t('Draft'),exact:true}).click();
   await expect(modal.getByLabel(t('Title'),{exact:true})).toHaveValue('My correction');
   expect(fixture.generations).toBe(1);
-  await modal.getByRole('button',{name:t('Update with AI'),exact:true}).click();
+  await modal.getByRole('button',{name:t('Improve with AI'),exact:true}).click();
   await modal.getByRole('button',{name:t('Edit'),exact:true}).click();
   await expect(modal.getByLabel(t('Description'),{exact:true})).toHaveValue('Round the total including the new contribution rule.');
   await modal.getByRole('button',{name:t('Keep my draft'),exact:true}).click();
   await expect(modal.getByLabel(t('Title'),{exact:true})).toHaveValue('My correction');
-  await modal.getByRole('button',{name:t('Update with AI'),exact:true}).click();
+  await modal.getByRole('button',{name:t('Improve with AI'),exact:true}).click();
   if(language==='fr')await expect(modal.getByRole('button',{name:'Appliquer',exact:true})).toBeVisible();
   await modal.getByRole('button',{name:t('Apply'),exact:true}).click();
   await expect(modal.getByLabel(t('Description'),{exact:true})).toHaveValue('Round the total including the new contribution rule.');
   await modal.screenshot({path:`../.local/ticket-ui/${language}-${theme}-${info.project.name}-prepare.png`});
-  await modal.getByRole('button',{name:t('Publish'),exact:true}).click();
-  const publication=page.getByRole('dialog',{name:t('Publish ticket'),exact:true});
+  const publication=page.getByRole('dialog',{name:t('Create ticket'),exact:true});
   await expect(page.locator('dialog[open]')).toHaveCount(1);
   await publication.getByLabel(t('Publication connection'),{exact:true}).selectOption('4');
   await publication.getByLabel(t('Project / repository'),{exact:true}).selectOption('TEAM');
@@ -166,12 +171,12 @@ test('existing draft requires an explicit choice to replace and failed refresh k
  const fixture=await setup(page,'en',true);
  await page.goto(`/analyses/${id}`);
  await page.getByRole('button',{name:'Prepare a ticket',exact:true}).last().click();
- const modal=page.getByRole('dialog',{name:'Prepare a ticket',exact:true});
+ const modal=page.getByRole('dialog',{name:'Create ticket',exact:true});
  await expect(modal.getByText(/A draft already exists/)).toBeVisible();expect(fixture.generations).toBe(0);
  await modal.getByRole('button',{name:'Resume draft',exact:true}).click();
  await modal.getByRole('button',{name:'Edit',exact:true}).click();
  await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);
- fixture.fail();await modal.getByRole('button',{name:'Update with AI',exact:true}).click();
+ fixture.fail();await modal.getByRole('button',{name:'Improve with AI',exact:true}).click();
  await expect(modal.getByRole('alert')).toBeVisible();await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);
  await modal.getByRole('button',{name:'Close',exact:true}).first().click();
  await page.getByRole('button',{name:'Prepare a ticket',exact:true}).last().click();
@@ -184,29 +189,29 @@ test('existing draft requires an explicit choice to replace and failed refresh k
  expect(fixture.generated.at(-1).replace_confirmed).toBe(true);expect(fixture.deep).toBe(0);
 });
 
-test('unsaved edits require confirmation before closing',async({page})=>{
+test('closing saves manual edits and reopening keeps the same draft',async({page})=>{
  await setup(page,'en',true);await page.goto(`/analyses/${id}`);
  await page.getByRole('button',{name:'Draft',exact:true}).click();
- const modal=page.getByRole('dialog',{name:'Prepare a ticket',exact:true});
+ const modal=page.getByRole('dialog',{name:'Create ticket',exact:true});
  await modal.getByLabel('Title',{exact:true}).fill('Unsaved correction');
- page.once('dialog',dialog=>dialog.dismiss());await modal.getByRole('button',{name:'Close',exact:true}).first().click();
- await expect(modal).toBeVisible();await expect(modal.getByLabel('Title',{exact:true})).toHaveValue('Unsaved correction');
- page.once('dialog',dialog=>dialog.accept());await modal.getByRole('button',{name:'Close',exact:true}).first().click();
+ await modal.getByRole('button',{name:'Close',exact:true}).first().click();
  await expect(modal).not.toBeVisible();
+ await page.getByRole('button',{name:'Draft',exact:true}).click();
+ await expect(modal.getByLabel('Title',{exact:true})).toHaveValue('Unsaved correction');
 });
 
 for(const outcome of ['ERROR','UNCERTAIN'])test(`a ${outcome} write keeps the draft and never adds a success link`,async({page})=>{
  const fixture=await setup(page,'en',true,outcome);await page.goto(`/analyses/${id}`);
  await page.getByRole('button',{name:'Draft',exact:true}).click();
- const modal=page.getByRole('dialog',{name:'Prepare a ticket',exact:true});
- await modal.getByRole('button',{name:'Publish',exact:true}).click();
- const publication=page.getByRole('dialog',{name:'Publish ticket',exact:true});
+ const modal=page.getByRole('dialog',{name:'Create ticket',exact:true});
+ const publication=page.getByRole('dialog',{name:'Create ticket',exact:true});
  await publication.getByLabel('Publication connection',{exact:true}).selectOption('4');
  await publication.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
  await publication.getByRole('button',{name:'Publish',exact:true}).click();
  await page.getByRole('alertdialog').getByRole('button',{name:'Publish anyway',exact:true}).click();
  await expect.poll(()=>fixture.posts.length).toBe(1);
- await publication.getByRole('button',{name:'Back',exact:true}).click();
+ await publication.getByRole('button',{name:'Close',exact:true}).first().click();
+ await page.getByRole('button',{name:'Draft',exact:true}).click();
   await modal.getByRole('button',{name:'Edit',exact:true}).click();
  await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);
  await modal.getByRole('button',{name:'Close',exact:true}).first().click();await page.reload();
@@ -215,7 +220,6 @@ for(const outcome of ['ERROR','UNCERTAIN'])test(`a ${outcome} write keeps the dr
   await modal.getByRole('button',{name:'Edit',exact:true}).click();
  await expect(modal.getByLabel('Description',{exact:true})).toHaveValue(body);expect(fixture.generations).toBe(0);
  if(outcome==='UNCERTAIN'){
-  await modal.getByRole('button',{name:'Verify publication',exact:true}).click();
   await publication.getByRole('button',{name:'Verify publication',exact:true}).click();
   await expect.poll(()=>fixture.posts.length).toBe(2);
   expect(fixture.posts[1].idempotency_key).toBe(fixture.posts[0].idempotency_key);
@@ -227,8 +231,9 @@ for(const outcome of ['ERROR','UNCERTAIN'])test(`a ${outcome} write keeps the dr
 test('saved draft survives explicit deep analysis, reports and a reviewed update',async({page})=>{
  const fixture=await setup(page,'en',true);await page.goto(`/analyses/${id}`);
  await page.getByRole('button',{name:'Draft',exact:true}).click();
- const draft=page.getByRole('dialog',{name:'Prepare a ticket',exact:true});
+ const draft=page.getByRole('dialog',{name:'Create ticket',exact:true});
  await draft.getByLabel('Title',{exact:true}).fill('Keep manual rounding rules');
+ await draft.getByText('Additional options',{exact:true}).click();
  await draft.getByRole('button',{name:'Launch deep analysis',exact:true}).click();
  const scope=page.getByRole('dialog',{name:'Deep analysis',exact:true});
  await expect(scope.getByLabel('Need to analyze',{exact:true})).toHaveValue('Keep manual rounding rules');
@@ -250,7 +255,7 @@ test('saved draft survives explicit deep analysis, reports and a reviewed update
  await technical.getByRole('button',{name:'Close',exact:true}).click();
  await page.getByRole('button',{name:'Draft',exact:true}).click();
  await expect(draft.getByLabel('Title',{exact:true})).toHaveValue('Keep manual rounding rules');
- await draft.getByRole('button',{name:'Update with AI',exact:true}).click();
+ await draft.getByRole('button',{name:'Improve with AI',exact:true}).click();
  await draft.getByRole('button',{name:'Apply',exact:true}).click();
  await expect(draft.getByLabel('Title',{exact:true})).toHaveValue('Contribution rounding');
  expect(fixture.deep).toBe(1);expect(fixture.reportReads).toEqual(['business','technical']);
@@ -259,7 +264,7 @@ test('saved draft survives explicit deep analysis, reports and a reviewed update
 test('documents are optional, retained with manual edits and generated only at publication',async({page})=>{
  const fixture=await setup(page,'fr',true);await page.goto(`/analyses/${id}`);
  await page.getByRole('button',{name:translate('Draft','fr'),exact:true}).click();
- const draft=page.getByRole('dialog',{name:translate('Prepare a ticket','fr'),exact:true});
+ const draft=page.getByRole('dialog',{name:translate('Create ticket','fr'),exact:true});
  await draft.getByLabel('Titre',{exact:true}).fill('Ma règle métier corrigée');
  await expect(page.getByRole('button',{name:'Générer goal.md',exact:true})).toHaveCount(0);
  await expect(draft.getByLabel(/^goal.md/)).toBeChecked();
@@ -269,13 +274,13 @@ test('documents are optional, retained with manual edits and generated only at p
  await draft.getByRole('button',{name:'Enregistrer',exact:true}).click();
  await expect(draft.getByRole('button',{name:'Enregistrer',exact:true})).toBeDisabled();
  expect(fixture.deep).toBe(0);expect(fixture.generations).toBe(0);
- await draft.getByRole('button',{name:'Publier',exact:true}).click();
- const publication=page.getByRole('dialog',{name:translate('Publish ticket','fr'),exact:true});
+ const publication=page.getByRole('dialog',{name:translate('Create ticket','fr'),exact:true});
  await publication.getByLabel('Connexion de publication',{exact:true}).selectOption('4');
  await publication.getByLabel('Projet / dépôt',{exact:true}).selectOption('TEAM');
  expect(fixture.documentRequests).toHaveLength(0);
  await publication.getByRole('button',{name:'Publier',exact:true}).click();
- expect(fixture.documentRequests).toHaveLength(0);
+ await expect.poll(()=>fixture.documentRequests.length).toBe(1);
+ expect(fixture.posts).toHaveLength(0);
  await publication.getByRole('button',{name:translate('Publish anyway','fr'),exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  expect(fixture.documentRequests[0].documents).toEqual(['goal','business']);
@@ -291,12 +296,10 @@ test('document failure allows an explicit writer choice and never publishes befo
  });
  await page.route(`**/api/analyses/${id}/goal/assistants`,r=>r.fulfill({json:[{connection_id:1,name:'ChatGPT',agent:'codex',model:'gpt-5.6-luna'}]}));
  await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:translate('Draft','fr'),exact:true}).click();
- await page.getByRole('dialog',{name:'Préparer un ticket',exact:true}).getByRole('button',{name:'Publier',exact:true}).click();
- const publication=page.getByRole('dialog',{name:translate('Publish ticket','fr'),exact:true});
+ const publication=page.getByRole('dialog',{name:translate('Create ticket','fr'),exact:true});
  await publication.getByLabel(translate('Publication connection','fr'),{exact:true}).selectOption('4');
  await publication.getByLabel(translate('Project / repository','fr'),{exact:true}).selectOption('TEAM');
  await publication.getByRole('button',{name:'Publier',exact:true}).click();
- await publication.getByRole('button',{name:translate('Publish anyway','fr'),exact:true}).click();
  await expect(publication.getByLabel('IA de rédaction')).toBeVisible();
  expect(fixture.posts).toHaveLength(0);
  await publication.getByLabel('IA de rédaction').selectOption('1');
@@ -309,8 +312,7 @@ test('document failure allows an explicit writer choice and never publishes befo
 test('unsupported destinations require deselecting documents and use no AI',async({page})=>{
  const fixture=await setup(page,'en',true);fixture.unsupportedFiles();
  await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
- await page.getByRole('dialog',{name:'Prepare a ticket',exact:true}).getByRole('button',{name:'Publish',exact:true}).click();
- const publication=page.getByRole('dialog',{name:'Publish ticket',exact:true});
+ const publication=page.getByRole('dialog',{name:'Create ticket',exact:true});
  await publication.getByLabel('Publication connection',{exact:true}).selectOption('4');
  await publication.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
  await expect(publication.getByRole('button',{name:'Publish',exact:true})).toBeDisabled();
@@ -327,32 +329,91 @@ test('closing while documents are generated never starts an external publication
  await page.route(`**/api/analyses/${id}/tickets/${ticket}/documents/generate`,r=>{started=true;return r.fulfill({json:{generation_id:55,status:'QUEUED',documents:{}}});});
  await page.route(`**/api/analyses/${id}/tickets/${ticket}/documents/55`,r=>r.fulfill({json:{generation_id:55,status:'RUNNING',documents:{}}}));
  await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
- await page.getByRole('dialog',{name:'Prepare a ticket',exact:true}).getByRole('button',{name:'Publish',exact:true}).click();
- const publication=page.getByRole('dialog',{name:'Publish ticket',exact:true});
+ const publication=page.getByRole('dialog',{name:'Create ticket',exact:true});
  await publication.getByLabel('Publication connection',{exact:true}).selectOption('4');
  await publication.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
  await publication.getByRole('button',{name:'Publish',exact:true}).click();
- await publication.getByRole('button',{name:'Publish anyway',exact:true}).click();
  await expect(publication.getByText('Generating selected documents…',{exact:true})).toBeVisible();
  expect(started).toBe(true);expect(fixture.posts).toHaveLength(0);
- await publication.getByRole('button',{name:'Back',exact:true}).click();
- await expect(page.getByRole('dialog',{name:'Prepare a ticket',exact:true})).toBeVisible();
+ await publication.getByRole('button',{name:'Close',exact:true}).first().click();
+ await expect(page.getByRole('dialog',{name:'Create ticket',exact:true})).not.toBeVisible();
  expect(fixture.posts).toHaveLength(0);expect(fixture.deep).toBe(0);
 });
 
-test('verified publication also requires confirmation and has a compact preview',async({page})=>{
+test('verified publication also requires confirmation without a repeated preview',async({page})=>{
  const fixture=await setup(page,'en',true);fixture.verifiedPublication();
  await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
- await page.getByRole('dialog',{name:'Prepare a ticket'}).getByRole('button',{name:'Publish',exact:true}).click();
- const publication=page.getByRole('dialog',{name:'Publish ticket',exact:true});
+ const publication=page.getByRole('dialog',{name:'Create ticket',exact:true});
  await publication.getByLabel('Publication connection',{exact:true}).selectOption('4');
  await publication.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
- const full=publication.locator('details').filter({hasText:'See full content'});
- await expect(full).not.toHaveAttribute('open','');
- await full.locator('summary').click();await expect(full.getByRole('heading',{name:'Need',exact:true})).toBeVisible();
+ await expect(publication.getByText('Publication preview',{exact:true})).toHaveCount(0);
+ await expect(publication.getByText('See full content',{exact:true})).toHaveCount(0);
+ await expect(publication.getByRole('heading',{name:'Need',exact:true})).toHaveCount(1);
  await publication.getByRole('button',{name:'Publish',exact:true}).click();
  expect(fixture.posts).toHaveLength(0);
  const confirmation=page.getByRole('alertdialog',{name:'Confirm publication',exact:true});
  await confirmation.getByRole('button',{name:'Confirm publication',exact:true}).click();
  await expect.poll(()=>fixture.posts.length).toBe(1);expect(fixture.deep).toBe(0);
+});
+
+test('required provider fields stay visible and optional assignation is searchable',async({page})=>{
+ const fixture=await setup(page,'en',true);
+ fixture.options({fields:[{id:'category',label:'Category',type:'text',required:true,options:[]}],assignees:[{id:'alice',name:'Alice Martin'},{id:'bob',name:'Bob Petit'}]});
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
+ const modal=page.getByRole('dialog',{name:'Create ticket',exact:true});
+ await modal.getByRole('button',{name:'Edit',exact:true}).click();
+ await modal.getByLabel('Description',{exact:true}).fill('My manually corrected scope.');
+ await modal.getByLabel('Publication connection',{exact:true}).selectOption('4');
+ await modal.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
+ await expect(modal.getByLabel('Category *',{exact:true})).toBeVisible();
+ await expect(modal.getByRole('button',{name:'Publish',exact:true})).toBeDisabled();
+ await modal.getByLabel('Category *',{exact:true}).fill('Accounting');
+ await modal.getByText('Additional options',{exact:true}).click();
+ await modal.locator('summary').filter({hasText:'Assignees'}).click();
+ await modal.getByLabel('Search Assignees',{exact:true}).fill('Bob');
+ await expect(modal.getByRole('checkbox',{name:'Alice Martin',exact:true})).toHaveCount(0);
+ await modal.getByRole('checkbox',{name:'Bob Petit',exact:true}).check();
+ await expect(modal.locator('select[multiple]')).toHaveCount(0);
+ await expect(modal.getByLabel('Description',{exact:true})).toHaveValue('My manually corrected scope.');
+ await modal.getByRole('button',{name:'Save',exact:true}).click();
+ await expect.poll(()=>fixture.destinationSaves.length).toBeGreaterThan(0);
+ expect(fixture.destinationSaves.at(-1)).toMatchObject({body:'My manually corrected scope.',fields:{category:'Accounting'},assignees:['bob']});
+ await modal.getByRole('button',{name:'Close',exact:true}).first().click();
+ await page.getByRole('button',{name:'Draft',exact:true}).click();
+ await modal.getByLabel('Publication connection',{exact:true}).selectOption('4');
+ await modal.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
+ await expect(modal.getByLabel('Category *',{exact:true})).toHaveValue('Accounting');
+ expect(fixture.posts).toHaveLength(0);expect(fixture.generations).toBe(0);
+});
+
+test('a failed save on close keeps manual corrections without starting AI',async({page})=>{
+ const fixture=await setup(page,'en',true);
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
+ const modal=page.getByRole('dialog',{name:'Create ticket',exact:true});
+ await modal.getByLabel('Title',{exact:true}).fill('Unsaved correction');
+ fixture.failSave();await modal.getByRole('button',{name:'Close',exact:true}).first().click();
+ await expect(modal).toBeVisible();await expect(modal.getByText('Draft could not be saved.',{exact:true})).toBeVisible();
+ await expect(modal.getByLabel('Title',{exact:true})).toHaveValue('Unsaved correction');
+ await expect(modal.getByRole('button',{name:'Retry',exact:true})).toHaveCount(0);
+ await modal.getByRole('button',{name:'Save',exact:true}).click();
+ await modal.getByRole('button',{name:'Close',exact:true}).first().click();
+ await page.getByRole('button',{name:'Draft',exact:true}).click();
+ await expect(modal.getByLabel('Title',{exact:true})).toHaveValue('Unsaved correction');
+ expect(fixture.generations).toBe(0);expect(fixture.posts).toHaveLength(0);
+});
+
+test('cancelling after document generation sends nothing and keeps the draft',async({page})=>{
+ const fixture=await setup(page,'en',true);
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
+ const modal=page.getByRole('dialog',{name:'Create ticket',exact:true});
+ await modal.getByLabel('Publication connection',{exact:true}).selectOption('4');
+ await modal.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
+ await modal.getByRole('button',{name:'Publish',exact:true}).click();
+ await expect(page.getByRole('alertdialog')).toBeVisible();expect(fixture.documentRequests).toHaveLength(1);
+ expect(fixture.posts).toHaveLength(0);
+ await page.getByRole('alertdialog').getByRole('button',{name:'Cancel',exact:true}).click();
+ await modal.getByRole('button',{name:'Close',exact:true}).first().click();
+ await page.getByRole('button',{name:'Draft',exact:true}).click();
+ await expect(modal.getByLabel('Title',{exact:true})).toHaveValue('Contribution rounding');
+ expect(fixture.posts).toHaveLength(0);expect(fixture.deep).toBe(0);
 });

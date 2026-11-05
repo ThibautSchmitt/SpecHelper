@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import { ProviderLogo } from "@/components/provider-logo";
 import { MarkdownReader } from "@/components/markdown-reader";
 import { secureFetch } from "@/lib/access";
@@ -16,6 +16,19 @@ import {
 } from "@/components/ticket-connectors";
 
 type Option = { id: string; name: string };
+function CompactOptions({label,options,value,onChange,single=false}:{label:string;options:Option[];value:string[];onChange:(value:string[])=>void;single?:boolean}) {
+  const {t}=useI18n();
+  const [query,setQuery]=useState("");
+  return <details className="rounded-md border p-2 text-sm">
+    <summary className="cursor-pointer">{label}<span className="muted"> · {value.length?options.filter(item=>value.includes(item.id)).map(item=>item.name).join(", "):t("Optional")}</span></summary>
+    <div className="mt-2 space-y-2">
+      <Input aria-label={t("Search {label}",{label})} placeholder={t("Search…")} value={query} onChange={event=>setQuery(event.target.value)}/>
+      <div className="max-h-36 space-y-2 overflow-y-auto" role="group" aria-label={label}>{options.filter(item=>item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map(item=><label key={item.id} className="flex items-center gap-2">
+        <input type="checkbox" checked={value.includes(item.id)} onChange={event=>onChange(event.target.checked?(single?[item.id]:[...value,item.id]):value.filter(id=>id!==item.id))}/>{item.name}
+      </label>)}</div>
+    </div>
+  </details>;
+}
 type Field = {
   id: string;
   label: string;
@@ -121,6 +134,11 @@ function remember(key: string, payload: Payload | null) {
   } catch {}
 }
 
+export type PublicationControls = {
+  save:(content:{title:string;body:string})=>Promise<void>;
+  close:()=>Promise<void>;
+};
+
 export function PublishTicket({
   requestId,
   version,
@@ -135,6 +153,9 @@ export function PublishTicket({
   autoOpen = false,
   hideTrigger = false,
   documents = [],
+  unified = false, controller, beforeSave, footerActions, advancedContent,
+  disabled = false, hideFooter = false,
+  onDocumentsChange, onLockedChange, onDirtyChange,
 }: {
   requestId: string;
   version: number | null;
@@ -149,6 +170,16 @@ export function PublishTicket({
   autoOpen?: boolean;
   hideTrigger?: boolean;
   documents?:string[];
+  unified?:boolean;
+  controller?:Ref<PublicationControls>;
+  beforeSave?:()=>Promise<{title:string;body:string}>;
+  footerActions?:ReactNode;
+  advancedContent?:ReactNode;
+  disabled?:boolean;
+  hideFooter?:boolean;
+  onDocumentsChange?:(documents:string[])=>void;
+  onLockedChange?:(locked:boolean)=>void;
+  onDirtyChange?:(dirty:boolean)=>void;
 }) {
   const { t } = useI18n();
   const ticketUrl = useTicketUrlResolver();
@@ -189,6 +220,11 @@ export function PublishTicket({
   useEffect(()=>()=>{documentGeneration.current++;},[]);
   const [result, setResult] = useState<Publication | null>(null);
   const [pending, setPending] = useState<Payload | null>(null);
+  useEffect(()=>{onLockedChange?.(generatingDocuments||!!confirmation||busy&&!!pending);},[generatingDocuments,confirmation,busy,pending,onLockedChange]);
+  useEffect(()=>{onDirtyChange?.(dirty);},[dirty,onDirtyChange]);
+  useEffect(()=>{if(unified&&preparedDraft){setTitle(preparedDraft.title);setBody(preparedDraft.body);}},[unified,preparedDraft?.title,preparedDraft?.body]);
+  useEffect(()=>{if(unified)setSelectedDocuments(documents);},[unified,documents.join(",")]);
+  useImperativeHandle(controller,()=>({save:async content=>{if(preview)await saveDraft(content);},close}));
   const storageKey = `publication:${requestId}:${version}${conversationTicketId ? ":"+conversationTicketId : ""}`;
   const endpoint = preparedSource && conversationTicketId ? `/analyses/${requestId}/tickets/${conversationTicketId}` : `/requests/${requestId}/versions/${version}`;
   const ticketQuery = conversationTicketId ? `&conversation_ticket_id=${conversationTicketId}` : "";
@@ -286,8 +322,8 @@ export function PublishTicket({
   }, [open, connector, connectors]);
   function applyPreview(value: Preview) {
     setPreview(value);
-    setTitle(value.title);
-    setBody(value.body);
+    setTitle(unified&&preparedDraft ? preparedDraft.title : value.title);
+    setBody(unified&&preparedDraft ? preparedDraft.body : value.body);
     setTemplate(value.template_id || "");
     setIssueType(value.issue_type || "");
     setPresentation({ ...defaultPresentation, ...Object.fromEntries(Object.keys(defaultPresentation).filter(key => key in value).map(key => [key, value[key as keyof Preview]])) });
@@ -304,7 +340,12 @@ export function PublishTicket({
     setError("");
     setPreview(null);
     api<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}${ticketQuery}`)
-      .then(value => { if (generation === previewGeneration.current) applyPreview(value); })
+      .then(async value => {
+        if(unified&&value.ticket_format==="project"&&!value.template_id){
+          value=await send<Preview>(`${endpoint}/publication-preview`,{conversation_ticket_id:conversationTicketId,connector_id:Number(connector),project,ticket_format:"standard",issue_type:value.issue_type||""});
+        }
+        if (generation === previewGeneration.current) applyPreview(value);
+      })
       .catch(error => { if (generation === previewGeneration.current) setError(error.message); })
       .finally(() => { if (generation === previewGeneration.current) setBusy(false); });
     return () => { previewGeneration.current++; };
@@ -331,9 +372,9 @@ export function PublishTicket({
   function draftPayload() {
     return { conversation_ticket_id:conversationTicketId, connector_id: Number(connector), project, title, body, fields, labels, assignees, template_id: template, issue_type: issueType, options_revision: preview?.revision, draft_id: preview?.draft_id, draft_revision: preview?.draft_revision, ...presentation };
   }
-  async function saveDraft() {
+  async function saveDraft(content?:{title:string;body:string}) {
     try {
-      const value = await send<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}${ticketQuery}`, draftPayload(), "PUT");
+      const value = await send<Preview>(`${endpoint}/publication-draft?connector_id=${connector}&project=${encodeURIComponent(project)}${ticketQuery}`, {...draftPayload(),...(content?{title:content.title,body:content.body}:{})}, "PUT");
       setPreview(value);
       setDirty(false);
       setDraftSaveFailed(false);
@@ -382,8 +423,8 @@ export function PublishTicket({
     ...(presentation.ticket_format === "project" && preview.templates.length && !template ? [t("Select a ticket template before creating the ticket.")] : []),
   ] : [];
   const availableFiles=(preview?.available_attachments||[]).filter(file=>!preparedSource||file.kind==="original");
-  async function prepareAndPublish(payload:Payload) {
-    if(!conversationTicketId||!selectedDocuments.length){await publish(payload);return;}
+  async function prepareAndConfirm(payload:Payload) {
+    if(!conversationTicketId||!selectedDocuments.length){setConfirmation(payload);return;}
     const token=++documentGeneration.current;
     setBusy(true);setGeneratingDocuments(true);setDocumentError(false);setError("");
     try {
@@ -397,11 +438,12 @@ export function PublishTicket({
       if(token!==documentGeneration.current)return;
       if(result.status!=="DONE" || selectedDocuments.some(kind=>!result.documents?.[kind]))throw new Error(result.error||"Document generation failed. No ticket was sent. Retry or deselect the affected documents.");
       const document_generations=Object.fromEntries(selectedDocuments.map(kind=>[kind,result.documents[kind].generation_id]));
-      const saved=await send<Preview>(`${endpoint}/publication-draft`,{...draftPayload(),document_generations},"PUT");
+      const {idempotency_key:_,confirmed:__,unverified_confirmed:___,...prepared}=payload;
+      const saved=await send<Preview>(`${endpoint}/publication-draft`,{...prepared,document_generations},"PUT");
       if(token!==documentGeneration.current)return;
       setPreview(saved);
       setGeneratingDocuments(false);
-      await publish({...payload,document_generations,draft_id:saved.draft_id,draft_revision:saved.draft_revision});
+      setConfirmation({...payload,document_generations,draft_id:saved.draft_id,draft_revision:saved.draft_revision});
     } catch(failure){
       if(token===documentGeneration.current){
         setError((failure as Error).message);setDocumentError(true);
@@ -508,9 +550,12 @@ export function PublishTicket({
   async function close() {
     if (generatingDocuments) {finishClose();return;}
     if (busy) return;
-    if (dirty && preview) {
+    if ((dirty || unified) && !pending) {
       setBusy(true);
-      try { await saveDraft(); }
+      try {
+        const content=await beforeSave?.();
+        if(preview&&(dirty||content&&(content.title!==preview.title||content.body!==preview.body)))await saveDraft(content);
+      }
       catch (error) { setError((error as Error).message); return; }
       finally { setBusy(false); }
     }
@@ -531,6 +576,143 @@ export function PublishTicket({
     setDraftSaveFailed(false);
     onClosed?.();
   }
+const renderFields=(items:Field[])=>items.map((field) => (
+                  <div key={field.id} className="field">
+                    <label htmlFor={`${prefix}-publish-field-${field.id}`}>
+                      {field.label}
+                      {field.required ? " *" : ""}
+                    </label>
+                    {field.description && (
+                      <p className="mb-2 text-xs muted">{field.description}</p>
+                    )}
+                    {field.type === "checkbox" ? (
+                      <input
+                        id={`${prefix}-publish-field-${field.id}`}
+                        disabled={field.read_only}
+                        type="checkbox"
+                        required={field.required}
+                        checked={Boolean(fields[field.id])}
+                        onChange={(e) => {
+                          setFields({
+                            ...fields,
+                            [field.id]: e.target.checked,
+                          });
+                          setDirty(true);
+                        }}
+                      />
+                    ) : field.type === "textarea" ? (
+                      <Textarea
+                        id={`${prefix}-publish-field-${field.id}`}
+                        disabled={field.read_only}
+                        required={field.required}
+                        value={String(fields[field.id] ?? "")}
+                        onChange={(e) => {
+                          setFields({ ...fields, [field.id]: e.target.value });
+                          setDirty(true);
+                        }}
+                      />
+                    ) : field.options?.length ? (
+                      <select
+                        id={`${prefix}-publish-field-${field.id}`}
+                        disabled={field.read_only}
+                        required={field.required}
+                        multiple={["checkboxes", "multiselect"].includes(
+                          field.type,
+                        )}
+                        value={
+                          Array.isArray(fields[field.id])
+                            ? (fields[field.id] as string[])
+                            : String(fields[field.id] ?? "")
+                        }
+                        onChange={(e) => {
+                          setFields({
+                            ...fields,
+                            [field.id]: e.target.multiple
+                              ? Array.from(
+                                  e.target.selectedOptions,
+                                  (o) => o.value,
+                                )
+                              : e.target.value,
+                          });
+                          setDirty(true);
+                        }}
+                      >
+                        {!["checkboxes", "multiselect"].includes(
+                          field.type,
+                        ) && <option value="">{t("Select a value")}</option>}
+                        {field.options.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        id={`${prefix}-publish-field-${field.id}`}
+                        disabled={field.read_only}
+                        required={field.required}
+                        type={
+                          field.type === "number"
+                            ? "number"
+                            : field.type === "date"
+                              ? "date"
+                              : "text"
+                        }
+                        value={String(fields[field.id] ?? "")}
+                        onChange={(e) => {
+                          setFields({ ...fields, [field.id]: e.target.value });
+                          setDirty(true);
+                        }}
+                      />
+                    )}
+                  </div>
+                ));
+  const optionalControls=preview&&<>
+    {!!preview.labels.length&&<CompactOptions label={t("Labels")} options={preview.labels} value={labels} onChange={next=>{setLabels(next);setDirty(true);}}/>}
+    {!!preview.assignees.length&&<CompactOptions label={t("Assignees")} options={preview.assignees} value={assignees} single={connectors.find(item=>String(item.id)===connector)?.platform==="jira"} onChange={next=>{setAssignees(next);setDirty(true);}}/>}
+                {(!!availableFiles.length||presentation.include_attachments)&&<fieldset className="mt-4 space-y-2 text-sm">
+                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false, include_diagrams: false }) }); })} />{t("Include attachments")}{!!availableFiles.length&&<span className="muted"> · {availableFiles.length}</span>}</label>
+                  {presentation.include_attachments && <div className="space-y-3">
+                    <p className="text-xs muted">{t("Select each file to transfer. Original files and generated goal.md are separate choices.")}</p>
+                    {availableFiles.map(file => <div key={file.id}>
+                      <label className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={!file.transferable} checked={file.kind === "goal" ? presentation.include_goal : file.kind === "diagrams" ? presentation.include_diagrams : presentation.attachment_ids.includes(file.id)} onChange={event => change(() => { void recompose(file.kind === "goal" ? { include_goal: event.target.checked } : file.kind === "diagrams" ? { include_diagrams: event.target.checked } : { attachment_ids: event.target.checked ? [...presentation.attachment_ids, file.id] : presentation.attachment_ids.filter(id => id !== file.id) }); })} /><span className="min-w-0 break-words">{file.name}<span className="ml-2 text-xs muted">{t(file.kind === "goal" ? "Generated goal.md" : file.kind === "diagrams" ? "Diagram annex (Mermaid)" : "Original attachment")} · {Math.ceil(file.size / 1024)} KB</span></span></label>
+                      {!file.transferable && <p className="ml-6 mt-1 text-xs muted">{t(file.reason || "This connector cannot transfer this file.")}</p>}
+                    </div>)}
+                    {!preview.available_attachments?.length && <p className="text-xs muted">{t("No transferable files are available.")}</p>}
+                  </div>}
+                </fieldset>}
+  </>;
+  const templateControls=<>
+              {preview && !!preview.templates.length && <div className="field sm:col-span-2">
+                <label htmlFor="publish-format">{t("Ticket format")}</label>
+                <select id="publish-format" value={presentation.ticket_format || "standard"} onChange={event => change(() => { void recompose({ ticket_format: event.target.value as "project" | "standard", ...(event.target.value === "project" ? { include_diagrams: false } : {}) }); })}>
+                  <option value="project" disabled={!preview.templates.length}>{t("Project template")}</option>
+                  <option value="standard">{t("Standard SpecHelper format")}</option>
+                </select>
+                {preview.fallback_reason && <p role="status" className="mt-2 text-xs muted">{t(preview.fallback_reason)}</p>}
+              </div>}
+              {!!preview?.templates.length && (
+                <div className="field">
+                  <label htmlFor={prefix+"-publish-template"}>
+                    {t("Ticket template")}
+                  </label>
+                  <select
+                    id={prefix+"-publish-template"}
+                    value={template}
+                    required={presentation.ticket_format === "project"}
+                    disabled={presentation.ticket_format === "standard"}
+                    onChange={(e) => change(() => { void recompose({ template_id: e.target.value }); })}
+                  >
+                    <option value="">{t("Select a template")}</option>
+                    {preview.templates.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+  </>;
   const Surface = embedded ? "section" : "dialog";
   return (
     <>
@@ -633,10 +815,11 @@ export function PublishTicket({
           <form id={`publication-form-${prefix}`}
             onSubmit={async (event) => {
               event.preventDefault();
-              if (!preview || preview.publication_allowed === false || confirmation) return;
+              if (!preview || preview.publication_allowed === false || confirmation || disabled || busy) return;
               setBusy(true);
               let current = preview;
-              try { current = await saveDraft(); }
+              let content:{title:string;body:string}|undefined;
+              try { content=await beforeSave?.(); current = await saveDraft(content); }
               catch (error) { setError((error as Error).message); setBusy(false); return; }
               const candidate:Payload = {
                 conversation_ticket_id:conversationTicketId,
@@ -645,8 +828,8 @@ export function PublishTicket({
                 draft_revision: current.draft_revision,
                 connector_id: Number(connector),
                 project,
-                title,
-                body,
+                title:content?.title??title,
+                body:content?.body??body,
                 fields,
                 labels,
                 assignees,
@@ -656,7 +839,7 @@ export function PublishTicket({
                 idempotency_key: crypto.randomUUID(),
                 confirmed: true,
               };
-              setConfirmation(candidate);setBusy(false);
+              await prepareAndConfirm(candidate);setBusy(false);
             }}
           >
             {!connectors.length && (
@@ -665,7 +848,8 @@ export function PublishTicket({
                 <a className="text-primary underline" href="/admin?tab=environments" target="_blank" rel="noopener noreferrer">{t("Configure publication destinations")}<span className="sr-only"> · {t("Opens in a new tab")}</span></a>
               </p>
             )}
-            <fieldset disabled={busy||!!confirmation} className="grid gap-x-4 sm:grid-cols-2">
+            {unified&&<h3 className="font-medium text-sm">{t("Publication")}</h3>}
+            <fieldset disabled={busy||!!confirmation||disabled} className="grid gap-x-4 sm:grid-cols-2">
               <div className="field">
                 <label htmlFor={prefix+"-publish-connector"}>{t("Publication connection")}</label>
                 <select
@@ -706,35 +890,7 @@ export function PublishTicket({
                   ))}
                 </select>
               </div>
-              {preview && !!preview.templates.length && <div className="field sm:col-span-2">
-                <label htmlFor="publish-format">{t("Ticket format")}</label>
-                <select id="publish-format" value={presentation.ticket_format || "standard"} onChange={event => change(() => { void recompose({ ticket_format: event.target.value as "project" | "standard", ...(event.target.value === "project" ? { include_diagrams: false } : {}) }); })}>
-                  <option value="project" disabled={!preview.templates.length}>{t("Project template")}</option>
-                  <option value="standard">{t("Standard SpecHelper format")}</option>
-                </select>
-                {preview.fallback_reason && <p role="status" className="mt-2 text-xs muted">{t(preview.fallback_reason)}</p>}
-              </div>}
-              {!!preview?.templates.length && (
-                <div className="field">
-                  <label htmlFor={prefix+"-publish-template"}>
-                    {t("Ticket template")}
-                  </label>
-                  <select
-                    id={prefix+"-publish-template"}
-                    value={template}
-                    required={presentation.ticket_format === "project"}
-                    disabled={presentation.ticket_format === "standard"}
-                    onChange={(e) => change(() => { void recompose({ template_id: e.target.value }); })}
-                  >
-                    <option value="">{t("Select a template")}</option>
-                    {preview.templates.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {!unified&&templateControls}
               {!!preview?.issue_types.length && (
                 <div className="field">
                   <label htmlFor={prefix+"-publish-issue-type"}>{t("Issue type")}</label>
@@ -772,171 +928,23 @@ export function PublishTicket({
               </Button>
             )}
             {preview && (
-              <fieldset disabled={busy||!!confirmation}>
-                {preparedDraft && (title !== preparedDraft.title || body !== preparedDraft.body) && <div className="mt-4 space-y-2"><Button type="button" variant="outline" onClick={() => { setTitle(preparedDraft.title); setBody(preparedDraft.body); setDirty(true); }}>{t("Use prepared draft")}</Button></div>}
+              <fieldset disabled={busy||!!confirmation||disabled}>
+                {!unified && preparedDraft && (title !== preparedDraft.title || body !== preparedDraft.body) && <div className="mt-4 space-y-2"><Button type="button" variant="outline" onClick={() => { setTitle(preparedDraft.title); setBody(preparedDraft.body); setDirty(true); }}>{t("Use prepared draft")}</Button></div>}
                 {preview.notice && (
                   <p className="mt-4 rounded border bg-muted p-3 text-sm">
                     {t(preview.notice)}
                   </p>
                 )}
-                {preview.fields.map((field) => (
-                  <div key={field.id} className="field">
-                    <label htmlFor={`${prefix}-publish-field-${field.id}`}>
-                      {field.label}
-                      {field.required ? " *" : ""}
-                    </label>
-                    {field.description && (
-                      <p className="mb-2 text-xs muted">{field.description}</p>
-                    )}
-                    {field.type === "checkbox" ? (
-                      <input
-                        id={`${prefix}-publish-field-${field.id}`}
-                        disabled={field.read_only}
-                        type="checkbox"
-                        required={field.required}
-                        checked={Boolean(fields[field.id])}
-                        onChange={(e) => {
-                          setFields({
-                            ...fields,
-                            [field.id]: e.target.checked,
-                          });
-                          setDirty(true);
-                        }}
-                      />
-                    ) : field.type === "textarea" ? (
-                      <Textarea
-                        id={`${prefix}-publish-field-${field.id}`}
-                        disabled={field.read_only}
-                        required={field.required}
-                        value={String(fields[field.id] ?? "")}
-                        onChange={(e) => {
-                          setFields({ ...fields, [field.id]: e.target.value });
-                          setDirty(true);
-                        }}
-                      />
-                    ) : field.options?.length ? (
-                      <select
-                        id={`${prefix}-publish-field-${field.id}`}
-                        disabled={field.read_only}
-                        required={field.required}
-                        multiple={["checkboxes", "multiselect"].includes(
-                          field.type,
-                        )}
-                        value={
-                          Array.isArray(fields[field.id])
-                            ? (fields[field.id] as string[])
-                            : String(fields[field.id] ?? "")
-                        }
-                        onChange={(e) => {
-                          setFields({
-                            ...fields,
-                            [field.id]: e.target.multiple
-                              ? Array.from(
-                                  e.target.selectedOptions,
-                                  (o) => o.value,
-                                )
-                              : e.target.value,
-                          });
-                          setDirty(true);
-                        }}
-                      >
-                        {!["checkboxes", "multiselect"].includes(
-                          field.type,
-                        ) && <option value="">{t("Select a value")}</option>}
-                        {field.options.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        id={`${prefix}-publish-field-${field.id}`}
-                        disabled={field.read_only}
-                        required={field.required}
-                        type={
-                          field.type === "number"
-                            ? "number"
-                            : field.type === "date"
-                              ? "date"
-                              : "text"
-                        }
-                        value={String(fields[field.id] ?? "")}
-                        onChange={(e) => {
-                          setFields({ ...fields, [field.id]: e.target.value });
-                          setDirty(true);
-                        }}
-                      />
-                    )}
-                  </div>
-                ))}
-                {!!preview.labels.length && (
-                  <div className="field">
-                    <label htmlFor={prefix+"-publish-labels"}>{t("Labels")}</label>
-                    <select
-                      id={prefix+"-publish-labels"}
-                      multiple
-                      value={labels}
-                      onChange={(e) => {
-                        setLabels(
-                          Array.from(e.target.selectedOptions, (o) => o.value),
-                        );
-                        setDirty(true);
-                      }}
-                    >
-                      {preview.labels.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                {!!preview.assignees.length && (
-                  <div className="field">
-                    <label htmlFor={prefix+"-publish-assignees"}>{t("Assignees")}</label>
-                    <select
-                      id={prefix+"-publish-assignees"}
-                      multiple
-                      value={assignees}
-                      onChange={(e) => {
-                        setAssignees(
-                          Array.from(e.target.selectedOptions, (o) => o.value),
-                        );
-                        setDirty(true);
-                      }}
-                    >
-                      {preview.assignees.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                {!!documents.length&&<fieldset className="mt-4 space-y-2 text-sm">
-                  <legend className="font-medium">{t("Documents to attach")}</legend>
-                  <p className="text-xs muted">{t("Only selected documents are generated after confirmation, before the ticket is sent.")}</p>
-                  {documents.map(kind=><label key={kind} className="flex items-center gap-2"><input type="checkbox" checked={selectedDocuments.includes(kind)} onChange={event=>{setSelectedDocuments(current=>event.target.checked?[...current,kind]:current.filter(item=>item!==kind));setDocumentError(false);setError("");}}/>{t(kind==="goal"?"goal.md":kind==="business"?"Business report":"Technical report")}</label>)}
-                  {preview.document_attachment_policy?.enabled === false&&<p className="text-xs muted">{t("This destination cannot receive generated documents. Deselect them to publish without files.")}</p>}
-                </fieldset>}
-                {(!!availableFiles.length||presentation.include_attachments)&&<fieldset className="mt-4 space-y-2 text-sm">
-                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false, include_diagrams: false }) }); })} />{t("Include attachments")}{!!availableFiles.length&&<span className="muted"> · {availableFiles.length}</span>}</label>
-                  {presentation.include_attachments && <div className="space-y-3">
-                    <p className="text-xs muted">{t("Select each file to transfer. Original files and generated goal.md are separate choices.")}</p>
-                    {availableFiles.map(file => <div key={file.id}>
-                      <label className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={!file.transferable} checked={file.kind === "goal" ? presentation.include_goal : file.kind === "diagrams" ? presentation.include_diagrams : presentation.attachment_ids.includes(file.id)} onChange={event => change(() => { void recompose(file.kind === "goal" ? { include_goal: event.target.checked } : file.kind === "diagrams" ? { include_diagrams: event.target.checked } : { attachment_ids: event.target.checked ? [...presentation.attachment_ids, file.id] : presentation.attachment_ids.filter(id => id !== file.id) }); })} /><span className="min-w-0 break-words">{file.name}<span className="ml-2 text-xs muted">{t(file.kind === "goal" ? "Generated goal.md" : file.kind === "diagrams" ? "Diagram annex (Mermaid)" : "Original attachment")} · {Math.ceil(file.size / 1024)} KB</span></span></label>
-                      {!file.transferable && <p className="ml-6 mt-1 text-xs muted">{t(file.reason || "This connector cannot transfer this file.")}</p>}
-                    </div>)}
-                    {!preview.available_attachments?.length && <p className="text-xs muted">{t("No transferable files are available.")}</p>}
-                  </div>}
-                </fieldset>}
+                {renderFields(preview.fields.filter(field=>!unified||field.required))}
+                {!unified&&optionalControls}
+                {!unified&&<>
                 <h3 className="mt-6">{t("Publication preview")}</h3>
                 <p className="mt-2 break-words text-sm font-semibold">{title}</p>
                 <p className="mt-1 flex items-center gap-2 text-xs muted"><ProviderLogo provider={connectors.find(item => String(item.id) === connector)?.platform} />{version ? t("Analysis version {number}", { number: version }) : t("Conversation draft")} · {projects.find(item => item.id === project)?.name || project}</p>
                 <div className="mt-3 text-sm"><MarkdownReader>{shortPreview}</MarkdownReader></div>
                 <details className="mt-3 text-sm"><summary className="cursor-pointer">{t("See full content")}</summary><div className="mt-3"><MarkdownReader>{renderedBody}</MarkdownReader></div></details>
                 <p className="my-4 text-xs muted">{t("The ticket will be created on the selected platform. No source code will be modified.")}</p>
+                </>}
                 {!!publicationIssues.length && <div id={`publication-issues-${prefix}`} role="status" className="mb-4 rounded-lg border border-amber-500/50 p-4 text-sm">
                   <p className="font-semibold">{t("Publication is blocked")}</p>
                   <ul className="mt-2 list-disc pl-5">{publicationIssues.map((reason, index) => <li key={index}>{reason}</li>)}</ul>
@@ -944,21 +952,38 @@ export function PublishTicket({
                 </div>}
               </fieldset>
             )}
+            {(unified||!!documents.length)&&<fieldset className="mt-3 space-y-2 text-sm" disabled={busy||!!confirmation||disabled}>
+              <legend className="font-medium">{t("Documents to attach")} <span className="font-normal muted">· {t("Optional")}</span></legend>
+              <div className="flex flex-wrap gap-x-5 gap-y-2">{(unified?["goal","business","technical"]:documents).map(kind=><label key={kind} className="flex items-center gap-2"><input type="checkbox" checked={selectedDocuments.includes(kind)} onChange={event=>{
+                const next=event.target.checked?[...selectedDocuments,kind]:selectedDocuments.filter(item=>item!==kind);
+                setSelectedDocuments(next);onDocumentsChange?.(next);setDocumentError(false);setError("");
+              }}/>{t(kind==="goal"?"goal.md":kind==="business"?"Business report":"Technical report")}</label>)}</div>
+            </fieldset>}
+            {unified&&<details className="mt-4 text-sm">
+              <summary className="cursor-pointer font-medium">{t("Additional options")}</summary>
+              <fieldset disabled={busy||!!confirmation||disabled} className="mt-3 space-y-3">
+                {advancedContent}
+                {templateControls}
+                {preview&&renderFields(preview.fields.filter(field=>!field.required))}
+                {optionalControls}
+              </fieldset>
+            </details>}
           </form>
         )}
         {confirmation&&<div ref={confirmationPanel} tabIndex={-1} className="mt-4 rounded-md border p-4 space-y-3" role="alertdialog" aria-label={t(preview?.requires_unverified_confirmation?"Publish without independent verification":"Confirm publication")}>
           <p>{t(preview?.requires_unverified_confirmation?"This ticket has not been verified by a deep analysis. Publish it anyway?":"Confirm creation of this ticket on the selected platform?")}</p>
-          <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>{const payload=confirmation;setConfirmation(null);void prepareAndPublish({...payload,unverified_confirmed:!!preview?.requires_unverified_confirmation});}}>{t(preview?.requires_unverified_confirmation?"Publish anyway":"Confirm publication")}</Button>
+          <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>{const payload=confirmation;setConfirmation(null);void publish({...payload,unverified_confirmed:!!preview?.requires_unverified_confirmation});}}>{t(preview?.requires_unverified_confirmation?"Publish anyway":"Confirm publication")}</Button>
           {onAnalyze&&preview?.requires_unverified_confirmation&&<Button variant="outline" disabled={busy} onClick={()=>{finishClose();onAnalyze();}}>{t("Launch deep analysis")}</Button>}
           <Button variant="ghost" disabled={busy} onClick={()=>setConfirmation(null)}>{t("Cancel")}</Button></div>
         </div>}
-        <div className="ticket-modal-footer mt-4">
+        {!hideFooter&&<div className="ticket-modal-footer mt-4">
           <Button type="button" variant="outline" disabled={busy&&!generatingDocuments} onClick={close}>
-            {t("Back")}
+            {t(unified?"Close":"Back")}
           </Button>
-          {draftSaveFailed&&<Button type="button" variant="ghost" disabled={busy} onClick={finishClose}>{t("Close without saving")}</Button>}
-          {preview&&!pending&&(!result||result.status==="ERROR")&&!recovering&&!recoveryFailed&&!confirmation&&<Button type="submit" form={`publication-form-${prefix}`} disabled={busy||publicationIssues.length>0} aria-describedby={publicationIssues.length?`publication-issues-${prefix}`:undefined}>{t("Publish")}</Button>}
-        </div>
+          {footerActions}
+          {!unified&&draftSaveFailed&&<Button type="button" variant="ghost" disabled={busy} onClick={finishClose}>{t("Close without saving")}</Button>}
+          {!pending&&(!result||result.status==="ERROR")&&!recovering&&!recoveryFailed&&!confirmation&&<Button type="submit" form={`publication-form-${prefix}`} disabled={busy||disabled||!preview||publicationIssues.length>0} aria-describedby={publicationIssues.length?`publication-issues-${prefix}`:undefined}>{t("Publish")}</Button>}
+        </div>}
       </Surface>
     </>
   );

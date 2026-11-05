@@ -473,7 +473,7 @@ dialog::backdrop {
 .reader-view-switch button { padding: 4px 10px; min-height: 30px; border-radius: 5px; color: var(--muted-foreground); font-weight: 600; white-space: nowrap; }
 .reader-view-switch button[aria-pressed="true"] { background: var(--card); color: var(--foreground); box-shadow: var(--surface-shadow); }
 .reader-view-switch button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-.ticket-description-reader { min-height: 12rem; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.ticket-description-reader { min-height: 8rem; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .source-reader { min-width: 0; }
 .source-reader > .reader-view-switch { margin-bottom: 12px; }
 .markdown-reader { min-width: 0; color: var(--foreground); font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
@@ -528,7 +528,7 @@ dialog::backdrop {
 }
 .ticket-modal-header { top: 0; justify-content: space-between; border-bottom: 1px solid var(--border); }
 .ticket-modal-footer { bottom: 0; justify-content: flex-end; flex-wrap: wrap; border-top: 1px solid var(--border); }
-.ticket-description-editor { min-height: 10rem; overflow-y: hidden; resize: none; }
+.ticket-description-editor { min-height: 8rem; overflow-y: hidden; resize: none; }
 .publication-surface > .ticket-modal-footer { margin-inline: -1.25rem; margin-bottom: -1.25rem; }
 .publication-dialog.publication-surface > .ticket-modal-header { margin: -1.5rem -1.5rem 1rem; }
 .skill-drawer {

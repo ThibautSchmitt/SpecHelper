@@ -499,7 +499,7 @@
   "Assignees": "Personnes assignées",
   "Publication preview": "Aperçu de la publication",
   "Creating this ticket sends the reviewed content to the selected service. No source code will be modified.": "Créer ce ticket envoie le contenu vérifié au service sélectionné. Aucun code source ne sera modifié.",
-  "Create ticket": "Créer le ticket",
+  "Create ticket": "Créer un ticket",
   "PUBLISHED": "Publié",
   "PUBLISHING": "Publication en cours",
   "UNCERTAIN": "À vérifier",
@@ -2481,5 +2481,11 @@
   "The selected document belongs to another ticket.": "Le document sélectionné appartient à un autre ticket.",
   "The selected document is not ready.": "Le document sélectionné n’est pas prêt.",
   "The generated document exceeds this destination's upload limit.": "Le document généré dépasse la taille autorisée pour cette destination.",
-  "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified.": "Document rédigé par une IA. Seuls les constats explicitement sourcés ont le niveau de vérification de leur source ; les nouvelles exigences restent non vérifiées."
+  "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified.": "Document rédigé par une IA. Seuls les constats explicitement sourcés ont le niveau de vérification de leur source ; les nouvelles exigences restent non vérifiées.",
+  "Improve with AI": "Améliorer avec l’IA",
+  "Additional options": "Options supplémentaires",
+  "Search {label}": "Rechercher dans {label}",
+  "Search…": "Rechercher…",
+  "Draft copied.": "Brouillon copié.",
+  "The draft could not be copied.": "Le brouillon n’a pas pu être copié."
 }

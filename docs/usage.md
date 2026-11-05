@@ -232,7 +232,8 @@ their generated content when the conversation or environment later changes.
 
 Choose **Prepare a ticket** in a conversation. SpecHelper asks the conversational
 assistant to write a title and description, then presents the draft in a centered
-modal. The genuine queued/running operation appears as **Preparing the ticket…**.
+**Create ticket** modal. Content, publication destination and optional documents
+share this one window. The genuine queued/running operation appears as **Preparing the ticket…**.
 This is one drafting turn in the existing native session, not an independent deep
 analysis. If essential information is missing, the assistant asks a short question
 instead of inventing a requested change.
@@ -253,8 +254,10 @@ essential context must be requested rather than fabricated.
 The description opens in **Preview**, with formatted headings, lists, tables and code.
 Choose **Edit** to change the Markdown, then **Preview** to check it. Switching views
 preserves unsaved corrections and makes no AI or save request. Edit **Title** and
-**Description**, then **Save** or **Publish**. Closing warns about
-unsaved edits. **Update with AI** uses the current draft as its editing base and can
+**Description**, then **Save** or **Publish**. Closing saves current edits and selected
+destination options; a failed save keeps the window open and the inputs intact.
+**Copy draft** copies the title and Markdown description. **Improve with AI**, beside
+the description, uses the current draft as its editing base and can
 integrate relevant later clarifications, new documents and late analysis results.
 Unrelated intervening subjects must not change the ticket's scope. The proposed
 update is shown for review: choose **Apply** or **Keep my draft**. The saved document
@@ -264,16 +267,17 @@ unchanged; a concurrent manual save invalidates a delayed proposal.
 Deep analysis remains optional for preparing, updating and publishing. A relevant
 analysis can supply existing conclusions and evidence, but new requirements are not
 independently verified merely because a prior cycle completed. The modal shows a
-short verification indication. Launching an independent analysis remains a separate,
-explicit action under **Need verification**. It saves current edits, opens an editable
+short verification indication under the collapsed **Additional options**. Launching an
+independent analysis remains a separate, explicit action there. It saves current edits, opens an editable
 need prefilled from the ticket and starts only after confirmation. The draft remains
-available during analysis. After it completes, use **Update with AI** on the same draft.
+available during analysis. After it completes, use **Improve with AI** on the same draft.
 
 **Documents to attach** offers `goal.md` (selected by default), a business report and
 a technical report (unselected by default). All three can be deselected. Saving or
 updating the ticket generates none of these files. After choosing the destination
-and explicitly confirming publication, SpecHelper generates only missing or outdated
-selected documents in one writing turn. Unchanged documents are reused individually.
+and pressing **Publish**, SpecHelper generates only missing or outdated selected
+documents in one writing turn, then asks for final confirmation before any external
+creation or transfer. Unchanged documents are reused individually.
 The final saved title, description and destination fields, relevant exchanges,
 reference documents and associated analysis results provide their context. No new
 independent investigation or business query is launched. Missing facts, hypotheses,
@@ -287,18 +291,17 @@ If it cannot be used, choose another authorized analyst explicitly when retrying
 That writer receives the saved ticket and bounded context in a separate writing
 session; the conversation's selected AI, native session and roles stay unchanged.
 
-**Publish** opens account and destination selection in the same modal. Choose an
+Account and destination selection are directly available in the same modal. Choose an
 enabled, verified connection associated with the environment and an accessible
 destination. Multiple accounts remain separate choices. A failure never switches
-accounts silently. Complete required provider fields and review the exact content.
-The publication view contains destination-specific inputs and a short formatted
-preview. **See full content** expands the complete content only when requested.
-Editing stays in preparation: **Back** returns there; destination options are saved
-on return or confirmation. Detailed report inclusion controls and repeated save/reload
-actions are omitted. Internal reconciliation markers stay out of the reading view;
-the provider payload and stored publication reference retain duplicate protection.
-A new destination preview starts with the saved draft; an existing destination draft
-keeps its own edits until **Use prepared draft** explicitly replaces them.
+accounts silently. Required provider fields stay visible. **Additional options**
+contains optional fields, project templates, labels and searchable compact assignee
+selection when supported. Original attachments remain an explicit choice there.
+The title and description already show the content to send: there is no duplicate
+publication preview or second preparation step. Changing destination preserves the
+conversation draft while loading that destination's saved fields. Internal
+reconciliation markers stay out of the reading view; the provider payload and
+stored publication reference retain duplicate protection.
 
 Publication always requires human confirmation. If independent verification is
 missing or the sent content is not covered by it, choose **Publish anyway** to

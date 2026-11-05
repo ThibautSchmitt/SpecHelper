@@ -2481,5 +2481,11 @@
   "The selected document belongs to another ticket.": "The selected document belongs to another ticket.",
   "The selected document is not ready.": "The selected document is not ready.",
   "The generated document exceeds this destination's upload limit.": "The generated document exceeds this destination's upload limit.",
-  "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified.": "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified."
+  "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified.": "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified.",
+  "Improve with AI": "Improve with AI",
+  "Additional options": "Additional options",
+  "Search {label}": "Search {label}",
+  "Search…": "Search…",
+  "Draft copied.": "Draft copied.",
+  "The draft could not be copied.": "The draft could not be copied."
 }
