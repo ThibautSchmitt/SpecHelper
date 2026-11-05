@@ -262,6 +262,7 @@ def snapshot(value, draft=None, *, source=None, topic_id=None, source_number=Non
         "unchanged": draft.get("unchanged", False),
         "initial_pending": bool(ticket and not ticket.draft.get("body")),
         "revision": draft.get("revision", 0),
+        "documents": draft.get("documents", ["goal"]),
         "discussion_revision": value.discussion_state.get("revision", 0),
         "source_version": source.number if source else None,
         "source_status": source.status if source else None,
@@ -324,6 +325,8 @@ def save(analysis_id, payload):
              "user_edited": bool(previous.get("user_edited") or previous.get("revision",0) and (payload.title != previous.get("title") or payload.body != previous.get("body"))),
              "title": text(payload.title.strip(), 200, secrets), "body": text(payload.body, 30000, secrets),
              "saved_at": timezone.now().isoformat()}
+    choices = payload.documents if getattr(payload,"documents",None) is not None else previous.get("documents", ["goal"])
+    draft["documents"] = [kind for kind in ("goal", "business", "technical") if kind in choices]
     if source and not previous.get("revision"):
         initial = snapshot(value,new=True,source_number=source.number,topic_id=topic.pk if topic else None,anchor_id=draft.get("anchor_message_id"))
         draft["user_edited"] = payload.title != initial["title"] or payload.body != initial["body"]

@@ -537,6 +537,9 @@ def run_job(job, caller=None):
     reply_schema = ContextSelection if analysis_preparation else TicketDraftReply if preparation else Reply
     if goal_generation:
         from .goal_generation import INSTRUCTIONS, GoalReply
+        if goal_generation.get("document_kinds"):
+            from .ticket_documents import INSTRUCTIONS, TicketDocumentsReply
+            GoalReply = TicketDocumentsReply
         data, instructions, reply_schema = goal_generation["inputs"], INSTRUCTIONS, GoalReply
         data["available_reference_files"] = resources
     db = frozen.get("dossier", {}).get("database", {})
@@ -656,6 +659,8 @@ def run_job(job, caller=None):
                 )
             if goal_generation:
                 from .goal_generation import complete
+                if goal_generation.get("document_kinds"):
+                    from .ticket_documents import complete
                 complete(locked, locked_job, output)
                 return
             if analysis_preparation:
@@ -850,6 +855,8 @@ def deepen(request, analysis_id: uuid.UUID, payload: DeepIn):
         if draft.get("revision") != payload.preparation_revision:
             raise HttpError(409, "The ticket draft changed. Reload it before starting deep analysis.")
         proposal = {key: draft.get(key) for key in ("revision", "source_version", "title", "body")}
+        if payload.ticket_id:
+            proposal["ticket_id"] = str(payload.ticket_id)
         proposal["verification_status"] = "unverified"
         proposal["user_message_id_at_submission"] = value.messages.filter(role="user").order_by("-id").values_list("id", flat=True).first()
     if "message_ids" not in payload.model_fields_set and payload.topic_message_id is None:

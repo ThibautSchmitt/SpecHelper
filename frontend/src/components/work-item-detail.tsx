@@ -3,7 +3,7 @@ import { BusinessClarification, BusinessDecisions, BusinessOverview } from "@/co
 import { QuestionResult } from "@/components/question-result";
 import { PublishTicket } from "@/components/publish-ticket";
 import { TicketPreparation } from "@/components/ticket-preparation";
-import { AnalysisDeliverables, DeliverableViewer } from "@/components/deliverable-viewer";
+import { AnalysisDeliverables } from "@/components/deliverable-viewer";
 import { AnalysisContext } from "@/components/analysis-context";
 import { AnalysisEvidence } from "@/components/analysis-evidence";
 import { AnalysisCancelButton } from "@/components/analysis-cancel-button";
@@ -408,7 +408,6 @@ function RequestContent({
         controls={<>
           {(unified || value.discussion?.enabled) && <TicketPreparation value={value} ticketId={search.get("ticket") || undefined} autoOpen={!!search.get("ticket")} onUpdated={setValue}/ >}
           {value.active_ticket && <TicketPreparation value={value} ticketId={value.active_ticket.id} resume triggerLabel="Draft" onUpdated={setValue}/>}
-          {!value.active_ticket&&<DeliverableViewer generate url={`/analyses/${value.id}/goal`} title="goal.md" label="Generate goal.md"/>}
           {!unified && !value.discussion?.enabled && value.analysis_protocol === "2.4" && active.includes(value.status) && <AnalysisCancelButton requestId={id} workflow={isQuestion ? "question" : "request"} onCancelled={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} />}
           {!unified && !value.discussion?.enabled && value.analysis_protocol === "2.4" && ["ERROR","CANCELLED"].includes(value.status) && <AnalysisRetryButton requestId={id} workflow={isQuestion ? "question" : "request"} onRetried={async () => setValue(await api<RequestDetail>(`${base}/${id}`))} />}
         </>}

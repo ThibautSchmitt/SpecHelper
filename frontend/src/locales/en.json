@@ -2465,5 +2465,21 @@
   "The current assistant can continue again. Refresh the conversation.": "The current assistant can continue again. Refresh the conversation.",
   "The selected assistant is no longer available. Choose another assistant.": "The selected assistant is no longer available. Choose another assistant.",
   "Choose another AI": "Choose another AI",
-  "Continue": "Continue"
+  "Continue": "Continue",
+  "Documents to attach": "Documents to attach",
+  "Select the files to generate and attach when publishing the ticket.": "Select the files to generate and attach when publishing the ticket.",
+  "Structured implementation instructions": "Structured implementation instructions",
+  "Functional context, rules and expected behavior": "Functional context, rules and expected behavior",
+  "Architecture, impacts, references and risks": "Architecture, impacts, references and risks",
+  "{count} document(s) selected": "{count} document(s) selected",
+  "Only selected documents are generated after confirmation, before the ticket is sent.": "Only selected documents are generated after confirmation, before the ticket is sent.",
+  "Generating selected documents…": "Generating selected documents…",
+  "Document generation failed. No ticket was sent. Retry or deselect the affected documents.": "Document generation failed. No ticket was sent. Retry or deselect the affected documents.",
+  "This destination cannot receive generated documents. Deselect them to publish without files.": "This destination cannot receive generated documents. Deselect them to publish without files.",
+  "The ticket or its sources changed. Generate the selected documents again.": "The ticket or its sources changed. Generate the selected documents again.",
+  "Verify the existing publication before generating documents.": "Verify the existing publication before generating documents.",
+  "The selected document belongs to another ticket.": "The selected document belongs to another ticket.",
+  "The selected document is not ready.": "The selected document is not ready.",
+  "The generated document exceeds this destination's upload limit.": "The generated document exceeds this destination's upload limit.",
+  "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified.": "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified."
 }

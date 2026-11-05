@@ -336,6 +336,8 @@ def preview(
         template_id=template_id if selected_format == "project" else "",
         issue_type=issue_type,
     )
+    if presentation.get("document_generations"):
+        selection["document_generations"] = presentation["document_generations"]
     # A standard presentation clears a project template but never bypasses Jira
     # issue-type or other destination-wide required fields.
     if selected_format == "standard" and template_id:
@@ -376,8 +378,9 @@ def preview(
         # template requires recomposition and another human review.
         if existing.content.get("options_revision") == options.get("revision"):
             content = existing.content
-    policy = attachment_policy(connector, project) if selection.get("include_attachments") else None
-    chosen = selected_attachments(version, connector, selection, policy=policy)
+    policy = attachment_policy(connector, project)
+    attachment_content = {**content, **{key:presentation[key] for key in ("title", "body", "fields") if key in presentation}}
+    chosen = selected_attachments(version, connector, {**selection, **attachment_content, "conversation_ticket_id": str(conversation_ticket.pk) if conversation_ticket else None}, policy=policy)
     content = {**content, "selected_attachments": chosen}
     draft = save_draft(version, connector, project, selection, content, conversation_ticket=conversation_ticket)
     return {
@@ -397,6 +400,8 @@ def preview(
             version, connector, policy, allow_diagrams=selection.get("ticket_format") == "standard",
         ),
         "selected_attachments": chosen,
+        "document_generations": presentation.get("document_generations", {}),
+        "document_attachment_policy": policy,
         "attachment_destination": connector.base_url.rstrip("/") + " · " + project,
         "validation_errors": {},
         "requires_template_choice": selected_format == "project"
@@ -613,6 +618,8 @@ def publish(version, connector, payload):
         raise HttpError(404, "Analysis not found.")
     if payload.get("confirmed") is not True:
         raise HttpError(422, "Explicit human confirmation is required to publish a ticket.")
+    if payload.get("document_generations") and "ticket_format" not in payload:
+        raise HttpError(422, "Save and review the exact ticket draft before publication.")
     conversation_ticket = publication_ticket(version, payload.get("conversation_ticket_id"))
     if not conversation_ticket and version_workflow(version) != "request":
         raise HttpError(409, "A question cannot publish an external ticket.")
@@ -649,6 +656,8 @@ def publish(version, connector, payload):
     draft = None
     if conversation_ticket:
         snapshot.update(conversation_ticket_id=str(conversation_ticket.pk), conversation_ticket_revision=conversation_ticket.draft.get("revision", 0))
+    if payload.get("document_generations"):
+        snapshot["document_generations"] = payload["document_generations"]
     if "ticket_format" in payload:
         from .ticket_attachments import selected_attachments
         from .ticket_presentation import PRESENTATION_KEYS

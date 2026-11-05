@@ -2465,5 +2465,21 @@
   "The current assistant can continue again. Refresh the conversation.": "L’IA actuelle peut de nouveau poursuivre la conversation. Actualisez la conversation.",
   "The selected assistant is no longer available. Choose another assistant.": "L’IA sélectionnée n’est plus disponible. Choisissez une autre IA.",
   "Choose another AI": "Choisir une autre IA",
-  "Continue": "Continuer"
+  "Continue": "Continuer",
+  "Documents to attach": "Documents à joindre",
+  "Select the files to generate and attach when publishing the ticket.": "Sélectionnez les fichiers à générer et joindre au ticket lors de sa publication.",
+  "Structured implementation instructions": "Instructions structurées pour l’implémentation",
+  "Functional context, rules and expected behavior": "Contexte fonctionnel, règles et comportement attendu",
+  "Architecture, impacts, references and risks": "Architecture, impacts, références et risques",
+  "{count} document(s) selected": "{count} document(s) sélectionné(s)",
+  "Only selected documents are generated after confirmation, before the ticket is sent.": "Seuls les documents sélectionnés sont générés après confirmation, avant l’envoi du ticket.",
+  "Generating selected documents…": "Génération des documents sélectionnés…",
+  "Document generation failed. No ticket was sent. Retry or deselect the affected documents.": "La génération des documents a échoué. Aucun ticket n’a été envoyé. Réessayez ou décochez les documents concernés.",
+  "This destination cannot receive generated documents. Deselect them to publish without files.": "Cette destination ne permet pas de joindre ces documents. Décochez-les pour publier sans fichier.",
+  "The ticket or its sources changed. Generate the selected documents again.": "Le ticket ou ses sources ont changé. Générez à nouveau les documents sélectionnés.",
+  "Verify the existing publication before generating documents.": "Vérifiez la publication existante avant de générer des documents.",
+  "The selected document belongs to another ticket.": "Le document sélectionné appartient à un autre ticket.",
+  "The selected document is not ready.": "Le document sélectionné n’est pas prêt.",
+  "The generated document exceeds this destination's upload limit.": "Le document généré dépasse la taille autorisée pour cette destination.",
+  "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified.": "Document rédigé par une IA. Seuls les constats explicitement sourcés ont le niveau de vérification de leur source ; les nouvelles exigences restent non vérifiées."
 }

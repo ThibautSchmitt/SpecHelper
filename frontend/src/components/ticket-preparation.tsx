@@ -10,13 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { PublishTicket } from "@/components/publish-ticket";
 import { MarkdownReader } from "@/components/markdown-reader";
 import { DeepAnalysisDialog } from "@/components/deep-analysis-dialog";
-import { DeliverableViewer } from "@/components/deliverable-viewer";
 
 type Proposal = {id:string; title:string; body:string; replacement?:boolean};
 type Draft = {
   id?:string|null; active?:boolean; read_only?:boolean; revision:number; discussion_revision:number;
   source_version:number|null; source_verified:boolean; title:string; body:string; markdown:string;
   scope_choice:"unknown"|"covered"|"clarified"|"changed"; topic_message_id?:number;
+  documents?:string[];
   initial_pending?:boolean; can_recover_publication?:boolean; unchanged?:boolean; clarification?:string; proposal?:Proposal|null;
   generation?:{id:number; status:string; error:string; waiting_reason:string}|null;
 };
@@ -123,6 +123,7 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
       expected_discussion_revision:draft.discussion_revision, source_version:draft.source_version,
       scope_choice:draft.scope_choice||"unknown", topic_message_id:draft.topic_message_id,
       title:draft.title, body:draft.body,
+      documents:draft.documents||["goal"],
     },"PUT");
     setDraft(next);setDirty(false);setSaved(true);await refreshConversation();
     return next;
@@ -175,6 +176,7 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
           </div>
         </>:publishing&&draft?.id?<PublishTicket requestId={value.id} version={draft.source_version} conversationTicketId={draft.id}
           preparedSource autoOpen hideTrigger embedded preparedDraft={{title:draft.title,body:draft.body}}
+          documents={draft.documents||["goal"]}
           onAnalyze={()=>void action("analyze")}
           onClosed={()=>{setPublishing(false);void load();void refreshConversation();}}
           onPublished={()=>{setPublishing(false);dialog.current?.close();void refreshConversation();}}/>:<>
@@ -194,11 +196,23 @@ export function TicketPreparation({value,onUpdated,sourceVersion,ticketId,anchor
               </div>
               {bodyView==="edit"?<Textarea ref={bodyEditor} className="ticket-description-editor" id={prefix+"-body"} rows={6} value={proposed?proposed.body:draft.body} maxLength={30000} readOnly={!!draft.proposal} disabled={readonly} onChange={event=>edit({body:event.target.value})}/>:<section className="ticket-description-reader" aria-label={t("Description")}><MarkdownReader>{proposed?proposed.body:draft.body}</MarkdownReader></section>}
             </div>
+            <fieldset className="space-y-2 text-sm" disabled={readonly||!!draft.proposal}>
+              <legend className="font-medium">{t("Documents to attach")}</legend>
+              <p className="text-xs muted">{t("Select the files to generate and attach when publishing the ticket.")}</p>
+              {[
+                ["goal","goal.md","Structured implementation instructions"],
+                ["business","Business report","Functional context, rules and expected behavior"],
+                ["technical","Technical report","Architecture, impacts, references and risks"],
+              ].map(([kind,label,help])=><label key={kind} className="flex items-start gap-2">
+                <input type="checkbox" checked={(draft.documents||["goal"]).includes(kind)} onChange={event=>edit({documents:event.target.checked?[...(draft.documents||["goal"]),kind]:(draft.documents||["goal"]).filter(item=>item!==kind)})}/>
+                <span>{t(label)}<span className="block text-xs muted">{t(help)}</span></span>
+              </label>)}
+              <p className="text-xs muted">{t("{count} document(s) selected",{count:(draft.documents||["goal"]).length})}</p>
+            </fieldset>
             <section className="text-xs muted" aria-label={t("Need verification")}>
               <p className="font-medium">{t("Need verification")} · {t(draft.source_verified?"Relevant deep analysis available":"Without deep verification")}</p>
               <div className="mt-1 flex flex-wrap gap-2">
                 <Button type="button" variant="ghost" size="sm" disabled={readonly||working||!!draft.proposal} onClick={()=>void action("analyze")}>{t("Launch deep analysis")}</Button>
-                {!!draft.id&&<DeliverableViewer generate url={`/analyses/${value.id}/goal?ticket_id=${draft.id}`} title="goal.md" label="Generate goal.md" disabled={readonly||!!draft.proposal} beforeOpen={async()=>{setBusy(true);try{await persist();}finally{setBusy(false);}}}/>}
               </div>
             </section>
             {saved&&<p role="status" className="text-sm">{t("Ticket draft saved.")}</p>}

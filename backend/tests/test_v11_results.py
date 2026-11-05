@@ -11,6 +11,18 @@ from core.results import publish
 pytestmark = pytest.mark.django_db
 
 
+def test_analysis_can_retain_results_without_generating_a_goal(environment, bundle):
+    request = Request.objects.create(environment=environment, need="Export contracts", status="READY")
+    data = bundle.model_dump()
+    data.pop("goal")
+    output = ArtifactOutput.model_validate(data)
+    assert output.goal is None
+    version = publish(request.pk, None, output)
+    assert version.artifacts.filter(name="ticket.md").exists()
+    assert not version.artifacts.filter(name="goal.md").exists()
+    assert version.ticket["title"] == bundle.ticket.title
+
+
 def test_continuation_retains_session_and_creates_immutable_artifacts(client, environment, bundle):
     created = client.post(
         "/api/requests",

@@ -173,13 +173,13 @@ must not be read as a fully verified answer even when every role has finished.
 Open **Analysis report** for detailed business/technical sections, evidence, frozen
 Git references, decisions and provenance. Optional individual role reports can be
 downloaded as Markdown; they are not automatically included in tickets.
-Each result also offers **View business report**, **View technical report** and
-**Generate goal.md** beside **Prepare a ticket**. Each deliverable opens in the same
-safe Markdown reader and can be downloaded separately. It belongs to that exact
+Each result also offers **View business report** and **View technical report** beside
+**Prepare a ticket**. These retained analysis results open in the same
+safe Markdown reader and can be downloaded separately. Each belongs to that exact
 cycle/version, including when later conversation topics have changed. Business
 reports emphasize functional conclusions; technical reports include retained source
 excerpts and executed SQL. Reports read saved evidence without new AI calls or
-business queries; generating `goal.md` explicitly requests an AI writing turn.
+business queries. Formal ticket documents are generated separately at publication.
 An interrupted cycle with recorded findings can expose partial
 reports; its findings remain explicitly without complete independent verification.
 Reviewed explanatory diagrams may be expanded where useful. Unchecked relationships
@@ -265,19 +265,21 @@ explicit action under **Need verification**. It saves current edits, opens an ed
 need prefilled from the ticket and starts only after confirmation. The draft remains
 available during analysis. After it completes, use **Update with AI** on the same draft.
 
-**Generate goal.md** is also available from the draft or conversation without a deep
-analysis. It saves pending draft edits first, then asks the conversation's AI to
-write an implementation brief using the ticket, relevant exchanges, recorded source
-findings, documents and selected analysis. The result includes a cautious plan,
-potential impacts, justified tests and acceptance criteria, investigations, missing
-information and blocking decisions. Discussion claims and possible impacts are not
-presented as verified facts. This does not launch independent analysis, create a
-ticket, query business data or modify source code. A real queued/running state is
-shown until the document is ready. Identical inputs reuse the saved result; changed
-drafts or reference context can produce a new brief without overwriting the ticket
-or the previous analysis artefacts. Read-only exports remain available separately.
+**Documents to attach** offers `goal.md` (selected by default), a business report and
+a technical report (unselected by default). All three can be deselected. Saving or
+updating the ticket generates none of these files. After choosing the destination
+and explicitly confirming publication, SpecHelper generates only missing or outdated
+selected documents in one writing turn. Unchanged documents are reused individually.
+The final saved title, description and destination fields, relevant exchanges,
+reference documents and associated analysis results provide their context. No new
+independent investigation or business query is launched. Missing facts, hypotheses,
+potential impacts, investigations and open decisions stay explicitly identified.
+The files must be ready and match the ticket and its sources before external creation
+begins. On failure, retry or deselect affected files before confirming again. Closing
+the preparation stops the browser's publication sequence; a running writing job can
+finish and be reused later. Analysis evidence remains available independently of tickets.
 Generation uses the authorized conversation assistant and preserves its role checks.
-If it cannot be used, choose another authorized analyst explicitly in the goal modal.
+If it cannot be used, choose another authorized analyst explicitly when retrying.
 That writer receives the saved ticket and bounded context in a separate writing
 session; the conversation's selected AI, native session and roles stay unchanged.
 
@@ -320,10 +322,10 @@ Destination-specific behavior matters:
 
 ### Optional files
 
-**Include attachments** starts unchecked. Select originals and `goal.md` individually
-when the destination supports uploads. Automatically attaching a frozen analysis's
-`goal.md` or a diagram annex still requires that source result. A discussion-only
-goal can be read and downloaded separately; it is not silently attached to a ticket.
+**Include attachments** starts unchecked for original uploaded files. Selected ticket
+documents use the separate **Documents to attach** choices and do not require an
+analysis. A destination's upload capability is checked before generation and sending;
+unsupported destinations require deselecting documents, rather than promising an upload.
 A detailed diagram annex is separately selectable
 for supported standard-format publications. Up to 20 selected files and 50 MB total
 are accepted; each original file must also meet the 25 MB safety limit. Preview hashes,

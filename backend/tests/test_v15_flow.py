@@ -70,6 +70,21 @@ def outputs(code_report, bundle, verifier=True):
     ]
 
 
+def test_deep_analysis_keeps_three_roles_without_writing_ticket_documents(environment, storage, bundle, code_report):
+    request = Request.objects.create(environment=environment, need="Export active records", confrontation=True)
+    bundle.goal = None
+    enqueue_analysis(request.pk)
+    runtime = run_job(claim_job(), storage, outputs(code_report, bundle))
+    request.refresh_from_db()
+    assert request.status == "READY"
+    version = request.versions.get()
+    assert version.artifacts.filter(name="ticket.md").exists()
+    assert not version.artifacts.filter(name="goal.md").exists()
+    assert len(runtime.call_args_list) == 5
+    assert len({call.args[1]["context_id"] for call in runtime.call_args_list}) == 3
+    assert all("ticket documents are written only when selected for publication" in call.args[1]["prompt"] for call in runtime.call_args_list)
+
+
 def test_frozen_custom_library_survives_edits_and_deletion_during_execution(
     client, environment, storage, bundle, code_report
 ):

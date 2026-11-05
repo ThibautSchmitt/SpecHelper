@@ -74,6 +74,5 @@ export function AnalysisDeliverables({requestId,version}:{requestId:string;versi
   return <>
     <DeliverableViewer url={`${base}/versions/${version}/reports/business`} title="Business report" label="View business report"/>
     <DeliverableViewer url={`${base}/versions/${version}/reports/technical`} title="Technical report" label="View technical report"/>
-    <DeliverableViewer generate url={`${base}/goal?source_version=${version}`} title="goal.md" label="Generate goal.md"/>
   </>;
 }

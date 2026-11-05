@@ -13,7 +13,7 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
   // Compatibility records must never become a list of draft cards.
   conversation_tickets:[{id:'old-draft',title:'Historical draft',active:false,created_at:at}],active_ticket:seeded?{id:ticket,title:draft.title,status:'DRAFT'}:null};
  let generations=0,deep=0,pendingReads=0,failNext=false;
- const posts:any[]=[];const generated:any[]=[];let attempts:any[]=[];
+ const posts:any[]=[];const generated:any[]=[];const documentRequests:any[]=[];let attempts:any[]=[];
  function setActive(){value={...value,active_ticket:draft.id?{id:draft.id,title:draft.title,status:'DRAFT'}:null};}
  await page.route('**/api/**',r=>r.fulfill({json:[]}));
  await page.route('**/api/access/session',r=>r.fulfill({json:{authenticated:true,mode:'local'}}));
@@ -61,13 +61,18 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
   }else if(outcome==='UNCERTAIN')draft={...draft,read_only:true,can_recover_publication:true};
   return r.fulfill({json:{...publication,error:outcome==='ERROR'?'Provider rejected the ticket':outcome==='UNCERTAIN'?'Publication requires verification':'',attachment_delivery:[]}});
  });
- let target:any={draft_id:'destination-draft',draft_revision:1,title:'',body:'',ticket_format:'standard',requires_unverified_confirmation:true,
+ let target:any={draft_id:'destination-draft',draft_revision:1,title:'',body:'',ticket_format:'standard',requires_unverified_confirmation:true,document_attachment_policy:{enabled:true,max_bytes:25000000},
   publication_allowed:true,publication_blockers:[],template_id:'',issue_type:'',fields:[],values:{},labels:[],assignees:[],templates:[],issue_types:[],defaults:{},revision:'options',options_revision:'options',format:'markdown',available_attachments:[],selected_attachments:[]};
  await page.route(`**${endpoint}/publication-draft*`,r=>{
   if(r.request().method()==='PUT'){
    const {fields,...payload}=r.request().postDataJSON();target={...target,...payload,values:fields,draft_revision:target.draft_revision+1};
   }else target={...target,title:draft.title,body:draft.body};
   return r.fulfill({json:target});
+ });
+ await page.route(`**${endpoint}/documents/generate`,r=>{
+  const payload=r.request().postDataJSON();documentRequests.push(payload);
+  expect(posts).toHaveLength(0);
+  return r.fulfill({json:{status:'DONE',documents:Object.fromEntries(payload.documents.map((kind:string)=>[kind,{name:kind+'.md',generation_id:55}]))}});
  });
  const reportReads:string[]=[];
  await page.route(`**/api/analyses/${id}/versions/1/reports/*`,r=>{
@@ -76,7 +81,8 @@ async function setup(page:Page,language:'en'|'fr',seeded=false,outcome='PUBLISHE
  });
  await page.route(`**/api/analyses/${id}/goal?*`,r=>r.fulfill({json:{name:'goal.md',content:`# Goal\n\n${draft.title}\n\n${draft.body}\n\nWithout deep verification`}}));
  await page.route(`**/api/analyses/${id}/goal/generate?*`,r=>r.fulfill({json:{generation_id:55,status:'QUEUED'}}));
- return {get generations(){return generations;},get deep(){return deep;},posts,generated,reportReads,
+ return {get generations(){return generations;},get deep(){return deep;},posts,generated,reportReads,documentRequests,
+  unsupportedFiles(){target.document_attachment_policy.enabled=false;},
   publications(items:any[]){value={...value,publications:items};},
   verifiedPublication(){target.requires_unverified_confirmation=false;},
   finishAnalysis(){
@@ -250,36 +256,88 @@ test('saved draft survives explicit deep analysis, reports and a reviewed update
  expect(fixture.deep).toBe(1);expect(fixture.reportReads).toEqual(['business','technical']);
 });
 
-test('goal export preserves unsaved draft edits without starting an analysis',async({page})=>{
+test('documents are optional, retained with manual edits and generated only at publication',async({page})=>{
  const fixture=await setup(page,'fr',true);await page.goto(`/analyses/${id}`);
  await page.getByRole('button',{name:translate('Draft','fr'),exact:true}).click();
  const draft=page.getByRole('dialog',{name:translate('Prepare a ticket','fr'),exact:true});
  await draft.getByLabel('Titre',{exact:true}).fill('Ma règle métier corrigée');
- await draft.getByRole('button',{name:'Générer goal.md',exact:true}).click();
- const goal=page.getByRole('dialog',{name:'goal.md',exact:true});
- await expect(goal.getByRole('heading',{name:'Goal'})).toBeVisible();
- await expect(goal).toContainText('Ma règle métier corrigée');
- await goal.getByRole('button',{name:'Fermer',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Générer goal.md',exact:true})).toHaveCount(0);
+ await expect(draft.getByLabel(/^goal.md/)).toBeChecked();
+ await draft.getByLabel(/^Rapport métier/).check();
+ await expect(draft.getByLabel(/^Rapport technique/)).not.toBeChecked();
+ expect(fixture.documentRequests).toHaveLength(0);
+ await draft.getByRole('button',{name:'Enregistrer',exact:true}).click();
  await expect(draft.getByRole('button',{name:'Enregistrer',exact:true})).toBeDisabled();
  expect(fixture.deep).toBe(0);expect(fixture.generations).toBe(0);
+ await draft.getByRole('button',{name:'Publier',exact:true}).click();
+ const publication=page.getByRole('dialog',{name:translate('Publish ticket','fr'),exact:true});
+ await publication.getByLabel('Connexion de publication',{exact:true}).selectOption('4');
+ await publication.getByLabel('Projet / dépôt',{exact:true}).selectOption('TEAM');
+ expect(fixture.documentRequests).toHaveLength(0);
+ await publication.getByRole('button',{name:'Publier',exact:true}).click();
+ expect(fixture.documentRequests).toHaveLength(0);
+ await publication.getByRole('button',{name:translate('Publish anyway','fr'),exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(fixture.documentRequests[0].documents).toEqual(['goal','business']);
+ expect(fixture.posts[0].document_generations).toEqual({goal:55,business:55});
+ expect(fixture.posts[0].title).toBe('Ma règle métier corrigée');
 });
 
-test('goal can explicitly use ChatGPT when the conversation assistant has no analyst role',async({page})=>{
+test('document failure allows an explicit writer choice and never publishes before success',async({page})=>{
  const fixture=await setup(page,'fr',true);let selected:string|null=null;
- await page.route(`**/api/analyses/${id}/goal/generate?*`,r=>{
-  selected=new URL(r.request().url()).searchParams.get('connection_id');
-  return r.fulfill(selected==='1'?{json:{name:'goal.md',content:'# Plan d’implémentation\n\nRédigé avec ChatGPT à partir du ticket enregistré.'}}:{status:409,json:{detail:'Choose an AI connection allowed to act as analyst.'}});
+ await page.route(`**/api/analyses/${id}/tickets/${ticket}/documents/generate`,r=>{
+  selected=String(r.request().postDataJSON().connection_id||'');
+  return r.fulfill(selected==='1'?{json:{status:'DONE',documents:{goal:{generation_id:55}}}}:{status:409,json:{detail:'Choose an AI connection allowed to act as analyst.'}});
  });
  await page.route(`**/api/analyses/${id}/goal/assistants`,r=>r.fulfill({json:[{connection_id:1,name:'ChatGPT',agent:'codex',model:'gpt-5.6-luna'}]}));
  await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:translate('Draft','fr'),exact:true}).click();
- await page.getByRole('button',{name:'Générer goal.md',exact:true}).click();
- const goal=page.getByRole('dialog',{name:'goal.md',exact:true});
- await expect(goal.getByLabel('IA de rédaction')).toBeVisible();
- await expect(goal).toContainText('L’IA de la conversation reste inchangée.');
- expect(selected).toBeNull();
- await goal.getByRole('button',{name:'Rédiger avec l’IA sélectionnée',exact:true}).click();
- await expect(goal.getByRole('heading',{name:'Plan d’implémentation'})).toBeVisible();
- expect(selected).toBe('1');expect(fixture.deep).toBe(0);expect(fixture.posts).toHaveLength(0);
+ await page.getByRole('dialog',{name:'Préparer un ticket',exact:true}).getByRole('button',{name:'Publier',exact:true}).click();
+ const publication=page.getByRole('dialog',{name:translate('Publish ticket','fr'),exact:true});
+ await publication.getByLabel(translate('Publication connection','fr'),{exact:true}).selectOption('4');
+ await publication.getByLabel(translate('Project / repository','fr'),{exact:true}).selectOption('TEAM');
+ await publication.getByRole('button',{name:'Publier',exact:true}).click();
+ await publication.getByRole('button',{name:translate('Publish anyway','fr'),exact:true}).click();
+ await expect(publication.getByLabel('IA de rédaction')).toBeVisible();
+ expect(fixture.posts).toHaveLength(0);
+ await publication.getByLabel('IA de rédaction').selectOption('1');
+ await publication.getByRole('button',{name:'Réessayer',exact:true}).click();
+ await publication.getByRole('button',{name:translate('Publish anyway','fr'),exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(selected).toBe('1');expect(fixture.deep).toBe(0);expect(fixture.posts).toHaveLength(1);
+});
+
+test('unsupported destinations require deselecting documents and use no AI',async({page})=>{
+ const fixture=await setup(page,'en',true);fixture.unsupportedFiles();
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
+ await page.getByRole('dialog',{name:'Prepare a ticket',exact:true}).getByRole('button',{name:'Publish',exact:true}).click();
+ const publication=page.getByRole('dialog',{name:'Publish ticket',exact:true});
+ await publication.getByLabel('Publication connection',{exact:true}).selectOption('4');
+ await publication.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
+ await expect(publication.getByRole('button',{name:'Publish',exact:true})).toBeDisabled();
+ await expect(publication).toContainText('This destination cannot receive generated documents.');
+ await publication.getByLabel('goal.md',{exact:true}).uncheck();
+ await publication.getByRole('button',{name:'Publish',exact:true}).click();
+ await publication.getByRole('button',{name:'Publish anyway',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(fixture.documentRequests).toHaveLength(0);expect(fixture.posts).toHaveLength(1);
+});
+
+test('closing while documents are generated never starts an external publication',async({page})=>{
+ const fixture=await setup(page,'en',true);let started=false;
+ await page.route(`**/api/analyses/${id}/tickets/${ticket}/documents/generate`,r=>{started=true;return r.fulfill({json:{generation_id:55,status:'QUEUED',documents:{}}});});
+ await page.route(`**/api/analyses/${id}/tickets/${ticket}/documents/55`,r=>r.fulfill({json:{generation_id:55,status:'RUNNING',documents:{}}}));
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
+ await page.getByRole('dialog',{name:'Prepare a ticket',exact:true}).getByRole('button',{name:'Publish',exact:true}).click();
+ const publication=page.getByRole('dialog',{name:'Publish ticket',exact:true});
+ await publication.getByLabel('Publication connection',{exact:true}).selectOption('4');
+ await publication.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
+ await publication.getByRole('button',{name:'Publish',exact:true}).click();
+ await publication.getByRole('button',{name:'Publish anyway',exact:true}).click();
+ await expect(publication.getByText('Generating selected documents…',{exact:true})).toBeVisible();
+ expect(started).toBe(true);expect(fixture.posts).toHaveLength(0);
+ await publication.getByRole('button',{name:'Back',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Prepare a ticket',exact:true})).toBeVisible();
+ expect(fixture.posts).toHaveLength(0);expect(fixture.deep).toBe(0);
 });
 
 test('verified publication also requires confirmation and has a compact preview',async({page})=>{

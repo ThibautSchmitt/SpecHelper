@@ -38,6 +38,7 @@ type Presentation = {
 type TransferFile = { id: string; name: string; size: number; mime: string; kind: "original" | "goal" | "diagrams"; transferable: boolean; reason?: string; };
 const defaultPresentation: Presentation = { ticket_format: "", include_business_analysis: false, include_technical_analysis: false, include_attachments: false, attachment_ids: [], include_goal: false, include_diagrams: false };
 type Preview = Partial<Presentation> & {
+  document_attachment_policy?:{enabled:boolean;max_bytes:number};
   draft_id?: string;
   draft_revision?: number;
   template_id?: string;
@@ -79,6 +80,7 @@ type Publication = {
   attachment_delivery?: { id: string; name: string; status: "TRANSFERRING" | "TRANSFERRED" | "UNCERTAIN"; error?: string; external_id?: string }[];
 };
 type Payload = Partial<Presentation> & {
+  document_generations?:Record<string,number>;
   conversation_ticket_id?: string;
   draft_id?: string;
   draft_revision?: number;
@@ -107,7 +109,7 @@ type Attempt = Publication & {
 };
 
 function recoveryPayload(attempt:Attempt):Payload {
-  const allowed=["conversation_ticket_id","title","body","fields","labels","assignees","template_id","issue_type","options_revision","ticket_format","include_business_analysis","include_technical_analysis","include_attachments","attachment_ids","include_goal","include_diagrams","unverified_confirmed"];
+  const allowed=["conversation_ticket_id","title","body","fields","labels","assignees","template_id","issue_type","options_revision","ticket_format","include_business_analysis","include_technical_analysis","include_attachments","attachment_ids","include_goal","include_diagrams","unverified_confirmed","document_generations"];
   const snapshot=Object.fromEntries(Object.entries(attempt.snapshot).filter(([key])=>allowed.includes(key)));
   return {...snapshot,connector_id:attempt.connector_id,project:attempt.project,idempotency_key:attempt.idempotency_key,confirmed:true} as Payload;
 }
@@ -132,6 +134,7 @@ export function PublishTicket({
   preparedSource = false,
   autoOpen = false,
   hideTrigger = false,
+  documents = [],
 }: {
   requestId: string;
   version: number | null;
@@ -145,6 +148,7 @@ export function PublishTicket({
   preparedSource?: boolean;
   autoOpen?: boolean;
   hideTrigger?: boolean;
+  documents?:string[];
 }) {
   const { t } = useI18n();
   const ticketUrl = useTicketUrlResolver();
@@ -176,6 +180,13 @@ export function PublishTicket({
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [selectedDocuments,setSelectedDocuments]=useState(documents);
+  const [generatingDocuments,setGeneratingDocuments]=useState(false);
+  const [documentError,setDocumentError]=useState(false);
+  const [writers,setWriters]=useState<{connection_id:number;name:string;model:string}[]>([]);
+  const [writer,setWriter]=useState("");
+  const documentGeneration=useRef(0);
+  useEffect(()=>()=>{documentGeneration.current++;},[]);
   const [result, setResult] = useState<Publication | null>(null);
   const [pending, setPending] = useState<Payload | null>(null);
   const storageKey = `publication:${requestId}:${version}${conversationTicketId ? ":"+conversationTicketId : ""}`;
@@ -359,6 +370,7 @@ export function PublishTicket({
     .replace(/^\s*spechelper:[0-9a-f-]{36}\s*$/gmi, "").trim();
   const shortPreview = renderedBody.split(/\n\s*\n/).slice(0,2).join("\n\n").slice(0,360);
   const publicationIssues = preview ? [
+    ...(selectedDocuments.length && preview.document_attachment_policy?.enabled === false ? [t("This destination cannot receive generated documents. Deselect them to publish without files.")] : []),
     ...(preview.publication_allowed === false
       ? (preview.publication_blockers?.length ? preview.publication_blockers : ["Required independent checks are incomplete. Publication is blocked."]).map(reason => t(reason))
       : []),
@@ -369,6 +381,34 @@ export function PublishTicket({
     ...(preview.issue_types.length && !issueType ? [t("Select an issue type before creating the ticket.")] : []),
     ...(presentation.ticket_format === "project" && preview.templates.length && !template ? [t("Select a ticket template before creating the ticket.")] : []),
   ] : [];
+  const availableFiles=(preview?.available_attachments||[]).filter(file=>!preparedSource||file.kind==="original");
+  async function prepareAndPublish(payload:Payload) {
+    if(!conversationTicketId||!selectedDocuments.length){await publish(payload);return;}
+    const token=++documentGeneration.current;
+    setBusy(true);setGeneratingDocuments(true);setDocumentError(false);setError("");
+    try {
+      type Documents={generation_id?:number;status:string;error?:string;documents:Record<string,{generation_id:number}>};
+      let result=await send<Documents>(`${endpoint}/documents/generate`,{draft_id:payload.draft_id,draft_revision:payload.draft_revision,documents:selectedDocuments,connection_id:writer?Number(writer):undefined});
+      while(token===documentGeneration.current&&["QUEUED","RUNNING"].includes(result.status)){
+        await new Promise(resolve=>setTimeout(resolve,1500));
+        if(token!==documentGeneration.current)return;
+        result=await api<Documents>(`${endpoint}/documents/${result.generation_id}`);
+      }
+      if(token!==documentGeneration.current)return;
+      if(result.status!=="DONE" || selectedDocuments.some(kind=>!result.documents?.[kind]))throw new Error(result.error||"Document generation failed. No ticket was sent. Retry or deselect the affected documents.");
+      const document_generations=Object.fromEntries(selectedDocuments.map(kind=>[kind,result.documents[kind].generation_id]));
+      const saved=await send<Preview>(`${endpoint}/publication-draft`,{...draftPayload(),document_generations},"PUT");
+      if(token!==documentGeneration.current)return;
+      setPreview(saved);
+      setGeneratingDocuments(false);
+      await publish({...payload,document_generations,draft_id:saved.draft_id,draft_revision:saved.draft_revision});
+    } catch(failure){
+      if(token===documentGeneration.current){
+        setError((failure as Error).message);setDocumentError(true);
+        try{setWriters(await api<typeof writers>(`/analyses/${requestId}/goal/assistants`));}catch{/* Keep the drafting error visible. */}
+      }
+    } finally {if(token===documentGeneration.current){setBusy(false);setGeneratingDocuments(false);}}
+  }
   function change(action: () => void) {
     if (
       !dirty ||
@@ -466,6 +506,7 @@ export function PublishTicket({
     }
   }
   async function close() {
+    if (generatingDocuments) {finishClose();return;}
     if (busy) return;
     if (dirty && preview) {
       setBusy(true);
@@ -476,6 +517,8 @@ export function PublishTicket({
     finishClose();
   }
   function finishClose() {
+    documentGeneration.current++;
+    setBusy(false);setGeneratingDocuments(false);
     previewGeneration.current++;
     setConfirmation(null);
     dialog.current?.close();
@@ -529,6 +572,11 @@ export function PublishTicket({
             {t(error)}
           </p>
         )}
+        {documentError&&<div className="mt-3 space-y-2 text-sm">
+          <p>{t("Document generation failed. No ticket was sent. Retry or deselect the affected documents.")}</p>
+          {!!writers.length&&<label>{t("Writing assistant")}<select value={writer} onChange={event=>setWriter(event.target.value)}><option value="">{t("Conversation assistant")}</option>{writers.map(item=><option key={item.connection_id} value={item.connection_id}>{item.name} · {item.model}</option>)}</select></label>}
+          <Button type="button" variant="outline" disabled={busy} onClick={()=>(document.getElementById(`publication-form-${prefix}`) as HTMLFormElement|null)?.requestSubmit()}>{t("Retry")}</Button>
+        </div>}
         {recovering ? (
           <p role="status" className="mt-5">
             {t("Checking previous publications…")}
@@ -708,7 +756,7 @@ export function PublishTicket({
             </fieldset>
             {busy && (
               <p role="status" className="mt-4">
-                {t("Loading publication options…")}
+                {t(generatingDocuments?"Generating selected documents…":"Loading publication options…")}
               </p>
             )}
             {!preview && !!project && !busy && (
@@ -866,11 +914,17 @@ export function PublishTicket({
                     </select>
                   </div>
                 )}
-                {(!!preview.available_attachments?.length||presentation.include_attachments)&&<fieldset className="mt-4 space-y-2 text-sm">
-                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false, include_diagrams: false }) }); })} />{t("Include attachments")}{!!preview.available_attachments?.length&&<span className="muted"> · {preview.available_attachments.length}</span>}</label>
+                {!!documents.length&&<fieldset className="mt-4 space-y-2 text-sm">
+                  <legend className="font-medium">{t("Documents to attach")}</legend>
+                  <p className="text-xs muted">{t("Only selected documents are generated after confirmation, before the ticket is sent.")}</p>
+                  {documents.map(kind=><label key={kind} className="flex items-center gap-2"><input type="checkbox" checked={selectedDocuments.includes(kind)} onChange={event=>{setSelectedDocuments(current=>event.target.checked?[...current,kind]:current.filter(item=>item!==kind));setDocumentError(false);setError("");}}/>{t(kind==="goal"?"goal.md":kind==="business"?"Business report":"Technical report")}</label>)}
+                  {preview.document_attachment_policy?.enabled === false&&<p className="text-xs muted">{t("This destination cannot receive generated documents. Deselect them to publish without files.")}</p>}
+                </fieldset>}
+                {(!!availableFiles.length||presentation.include_attachments)&&<fieldset className="mt-4 space-y-2 text-sm">
+                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={presentation.include_attachments} onChange={event => change(() => { void recompose({ include_attachments: event.target.checked, ...(event.target.checked ? {} : { attachment_ids: [], include_goal: false, include_diagrams: false }) }); })} />{t("Include attachments")}{!!availableFiles.length&&<span className="muted"> · {availableFiles.length}</span>}</label>
                   {presentation.include_attachments && <div className="space-y-3">
                     <p className="text-xs muted">{t("Select each file to transfer. Original files and generated goal.md are separate choices.")}</p>
-                    {(preview.available_attachments || []).map(file => <div key={file.id}>
+                    {availableFiles.map(file => <div key={file.id}>
                       <label className="flex items-start gap-2 text-sm"><input type="checkbox" disabled={!file.transferable} checked={file.kind === "goal" ? presentation.include_goal : file.kind === "diagrams" ? presentation.include_diagrams : presentation.attachment_ids.includes(file.id)} onChange={event => change(() => { void recompose(file.kind === "goal" ? { include_goal: event.target.checked } : file.kind === "diagrams" ? { include_diagrams: event.target.checked } : { attachment_ids: event.target.checked ? [...presentation.attachment_ids, file.id] : presentation.attachment_ids.filter(id => id !== file.id) }); })} /><span className="min-w-0 break-words">{file.name}<span className="ml-2 text-xs muted">{t(file.kind === "goal" ? "Generated goal.md" : file.kind === "diagrams" ? "Diagram annex (Mermaid)" : "Original attachment")} · {Math.ceil(file.size / 1024)} KB</span></span></label>
                       {!file.transferable && <p className="ml-6 mt-1 text-xs muted">{t(file.reason || "This connector cannot transfer this file.")}</p>}
                     </div>)}
@@ -894,12 +948,12 @@ export function PublishTicket({
         )}
         {confirmation&&<div ref={confirmationPanel} tabIndex={-1} className="mt-4 rounded-md border p-4 space-y-3" role="alertdialog" aria-label={t(preview?.requires_unverified_confirmation?"Publish without independent verification":"Confirm publication")}>
           <p>{t(preview?.requires_unverified_confirmation?"This ticket has not been verified by a deep analysis. Publish it anyway?":"Confirm creation of this ticket on the selected platform?")}</p>
-          <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>{const payload=confirmation;setConfirmation(null);void publish({...payload,unverified_confirmed:!!preview?.requires_unverified_confirmation});}}>{t(preview?.requires_unverified_confirmation?"Publish anyway":"Confirm publication")}</Button>
+          <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={()=>{const payload=confirmation;setConfirmation(null);void prepareAndPublish({...payload,unverified_confirmed:!!preview?.requires_unverified_confirmation});}}>{t(preview?.requires_unverified_confirmation?"Publish anyway":"Confirm publication")}</Button>
           {onAnalyze&&preview?.requires_unverified_confirmation&&<Button variant="outline" disabled={busy} onClick={()=>{finishClose();onAnalyze();}}>{t("Launch deep analysis")}</Button>}
           <Button variant="ghost" disabled={busy} onClick={()=>setConfirmation(null)}>{t("Cancel")}</Button></div>
         </div>}
         <div className="ticket-modal-footer mt-4">
-          <Button type="button" variant="outline" disabled={busy} onClick={close}>
+          <Button type="button" variant="outline" disabled={busy&&!generatingDocuments} onClick={close}>
             {t("Back")}
           </Button>
           {draftSaveFailed&&<Button type="button" variant="ghost" disabled={busy} onClick={finishClose}>{t("Close without saving")}</Button>}

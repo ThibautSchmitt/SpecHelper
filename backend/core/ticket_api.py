@@ -105,6 +105,7 @@ class PreviewIn(StrictSchema):
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)
     include_goal: bool = False
     include_diagrams: bool = False
+    document_generations: dict[Literal["goal", "business", "technical"], int] = Field(default_factory=dict, max_length=3)
 
 
 class PublicationDraftIn(PreviewIn):
@@ -154,6 +155,7 @@ class TicketPreparationIn(StrictSchema):
     scope_choice: Literal["unknown", "covered", "clarified", "changed"] = "unknown"
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(max_length=30000)
+    documents: list[Literal["goal", "business", "technical"]] | None = Field(default=None, max_length=3)
 
     @field_validator("title")
     @classmethod
@@ -177,6 +179,31 @@ def save_ticket_preparation(request, analysis_id: UUID, payload: TicketPreparati
     from .ticket_preparation import save
 
     return save(analysis_id, payload)
+
+
+class TicketDocumentsIn(StrictSchema):
+    draft_id: UUID
+    draft_revision: int = Field(ge=1)
+    documents: list[Literal["goal", "business", "technical"]] = Field(min_length=1, max_length=3)
+    connection_id: int | None = Field(default=None, gt=0)
+
+
+@router.post("/analyses/{analysis_id}/tickets/{ticket_id}/documents/generate")
+def generate_ticket_documents(request, analysis_id: UUID, ticket_id: UUID, payload: TicketDocumentsIn):
+    from .discussion_access import actor
+    from .ticket_documents import generate
+    return generate(analysis_id, ticket_id, payload, actor(request))
+
+
+@router.get("/analyses/{analysis_id}/tickets/{ticket_id}/documents/{generation_id}")
+def ticket_document_result(request, analysis_id: UUID, ticket_id: UUID, generation_id: int):
+    from .ticket_documents import result
+    get_object_or_404(ConversationTicket, pk=ticket_id, request_id=analysis_id, request__deleted_at__isnull=True)
+    value = result(analysis_id, generation_id)
+    from .models import Job
+    if Job.objects.get(pk=generation_id).payload["goal_generation"]["inputs"]["ticket"]["id"] != str(ticket_id):
+        raise HttpError(404, "Ticket documents not found.")
+    return value
 
 
 class TicketDraftGenerationIn(StrictSchema):
@@ -628,6 +655,8 @@ def update_publication_draft(request, request_id: UUID, number: int, payload: Pu
     }
     content["selected_attachments"] = result["selected_attachments"]
     presentation = {key: result[key] for key in PRESENTATION_KEYS}
+    if values.get("document_generations"):
+        presentation["document_generations"] = values["document_generations"]
     draft = save_draft(
         version,
         connector,

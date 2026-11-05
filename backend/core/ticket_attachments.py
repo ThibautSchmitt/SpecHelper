@@ -89,10 +89,15 @@ def available_attachments(version, connector, policy=None, *, allow_diagrams=Tru
 
 
 def selected_attachments(version, connector, payload, project="", policy=None):
+    from .ticket_documents import attachment_rows
+
+    if payload.get("document_generations") and policy is None:
+        policy = attachment_policy(connector, project)
+    documents = attachment_rows(version, payload, connector, policy)
     if not payload.get("include_attachments"):
         if payload.get("attachment_ids") or payload.get("include_goal") or payload.get("include_diagrams"):
             raise HttpError(422, "Enable Include attachments before selecting files to transfer.")
-        return []
+        return documents
     identifiers = [str(value) for value in payload.get("attachment_ids", [])]
     if payload.get("include_goal"):
         identifiers.append("goal")
@@ -110,7 +115,7 @@ def selected_attachments(version, connector, payload, project="", policy=None):
         for identifier in identifiers
     ):
         raise HttpError(422, "A selected attachment cannot be transferred to this destination.")
-    rows = [available[identifier] for identifier in identifiers]
+    rows = [available[identifier] for identifier in identifiers] + documents
     if len(rows) > 20 or sum(row["size"] for row in rows) > 50 * 1024 * 1024:
         raise HttpError(422, "Select at most 20 attachments and 50 MB per publication.")
     return rows
@@ -127,7 +132,11 @@ def attachment_policy(connector, project):
 
 
 def selected_bytes(record, row):
-    if row["kind"] == "goal":
+    if row["kind"] == "ticket_document":
+        from .models import Job
+        job = Job.objects.get(pk=row["generation_id"], target=str(record.request_id), kind="discussion", status="DONE")
+        content = job.payload["goal_generation"]["documents"][row["document_kind"]]["content"].encode()
+    elif row["kind"] == "goal":
         artifact = record.version.artifacts.get(name="goal.md")
         content = artifact.content.encode()
     elif row["kind"] == "diagrams":

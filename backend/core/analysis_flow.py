@@ -445,7 +445,7 @@ class Orchestrator:
                 "REVIEWING",
                 "Reviewing the proposal and preparing the result",
             ),
-            "writer": ("GENERATING_RESULT", "Preparing the ticket and goal.md"),
+            "writer": ("GENERATING_RESULT", "Preparing the result"),
             "independent": ("ANALYZING", "Second independent analysis"),
             "synthesis": ("REVIEWING", "Comparing proposals and writing the synthesis"),
         }[role]
@@ -588,6 +588,7 @@ class Orchestrator:
                 "missing references explicitly; cite the current request baseline in the result. "
                 "Do not copy the source question's solution or bypass ordinary clarification."
             )
+        prompt += "\nDELIVERABLE POLICY: Do not draft goal.md or formal report attachments during analysis. If the output schema has a goal field, leave it null. Retain findings, evidence, summaries and limitations; ticket documents are written only when selected for publication."
         prompt = redact(prompt, self.secret_values)
         if len(prompt) > 195000:
             step.update(status="ERROR", finished_at=timezone.now().isoformat())
@@ -715,7 +716,7 @@ class Orchestrator:
                     )
                     if isinstance(candidate, QuestionOutput):
                         self.validate_question_result(candidate)
-                    elif candidate:
+                    elif candidate and candidate.goal is not None:
                         # Semantic validation belongs inside the one bounded format
                         # repair, before marking the writing step as completed.
                         render_goal(
@@ -740,7 +741,7 @@ class Orchestrator:
                     elif self.is_question:
                         prompt += "\nFORMAT CORRECTION: strictly follow the explanation schema. The answer field must be a JSON object with required title and summary, not a prose or Markdown string. Use only declared QuestionAnswer fields. Use only known repository identifiers and existing repository-relative paths. Do not include private paths, ticket fields, goal fields or internal reasoning. Leave unsupported details empty."
                     else:
-                        prompt += "\nFORMAT CORRECTION: strictly follow the schema, a ticket of at most 700 words and a separate detailed goal.md. useful_attachments must contain only the exact provided names, without Markdown or explanations, or an empty list. Do not include internal reasoning fields."
+                        prompt += "\nFORMAT CORRECTION: strictly follow the schema and a ticket of at most 700 words. Leave goal null: ticket documents are generated only on demand at publication. Do not include internal reasoning fields."
             step.update(
                 status="DONE", finished_at=timezone.now().isoformat(), output=output.model_dump()
             )
@@ -1095,7 +1096,7 @@ class Orchestrator:
         self.on_progress(
             self.request,
             "GENERATING_RESULT",
-            "Preparing the explanation" if self.is_question else "Preparing the ticket and goal.md",
+            "Preparing the explanation" if self.is_question else "Preparing the result",
         )
         from .business_outputs import BusinessOutputError
 
@@ -1320,7 +1321,7 @@ class ConfrontationOrchestrator(Orchestrator):
                 "verifier",
                 "synthesis",
                 SynthesisOutput,
-                "Verify material evidence and divergences in the structured reports. Read relevant sources if necessary. Consolidate the short ticket and detailed goal.md from supported conclusions only. Return agreements and divergences, no conversation transcripts or internal reasoning. No additional verification loop is permitted. Unresolved material uncertainties must be explicit in risks and goal; use PARTIAL when blocking. Human validation remains required.",
+                "Verify material evidence and divergences in the structured reports. Read relevant sources if necessary. Consolidate the short ticket from supported conclusions only; leave goal null. Return agreements and divergences, no conversation transcripts or internal reasoning. No additional verification loop is permitted. Unresolved material uncertainties must be explicit in risks; use PARTIAL when blocking. Human validation remains required.",
                 budget=65,
             ).result
         else:
@@ -1329,7 +1330,7 @@ class ConfrontationOrchestrator(Orchestrator):
                 "counter_analyst",
                 "writer",
                 ArtifactOutput,
-                "Act as the internal ticket writer. Consolidate both independent reports and the comparison into a short ticket and detailed goal.md. Do not restart exploration or debate. Preserve unresolved uncertainty in risks and goal and use PARTIAL if blocking. Human validation remains required.",
+                "Act as the internal ticket writer. Consolidate both independent reports and the comparison into a short ticket; leave goal null. Do not restart exploration or debate. Preserve unresolved uncertainty in risks and use PARTIAL if blocking. Human validation remains required.",
                 budget=65,
             )
         unresolved = self.facts.get("verification", {}).get("remaining_uncertainties", [])
@@ -1346,11 +1347,12 @@ class ConfrontationOrchestrator(Orchestrator):
             original_risks = result.ticket.risks
             result.ticket.risks = list(dict.fromkeys([*original_risks[:7], summary]))
             retained = "\n".join([*original_risks[7:], *unresolved])
-            constraints = result.goal.constraints
-            if len(constraints) < 20:
-                result.goal.constraints = [*constraints, retained]
-            else:
-                result.goal.constraints = [*constraints[:19], constraints[19] + "\n" + retained]
+            if result.goal is not None:
+                constraints = result.goal.constraints
+                if len(constraints) < 20:
+                    result.goal.constraints = [*constraints, retained]
+                else:
+                    result.goal.constraints = [*constraints[:19], constraints[19] + "\n" + retained]
             try:
                 result = ArtifactOutput.model_validate(result.model_dump())
             except ValueError as exc:

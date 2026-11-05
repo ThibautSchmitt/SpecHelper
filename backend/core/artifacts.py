@@ -53,7 +53,7 @@ class DevelopmentGoal(StrictModel):
 class ArtifactOutput(StrictModel):
     status: Literal["READY", "PARTIAL"]
     ticket: HumanTicket
-    goal: DevelopmentGoal
+    goal: DevelopmentGoal | None = Field(default=None, description="Leave null during analysis. Implementation documents are generated only when selected for ticket publication.")
     technical_summary: str = Field(min_length=1, max_length=4000)
     business_summary: BusinessSummary | None = None
     questions: list[ClarificationQuestion] = Field(default_factory=list, max_length=5)

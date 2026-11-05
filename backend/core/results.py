@@ -101,12 +101,13 @@ def publish(request_id, run, output):
             output.ticket.acceptance_criteria = normative_rules(
                 output.ticket.acceptance_criteria, rules, history, decisions
             )
-            output.goal.required_behavior = normative_rules(
-                output.goal.required_behavior, rules, history, decisions
-            )
-            output.goal.acceptance_criteria = normative_rules(
-                output.goal.acceptance_criteria, rules, history, decisions
-            )
+            if output.goal is not None:
+                output.goal.required_behavior = normative_rules(
+                    output.goal.required_behavior, rules, history, decisions
+                )
+                output.goal.acceptance_criteria = normative_rules(
+                    output.goal.acceptance_criteria, rules, history, decisions
+                )
             try:
                 output = type(output).model_validate(output.model_dump())
             except ValueError as error:
@@ -116,16 +117,15 @@ def publish(request_id, run, output):
         explanation = {}
         ticket = output.ticket.model_dump()
         markdown = render_human(ticket, language=request.language, business_summary=summary)
-        artifacts = {
-            "ticket.md": markdown,
-            "goal.md": render_goal(
+        artifacts = {"ticket.md": markdown}
+        if output.goal is not None:
+            artifacts["goal.md"] = render_goal(
                 output.goal.model_dump(),
                 request.baseline,
                 request.attachments.all(),
                 language=request.language,
                 context_snapshot=frozen,
-            ),
-        }
+            )
         technical_summary = output.technical_summary
     if evidence and not is_question:
         from .evidence_rendering import render_evidence
