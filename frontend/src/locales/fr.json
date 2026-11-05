@@ -2463,5 +2463,7 @@
   "The selected assistant no longer has the Analyst role. Choose another assistant to continue.": "Cette IA n’a plus le rôle Analyste. Choisissez une autre IA pour poursuivre la conversation.",
   "The selected AI connection is no longer available. Choose another assistant to continue.": "Cette connexion IA n’est plus disponible. Choisissez une autre IA pour poursuivre la conversation.",
   "The current assistant can continue again. Refresh the conversation.": "L’IA actuelle peut de nouveau poursuivre la conversation. Actualisez la conversation.",
-  "The selected assistant is no longer available. Choose another assistant.": "L’IA sélectionnée n’est plus disponible. Choisissez une autre IA."
+  "The selected assistant is no longer available. Choose another assistant.": "L’IA sélectionnée n’est plus disponible. Choisissez une autre IA.",
+  "Choose another AI": "Choisir une autre IA",
+  "Continue": "Continuer"
 }

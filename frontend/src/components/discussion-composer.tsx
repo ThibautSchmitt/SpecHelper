@@ -8,6 +8,7 @@ import { api, send, type RequestDetail } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { conversationState } from "@/lib/conversation-state";
 import { DeepAnalysisDialog } from "@/components/deep-analysis-dialog";
+import { ConversationAssistantControl } from "@/components/conversation-assistant";
 
 export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpdated:(value:RequestDetail)=>void}) {
   const {t}=useI18n();
@@ -21,6 +22,10 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
   const activeOperation=["IN_PROGRESS","WAITING_AI"].includes(conversationState(value));
   const working=!!value.archived_at || activeOperation;
   const deepRetry=value.discussion?.mode === "analysis" && !!value.analysis_runs?.length;
+  const assistantError=[
+    "Choose an AI connection allowed to act as analyst.",
+    "The selected assistant is no longer available. Choose another assistant.",
+  ].some(message=>error === message || error === t(message));
   async function action(operation:"message"|"cancel"|"retry"|"start") {
     setBusy(true);setError("");
     try {
@@ -50,7 +55,10 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
   }
   return <div className="space-y-3">
     {value.discussion?.has_new_messages && value.latest_version && <p className="text-xs muted">{t("New messages are not covered by the previous analysis.")}</p>}
-    {error && <p role="alert" className="text-sm text-red-700">{t(error)}</p>}
+    {error && <div role="alert" className="space-y-2">
+      <p className="text-sm text-red-700">{t(error)}</p>
+      {assistantError && <ConversationAssistantControl value={value} onUpdated={onUpdated} selectionOnly />}
+    </div>}
     {value.discussion?.mode === "discussion" && value.discussion.job?.waiting_reason && <p className="text-xs muted">{t(value.discussion.job.waiting_reason)}</p>}
     <form className="conversation-composer conversation-compose-form" onSubmit={event=>{event.preventDefault();if(text.trim())void action("message");}}>
       <label className="cursor-pointer p-2" title={t("Attach files")}><Paperclip size={19} aria-hidden="true"/><span className="sr-only">{t("Attach files")}</span><input className="sr-only" type="file" multiple disabled={busy||working||uploaded>0} onChange={event=>setFiles(Array.from(event.target.files||[]))}/></label>

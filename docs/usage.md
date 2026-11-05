@@ -38,11 +38,14 @@ reasoning settings. The current connection is identified separately; repeated na
 session restarts with the same configuration do not add duplicate entries.
 
 If its quota is exhausted, or its connection is removed, disabled, disconnected or
-no longer authorized for the Analyst role, **Continue the analysis with…** opens a list of currently
+no longer authorized for the Analyst role, **Choose another AI** opens a list of currently
 available Analyst connections. Choose a connection and inspect its model and reasoning
 before selecting **Continue**. Leaving the selection or choosing **Cancel** keeps the
 original connection and pending request. SpecHelper never transfers it automatically.
 Availability and the selected configuration are checked again on confirmation.
+If a message cannot be sent because its assistant is no longer authorized or available,
+the same action appears directly beside the error, above the message composer.
+Choosing another assistant preserves the unsent message and attached files.
 
 A confirmed change starts a new native session, even for another ChatGPT account.
 The recorded history and frozen project context are provided for recovery; private
