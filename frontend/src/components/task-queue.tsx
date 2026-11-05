@@ -205,7 +205,7 @@ export function TaskQueue() {
         const timing = clarification && waiting ? t("Waiting for your answer for {duration}", { duration: waiting })
           : waiting ? t("In queue for {duration}", { duration: waiting })
           : state === "RUNNING" && typeof active === "number" ? t(job.kind === "analysis" ? "Active AI: {minutes}m {seconds}s" : "Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(active / 60), seconds: active % 60 }) : "";
-        const action = job.analysis_state === "scope_rejected" ? "Revise analysis" : clarification ? "Answer" : state === "ERROR" ? "See the problem" : job.kind === "sync" ? "Open environment" : "Open analysis";
+        const action = job.analysis_state === "scope_rejected" ? "Revise analysis" : clarification ? "Answer" : state === "ERROR" ? "See the problem" : "Open analysis";
         return <li key={job.id} data-job={String(job.id)} className="queue-card" data-state={state} data-result-status={resultState}>
           <div className="p-3">
             <div className="title-tags">
@@ -216,7 +216,7 @@ export function TaskQueue() {
             {state === "ERROR" && <p className="mt-1 text-xs muted">{t("Analysis interrupted")}</p>}
             {state === "RUNNING" && job.stage_number && job.stage_count ? <p className="mt-1 text-xs muted">{t("Step {step} of {total}", { step: job.stage_number, total: job.stage_count })}</p> : null}
             {timing && <p className="mt-1 text-xs muted">{timing}</p>}
-            <Link href={job.href || "/analyses"} className="mt-3 inline-block rounded text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-primary">{t(action)}</Link>
+            {job.kind !== "sync" && <Link href={job.href || "/analyses"} className="mt-3 inline-block rounded text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-primary">{t(action)}</Link>}
           </div>
           {job.can_cancel && job.request_id && <div className="border-t p-2"><AnalysisCancelButton requestId={job.request_id} workflow={job.workflow} title={job.title} /></div>}
         </li>;
