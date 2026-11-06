@@ -333,6 +333,34 @@ def test_unsafe_external_url_is_never_published(publication_context, url):
     assert record.url == ""
 
 
+def test_local_gitlab_native_url_reconciles_without_creating_again(publication_context, monkeypatch):
+    from core.models import RequestMessage
+    from core.ticket_publication import stored_publication_url
+
+    monkeypatch.setattr("core.ticket_urls.in_container", lambda: True)
+    version, connector, provider, payload = publication_context
+    connector.base_url = "http://host.docker.internal:9082"
+    connector.save(update_fields=["base_url"])
+    provider.create.side_effect = NetworkUncertain("Response lost after creation")
+    uncertain = publish(version, connector, payload)
+    assert uncertain.status == "UNCERTAIN"
+    native_url = "http://localhost:9082/team/project/-/work_items/1"
+    provider.find.return_value = {"external_id": "123", "external_key": "1", "url": native_url}
+    recovered = publish(version, connector, payload)
+    assert recovered.pk == uncertain.pk
+    assert recovered.status == "PUBLISHED"
+    assert stored_publication_url(recovered) == native_url
+    assert publish(version, connector, payload).pk == recovered.pk
+    assert provider.create.call_count == 1
+    assert RequestMessage.objects.filter(request=version.request, kind="ticket_publication").count() == 1
+    for unsafe in ["http://localhost:9082/team/project/-/redirect/1",
+                   native_url + "?redirect=https://elsewhere.test",
+                   "http://localhost:9083/team/project/-/work_items/1",
+                   "http://elsewhere.test:9082/team/project/-/work_items/1"]:
+        recovered.url = unsafe
+        assert stored_publication_url(recovered) == ""
+
+
 @pytest.mark.parametrize("external_id", [None, True, False, "", " ", " 123", [], {}, 0, -1])
 def test_invalid_external_identity_never_becomes_a_success(publication_context, external_id):
     version, connector, provider, payload = publication_context

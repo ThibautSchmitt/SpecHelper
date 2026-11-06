@@ -23,6 +23,7 @@ from .models import (
 )
 from .ticket_preparation import publication_ticket, version_workflow
 from .ticket_providers import NetworkUncertain, TicketProviderError, provider_for, render_body
+from .ticket_urls import same_origin
 
 
 def canonical_hash(value):
@@ -468,10 +469,10 @@ def stored_publication_url(record):
     value = record.url
     try:
         parsed, origin = urlsplit(value), urlsplit(record.connector.base_url)
-        host = (
-            "github.com"
+        allowed_origin = (
+            "https://github.com"
             if record.platform == "github" and origin.hostname == "api.github.com"
-            else origin.hostname
+            else record.connector.base_url
         )
         if (
             not value
@@ -479,7 +480,7 @@ def stored_publication_url(record):
             or not origin.hostname
             or parsed.scheme not in {"http", "https"}
             or parsed.scheme != origin.scheme
-            or (parsed.hostname, parsed.port) != (host, origin.port)
+            or not same_origin(value, allowed_origin)
             or parsed.username is not None
             or parsed.password is not None
             or parsed.fragment
@@ -499,7 +500,7 @@ def stored_publication_url(record):
             pattern = (
                 r"/[^/]+/[^/]+/issues/[1-9]\d*"
                 if record.platform == "github"
-                else r"/.+/-/issues/[1-9]\d*"
+                else r"/.+/-/(?:issues|work_items)/[1-9]\d*"
             )
             return value if not parsed.query and re.fullmatch(pattern, path) else ""
         if record.platform == "jira":
@@ -528,14 +529,14 @@ def store_success(record, result):
         parsed.port
         origin = urlsplit(record.connector.base_url)
         allowed_origin = (
-            "github.com"
+            "https://github.com"
             if record.platform == "github" and origin.hostname == "api.github.com"
-            else origin.netloc.lower()
+            else record.connector.base_url
         )
         if (
             parsed.scheme not in {"http", "https"}
             or parsed.scheme != origin.scheme
-            or parsed.netloc.lower() != allowed_origin
+            or not same_origin(url, allowed_origin)
             or parsed.username is not None
             or parsed.password is not None
             or any(ord(char) < 33 for char in url)

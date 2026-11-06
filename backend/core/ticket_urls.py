@@ -21,6 +21,21 @@ def transport_url(value):
     return urlunsplit(parsed)
 
 
+def same_origin(left, right):
+    """Accept only the configured HTTP origin and its existing Docker host aliases."""
+    def origin(value):
+        parsed = urlsplit(value)
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None):
+            raise ValueError
+        return parsed.scheme, transport_host(parsed.hostname), parsed.port
+
+    try:
+        return origin(left) == origin(right)
+    except (TypeError, ValueError):
+        return False
+
+
 def same_instance(left, right, platform):
     """Presentation-only aliases must not retarget or duplicate an old destination."""
 

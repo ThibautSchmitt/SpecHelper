@@ -220,6 +220,35 @@ def test_gitlab_inherited_templates_and_creation(transport):
     assert sent["assignee_ids"] == ["3"]
 
 
+def test_gitlab_native_work_item_url_accepts_only_existing_local_transport_alias(transport, monkeypatch):
+    monkeypatch.setattr("core.ticket_urls.in_container", lambda: True)
+    url = "http://localhost:9082/org/app/-/work_items/4"
+    item = {"id": 90, "iid": 4, "web_url": url, "description": "spechelper:123"}
+    calls = transport({
+        ("GET", "/api/v4/projects/8/templates/issues"): (200, []),
+        ("GET", "/api/v4/projects/8/labels"): (200, []),
+        ("GET", "/api/v4/projects/8/members/all"): (200, []),
+        ("POST", "/api/v4/projects/8/issues"): (201, item),
+        ("GET", "/api/v4/projects/8/issues"): (200, [item]),
+    })
+    connection = connector("gitlab")
+    connection.base_url = "http://host.docker.internal:9082"
+    provider = adapters.provider_for(connection)
+    result = provider.create("8", {"title": "Ticket", "body": "Need"}, "spechelper:123")
+    assert result == provider.find("8", "spechelper:123")
+    assert result["url"] == url
+    assert sum(call.method == "POST" for call in calls) == 1
+    for unsafe in ["http://localhost:9083/org/app/-/work_items/4",
+                   "https://localhost:9082/org/app/-/work_items/4",
+                   "http://elsewhere.test:9082/org/app/-/work_items/4",
+                   "http://user:password@localhost:9082/org/app/-/work_items/4"]:
+        with pytest.raises(adapters.NetworkUncertain):
+            provider.external({**item, "web_url": unsafe})
+    monkeypatch.setattr("core.ticket_urls.in_container", lambda: False)
+    with pytest.raises(adapters.NetworkUncertain):
+        provider.external(item)
+
+
 def jira_routes():
     return {
         ("GET", "/rest/api/3/project/search"): (

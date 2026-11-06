@@ -7,14 +7,14 @@ import json
 import re
 import time
 from html.parser import HTMLParser
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
 import httpx
 import yaml
 
 from . import github
 from .secrets import decrypt
-from .ticket_urls import transport_url
+from .ticket_urls import same_origin, transport_url
 
 MAX_BYTES = 2_000_000
 MAX_PAGES = 10
@@ -157,17 +157,7 @@ class Provider:
         self.last_status = None
 
     def external_url(self, value, github_url=False):
-        try:
-            parsed = urlsplit(value)
-            allowed = urlsplit("https://github.com" if github_url else self.base)
-            if (
-                (parsed.scheme, parsed.hostname, parsed.port)
-                != (allowed.scheme, allowed.hostname, allowed.port)
-                or parsed.username
-                or parsed.password
-            ):
-                raise ValueError
-        except (TypeError, ValueError):
+        if not same_origin(value, "https://github.com" if github_url else self.base):
             raise NetworkUncertain("Ticket response contains an invalid external URL") from None
         return value
 
