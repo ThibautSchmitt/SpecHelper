@@ -20,7 +20,7 @@ MODES = {"source", "codebase-memory-mcp"}
 
 def command(arguments, *, cwd=None, environment=None):
     return subprocess.check_output(
-        ["rtk", "proxy", *arguments], cwd=cwd, env=environment, text=True
+        arguments, cwd=cwd, env=environment, text=True
     ).strip()
 
 

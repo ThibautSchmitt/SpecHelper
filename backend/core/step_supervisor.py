@@ -17,6 +17,22 @@ OWNER = str(uuid.uuid4())
 PROCESSES = {}
 
 
+def process_timeout(job):
+    """Leave time for the bounded runtime call to return and save its result."""
+    from .orchestration_settings import get_config
+    from .step_execution import is_incremental
+
+    if job.kind in {"sync", "cli_update"}:
+        return 1200
+    if is_incremental(job):
+        config = job.analysis_run.orchestration.get("config") or get_config("2.4")
+    elif job.kind in {"discussion", "library_assistant"}:
+        config = get_config("2.4")
+    else:
+        return 295
+    return config["tool_timeout_seconds"] + 60
+
+
 def start_invocation(job):
     from .step_execution import is_incremental
 
@@ -84,7 +100,7 @@ def poll_processes():
                 PROCESSES.pop(job_id, None)
             continue
         if attempt_id is None:
-            limit = 1200 if job.kind in {"sync", "cli_update"} else 295
+            limit = process_timeout(job)
             if process.poll() is None and time.monotonic() - started < limit:
                 continue
             if process.poll() is None:
@@ -131,7 +147,7 @@ def poll_processes():
             continue
         if process.poll() is None:
             # This guards a stuck invocation/tool process, never total business-job age.
-            if time.monotonic() - started <= 900:
+            if time.monotonic() - started <= process_timeout(job):
                 StepExecution.objects.filter(
                     job_id=job_id, attempt_id=attempt_id, status="RUNNING"
                 ).update(heartbeat_at=timezone.now())

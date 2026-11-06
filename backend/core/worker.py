@@ -125,6 +125,11 @@ def recover_stale_jobs():
 
         if is_incremental(job):
             continue
+        if job.kind in {"discussion", "library_assistant"}:
+            from .step_supervisor import process_timeout
+
+            if job.started_at >= timezone.now() - timedelta(seconds=process_timeout(job) + 15):
+                continue
         if job.kind == "discussion":
             from .discussion import fail, stop_failed_attempt
 

@@ -301,5 +301,10 @@ def request_workspace(request):
     for repo in request.baseline:
         with lock(repo["repository"]):
             destination = root / repo["repository"]
-            materialize(mirror_path(repo), destination, repo["sha"])
+            mirror = mirror_path(repo)
+            if destination.exists() and run("-C", destination, "rev-parse", "HEAD") != repo["sha"]:
+                # Only an idle conversation's next invocation can replace this copy.
+                # Frozen results keep their original SHAs and immutable mirror objects.
+                run("--git-dir", mirror, "worktree", "remove", destination)
+            materialize(mirror, destination, repo["sha"])
     return root

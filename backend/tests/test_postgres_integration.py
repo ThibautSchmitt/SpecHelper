@@ -133,7 +133,8 @@ def test_real_database_url_probe_rejects_writer_and_returns_three_checks(
     )
     assert response.status_code == 201, response.content
     assert response.json()["checks"] == {"connection": True, "read": True, "read_only": True}
-    assert set(response.json()) == {"id", "name", "status", "checks"}
+    assert set(response.json()) == {"id", "name", "status", "checks", "checked_at"}
+    assert response.json()["checked_at"]
     with psycopg.connect(DSN, autocommit=True) as db:
         db.execute("GRANT UPDATE ON fixture.contracts TO fixture_reader")
     refused = client.post(f"/api/connections/databases/{response.json()['id']}/test")

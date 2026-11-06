@@ -28,7 +28,7 @@ x-backend: &backend
     SPECHELPER_TRUST_PROXY: ${SPECHELPER_TRUST_PROXY:-0}
     SPECHELPER_AUDIT_RETENTION_DAYS: ${SPECHELPER_AUDIT_RETENTION_DAYS:-30}
     ENCRYPTION_KEY_FILE: ${ENCRYPTION_KEY_FILE:-/data/encryption.key}
-  volumes:
+  volumes: &backend-volumes
     - runtime-control-secrets:/control
     - app-data:/data
     - git-cache:/data/git-cache
@@ -45,11 +45,17 @@ x-backend: &backend
   restart: unless-stopped
 services:
   prepare-storage:
-    <<: *backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes: *backend-volumes
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=256m,mode=1777"]
     user: "0:0"
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
     network_mode: none
-    networks: !reset []
     restart: "no"
     entrypoint: [python, -c]
     command:

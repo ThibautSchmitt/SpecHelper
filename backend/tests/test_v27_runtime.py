@@ -21,6 +21,11 @@ def runtime_client(tmp_path, monkeypatch):
         "runtime.antigravity_auth.inspect_cli",
         lambda: {"state": "supported", "reason": "", "version": "1.4.7"},
     )
+    # Credential storage tests never query a real provider with the synthetic key.
+    monkeypatch.setattr(
+        "runtime.antigravity_auth.quota_metadata",
+        lambda *args: {"quota_status": {"state": "unavailable"}, "quota_windows": {}},
+    )
     return TestClient(server.app)
 
 

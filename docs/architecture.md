@@ -181,6 +181,11 @@ Antigravity CLI accept the same bounded limit. Database/network tool limits rema
 separate. An explicit retry applies the current invocation budget and records the
 change without replacing frozen evidence, role sessions or completed checkpoints.
 An execution timeout is reported explicitly; it never becomes successful verification.
+The process supervisor follows the invocation's configured budget, with a sixty-second
+margin for transport and checkpoint persistence. Stale conversational/library jobs are
+not recovered before that budget and a further fifteen-second recovery margin expire.
+Persisted installation settings retain their selected budget; the schema default does
+not silently replace a previously saved value.
 
 The roles inside an analysis remain sequential while other conversations run alongside
 it. Actual provider throttling, quota, authentication and backoff still constrain work.
@@ -230,6 +235,10 @@ already near the bottom of the conversation.
 Git connections maintain mirrors and authorized checkouts. Analysis workspaces retain
 frozen SHAs; branch movement does not rewrite previous conclusions. Environment facts,
 reference documents and attachments have captured versions and read-only sandbox bindings.
+When an idle conversation starts a new investigation with a different frozen SHA, its
+clean working copy is recreated at that SHA under the repository lock. Prior result
+baselines and retained mirror objects remain unchanged; historical source disclosure
+reads those immutable objects and does not recreate an active workspace.
 Path bounds, signatures and hashes prevent substitution with unrelated host files.
 Removing a current reference does not erase copies retained by historical analyses.
 

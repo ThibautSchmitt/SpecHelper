@@ -81,7 +81,7 @@ def test_same_ticket_edits_are_serialized_without_overwriting_another_draft(clie
     value=Request.objects.create(environment=environment,need="Explain dates",status="DISCUSSING",
         discussion_state={"enabled":True,"revision":0})
     ticket=ConversationTicket.objects.create(request=value,draft={"revision":1,"title":"Dates","body":"Original"})
-    other=ConversationTicket.objects.create(request=value,draft={"revision":1,"title":"Rounding","body":"Unrelated"})
+    other=ConversationTicket.objects.create(request=value,active=False,draft={"revision":1,"title":"Rounding","body":"Unrelated"})
     barrier=threading.Barrier(2)
     def submit(body):
         close_old_connections()
@@ -115,7 +115,7 @@ def test_two_browsers_cannot_transfer_the_same_pending_turn_twice(client, enviro
     mark_failure(1, "QUOTA_EXHAUSTED")
     identity = AIIdentity.objects.create(agent="antigravity", credential_id=uuid.uuid4(),
         status="CONNECTED", availability="AVAILABLE")
-    target = AIConnection.objects.create(agent="antigravity", identity=identity,
+    target = AIConnection.objects.create(pk=2,agent="antigravity", identity=identity,
         status="CONNECTED", availability="AVAILABLE", roles=["analyst"])
     choice = client.get(f"/api/analyses/{value['id']}/discussion/continuation-options").json()["options"][0]
     barrier = threading.Barrier(2)

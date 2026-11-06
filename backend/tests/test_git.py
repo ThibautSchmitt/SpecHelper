@@ -67,6 +67,11 @@ def test_mirror_shared_between_branches_and_request_baseline_immutable(storage):
     with patch("core.git.fetch", return_value=mirror):
         sync_environment(preprod.id)
     assert preprod.repositories.get().sha != develop_sha
+    # A later turn of the same conversation uses its own newly frozen baseline.
+    current = SimpleNamespace(id=request.id, baseline=[{
+        **request.baseline[0], "sha":preprod.repositories.get().sha,
+    }])
+    assert (request_workspace(current) / "company/project/domain.txt").read_text() == "newer"
     request.refresh_from_db()
     assert request.baseline[0]["sha"] == develop_sha
     assert (

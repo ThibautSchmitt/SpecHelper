@@ -41,6 +41,10 @@ Four built-in skills support source exploration, documents, impact analysis and 
 protection. Responses adapt to the question: functional explanations by default,
 with code, Git history or authorized data when explicitly requested.
 
+The [stabilization review](docs/stabilization.md) distinguishes tested guarantees,
+release blockers and the real-world acceptance journey still required before a
+stable release.
+
 ## Quick start
 
 You need Docker Engine on Linux or Docker Desktop, Docker Compose supporting

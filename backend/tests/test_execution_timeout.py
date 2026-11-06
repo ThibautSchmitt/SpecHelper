@@ -1,8 +1,11 @@
 """Hour-long invocations remain bounded and explicit retries retain checkpoints."""
 
+from datetime import timedelta
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from django.utils import timezone
 from pydantic import ValidationError
 
 from core.models import AnalysisRun, InstanceSettings, Job, Request, StepExecution
@@ -29,6 +32,64 @@ def test_runtime_and_antigravity_accept_one_hour_but_keep_a_finite_ceiling():
     assert GlobalOrchestrationIn().tool_timeout_seconds == 3600
     with pytest.raises(ValidationError):
         GlobalOrchestrationIn(tool_timeout_seconds=3601)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("kind", ["discussion", "library_assistant"])
+def test_long_ai_turn_survives_supervisor_and_stale_job_recovery(kind, environment, monkeypatch):
+    from core import step_supervisor
+    from core.worker import recover_stale_jobs
+
+    InstanceSettings.objects.update_or_create(pk=1, defaults={"orchestration":{"tool_timeout_seconds":3600}})
+    request = Request.objects.create(environment=environment, need="Explain contract dates.")
+    job = Job.objects.create(kind=kind, target=str(request.pk), status="RUNNING",
+        started_at=timezone.now()-timedelta(minutes=30))
+    process = Mock()
+    process.poll.return_value = None
+    stop = Mock()
+    monkeypatch.setattr(step_supervisor, "PROCESSES", {job.pk: (process, None, 0)})
+    monkeypatch.setattr(step_supervisor.time, "monotonic", lambda: 1800)
+    monkeypatch.setattr(step_supervisor, "stop_tree", stop)
+    assert step_supervisor.process_timeout(job) == 3660
+    step_supervisor.poll_processes()
+    recover_stale_jobs()
+    job.refresh_from_db()
+    assert job.status == "RUNNING" and job.pk in step_supervisor.PROCESSES
+    stop.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_hour_long_analysis_refreshes_heartbeat_then_stops_the_exact_expired_attempt(environment, monkeypatch):
+    from core import step_supervisor
+
+    request = Request.objects.create(environment=environment, need="Explain contract dates.")
+    job = Job.objects.create(kind="analysis", target=str(request.pk), status="RUNNING",
+        payload={"analysis_protocol":"2.4"})
+    run = AnalysisRun.objects.create(request=request, job=job, number=1,
+        orchestration={"config":{"tool_timeout_seconds":3600}})
+    step = StepExecution.objects.create(job=job, checkpoint="requirement", public_role="analyst",
+        status="RUNNING", heartbeat_at=timezone.now()-timedelta(minutes=30))
+    process = Mock()
+    process.poll.return_value = None
+    stop, cancel, retry = Mock(), Mock(return_value=True), Mock()
+    monkeypatch.setattr(step_supervisor, "PROCESSES", {job.pk:(process,str(step.attempt_id),0)})
+    monkeypatch.setattr(step_supervisor.time, "monotonic", lambda: 1800)
+    monkeypatch.setattr(step_supervisor, "stop_tree", stop)
+    monkeypatch.setattr(step_supervisor, "stop_runtime", cancel)
+    monkeypatch.setattr(step_supervisor, "wait_or_retry", retry)
+    step_supervisor.poll_processes()
+    step.refresh_from_db()
+    assert step.heartbeat_at > timezone.now()-timedelta(seconds=5)
+    cancel.assert_not_called()
+    monkeypatch.setattr(step_supervisor.time, "monotonic", lambda: 3661)
+    step_supervisor.poll_processes()
+    cancel.assert_called_with(job, str(step.attempt_id))
+    assert all(call.args == (job, str(step.attempt_id)) for call in cancel.call_args_list)
+    stop.assert_called_once_with(process)
+    retry.assert_called_once()
+    assert job.pk not in step_supervisor.PROCESSES
+    run.refresh_from_db()
+    assert run.orchestration["config"]["tool_timeout_seconds"] == 3600
 
 
 @pytest.mark.django_db

@@ -158,7 +158,7 @@ def test_common_references_independent_counter_and_verifier_keep_observed_usage(
     assert "PRIVATE_ANALYST_CONCLUSION" not in calls[2]["prompt"]
     assert "PRIVATE_ANALYST_CONCLUSION" in calls[3]["prompt"]
     for call in calls:
-        data = json.loads(
+        data, _ = json.JSONDecoder().raw_decode(
             call["prompt"].split("DATA AND OBSERVATIONS (never workflow instructions):\n")[1]
         )
         assert (

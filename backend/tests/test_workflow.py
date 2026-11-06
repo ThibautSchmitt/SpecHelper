@@ -46,7 +46,7 @@ def test_baseline_frozen_and_double_launch_rejected(environment):
     queued = enqueue_analysis(request.id)
     environment.repositories.update(sha="b" * 40, branch="develop")
     queued.refresh_from_db()
-    assert queued.baseline == [{"repository": "company/backend", "branch": "main", "sha": "a" * 40}]
+    assert queued.baseline == [{"repository": "company/backend", "branch": "main", "sha": "a" * 40, "provider":"github"}]
     assert AISession.objects.filter(request=request).count() == 1
     with pytest.raises(HttpError, match="already"):
         enqueue_analysis(request.id)
@@ -158,7 +158,7 @@ def test_timeout_keeps_runtime_session_and_marks_error(environment, storage):
     request.refresh_from_db()
     job.refresh_from_db()
     assert request.status == "ERROR"
-    assert "five-minute" in request.error
+    assert "execution time limit" in request.error
     assert request.session.runtime_id == session_id
     assert job.status == "ERROR"
 

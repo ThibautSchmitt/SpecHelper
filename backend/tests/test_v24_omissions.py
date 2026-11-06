@@ -83,7 +83,7 @@ def test_database_enabled_pipeline_keeps_lazy_skills_within_current_tool_capabil
             database = DatabaseConnection.objects.create(
                 name="Synthetic migration fixture",
                 host=connection["host"],
-                port=int(connection["port"]),
+                port=int(connection.get("port", 5432)),
                 database=connection["dbname"],
                 username=role,
                 secret=encrypt(password),

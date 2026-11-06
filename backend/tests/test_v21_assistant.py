@@ -359,7 +359,7 @@ def test_connection_lease_is_shared_and_stale_worker_is_recovered(client, storag
         == "BUSY"
     )
     assert claim_job() is None
-    Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=6))
+    Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=62))
     recover_stale_jobs()
     job.refresh_from_db()
     assert job.status == "ERROR"

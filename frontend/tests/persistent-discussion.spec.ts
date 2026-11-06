@@ -134,106 +134,90 @@ for(const language of ['en','fr'] as const){
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  });
 
- test(`ticket preparation opens a saved draft before an explicit deep launch in ${language}`,async({page})=>{
-  let value:any=dossier();let launches=0;
-  let draft:any={revision:0,discussion_revision:1,source_version:null,source_verified:false,analysis_state:'none',verified_scope:'',limitations:[],has_new_messages:false,scope_choice:'unknown',update_recommended:true,title:'Contract dates',body:'Prevent inconsistent dates.',markdown:'# Contract dates\n\n> Unverified draft\n\nPrevent inconsistent dates.',publication_available:false,publication_allowed:false};
-  await page.route('**/api/**',route=>route.fulfill({json:[]}));
-  await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
-  await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language,primary_color:'#168e95'}}));
-  await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
-  await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),route=>{
-   if(route.request().method()==='PUT'){
-    const payload=route.request().postDataJSON();expect(payload.expected_revision).toBe(draft.revision);
-    draft={...draft,revision:draft.revision+1,title:payload.title,body:payload.body};
-   }
-   return route.fulfill({json:draft});
-  });
+ test(`ticket preparation saves the same draft before an explicit deep launch in ${language}`,async({page})=>{
+  const fixture=await ticketFixture(page,language);
+  let launches=0;
   await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{
-   expect(route.request().postDataJSON()).toMatchObject({expected_revision:1,intent:'change',preparation_revision:1,subject:'Contract dates'});launches++;
-   value={...value,workflow:'request',status:'QUEUED',discussion:{...value.discussion,mode:'analysis'}};
-   return route.fulfill({json:value});
+   expect(route.request().postDataJSON()).toMatchObject({expected_revision:1,intent:'change',subject:'Contract dates',ticket_id:ticketId,preparation_revision:2});launches++;
+   return route.fulfill({json:fixture.value});
   });
-  await page.route(`**/api/analyses/${id}/cancel`,route=>{value={...value,status:'CANCELLED'};return route.fulfill({json:value});});
   await page.goto(`/analyses/${id}`);
-  await expect(page.locator('#analysis-report')).toHaveCount(0);
-  await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
-  const preparation=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
-  await expect(preparation).toBeVisible();
-  await expect(preparation).toContainText(t('No deep analysis yet.'));
+  await page.getByRole('button',{name:t('Draft'),exact:true}).click();
+  const modal=page.getByRole('dialog',{name:t('Create ticket'),exact:true});
+  await modal.getByRole('button',{name:t('Edit'),exact:true}).click();
+  await modal.getByLabel(t('Description'),{exact:true}).fill('Reject inconsistent dates with a message.');
+  await modal.getByRole('button',{name:t('Save'),exact:true}).click();
+  await expect(modal).toContainText(t('Ticket draft saved.'));expect(launches).toBe(0);
+  await modal.getByRole('button',{name:t('Close'),exact:true}).first().click();
+  await page.reload();await page.getByRole('button',{name:t('Draft'),exact:true}).click();
+  await modal.getByRole('button',{name:t('Edit'),exact:true}).click();
+  await expect(modal.getByLabel(t('Description'),{exact:true})).toHaveValue('Reject inconsistent dates with a message.');
+  await modal.getByText(t('Additional options'),{exact:true}).click();
+  await modal.getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
   expect(launches).toBe(0);
-  await preparation.getByLabel(t('Ticket description'),{exact:true}).fill('Reject inconsistent dates with a message.');
-  await preparation.getByRole('button',{name:t('Save'),exact:true}).click();
-  await expect(preparation).toContainText(t('Ticket draft saved.'));
-  expect(launches).toBe(0);
-  await preparation.getByRole('button',{name:t('Cancel'),exact:true}).click();
-  await page.reload();
-  await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
-  await expect(preparation.getByLabel(t('Ticket description'),{exact:true})).toHaveValue('Reject inconsistent dates with a message.');
-  await preparation.getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
-  expect(launches).toBe(1);
-  await expect(preparation).not.toBeVisible();
-  await page.locator('.conversation-reply').getByRole('button',{name:t('Cancel'),exact:true}).click();
-  await expect(page.getByLabel(t('Your message'),{exact:true})).toBeEnabled();
-  await expect(page.locator('.analysis-conversation [data-message="message-1"]').getByText('Explain benefit behavior.',{exact:true})).toBeVisible();
+  await page.getByRole('dialog',{name:t('Deep analysis'),exact:true}).getByRole('button',{name:t('Launch deep analysis'),exact:true}).click();
+  await expect.poll(()=>launches).toBe(1);await expect(modal).not.toBeVisible();
+  expect(fixture.draft.body).toBe('Reject inconsistent dates with a message.');
  });
 
- test(`ticket drafting selects one subject and uses one assistant without deep analysis in ${language}`,async({page})=>{
-  let value:any=dossier();let generations=0,deep=0,polls=0;
-  let draft:any={revision:0,discussion_revision:1,source_version:null,source_verified:false,analysis_state:'interrupted',verified_scope:'',limitations:[],has_new_messages:true,scope_choice:'unknown',title:'Switch question',body:'Recorded switch findings in `menu.py:42`.',markdown:'Unverified draft',publication_available:false,publication_allowed:false,topic_message_id:2,topics:[{id:2,label:'Explain the switch menu.'},{id:1,label:'Explain import batches.'}],discussion_findings_available:true,generation:null};
-  await page.route('**/api/**',route=>route.fulfill({json:[]}));
-  await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
-  await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
-  await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
-  await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{deep++;return route.fulfill({json:value});});
-  await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),route=>{
-   const topic=new URL(route.request().url()).searchParams.get('topic_message_id');
-   if(topic==='1')draft={...draft,topic_message_id:1,title:'Import batches',body:'Recorded batch findings in `import.py:12`.'};
-   if(route.request().method()==='PUT'){const payload=route.request().postDataJSON();draft={...draft,revision:draft.revision+1,title:payload.title,body:payload.body,topic_message_id:payload.topic_message_id};}
-   if(draft.generation?.status==='RUNNING'&&++polls>=2){draft={...draft,revision:draft.revision+1,title:'Document import validation',body:'## Findings\nThe import validates the file (`import.py:12`).\n\n## Limits\nNot independently verified.',generation:{...draft.generation,status:'DONE'}};value={...value,status:'DISCUSSING'};}
-   return route.fulfill({json:draft});
-  });
+ test(`initial ticket writing uses the conversation without a subject picker in ${language}`,async({page})=>{
+  const fixture=await ticketFixture(page,language);
+  fixture.draft={...fixture.draft,id:null,active:false,revision:0,title:'',body:''};
+  fixture.value={...fixture.value,active_ticket:null};
+  let generations=0,polls=0,deep=0;
+  await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{deep++;return route.fulfill({json:fixture.value});});
   await page.route(`**/api/analyses/${id}/ticket-preparation/generate`,route=>{
-   expect(route.request().postDataJSON()).toMatchObject({topic_message_id:1,expected_revision:1});generations++;
-   draft={...draft,generation:{id:9,status:'RUNNING',error:'',waiting_reason:''}};value={...value,status:'QUEUED'};
-   return route.fulfill({json:value});
+   const payload=route.request().postDataJSON();expect(payload).toMatchObject({purpose:'prepare',expected_revision:0});
+   expect(payload).not.toHaveProperty('topic_message_id');generations++;
+   fixture.draft={...fixture.draft,id:ticketId,active:true,initial_pending:true,generation:{id:9,status:'RUNNING',error:'',waiting_reason:''}};
+   return route.fulfill({json:fixture.value});
   });
-  await page.goto(`/analyses/${id}`);
-  await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
-  await expect(dialog.getByLabel(t('Ticket subject'),{exact:true})).toHaveValue('2');
-  await dialog.getByLabel(t('Ticket subject'),{exact:true}).selectOption('1');
-  await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toHaveValue('Recorded batch findings in `import.py:12`.');
-  expect(generations).toBe(0);expect(deep).toBe(0);
-  await dialog.getByRole('button',{name:t('Write from conversation'),exact:true}).click();
-  await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toBeDisabled();
-  await expect(dialog.getByLabel(t('Ticket title'),{exact:true})).toHaveValue('Document import validation');
-  await expect(dialog.getByLabel(t('Ticket description'),{exact:true})).toContainText('import.py:12');
+  await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),route=>{
+   if(fixture.draft.generation?.status==='RUNNING'&&++polls>=2)fixture.draft={...fixture.draft,title:'Document import validation',body:'The import validates the file. Missing checks remain unverified.',initial_pending:false,generation:{id:9,status:'DONE',error:'',waiting_reason:''}};
+   return route.fulfill({json:fixture.draft});
+  });
+  await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
+  const modal=page.getByRole('dialog',{name:t('Create ticket'),exact:true});
+  await expect(modal.getByLabel(t('Title'),{exact:true})).toHaveValue('Document import validation');
+  await expect(modal.getByLabel(t('Ticket subject'),{exact:true})).toHaveCount(0);
+  await expect(modal.getByRole('region',{name:t('Description'),exact:true})).toContainText('Missing checks remain unverified.');
   expect(generations).toBe(1);expect(deep).toBe(0);
  });
 
  for(const state of ['complete','partial','interrupted'] as const){
   test(`ticket preparation reuses ${state} analysis without relaunching in ${language}`,async({page})=>{
-   const source=dossier();let launches=0;
-   const value:any={...source,status:state==='complete'?'DISCUSSING':state==='partial'?'PARTIAL':'ERROR'};
-   let draft:any={revision:0,discussion_revision:1,source_version:1,source_verified:state==='complete',analysis_state:state,verified_scope:'Explain the cause of inconsistent dates.',limitations:state==='partial'?['Runtime checks were not completed.']:[],has_new_messages:true,scope_choice:'unknown',update_recommended:true,title:'Reject inconsistent dates',body:'## Findings\n\nIndependent date updates.\n\n## Additional request — unverified\n\nShow an error.',markdown:'Unverified proposals',publication_available:false,publication_allowed:false};
-   await page.route('**/api/**',route=>route.fulfill({json:[]}));
-   await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
-   await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
-   await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
-   await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{launches++;return route.fulfill({json:value});});
-   await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),route=>{
-    if(route.request().method()==='PUT'){const payload=route.request().postDataJSON();draft={...draft,revision:1,scope_choice:payload.scope_choice};}
-    return route.fulfill({json:draft});
-   });
-   await page.goto(`/analyses/${id}`);
-   await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).click();
-   const preparation=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
-   await expect(preparation.getByLabel(t('Ticket description'),{exact:true})).toContainText('Show an error.');
-   await preparation.getByLabel(t('Changes since the analysis'),{exact:true}).selectOption('clarified');
-   await preparation.getByRole('button',{name:t('Save'),exact:true}).click();
-   await expect(preparation).toContainText(t('Ticket draft saved.'));
-   await expect(preparation.getByRole('button',{name:t('Update analysis'),exact:true})).toBeVisible();
-   expect(launches).toBe(0);
+   const fixture=await ticketFixture(page,language);
+   fixture.draft={...fixture.draft,source_version:1,source_verified:state==='complete',body:'## Findings\n\nIndependent date updates.\n\n## Additional request — unverified\n\nShow an error.'};
+   let launches=0;
+   await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{launches++;return route.fulfill({json:fixture.value});});
+   await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:t('Draft'),exact:true}).click();
+   const modal=page.getByRole('dialog',{name:t('Create ticket'),exact:true});
+   await expect(modal.getByRole('region',{name:t('Description'),exact:true})).toContainText('Show an error.');
+   await modal.getByRole('button',{name:t('Edit'),exact:true}).click();
+   await modal.getByLabel(t('Description'),{exact:true}).fill(fixture.draft.body+'\n\nPreserve the existing behavior.');
+   await modal.getByRole('button',{name:t('Save'),exact:true}).click();
+   await expect(modal).toContainText(t('Ticket draft saved.'));
+   await modal.getByText(t('Additional options'),{exact:true}).click();
+   await expect(modal).toContainText(t(state==='complete'?'Relevant deep analysis available':'Without deep verification'));
+   await expect(modal.getByRole('button',{name:t('Launch deep analysis'),exact:true})).toBeVisible();
+   expect(launches).toBe(0);expect(fixture.draft.id).toBe(ticketId);expect(fixture.draft.source_version).toBe(1);
   });
  }
+}
+
+const ticketId='32323232-3232-4323-8323-323232323232';
+async function ticketFixture(page:import('@playwright/test').Page,language:'en'|'fr'){
+ const state:{value:any;draft:any}={value:{...dossier(),active_ticket:{id:ticketId,title:'Contract dates',status:'DRAFT'}},draft:{id:ticketId,active:true,read_only:false,revision:1,discussion_revision:1,source_version:null,source_verified:false,scope_choice:'unknown',title:'Contract dates',body:'Prevent inconsistent dates.',documents:['goal'],generation:null,proposal:null}};
+ await page.route('**/api/**',route=>route.fulfill({json:[]}));
+ await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
+ await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
+ await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:state.value}));
+ await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`),route=>{
+  if(route.request().method()==='PUT'){
+   const payload=route.request().postDataJSON();expect(payload.expected_revision).toBe(state.draft.revision);
+   state.draft={...state.draft,...payload,revision:state.draft.revision+1};
+  }
+  return route.fulfill({json:state.draft});
+ });
+ return state;
 }
