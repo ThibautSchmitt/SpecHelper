@@ -42,6 +42,15 @@ remain blocked. New identities/CVEs, fixable or unreviewed high/critical
 findings, secrets and missing controls remain blocking. Raw finding counts are retained.
 Review lower-severity records too.
 
+The runtime uses the distribution's Bubblewrap binary at `/usr/local/bin/bwrap`.
+This avoids automatic attachment of a host desktop profile for `/usr/bin/bwrap`
+that can deny the trusted `setpriv` UID transition inside an explicitly unconfined
+Docker runtime. The host's AppArmor profiles are left intact. This does not grant
+capabilities to analysis code: exact-image Linux tests still require UID/GID 10001,
+zero effective/bounding capabilities, no-new-privileges, seccomp, read-only sources,
+and blocked arbitrary network/credential access. An unsuccessful boundary probe
+continues to prevent execution.
+
 The [infrastructure exception register](../security/trivy-exceptions.json) has one
 exact DS002 exception for the trusted supervisor in `runtime/Dockerfile`, expiring
 2027-01-23. It does not cover the frontend/backend or analysis child. Non-root child,
