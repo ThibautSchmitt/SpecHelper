@@ -102,6 +102,29 @@ back up data, then rebuild:
 docker compose up --build -d
 ```
 
+Check free space **inside Docker's VM** before building or exporting images; host
+free space alone is insufficient. Existing database and source volumes must not be
+removed to make room. The backend's GitHub CLI compiler uses temporary in-memory
+compiler cache and two compilation workers, avoiding large persisted Go cache
+layers; allow sufficient VM RAM for this build. Downloaded modules use temporary
+disk space and are removed from the build layer after compilation, while the
+executable and upstream licenses are retained.
+
+For a backend-only change, build once and then recreate only the affected services:
+
+```sh
+docker compose build backend
+docker image tag spechelper-backend spechelper-worker
+docker compose up -d --no-build --no-deps --wait backend worker
+docker compose ps
+curl --fail http://localhost:3000/api/health
+```
+
+Keep the previous image IDs until health and data-preservation checks pass. Use
+those exact images to roll back the affected services if necessary; do not delete
+volumes or reset the database. A full installation update still uses the complete
+build command above when other components changed.
+
 Automatic migrations update the application database. Rehearse them on a protected
 copy when upgrading a team installation. Source commits or pushes alone do not
 upgrade running containers. Use the in-application CLI update action for detected

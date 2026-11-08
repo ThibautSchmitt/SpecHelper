@@ -92,7 +92,7 @@ Run the local-retirement, ownership, cleanup and query-budget checks from `backe
 ```sh
 uv run pytest -q tests/test_local_deletion.py tests/test_session_cleanup.py \
   tests/test_cleanup_admin.py tests/test_resource_probe.py \
-  tests/test_publication_query_budget.py
+  tests/test_publication_query_budget.py tests/test_conversation_read_budget.py
 ```
 
 Use disposable PostgreSQL for `tests/test_persistent_discussion_postgres.py`,
@@ -101,6 +101,12 @@ exercise row locks, account reservations and concurrent publication/reconciliati
 with controlled providers. Synthetic tokens and HTTP fixtures are not evidence of
 real multi-account provider capacity. Keep each simultaneous test runner's database
 name distinct; `SPECHELPER_TEST_POSTGRES_DSN` is a separate optional SQL fixture.
+
+The conversation-read regression preserves 1,000 messages and 20 historical cycles
+while checking that each latest cycle/result is fetched once and unchanged progress
+responses remain small. `SPECHELPER_BENCHMARK_REPORT=/absolute/output.json` retains
+the five-read timing/query/payload measurements when needed. Timing is evidence,
+not a machine-independent pass threshold.
 
 The [load methodology](local-administration.md#controlled-and-real-load-tests)
 provides opt-in five/ten-conversation native probes, resource sampling and limits

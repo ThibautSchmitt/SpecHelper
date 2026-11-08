@@ -13,6 +13,13 @@ and [Security campaign 42466160999](https://github.com/ThibautSchmitt/SpecHelper
 Backend, desktop/mobile browser checks, source scans, all three image gates and
 DAST succeeded. No check was disabled to obtain this result.
 
+The subsequent application commit `150b5f77952619b5a2ef30a362d318884e88b5d5`
+also passed the complete [Checks 42468822903](https://github.com/ThibautSchmitt/SpecHelper/actions/runs/42468822903)
+and [Security campaign 42468822961](https://github.com/ThibautSchmitt/SpecHelper/actions/runs/42468822961):
+**1,739 backend tests passed** (one deprecation warning), both browser viewport
+suites passed, and all source/image/DAST gates passed. This commit includes the
+conversation-read optimization measured below and was pushed to `main`.
+
 - Backend CI installs the `rg` executable required by its evaluation tests and
   allows 25 minutes for the complete suite. A capability test now supplies its
   own SQL-requiring skill rather than assuming the built-in privacy skill needs SQL.
@@ -160,3 +167,50 @@ A controlled HTTP fixture verified two waves reusing five conversations (ten
 responses, zero native inferences); it is separate from the actual provider results.
 Run commands and remaining acceptance criteria are in
 [local administration](local-administration.md#controlled-and-real-load-tests).
+
+## Local deployment — 8 November 2026
+
+The optimized application backend and worker were rebuilt and recreated at
+10:17 UTC. The running image is
+`sha256:c6807152979cf790e82b907b73b9d77b592d14fd0207a2892505a9a48d1d3400`
+(415,678,086 bytes). Its three optimized Python source files have the same SHA-256
+digests as the checkout. Frontend and native runtime application behavior did not
+change in this backend-only deployment. No database migration was pending.
+
+Before replacement, an application PostgreSQL custom-format backup was verified
+(1,844,575 bytes; SHA-256
+`e79d9112da8d339210d165486ca8bee4dda331aa2e7efc9c9700b0f3dd62c870`).
+The previous backend image remains tagged locally for rollback; persistent volumes
+and encryption/control keys were retained. No active AI job was interrupted by
+service replacement.
+
+The low-space rebuild first tried putting both Go module and compiler caches in
+memory. That attempt was cancelled after memory pressure temporarily stalled
+Docker and the application. It was not deployed. The final Dockerfile keeps only
+the compiler cache in memory, uses two compilation workers, and removes downloaded
+modules from the build layer after retaining their licenses. The completed build
+took 342 seconds; the monitored minima were 1,126,957,056 free disk bytes and
+1,156,993,024 available VM-memory bytes. Its compiler step retains a 40.73 MB build
+record rather than the previously observed 1.55 GB cache. Specifically
+identified, unused, non-shared SpecHelper CLI build records (about 922 MB) were
+removed; no global cache prune, application-data deletion or shared-resource cleanup
+was performed. About 2.6 GB remained free after deployment.
+
+Post-deployment checks:
+
+- Compose reported the backend healthy; the worker started and reached the native
+  runtime. `/api/health` returned HTTP 200 and Django reported no system-check issue.
+- Exact-image applicability checks all passed, including non-root execution,
+  no privilege escalation and fixed library versions. Both upstream licenses are
+  present. The rebuilt GitHub CLI executable has the same SHA-256 digest as the
+  previously validated executable.
+- Counts were preserved: 83 conversations, 291 messages, 50 analysis runs, 24
+  results, 11 conversation tickets, four publication records and 227 AI sessions.
+  Content/source/session hashes matched the pre-deployment state. Only three older
+  conversations' archive timestamps changed during the observation window; this is
+  recorded separately from content preservation, without attributing its cause.
+- The 17-conversation restart fixture remained identical. The real GitLab and GLPI
+  publication links still passed the browser/reload checks after deployment.
+
+No additional provider inference or external publication was performed for this
+deployment. The quota-related qualification limits above remain open.

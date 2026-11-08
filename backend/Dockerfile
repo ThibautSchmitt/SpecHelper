@@ -6,10 +6,13 @@ RUN go mod download github.com/cli/cli/v2@v${GH_VERSION} \
     && cp -a /go/pkg/mod/github.com/cli/cli/v2@v${GH_VERSION} /src \
     && chmod -R u+w /src
 WORKDIR /src
-RUN go mod edit -require=golang.org/x/net@v0.62.0 && go mod tidy \
+RUN --mount=type=tmpfs,target=/root/.cache/go-build \
+    GOMAXPROCS=2 go mod edit -require=golang.org/x/net@v0.62.0 && GOMAXPROCS=2 go mod tidy \
     && go mod verify \
-    && go build -trimpath -ldflags="-s -w -X github.com/cli/cli/v2/internal/build.Version=${GH_VERSION}" -o /out/gh ./cmd/gh \
-    && /out/gh --version
+    && GOMAXPROCS=2 go build -p=2 -trimpath -ldflags="-s -w -X github.com/cli/cli/v2/internal/build.Version=${GH_VERSION}" -o /out/gh ./cmd/gh \
+    && cp /go/pkg/mod/golang.org/x/net@v0.62.0/LICENSE /out/x-net-LICENSE \
+    && /out/gh --version \
+    && rm -rf /go/pkg/mod
 
 FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH=/app/backend/.venv/bin:$PATH
@@ -20,7 +23,7 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev && pip uninstall -y uv
 COPY --from=github-cli /out/gh /usr/local/bin/gh
 COPY --from=github-cli /src/LICENSE /usr/share/licenses/github-cli/LICENSE
-COPY --from=github-cli /go/pkg/mod/golang.org/x/net@v0.62.0/LICENSE /usr/share/licenses/github-cli/x-net-LICENSE
+COPY --from=github-cli /out/x-net-LICENSE /usr/share/licenses/github-cli/x-net-LICENSE
 COPY scripts/security/update-libraries.sh /tmp/update-libraries.sh
 RUN sh /tmp/update-libraries.sh && rm /tmp/update-libraries.sh
 COPY backend/ ./
