@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import {parseArgs} from 'node:util';
 import {chromium} from '../../frontend/node_modules/playwright/index.mjs';
 
-const {values}=parseArgs({options:{base:{type:'string',default:'http://localhost:3000'},environment:{type:'string'},parallel:{type:'string',default:'5'},rounds:{type:'string',default:'1'},output:{type:'string'},'allow-inference':{type:'boolean',default:false},'timeout-seconds':{type:'string',default:'1200'}}});
-const parallel=Number(values.parallel), rounds=Number(values.rounds), timeout=Number(values['timeout-seconds']);
+const {values}=parseArgs({options:{base:{type:'string',default:'http://localhost:3000'},environment:{type:'string'},parallel:{type:'string',default:'5'},rounds:{type:'string',default:'1'},output:{type:'string'},'allow-inference':{type:'boolean',default:false},'timeout-seconds':{type:'string',default:'1200'},'reuse-conversations':{type:'boolean',default:false},'interval-seconds':{type:'string',default:'0'}}});
+const parallel=Number(values.parallel), rounds=Number(values.rounds), timeout=Number(values['timeout-seconds']), interval=Number(values['interval-seconds']);
 const base=new URL(values.base);
 if(!values['allow-inference']||!values.environment||!values.output||![5,10].includes(parallel)||!Number.isInteger(rounds)||rounds<1||rounds>20||!Number.isFinite(timeout)||timeout<30||timeout>3600||!['localhost','127.0.0.1'].includes(base.hostname))throw Error('Use a dedicated local test environment, --parallel 5|10, --output and explicit --allow-inference. Native AI quota will be consumed.');
+if(!Number.isFinite(interval)||interval<0||interval>3600||interval>0&&!values['reuse-conversations'])throw Error('Use --reuse-conversations with --interval-seconds 0..3600 for endurance.');
 const questions=['Quel framework utilise le backend ?', 'Quel framework utilise le frontend ?', 'Quelle base stocke les conversations ?', 'Quel outil sert les requêtes HTTP Django ?', 'Quel outil exécute les tests backend ?', 'Quel outil exécute les tests navigateur ?', 'Quel outil orchestre les conteneurs locaux ?', 'Quel format utilisent les rapports textuels ?', 'Quel langage utilise le backend ?', 'Quel langage utilise principalement le frontend ?'];
-const report={kind:'real-native-conversation-load',parallel,rounds,started_at:new Date().toISOString(),environment_id:Number(values.environment),operations:[],limits:['No external publication is performed','Native provider quotas and current connection capacity are preserved','Small samples do not establish p95/p99 service guarantees']};
+const report={kind:'real-native-conversation-load',parallel,rounds,reuse_conversations:values['reuse-conversations'],interval_seconds:interval,started_at:new Date().toISOString(),environment_id:Number(values.environment),operations:[],limits:['No external publication is performed','Native provider quotas and current connection capacity are preserved','Small samples do not establish p95/p99 service guarantees']};
 const save=()=>fs.writeFileSync(values.output,JSON.stringify(report,null,2)+'\n');
 const browser=await chromium.launch({channel:process.env.PLAYWRIGHT_CHANNEL||'chrome',headless:true});
 try{
@@ -20,13 +21,20 @@ try{
  async function get(path){const response=await page.request.get(new URL('/api'+path,base).href);if(!response.ok())throw Error('Read rejected: '+response.status());return response.json();}
  const environment=(await get('/environments')).find(item=>item.id===Number(values.environment));
  if(!environment||environment.status!=='READY')throw Error('Dedicated environment must be ready');
+ const conversationIds=[];
  for(let round=0;round<rounds;round++){
+  const wait=Date.parse(report.started_at)+round*interval*1000-Date.now();
+  if(wait>0)await new Promise(resolve=>setTimeout(resolve,wait));
   const batch=await Promise.all(questions.slice(0,parallel).map(async(question,index)=>{
    const marker=`LOAD-${Date.now()}-${round}-${index}`;
-   const value=await call('/analyses',{environment_id:environment.id,need:`${question} Consulte uniquement les manifestes nécessaires de SpecHelper. Réponds en une phrase concise en incluant le marqueur ${marker}. Ne prépare ni ticket ni analyse approfondie.`});
+   const message=`${question} Consulte uniquement les manifestes nécessaires de SpecHelper. Réponds en une phrase concise en incluant le marqueur ${marker}. Ne prépare ni ticket ni analyse approfondie.`;
+   const resume=values['reuse-conversations']&&round>0;
+   const value=resume?await get('/analyses/'+conversationIds[index]):await call('/analyses',{environment_id:environment.id,need:message});
+   if(resume&&value.conversation_state!=='DISCUSSION')throw Error('Conversation is not idle; refusing to overlap native operations');
+   conversationIds[index]=value.id;
    const operation={id:value.id,marker,round,index,submitted_at:new Date().toISOString(),started_at:null,finished_at:null,status:'SUBMITTING',connection_id:null,foreign_marker:false};
    report.operations.push(operation);save();
-   const launched=await call('/analyses/'+value.id+'/analyze');
+   const launched=resume?await call('/analyses/'+value.id+'/discussion',{message,expected_revision:value.discussion.revision}):await call('/analyses/'+value.id+'/analyze');
    operation.connection_id=launched.discussion?.connection_id;operation.status='QUEUED';save();return operation;
   }));
   const deadline=Date.now()+timeout*1000;
@@ -49,11 +57,15 @@ try{
    if(batch.some(operation=>!operation.finished_at))await new Promise(resolve=>setTimeout(resolve,5000));
   }
   if(batch.some(operation=>!operation.finished_at)){report.timed_out=true;break;}
+  if(batch.some(operation=>operation.status!=='DONE'||!operation.own_marker||operation.foreign_marker))break;
+  console.log(JSON.stringify({round:round+1,completed:batch.length,at:new Date().toISOString()}));
  }
  report.finished_at=new Date().toISOString();
  report.summary={operations:report.operations.length,done:report.operations.filter(item=>item.status==='DONE').length,errors:report.operations.filter(item=>item.status==='ERROR').length,cancelled:report.operations.filter(item=>item.status==='CANCELLED').length,missing_markers:report.operations.filter(item=>item.status==='DONE'&&!item.own_marker).length,foreign_markers:report.operations.filter(item=>item.foreign_marker).length,pending:report.operations.filter(item=>!item.finished_at).length};
  save();console.log(JSON.stringify(report.summary));
- if(report.summary.done!==report.summary.operations||report.summary.pending||report.summary.errors||report.summary.foreign_markers||report.summary.missing_markers)process.exitCode=1;
+ report.elapsed_seconds=(Date.parse(report.finished_at)-Date.parse(report.started_at))/1000;
+ save();
+ if(report.summary.operations!==parallel*rounds||report.summary.done!==report.summary.operations||report.summary.pending||report.summary.errors||report.summary.foreign_markers||report.summary.missing_markers)process.exitCode=1;
 }catch(error){
  report.transport_failure=error.name||'Error';report.finished_at=new Date().toISOString();save();console.log(JSON.stringify({transport_failure:report.transport_failure,pending:report.operations.filter(item=>!item.finished_at).length}));process.exitCode=1;
 }finally{await browser.close();}

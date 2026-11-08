@@ -130,6 +130,10 @@ node scripts/evaluation/conversation_load.mjs --environment 10 --parallel 5 \
   --rounds 1 --output .local/load/native-5.json --allow-inference
 node scripts/evaluation/conversation_load.mjs --environment 10 --parallel 10 \
   --rounds 1 --output .local/load/native-10.json --allow-inference
+# Five waves on the same ten conversations, scheduled over two hours:
+node scripts/evaluation/conversation_load.mjs --environment 10 --parallel 10 \
+  --rounds 5 --reuse-conversations --interval-seconds 1800 \
+  --output .local/load/native-endurance.json --allow-inference
 ```
 
 Replace `10` with the actual dedicated environment ID. Run resource sampling in a
@@ -142,6 +146,11 @@ inspect them and cancel them normally before another test or redeployment.
 `--base` defaults to `http://localhost:3000` and accepts only `localhost` or
 `127.0.0.1`. `--parallel` accepts 5 or 10; `--rounds` accepts 1–20.
 `--timeout-seconds` defaults to 1200 and accepts 30–3600 seconds per batch.
+`--reuse-conversations` resumes the same native threads on subsequent rounds;
+without it, each round creates fresh conversations. `--interval-seconds` accepts
+0–3600 and requires reuse; it schedules wave starts, waiting for completion before
+the next wave. A two-hour schedule is not proof of two hours of successful work:
+check completion counts, quota waits and recorded session identifiers.
 `--environment`, `--output` and `--allow-inference` are required. A batch timeout
 does not cancel its outstanding jobs; test conversations and histories remain
 available for inspection and normal archive/cancel actions.
@@ -155,4 +164,5 @@ creation reconciliation instead.
 Release qualification requires no mixed contexts/accounts, duplicate writes,
 corrupted drafts, persistent orphan processes or forgotten jobs. Derive numerical
 CPU/RAM/latency thresholds from the target hardware and its baseline. Current
-evidence and unverified cases are recorded in the [qualification report](stabilization-final.md).
+evidence and unverified cases are recorded in the [qualification report](stabilization-final.md)
+and its [8 November follow-up](stabilization-follow-up.md).

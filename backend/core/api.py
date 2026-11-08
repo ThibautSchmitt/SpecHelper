@@ -260,13 +260,17 @@ def request_dict(value, full=False):
         result.update(progress_snapshot_for_request(value))
         from .need_revisions import revision_state
 
-        result.update(revision_state(value))
+        # Reuse these heavy JSON rows throughout this response rather than
+        # fetching the latest cycle/result separately for each projection.
+        latest_run = value.analysis_runs.select_related("job").order_by("-number").first()
+        latest_version = value.versions.select_related("run").order_by("-number").first()
+        if latest_version:
+            latest_version.request = value
+        result.update(revision_state(value, latest_version=latest_version))
         analysis = AnalysisResult.objects.filter(request=value).first()
         from .business_decisions import snapshot_for_request
 
-        decisions = snapshot_for_request(value)
-        latest_run = value.analysis_runs.order_by("-number").first()
-        latest_version = value.versions.order_by("-number").first()
+        decisions = snapshot_for_request(value, latest_run=latest_run)
         summary = (latest_run.orchestration.get("business_summary") if latest_run else None) or (
             latest_version.business_summary if latest_version else {}
         )
@@ -345,7 +349,7 @@ def request_dict(value, full=False):
                         "job__payload",
                     )
                 ),
-                "latest_version": version_dict(value.versions.order_by("-number").first()),
+                "latest_version": version_dict(latest_version),
             }
         )
         from .analysis_states import result_state

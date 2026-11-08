@@ -20,9 +20,9 @@ class NeedRevisionIn(Schema):
     operation_id: UUID
 
 
-def revision_state(value):
+def revision_state(value, *, latest_version=...):
     revisions = list(value.messages.filter(kind="need_revision").order_by("created_at", "id"))
-    latest = value.versions.order_by("-number").first()
+    latest = value.versions.order_by("-number").first() if latest_version is ... else latest_version
     return {
         "need_revision": len(revisions),
         "conclusions_stale": bool(revisions and latest and revisions[-1].created_at > latest.created_at),

@@ -61,9 +61,9 @@ def describe(decision):
     }
 
 
-def snapshot_for_request(request, *, sequence_after=None):
+def snapshot_for_request(request, *, sequence_after=None, latest_run=...):
     if sequence_after is None and request.discussion_state.get("enabled"):
-        latest = request.analysis_runs.order_by("-number").first()
+        latest = request.analysis_runs.order_by("-number").first() if latest_run is ... else latest_run
         sequence_after = (latest.context_snapshot.get("dossier", {}).get("cycle_scope", {}).get("decision_sequence") if latest else None)
     decisions = request.business_decisions.order_by("sequence")
     if sequence_after is not None:

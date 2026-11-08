@@ -47,7 +47,7 @@ The [stabilization review](docs/stabilization.md) distinguishes tested guarantee
 release blockers and the real-world acceptance journey still required before a
 stable release.
 See [local operations](docs/local-administration.md) for safe stop/clean/purge commands and
-load-test methodology, and the [qualification results](docs/stabilization-final.md)
+load-test methodology, and the [latest qualification results](docs/stabilization-follow-up.md)
 for executed measurements and remaining limits.
 
 ## Quick start
