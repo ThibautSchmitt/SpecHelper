@@ -114,6 +114,7 @@ jobs:
           COMPONENT: ${{ matrix.component }}
         run: |
           docker image inspect "spechelper-security:$COMPONENT" --format '{{.Id}}' > security-reports/image-id.txt
+          docker image inspect "spechelper-security:$COMPONENT" > security-reports/image-inspect.json
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             -v "$PWD/scripts/security/image-probe.sh:/probe.sh:ro" \
             "spechelper-security:$COMPONENT" sh /probe.sh > security-reports/image-probe.json
@@ -177,7 +178,9 @@ jobs:
           spechelper-security:runtime python -m runtime.v25_smoke
           > security-reports/runtime-v25.json
       - name: Export image without exposing Docker socket to scanner
-        run: docker save "spechelper-security:${{ matrix.component }}" -o security-reports/image.tar
+        run: |
+          docker save "spechelper-security:${{ matrix.component }}" -o security-reports/image.tar
+          python3 scripts/security/bind_image_archive.py security-reports
       - name: Scan container packages and image configuration
         run: >-
           docker run --rm -v "$PWD/security-reports:/reports"

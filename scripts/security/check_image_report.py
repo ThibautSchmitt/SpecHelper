@@ -17,7 +17,13 @@ def check(directory, component, policy_path):
     evidence = read(directory / "image-evidence.json")
     policy = read(policy_path)
     image_id = report.get("Metadata", {}).get("ImageID")
-    if not image_id or evidence.get("image_id") != image_id or evidence.get("component") != component:
+    # Docker/containerd index IDs and OCI config IDs are distinct identities.
+    # A separately verified export binding is required when they differ.
+    matched = image_id and (evidence.get("image_id") == image_id or (
+        evidence.get("archive_binding_verified") is True
+        and evidence.get("archive_config_id") == image_id
+    ))
+    if not matched or evidence.get("component") != component:
         raise ValueError("Scanner and probe must identify the same exact image")
     if not report.get("Results") or not report.get("Metadata", {}).get("OS", {}).get("Family"):
         raise ValueError("Image scan lacks operating-system coverage")

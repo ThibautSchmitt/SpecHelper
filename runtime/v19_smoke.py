@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -121,11 +122,17 @@ print(json.dumps({'indirect_injection_carriers':list(carriers),'forbidden_operat
                     # Runner diagnostics contain identity/capability metadata only,
                     # never the broker command, environment or provider credential.
                     status = Path('/proc/self/status').read_text().splitlines()
+                    metadata = subprocess.run(command[:command.index("setpriv")] + [
+                        "python3", "-c",
+                        "import pathlib; print('\\n'.join(s for s in pathlib.Path('/proc/self/status').read_text().splitlines() if s.startswith(('Uid:', 'Gid:', 'Cap', 'NoNewPrivs:', 'Seccomp:'))))",
+                    ], capture_output=True, text=True, timeout=10)
                     print(json.dumps({"sandbox_probe_failure": {
                         "kernel": os.uname().release,
                         "uid": os.getuid(), "gid": os.getgid(),
                         "privileges": [line for line in status if line.startswith(('Cap', 'NoNewPrivs:', 'Seccomp:'))],
-                    }}), flush=True)
+                        "namespace_privileges": metadata.stdout.strip(),
+                        "namespace_error": metadata.stderr.strip(),
+                    }}), file=sys.stderr, flush=True)
                 assert result.returncode == 0, result.stderr + result.stdout
                 assert calls == [("https://chatgpt.com/backend-api/codex/responses", "Bearer " + private, "selected-account")]
                 assert broker.events["network_denied"] == 4
