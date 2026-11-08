@@ -41,7 +41,7 @@ EXCEPTION = "Migration imports bypass the ordinary cancellation guard."
 def test_database_enabled_pipeline_keeps_lazy_skills_within_current_tool_capabilities(
     environment, storage, committed_source, bundle
 ):
-    from core.models import DatabaseConnection
+    from core.models import DatabaseConnection, SkillDefinition
     from core.postgres import query
     from core.secrets import encrypt
     from runtime.broker import Broker
@@ -51,6 +51,15 @@ def test_database_enabled_pipeline_keeps_lazy_skills_within_current_tool_capabil
     schema = "v24_scope_" + uuid.uuid4().hex[:12]
     role = "v24_reader_" + uuid.uuid4().hex[:12]
     password = "fixture-v24-reader-only"
+    # The maintained data-protection procedure is useful without SQL access.
+    # Exercise capability filtering with an explicitly database-dependent skill.
+    SkillDefinition.objects.create(
+        slug="fixture-sql-scope",
+        name="Read-only SQL scope fixture",
+        objective="Inspect authorized PostgreSQL counts.",
+        instructions="Use only the granted read-only database gateway for counts.",
+        required_capabilities=["read_database"],
+    )
     with psycopg.connect(dsn, autocommit=True) as admin:
         admin.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
         admin.execute(

@@ -21,6 +21,7 @@ The lock files record dependency versions; they do not relicense dependencies.
 | lowlight / highlight.js | MIT / BSD-3-Clause; render syntax highlighting locally as React elements. Their notices are retained below. |
 | Mermaid | MIT; renders reviewed explanatory diagrams in the browser. Preserve its upstream notice and dependency licenses when distributing built packages. |
 | Caddy official Docker image | Apache-2.0; optional HTTPS reverse proxy. Preserve upstream image notices and dependency licenses. See the [Caddy license](https://github.com/caddyserver/caddy/blob/master/LICENSE). |
+| GitHub CLI | MIT; the backend rebuilds upstream 2.103.3 with golang.org/x/net 0.62.0 (BSD-3-Clause) for its parser fixes. Their licenses are retained under `/usr/share/licenses/github-cli/` in the backend image. This is a SpecHelper build of upstream source. |
 
 Other dependencies include software under MIT, BSD, Apache and PostgreSQL
 licenses. Preserve the licenses and notices supplied with installed packages.

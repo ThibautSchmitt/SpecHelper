@@ -706,6 +706,153 @@
           ]
         }
       ]
+    },
+    {
+      "cve": "CVE-2026-113351",
+      "owner": "SpecHelper maintainers; agent-assisted fixed-package review",
+      "reviewed": "2026-11-08",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-113351",
+      "reason": "The trixie scanner feed marks the source package affected without a trixie fixed version. The image installs the signed Debian sid binary libexpat1 2.10.0-1, listed as fixed by the Debian tracker. Exact installed version is checked in the image; this review does not apply to the older trixie package or any other version.",
+      "required_checks": [
+        "expat_fixed_version"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libexpat1@2.10.0-1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-115506",
+      "owner": "SpecHelper maintainers; agent-assisted fixed-package review",
+      "reviewed": "2026-11-08",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-115506",
+      "reason": "The trixie scanner feed marks the source package affected without a trixie fixed version. The image installs the signed Debian sid binary libexpat1 2.10.0-1, listed as fixed by the Debian tracker. Exact installed version is checked in the image; this review does not apply to the older trixie package or any other version.",
+      "required_checks": [
+        "expat_fixed_version"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libexpat1@2.10.0-1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-117610",
+      "owner": "SpecHelper maintainers; agent-assisted fixed-package review",
+      "reviewed": "2026-11-08",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-117610",
+      "reason": "The trixie scanner feed marks the source package affected without a trixie fixed version. The image installs the signed Debian sid binary libexpat1 2.10.0-1, listed as fixed by the Debian tracker. Exact installed version is checked in the image; this review does not apply to the older trixie package or any other version.",
+      "required_checks": [
+        "expat_fixed_version"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libexpat1@2.10.0-1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-118370",
+      "owner": "SpecHelper maintainers; agent-assisted fixed-package review",
+      "reviewed": "2026-11-08",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-118370",
+      "reason": "The trixie scanner feed marks the source package affected without a trixie fixed version. The image installs the signed Debian sid binary libexpat1 2.10.0-1, listed as fixed by the Debian tracker. Exact installed version is checked in the image; this review does not apply to the older trixie package or any other version.",
+      "required_checks": [
+        "expat_fixed_version"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libexpat1@2.10.0-1?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-119373",
+      "owner": "SpecHelper maintainers; agent-assisted fixed-package review",
+      "reviewed": "2026-11-08",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-119373",
+      "reason": "The trixie scanner feed marks the source package affected without a trixie fixed version. The image installs the signed Debian sid binary libsqlite3-0 3.54.1-2, listed as fixed by the Debian tracker. Exact installed version is checked in the image; this review does not apply to the older trixie package or any other version.",
+      "required_checks": [
+        "sqlite_fixed_version"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libsqlite3-0@3.54.1-2?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-119374",
+      "owner": "SpecHelper maintainers; agent-assisted fixed-package review",
+      "reviewed": "2026-11-08",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-119374",
+      "reason": "The trixie scanner feed marks the source package affected without a trixie fixed version. The image installs the signed Debian sid binary libsqlite3-0 3.54.1-2, listed as fixed by the Debian tracker. Exact installed version is checked in the image; this review does not apply to the older trixie package or any other version.",
+      "required_checks": [
+        "sqlite_fixed_version"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libsqlite3-0@3.54.1-2?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-119379",
+      "owner": "SpecHelper maintainers; agent-assisted fixed-package review",
+      "reviewed": "2026-11-08",
+      "expires": "2026-11-22",
+      "source": "https://security-tracker.debian.org/tracker/CVE-2026-119379",
+      "reason": "The trixie scanner feed marks the source package affected without a trixie fixed version. The image installs the signed Debian sid binary libsqlite3-0 3.54.1-2, listed as fixed by the Debian tracker. Exact installed version is checked in the image; this review does not apply to the older trixie package or any other version.",
+      "required_checks": [
+        "sqlite_fixed_version"
+      ],
+      "packages": [
+        {
+          "purl": "pkg:deb/debian/libsqlite3-0@3.54.1-2?arch=amd64&distro=debian-13.7",
+          "components": [
+            "backend",
+            "frontend",
+            "runtime"
+          ]
+        }
+      ]
     }
   ]
 }

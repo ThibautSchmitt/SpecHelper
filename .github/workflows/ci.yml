@@ -8,7 +8,7 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17
@@ -34,6 +34,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install uv==0.13.4
+      - name: Install source-navigation test dependency
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ripgrep
       - run: uv sync --project backend --frozen
       - run: uv run ruff check --config pyproject.toml . ../runtime
         working-directory: backend
@@ -44,6 +46,10 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [desktop, mobile]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,6 +72,7 @@ jobs:
         working-directory: frontend
         env:
           E2E_BASE_URL: http://127.0.0.1:3000
+          PLAYWRIGHT_JSON_OUTPUT_NAME: browser-results.json
         run: |
           npm run start > "$RUNNER_TEMP/spechelper-frontend.log" 2>&1 &
           frontend_pid=$!
@@ -81,4 +88,13 @@ jobs:
           else:
               raise SystemExit("Security-test frontend did not start")
           PY
-          npx playwright test tests/agy-usage.spec.ts tests/v19-security.spec.ts tests/v20-library.spec.ts tests/v20-models.spec.ts tests/v21-assistant.spec.ts tests/v22-clarification.spec.ts tests/v23-evidence.spec.ts tests/v24-orchestration.spec.ts tests/v24-cancellation.spec.ts tests/v24-retry.spec.ts tests/v25-admin.spec.ts tests/v25-ux.spec.ts tests/v25-web.spec.ts tests/v25-sync-history.spec.ts tests/v27-antigravity.spec.ts tests/v29-analysis.spec.ts tests/v291-polish.spec.ts tests/v291-priority.spec.ts tests/v18-queue.spec.ts tests/settings-consolidation.spec.ts tests/persistent-discussion.spec.ts tests/observed-progress.spec.ts tests/global-publication-connections.spec.ts tests/git-source-server.spec.ts tests/inline-settings.spec.ts tests/environments.spec.ts tests/conversation-ticket-preparation.spec.ts tests/deep-analysis-context.spec.ts tests/conversation-lifecycle.spec.ts
+          npx playwright test tests/agy-usage.spec.ts tests/v19-security.spec.ts tests/v20-library.spec.ts tests/v20-models.spec.ts tests/v21-assistant.spec.ts tests/v22-clarification.spec.ts tests/v23-evidence.spec.ts tests/v24-orchestration.spec.ts tests/v24-cancellation.spec.ts tests/v24-retry.spec.ts tests/v25-admin.spec.ts tests/v25-ux.spec.ts tests/v25-web.spec.ts tests/v25-sync-history.spec.ts tests/v27-antigravity.spec.ts tests/v29-analysis.spec.ts tests/v291-polish.spec.ts tests/v291-priority.spec.ts tests/v18-queue.spec.ts tests/settings-consolidation.spec.ts tests/persistent-discussion.spec.ts tests/observed-progress.spec.ts tests/global-publication-connections.spec.ts tests/git-source-server.spec.ts tests/inline-settings.spec.ts tests/environments.spec.ts tests/conversation-ticket-preparation.spec.ts tests/deep-analysis-context.spec.ts tests/conversation-lifecycle.spec.ts tests/local-retirement.spec.ts tests/skills-layout.spec.ts --project=${{ matrix.browser }} --workers=2 --reporter=line,json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-results-${{ matrix.browser }}
+          path: |
+            frontend/browser-results.json
+            frontend/test-results
+            ${{ runner.temp }}/spechelper-frontend.log
+          retention-days: 7

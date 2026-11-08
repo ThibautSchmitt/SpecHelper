@@ -117,6 +117,15 @@ print(json.dumps({'indirect_injection_carriers':list(carriers),'forbidden_operat
             with Broker("codex", {"tokens":{"access_token":private,"account_id":"selected-account"}}, 20, database=lambda sql: {"columns": ["note"], "rows": [[injection]]}) as broker:
                 command = server.sandbox(workspace, session, attachments, broker=broker) + ["python3", "-c", checks]
                 result = subprocess.run(command, capture_output=True, text=True, timeout=25)
+                if result.returncode:
+                    # Runner diagnostics contain identity/capability metadata only,
+                    # never the broker command, environment or provider credential.
+                    status = Path('/proc/self/status').read_text().splitlines()
+                    print(json.dumps({"sandbox_probe_failure": {
+                        "kernel": os.uname().release,
+                        "uid": os.getuid(), "gid": os.getgid(),
+                        "privileges": [line for line in status if line.startswith(('Cap', 'NoNewPrivs:', 'Seccomp:'))],
+                    }}), flush=True)
                 assert result.returncode == 0, result.stderr + result.stdout
                 assert calls == [("https://chatgpt.com/backend-api/codex/responses", "Bearer " + private, "selected-account")]
                 assert broker.events["network_denied"] == 4

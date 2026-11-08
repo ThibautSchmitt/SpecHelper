@@ -18,8 +18,12 @@ awk '$1 == "NoNewPrivs:" {if ($2 != 1) exit 1; seen=1} END {if (!seen) exit 1}' 
 nonroot=true
 if [ "$(id -u)" = 0 ]; then nonroot=false; fi
 github_fixed=false
+expat_fixed=false
+sqlite_fixed=false
+if [ "$(dpkg-query -W -f='${Version}' libexpat1 2>/dev/null || true)" = '2.10.0-1' ]; then expat_fixed=true; fi
+if [ "$(dpkg-query -W -f='${Version}' libsqlite3-0 2>/dev/null || true)" = '3.54.1-2' ]; then sqlite_fixed=true; fi
 if command -v gh >/dev/null 2>&1; then
   installed_gh=$(gh --version | awk 'NR == 1 {print $3}')
   if [ "$installed_gh" = '2.103.3' ]; then github_fixed=true; fi
 fi
-printf '{"no_suid_sgid":true,"no_infocmp":true,"no_perl_tar":true,"no_homed":true,"no_tpm_daemon":true,"no_tiffcrop":true,"no_x_server":true,"no_fstab_mounts":true,"no_new_privileges":true,"github_fixed_version":%s,"nonroot":%s}\n' "$github_fixed" "$nonroot"
+printf '{"no_suid_sgid":true,"no_infocmp":true,"no_perl_tar":true,"no_homed":true,"no_tpm_daemon":true,"no_tiffcrop":true,"no_x_server":true,"no_fstab_mounts":true,"no_new_privileges":true,"github_fixed_version":%s,"expat_fixed_version":%s,"sqlite_fixed_version":%s,"nonroot":%s}\n' "$github_fixed" "$expat_fixed" "$sqlite_fixed" "$nonroot"

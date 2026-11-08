@@ -6,6 +6,8 @@ COPY frontend/ ./
 ENV NEXT_TELEMETRY_DISABLED=1 BACKEND_URL=http://backend:8000
 RUN npm run build
 FROM node:22-trixie-slim
+COPY scripts/security/update-libraries.sh /tmp/update-libraries.sh
+RUN sh /tmp/update-libraries.sh && rm /tmp/update-libraries.sh
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /opt/yarn*
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000

@@ -167,7 +167,7 @@ def main():
         connection = http.client.HTTPSConnection("localhost", 443, context=context, timeout=10)
         try:
             connection.request("POST", "/api/health", body=b"x" * (26 * 1024 * 1024 + 1))
-        except BrokenPipeError:
+        except (BrokenPipeError, ConnectionResetError):
             # A proxy may reject the known length before the complete body arrives.
             pass
         assert connection.getresponse().status == 413

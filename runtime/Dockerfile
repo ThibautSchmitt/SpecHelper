@@ -16,6 +16,8 @@ RUN python /tmp/install_antigravity.py /tmp/antigravity-release.json /usr/local/
     && rm /tmp/install_antigravity.py /tmp/antigravity-release.json
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /root/.npm /root/.cache
 RUN apt-get update && apt-get install -y --no-install-recommends libseccomp2 && rm -rf /var/lib/apt/lists/*
+COPY scripts/security/update-libraries.sh /tmp/update-libraries.sh
+RUN sh /tmp/update-libraries.sh && rm /tmp/update-libraries.sh
 COPY backend/core/ ./core/
 COPY backend/config/ ./config/
 COPY runtime/ /app/runtime/

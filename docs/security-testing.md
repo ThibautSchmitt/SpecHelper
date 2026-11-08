@@ -31,7 +31,14 @@ There is no blanket dependency ignore list or broad test-source exclusion. The
 [image applicability register](../security/image-applicability.json) records exact
 package/image conditions and expiry, not a zero-vulnerability image. Reviews expire
 within 31 days and require controls verified in the same image. They apply only where
-no distribution fix is available. New identities/CVEs, fixable or unreviewed high/critical
+no fix is reported for the base distribution, or an exact installed replacement is
+confirmed fixed by Debian's tracker and checked in the image. In particular, the
+Trixie feed still flags Expat 2.10.0-1 and SQLite 3.54.1-2 even though those signed
+Debian sid packages include the fixes. Only these two exact libraries are installed
+from that repository; the remaining distribution is not upgraded to sid. The build
+removes the additional repository afterwards. Each reviewed CVE names the exact
+package identity, fixed-version probe, upstream evidence and expiry. Older packages
+remain blocked. New identities/CVEs, fixable or unreviewed high/critical
 findings, secrets and missing controls remain blocking. Raw finding counts are retained.
 Review lower-severity records too.
 

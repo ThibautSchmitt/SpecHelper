@@ -1,3 +1,16 @@
+FROM golang:1.27.3-trixie AS github-cli
+ARG GH_VERSION=2.103.3
+ENV GOSUMDB=sum.golang.org CGO_ENABLED=0
+# Rebuild the pinned upstream release with its fixed HTML parser dependency.
+RUN go mod download github.com/cli/cli/v2@v${GH_VERSION} \
+    && cp -a /go/pkg/mod/github.com/cli/cli/v2@v${GH_VERSION} /src \
+    && chmod -R u+w /src
+WORKDIR /src
+RUN go mod edit -require=golang.org/x/net@v0.62.0 && go mod tidy \
+    && go mod verify \
+    && go build -trimpath -ldflags="-s -w -X github.com/cli/cli/v2/internal/build.Version=${GH_VERSION}" -o /out/gh ./cmd/gh \
+    && /out/gh --version
+
 FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH=/app/backend/.venv/bin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
@@ -5,11 +18,11 @@ RUN pip install --no-cache-dir uv==0.13.4
 WORKDIR /app/backend
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev && pip uninstall -y uv
-ARG GH_VERSION=2.103.3
-# Official signed repository; fail if the documented trust key changes unexpectedly.
-RUN python -c 'import hashlib,pathlib,urllib.request; data=urllib.request.urlopen("https://cli.github.com/packages/githubcli-archive-keyring.gpg",timeout=60).read(); assert hashlib.sha256(data).hexdigest()=="6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b"; root=pathlib.Path("/etc/apt/keyrings"); root.mkdir(parents=True,exist_ok=True); (root/"githubcli-archive-keyring.gpg").write_bytes(data)'
-RUN echo 'deb [signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main' > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update && apt-get install -y --no-install-recommends gh=${GH_VERSION} && rm -rf /var/lib/apt/lists/*
+COPY --from=github-cli /out/gh /usr/local/bin/gh
+COPY --from=github-cli /src/LICENSE /usr/share/licenses/github-cli/LICENSE
+COPY --from=github-cli /go/pkg/mod/golang.org/x/net@v0.62.0/LICENSE /usr/share/licenses/github-cli/x-net-LICENSE
+COPY scripts/security/update-libraries.sh /tmp/update-libraries.sh
+RUN sh /tmp/update-libraries.sh && rm /tmp/update-libraries.sh
 COPY backend/ ./
 COPY LICENSE THIRD_PARTY_NOTICES.md /app/
 RUN chmod +x core/git_askpass.py core/login_browser.py

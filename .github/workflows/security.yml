@@ -69,7 +69,7 @@ jobs:
         continue-on-error: true
         run: >-
           docker run --rm -v "$PWD:/src:ro" -v "$PWD/security-reports:/reports"
-          aquasec/trivy:0.67.2 config --format json --output /reports/trivy-iac.json
+          aquasec/trivy:0.76.2 config --format json --output /reports/trivy-iac.json
           --severity HIGH,CRITICAL --exit-code 0 --skip-dirs /src/.git
           --skip-dirs /src/security-reports /src
       - uses: actions/upload-artifact@v4
@@ -181,7 +181,7 @@ jobs:
       - name: Scan container packages and image configuration
         run: >-
           docker run --rm -v "$PWD/security-reports:/reports"
-          aquasec/trivy:0.67.2 image --input /reports/image.tar
+          aquasec/trivy:0.76.2 image --input /reports/image.tar
           --scanners vuln,secret --image-config-scanners secret
           --exit-code 0 --timeout 15m --format json
           --output /reports/trivy-image.json
