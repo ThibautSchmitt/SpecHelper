@@ -80,16 +80,16 @@ for (const language of ["en", "fr"] as const) {
     page.on("request", request => { if (/\/(analyze|run)$/.test(request.url())) analysisCalls.push(request.url()); });
     await page.goto("/analyses");
     const sidebar = page.getByRole("complementary", { name: t("Instance navigation"), exact: true });
-    for (const [id, color] of [[1,"green"],[2,"orange"],[3,"orange"],[4,"red"],[5,"red"]]) {
+    for (const [id, color] of [[1,"green"],[2,"green"],[3,"green"],[4,"green"],[5,"unknown"]]) {
       await expect(sidebar.locator(`[data-connection="${id}"] [data-quota-color]`)).toHaveAttribute("data-quota-color", String(color));
-      await expect(sidebar.locator(`[data-connection="${id}"] .connection-dot`)).toHaveCSS("background-color", color === "green" ? "rgb(21, 128, 61)" : color === "orange" ? "rgb(180, 83, 9)" : "rgb(185, 28, 28)");
+      await expect(sidebar.locator(`[data-connection="${id}"] .connection-dot`)).toHaveCSS("background-color", color === "green" ? "rgb(21, 128, 61)" : "rgb(148, 163, 184)");
     }
     const old = sidebar.locator('[data-connection="1"]');
     await expect(old.getByRole("link")).toHaveAccessibleName(new RegExp(t("Data needs refreshing")));
     await expect(old.locator("details")).toHaveCount(0);
     await expect(old.getByRole("link")).toHaveAttribute("href", "/admin?tab=ai-agents&connection=1");
-    await expect(sidebar.locator('[data-connection="5"]')).toContainText(t("Quota exhausted"));
-    await expect(sidebar.locator('[data-connection="6"]')).toContainText(t("Quota unknown"));
+    await expect(sidebar.locator('[data-connection="5"]')).toContainText(t("Quota limit reported"));
+    await expect(sidebar.locator('[data-connection="6"]')).toContainText(t("Available"));
     await expect(sidebar.locator('[data-connection="6"] [role="meter"]')).toHaveCount(0);
     await sidebar.getByRole("button", { name: t("Refresh status and quotas"), exact: true }).click();
     await expect.poll(() => refreshes).toBe(6);
@@ -105,7 +105,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto("/admin");
     await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
     const main = page.getByRole("main");
-    await expect(main.getByText(t("Connected"), { exact: true }).first()).toBeVisible();
+    await expect(main.locator("#ai-connection-1 .connection-role-tag")).toHaveCount(3);
     const card = main.locator("#ai-connection-1");
     const quotaTag = card.getByText(t("Quota depleted"), { exact: true });
     await expect(quotaTag).toBeVisible();
@@ -136,14 +136,14 @@ for (const language of ["en", "fr"] as const) {
     await expect(card.locator(".connection-role-tag")).toHaveText([t("Analyst"), t("Counter-analyst"), t("Verifier")]);
     await card.getByLabel(t("More actions for {name}").replace("{name}", "Team assistant"), { exact: true }).click();
     await card.getByRole("button", { name: t("Disable"), exact: true }).click();
-    await expect(card.getByText(t("Disabled"), { exact: true })).toBeVisible();
+    await expect(card.getByText(t("Unavailable"), { exact: true })).toBeVisible();
     await card.getByRole("button", { name: t("Edit"), exact: true }).click();
     await expect(page.getByRole("group", { name: t("Analysis roles"), exact: true }).getByRole("checkbox").first()).toBeEnabled();
     await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => saved).toMatchObject({ preference: 37, enabled: false, roles: connection.roles });
     await page.getByRole("button", { name: t("Orchestration"), exact: true }).click();
     await expect(page.getByLabel(t("Maximum AI calls per analysis"), { exact: true })).toHaveCount(0);
-    await expect(page.getByText(t("Automatic safeguards stop stalled or repeated steps and preserve completed observations."), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("Deep analyses use three distinct roles with independent sessions."), { exact: true })).toBeVisible();
     await expect(page.getByLabel(t("Analysis time limit (seconds)"))).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
@@ -158,7 +158,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: t("Needs attention"), exact: true })).toBeVisible();
     const results = page.locator("section[aria-label]").filter({ has: page.getByRole("heading", { name: t("Results available"), exact: true }) });
-    await expect(results).toContainText(t("Partial result"));
+    await expect(results).toContainText(t("In discussion"));
     await expect(results).not.toContainText("Verifier quota unavailable.");
     await page.getByRole("navigation", { name: t("Main navigation"), exact: true }).getByRole("link", { name: t("Analyses"), exact: true }).click();
     await expect(page.getByRole("button", { name: t("Search"), exact: true })).toBeVisible();

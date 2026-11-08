@@ -21,14 +21,14 @@ for (const language of ["en", "fr"] as const) {
     let value = detail(workflow);
     await page.route(`**/api/${base}/${id}`, route => route.fulfill({ json: value }));
     let cancellations = 0;
-    await page.route(`**/api/${base}/${id}/cancel`, route => { cancellations += 1; expect(route.request().method()).toBe("POST"); value = { ...value, status: "CANCELLED" }; return route.fulfill({ json: value }); });
+    await page.route(`**/api/${base}/${id}/cancel`, route => { cancellations += 1; expect(route.request().method()).toBe("POST"); value = { ...value, status: "CANCELLED", analysis_runs: [{ number: 1, status: "CANCELLED", steps: [] }] } as typeof value; return route.fulfill({ json: value }); });
     await page.goto(`/${base}/${id}`);
-    await expect(page.getByText(t("The analysis continues until its checks are complete. You can leave this page and return later."), { exact: true })).toBeVisible();
+    await expect(page.locator(".investigation-progress")).toBeVisible();
     await expect(page.getByText(t("An analysis is limited to five minutes once started. You can leave this page and return later."), { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: t("Cancel analysis"), exact: true }).click();
     await expect.poll(() => cancellations).toBe(1);
-    await expect(page.getByRole("heading", { name: t("Analysis cancelled"), exact: true })).toBeVisible();
-    await expect(page.getByText(t("Execution has stopped. Earlier results and recorded evidence remain available."), { exact: true })).toBeVisible();
+    await expect(page.locator(".investigation-progress").getByText(t("Analysis cancelled"), { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: t("Resume analysis"), exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: t("Cancel analysis"), exact: true })).toHaveCount(0);
   });
   test(`a rejected cancellation remains visible and does not claim success in ${language}`, async ({ page }) => {
@@ -38,7 +38,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto(`/requests/${id}`);
     await page.getByRole("button", { name: t("Cancel analysis"), exact: true }).click();
     await expect(page.getByRole("main").getByRole("alert")).toHaveText(t("The analysis state changed. Refresh before cancelling."));
-    await expect(page.getByRole("heading", { name: t("Analysis cancelled"), exact: true })).toHaveCount(0);
+    await expect(page.locator(".investigation-progress").getByText(t("Analysis cancelled"), { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: t("Cancel analysis"), exact: true })).toBeEnabled();
   });
   test(`recorded instructions and actual skill loads remain distinct from availability in ${language}`, async ({ page }) => {

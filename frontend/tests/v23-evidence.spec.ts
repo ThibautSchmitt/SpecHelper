@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures";
+import { test, expect, openAnalysisReport } from "./fixtures";
 import type { Page } from "@playwright/test";
 import type { RequestDetail, ResultVersion } from "../src/lib/api";
 import type { ReliabilityReport, AnalysisClaim } from "../src/lib/analysis-evidence";
@@ -37,6 +37,7 @@ for (const language of ["en", "fr"] as const) {
       await setup(page, language, workflow, value);
       const base = workflow === "question" ? "questions" : "requests";
       await page.goto(`/${base}/${id}`);
+      await openAnalysisReport(page);
       await page.getByText(t("Verification details"), { exact: true }).click();
       const panel = page.getByRole("region", { name: t("Analysis findings and limits"), exact: true });
       for (const label of ["Supported finding", "Partially supported", "Contradicted", "Not verified"]) await expect(panel.getByText(t(label), { exact: true })).toBeVisible();
@@ -51,6 +52,7 @@ for (const language of ["en", "fr"] as const) {
       await expect(page.getByRole("region", { name: t("Confirmed business decisions"), exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: t("Validate business intent"), exact: true })).toHaveCount(0);
       await page.getByLabel(t("Result version"), { exact: true }).selectOption("1");
+      await openAnalysisReport(page);
       await page.getByText(t("Verification details"), { exact: true }).click();
       await expect(panel).toContainText(t("These findings and limits belong to the displayed result version."));
       await expect(panel.getByText(/frozen-commit-v1/)).not.toBeVisible();
@@ -68,6 +70,7 @@ for (const language of ["en", "fr"] as const) {
       const evidence = report(); evidence.database = { status, scope: "", limitations: [], checks: [] }; evidence.claims = [];
       await setup(page, language, workflow, detail(workflow, evidence));
       await page.goto(`/${workflow === "question" ? "questions" : "requests"}/${id}`);
+      await openAnalysisReport(page);
       await page.getByText(t("Verification details"), { exact: true }).click();
       const panel = page.getByRole("region", { name: t("Analysis findings and limits"), exact: true });
       const labels = { not_configured: "No business database is configured. Real records were not checked.", unavailable: "The business database could not be checked. Conclusions about real records remain unverified.", not_checked: "Business database records were not checked for this analysis." };
@@ -82,8 +85,10 @@ for (const language of ["en", "fr"] as const) {
     value.result_state = "partial";
     await setup(page, language, "request", value);
     await page.goto(`/requests/${id}`);
+    await openAnalysisReport(page);
     await expect(page.getByLabel(t("Result reliability"), { exact: true })).toContainText(t("Partial result"));
     await expect(page.getByLabel(t("Result reliability"), { exact: true })).toContainText("Supervisor overrides require another focused check.");
+      await openAnalysisReport(page);
       await page.getByText(t("Verification details"), { exact: true }).click();
     await expect(page.getByRole("region", { name: t("Analysis findings and limits"), exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: t("Validate business intent"), exact: true })).toHaveCount(0);
@@ -97,13 +102,14 @@ for (const language of ["en", "fr"] as const) {
     await page.route("**/api/orchestration-settings", route => { if (route.request().method() === "PUT") body = route.request().postDataJSON(); return route.fulfill({ json: settings }); });
     await page.goto("/admin");
     await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
-    await page.getByRole("button", { name: t("Roles and orchestration"), exact: true }).click();
-    await expect(page.getByText(t("Independent review is required"), { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: t("Orchestration"), exact: true }).click();
+    await expect(page.getByText(t("Deep analyses use three distinct roles with independent sessions."), { exact: true })).toBeVisible();
     await expect(page.getByLabel(t("Verify compared analyses"), { exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Allow comparison of multiple analyses"), { exact: true })).toHaveCount(0);
     await page.locator("summary").filter({ hasText: t("Advanced options") }).click();
     await expect(page.getByLabel(t("Maximum AI calls per analysis"))).toHaveCount(0);
-    await page.getByRole("button", { name: t("Save analysis settings"), exact: true }).click();
+    await page.getByLabel(t("Allow limited AI diversity"), { exact: true }).uncheck();
+    await page.getByRole("button", { name: t("Save"), exact: true }).click();
     await expect.poll(() => body).toMatchObject({ allow_confrontation: true, verifier_enabled: true });
     expect(body).not.toHaveProperty("max_calls");
     expect(body).not.toHaveProperty("reliability_protocol"); expect(body).not.toHaveProperty("available_agents");

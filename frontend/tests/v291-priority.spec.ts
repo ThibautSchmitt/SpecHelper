@@ -21,13 +21,13 @@ for (const language of ["en", "fr"] as const) {
     await setup(page, language);
     const observed = "2026-10-27T10:00:00Z";
     let values = [1, 2].map(id => ({ id, agent: "codex", name: `Shared ${id}`, enabled: true, status: "CONNECTED", availability: "AVAILABLE", quota_identity_id: "shared", quota_status: { state: "available", checked_at: observed }, quota_windows: {
-      session: { remaining_percent: 0, exhausted: true, observed_at: observed, resets_at: "2026-10-27T10:00:30Z" },
+      session: { remaining_percent: 0, exhausted: true, window_minutes: 300, observed_at: observed, resets_at: "2026-10-27T10:00:30Z" },
     } }));
     await page.route("**/api/ai-connections", route => route.fulfill({ json: values }));
     let refreshes = 0;
     await page.route("**/api/ai-connections/*/quota/refresh", route => {
       refreshes++;
-      values = values.map(value => ({ ...value, quota_windows: { session: { remaining_percent: 90, exhausted: false, observed_at: "2026-10-27T10:00:31Z", resets_at: "2026-10-27T15:00:00Z" } } }));
+      values = values.map(value => ({ ...value, quota_windows: { session: { remaining_percent: 90, exhausted: false, window_minutes: 300, observed_at: "2026-10-27T10:00:31Z", resets_at: "2026-10-27T15:00:00Z" } } }));
       return route.fulfill({ json: { quota_refresh_state: "refreshed" } });
     });
     await page.goto("/admin");
@@ -38,7 +38,7 @@ for (const language of ["en", "fr"] as const) {
     const window = card.locator('[data-quota-window="session"]');
     await expect(window).toContainText(t("0% remaining"));
     await expect(window.getByRole("progressbar")).toHaveJSProperty("value", 0);
-    await expect(page.locator('[data-connection="1"]')).toContainText(t("Quota exhausted"));
+    await expect(page.locator('[data-connection="1"]')).toContainText(t("Waiting"));
     await page.clock.runFor(31000);
     await expect.poll(() => refreshes).toBe(1);
     await expect(window).toContainText(/90\s*%/);
@@ -100,7 +100,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(gemini).toContainText(t("0% remaining"));
     await expect(gemini).not.toContainText(t("Quota exhausted"));
     await expect(antigravity.locator('[data-quota-window="3p-weekly"]').getByRole("progressbar")).toHaveJSProperty("value", 70);
-    await expect(antigravity.locator(".connection-quota-exhausted")).toHaveCount(0);
+    await expect(antigravity.locator(".connection-quota-exhausted")).toHaveCount(1);
     await expect(main.locator("#ai-connection-1 .connection-quota-exhausted")).toHaveCount(0);
     await expect(main.locator("#ai-connection-2 .connection-quota-exhausted")).toHaveCount(0);
     connections[2].model = "claude-opus";
@@ -110,7 +110,7 @@ for (const language of ["en", "fr"] as const) {
     connections[2].quota_windows!["3p-weekly"]!.remaining_percent = 0;
     await page.evaluate(() => window.dispatchEvent(new Event("quota-updated")));
     await expect(antigravity.getByText(t("Quota depleted"), { exact: true })).toBeVisible();
-    connections[2].availability = "QUOTA_EXHAUSTED";
+    connections[2].availability = "AVAILABLE";
     const { ["3p-weekly"]: thirdParty, ...geminiOnly } = connections[2].quota_windows!;
     connections[2].quota_windows = geminiOnly;
     await page.evaluate(() => window.dispatchEvent(new Event("quota-updated")));
@@ -197,7 +197,7 @@ for (const language of ["en", "fr"] as const) {
     await setup(page, language);
     await page.goto("/admin");
     const navigation = page.getByRole("navigation", { name: t("Administration"), exact: true });
-    await expect(navigation.getByRole("button")).toHaveText([t("AI & Agents"), t("Environments"), t("Connectors"), t("Appearance")]);
+    await expect(navigation.getByRole("button")).toHaveText([t("AI & Agents"), t("Environments"), t("Ticket publication"), t("Appearance")]);
     await navigation.getByRole("button", { name: t("Environments"), exact: true }).click();
     const sources = page.getByRole("navigation", { name: t("Environment settings"), exact: true });
     await expect(sources.getByRole("button")).toHaveText([t("Configured environments"), t("Manage Git connections"), t("Manage PostgreSQL connections")]);

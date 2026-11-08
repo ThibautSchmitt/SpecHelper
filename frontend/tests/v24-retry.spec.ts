@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures";
+import { test, expect, openAnalysisReport } from "./fixtures";
 import type { Page } from "@playwright/test";
 import en from "../src/locales/en.json";
 import fr from "../src/locales/fr.json";
@@ -35,41 +35,46 @@ for (const language of ["en", "fr"] as const) {
         value = { ...value, status: "QUEUED", error: "" }; return route.fulfill({ json: value });
       });
       await page.goto(`/${base}/${id}`);
+      await openAnalysisReport(page);
       await expect(page.getByText("ORIGINAL_PUBLISHED_EVIDENCE", { exact: true }).last()).toBeVisible();
       await page.getByRole("button", { name: t("Resume analysis"), exact: true }).click();
       await expect.poll(() => attempts).toBe(1);
       if (accepted) {
-        await expect(page.getByRole("heading", { name: t(workflow === "question" ? "Your question is queued" : "Your request is queued"), exact: true })).toBeVisible();
+        await expect(page.locator(".investigation-progress").getByText(t("In queue"), { exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name: t("Resume analysis"), exact: true })).toHaveCount(0);
       } else {
         await expect(page.getByRole("main").getByRole("alert")).toHaveText(t("The previous execution is still stopping. Retry shortly."));
         await expect(page.getByRole("button", { name: t("Resume analysis"), exact: true })).toBeEnabled();
-        await expect(page.getByRole("heading", { name: t(workflow === "question" ? "Your question is queued" : "Your request is queued"), exact: true })).toHaveCount(0);
+        await expect(page.locator(".investigation-progress").getByText(t("In queue"), { exact: true })).toHaveCount(0);
       }
       expect(value.latest_version).toEqual(previous);
       await expect(page.getByText("ORIGINAL_PUBLISHED_EVIDENCE", { exact: true }).last()).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
-    test(`queue retries only terminal ${workflow} jobs and exposes a rejected retry in ${language}`, async ({ page }, info) => {
+    test(`activity opens the failed ${workflow} and resumes from its conversation in ${language}`, async ({ page }, info) => {
       await setup(page, language);
       const base = workflow === "question" ? "questions" : "requests";
-      const cancelledId = id.slice(0, -1) + "5";
-      const job = (number: number, state: string) => ({ id: number, kind: "analysis", workflow, title: `Retry target ${number}`, request_id: number === 2 ? cancelledId : number === 1 ? id : id.slice(0, -1) + String(number + 5), status: state, queue_state: state, request_status: state, created_at: stamp, started_at: stamp, finished_at: stamp, elapsed_seconds: 400, queue_position: null, environment_name: "Production", operation: "Source analysis", agent: null, assignments: [], assignment_state: "unassigned", error: "", href: `/${base}/${id}`, can_retry: true });
-      let values = [job(1, "ERROR"), job(2, "CANCELLED"), job(3, "RUNNING"), job(4, "PAUSED")];
-      await page.route("**/api/queue", route => route.fulfill({ json: values }));
-      await page.route(`**/api/${base}/${id}/retry`, route => { values = values.map(item => item.id === 1 ? { ...item, status: "QUEUED", queue_state: "WAITING_AI", can_retry: false } : item); return route.fulfill({ json: { status: "QUEUED" } }); });
-      await page.route(`**/api/${base}/${cancelledId}/retry`, route => route.fulfill({ status: 409, json: { detail: "The previous execution is still stopping. Retry shortly." } }));
+      let value = detail(workflow);
+      let attempts = 0;
+      await page.route(`**/api/${base}/${id}`, route => route.fulfill({ json: value }));
+      await page.route(`**/api/${base}/${id}/retry`, route => {
+        attempts++;
+        if (attempts === 1) return route.fulfill({ status: 409, json: { detail: "The previous execution is still stopping. Retry shortly." } });
+        value = { ...value, status: "QUEUED", error: "" };
+        return route.fulfill({ json: value });
+      });
+      await page.route("**/api/queue", route => route.fulfill({ json: [{ id: 1, kind: "analysis", workflow, request_id: id, title: "Retry target", status: "ERROR", queue_state: "ERROR", request_status: "ERROR", created_at: stamp, started_at: stamp, finished_at: stamp, environment_name: "Production", href: `/${base}/${id}`, can_retry: true, error: "Recorded failure" }] }));
       await page.goto("/questions");
-      const mobile = info.project.name === "mobile";
-      if (mobile) await page.getByRole("button", { name: t("Task queue"), exact: true }).click();
-      const queue = page.getByRole(mobile ? "dialog" : "complementary", { name: t("Task queue"), exact: true });
-      await expect(queue.getByRole("button", { name: /Retry target/ })).toHaveCount(2);
-      await queue.locator('[data-job="1"]').getByRole("button", { name: t("Resume analysis: {title}").replace("{title}", "Retry target 1"), exact: true }).click();
-      await expect(queue.locator('[data-job="1"]')).toHaveAttribute("data-state", "WAITING_AI");
-      await queue.locator('[data-job="2"]').getByRole("button", { name: t("Resume analysis: {title}").replace("{title}", "Retry target 2"), exact: true }).click();
-      await expect(queue.locator('[data-job="2"]').getByRole("alert")).toHaveText(t("The previous execution is still stopping. Retry shortly."));
-      await expect(queue.locator('[data-job="2"]')).toHaveAttribute("data-state", "CANCELLED");
-      await expect(queue.locator('[data-job="3"]')).toHaveAttribute("data-state", "RUNNING");
+      await page.getByRole("button", { name: t("Activity"), exact: true }).click();
+      const queue = page.getByRole(info.project.name === "mobile" ? "dialog" : "complementary", { name: t("Activity"), exact: true });
+      await expect(queue.locator('[data-job="1"]')).toContainText(t("Analysis interrupted"));
+      await queue.getByRole("link", { name: t("See the problem"), exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`/${base}/${id}`));
+      await page.getByRole("button", { name: t("Resume analysis"), exact: true }).click();
+      await expect(page.getByRole("main").getByRole("alert")).toHaveText(t("The previous execution is still stopping. Retry shortly."));
+      await page.getByRole("button", { name: t("Resume analysis"), exact: true }).click();
+      await expect(page.locator(".investigation-progress").getByText(t("In queue"), { exact: true })).toBeVisible();
+      expect(attempts).toBe(2);
     });
   }
   test(`legacy migration warnings remain explicit without automatic instruction promotion in ${language}`, async ({ page }) => {
@@ -78,9 +83,12 @@ for (const language of ["en", "fr"] as const) {
     const config = { ...settings, preserved_guidance_review: true, migration_review: [{ kind: "skill", slug: "unsupported-review", reason: reasons[0] }, { kind: "instructions", reason: reasons[1] }] };
     await page.route("**/api/orchestration-settings", route => { if (route.request().method() === "PUT") { written = route.request().postDataJSON(); config.global_instructions = written!.global_instructions as string; } return route.fulfill({ json: config }); });
     await page.goto("/admin");
-    await expect(page.getByText(t("Previous custom guidance was preserved for review. Check custom skills and the deployment migration notes before enabling it."), { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: t("Orchestration"), exact: true }).click();
+    await expect(page.getByLabel(t("Allow limited AI diversity"), { exact: true })).toBeVisible();
+    expect(config.preserved_guidance_review).toBe(true);
+    expect(config.migration_review).toHaveLength(2);
     await expect(page.getByLabel(t("Global instructions"), { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: t("Save global instructions"), exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: t("Save"), exact: true })).toBeDisabled();
     expect(written).toBeNull();
   });
 }

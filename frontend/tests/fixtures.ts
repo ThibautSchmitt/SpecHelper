@@ -1,5 +1,14 @@
 import { test as base } from "@playwright/test";
+import type { Page } from "@playwright/test";
 export { expect } from "@playwright/test";
+
+// Reports remain available on historical analyses, behind an explicit disclosure.
+export async function openAnalysisReport(page: Page) {
+  const report = page.locator("#analysis-report");
+  await report.waitFor({ state: "visible" });
+  if (!(await report.evaluate(element => (element as HTMLDetailsElement).open)))
+    await report.locator(":scope > summary").click();
+}
 
 export const test = base.extend({
   page: async ({ page }, use) => {

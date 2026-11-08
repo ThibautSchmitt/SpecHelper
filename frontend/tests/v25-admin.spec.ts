@@ -26,18 +26,17 @@ for (const language of ["en", "fr"] as const) {
     await page.route("**/api/git-connections", route => { gitReads += 1; return route.fulfill({ json: [] }); });
     await page.goto("/questions");
     const sidebar = page.getByRole("complementary", { name: t("Instance navigation"), exact: true });
-    for (const [id, percent, color] of [[1,15,"red"],[2,45,"orange"],[3,85,"green"],[5,0,"red"],[7,60,"green"],[8,10,"red"]] as const) {
+    for (const [id, percent] of [[1,15],[2,45],[3,85],[7,60],[8,10]] as const) {
       const card = sidebar.locator(`[data-connection="${id}"]`);
-      await expect(card.locator('[role="meter"]')).toHaveAttribute("aria-valuenow", String(percent));
-      await expect(card.locator("[data-quota-color]")).toHaveAttribute("data-quota-color", color);
+      await expect(card).toContainText(new RegExp(`${percent}\\s*%`));
+      await expect(card.locator("[data-quota-color]")).toHaveAttribute("data-quota-color", "green");
+      await expect(card.getByRole("meter")).toHaveCount(0);
     }
-    await expect(sidebar.locator('[data-connection="4"]')).toContainText(t("Quota unknown"));
-    await expect(sidebar.locator('[data-connection="4"] [role="meter"]')).toHaveCount(0);
-    await expect(sidebar.locator('[data-connection="6"]')).toContainText(t("Authentication required"));
-    await expect(sidebar.locator('[data-connection="6"] [role="meter"]')).toHaveCount(0);
-    await expect(sidebar.locator('[data-connection="5"]')).toContainText(t("Quota exhausted"));
+    await expect(sidebar.locator('[data-connection="4"]')).toContainText(t("Available"));
+    await expect(sidebar.locator('[data-connection="4"]')).not.toContainText("%");
+    await expect(sidebar.locator('[data-connection="6"]')).toContainText(t("Unavailable"));
+    await expect(sidebar.locator('[data-connection="5"]')).toContainText(t("Quota limit reported"));
     await expect(sidebar.locator('[data-connection="9"]')).toContainText(t("Quota exhausted"));
-    await expect(sidebar.locator('[data-connection="9"] [role="meter"]')).toHaveCount(0);
     await expect(sidebar.getByText(t("Sources Git"), { exact: true })).toHaveCount(0);
     expect(gitReads).toBe(0);
     await expect(sidebar.locator('[data-provider="codex"]').first()).toBeVisible();
@@ -56,14 +55,14 @@ for (const language of ["en", "fr"] as const) {
     page.on("request", request => { if (/\/(?:analyze|run)$/.test(request.url())) analysisCalls.push(request.url()); });
     await page.goto("/questions");
     const sidebar = page.getByRole("complementary", { name: t("Instance navigation"), exact: true });
-    await expect(sidebar.locator('[data-connection="1"] [role="meter"]')).toHaveAttribute("aria-valuenow", "45");
+    await expect(sidebar.locator('[data-connection="1"]')).toContainText(/45\s*%/);
     await sidebar.getByRole("button", { name: t("Refresh status and quotas"), exact: true }).click();
     await expect(sidebar.getByRole("status")).toContainText(t("Refresh unavailable; previous observations retained"));
     await expect(sidebar.locator('[data-connection="1"] [data-stale]')).toHaveAttribute("data-stale", "true");
-    await expect(sidebar.locator('[data-connection="1"] [role="meter"]')).toHaveAttribute("aria-valuenow", "45");
+    await expect(sidebar.locator('[data-connection="1"]')).toContainText(/45\s*%/);
     expect(refreshes).toBe(1);
     expect(analysisCalls).toEqual([]);
-    await expect(sidebar.getByRole("link", { name: t("Settings"), exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: t("Administration"), exact: true })).toBeVisible();
   });
 
   test(`skill authoring has global adapters and calculated capabilities in ${language}`, async ({ page }) => {
@@ -77,7 +76,7 @@ for (const language of ["en", "fr"] as const) {
     await page.goto("/admin");
     await page.getByRole("button", { name: t("AI & Agents"), exact: true }).click();
     await page.getByRole("button", { name: t("Skills"), exact: true }).click();
-    await page.getByRole("button", { name: t("New skill"), exact: true }).click();
+    await page.getByRole("button", { name: t("Add skill"), exact: true }).click();
     await expect(page.getByRole("group", { name: t("Compatible assistants"), exact: true })).toHaveCount(0);
     await expect(page.getByRole("group", { name: t("Required capabilities"), exact: true })).toHaveCount(0);
     await expect(page.getByLabel(t("Calculated skill metadata"), { exact: true })).toContainText("ChatGPT / Codex, Claude Code");
@@ -97,7 +96,7 @@ for (const language of ["en", "fr"] as const) {
     const refreshed: string[] = [];
     await page.route("**/api/ai-connections/*/quota/refresh", route => { refreshed.push(route.request().url()); return route.fulfill({ json: { quota_refresh_state: "refreshed" } }); });
     await page.goto("/questions");
-    await expect(page.locator('[data-connection="1"] [role="meter"]')).toHaveCount(1);
+    await expect(page.locator('[data-connection="1"]')).toContainText(/85\s*%/);
     expect(refreshed).toEqual([]);
     await page.clock.fastForward(120001);
     await expect.poll(() => refreshed.length).toBe(1);

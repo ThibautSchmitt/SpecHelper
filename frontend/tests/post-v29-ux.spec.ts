@@ -57,7 +57,7 @@ for (const language of ["en", "fr"] as const) {
     await expect(dialog.getByRole("link", { name: new RegExp(t("Manage PostgreSQL connections")) })).toHaveAttribute("target", "_blank");
     await dialog.getByRole("button", { name: t("Cancel"), exact: true }).click();
     await page.getByRole("link", { name: t("Administration"), exact: true }).click();
-    await page.getByRole("navigation", { name: t("Administration"), exact: true }).getByRole("button", { name: t("Connectors"), exact: true }).click();
+    await page.getByRole("navigation", { name: t("Administration"), exact: true }).getByRole("button", { name: t("Ticket publication"), exact: true }).click();
     const connector = page.getByRole("region", { name: "GitLab tracker", exact: true });
     await expect(connector).toContainText(t("Not tested"));
     expect(tests).toBe(0);

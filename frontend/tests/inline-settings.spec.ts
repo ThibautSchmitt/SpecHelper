@@ -61,7 +61,8 @@ for (const language of ["en", "fr"] as const) {
       await expect(button).toBeVisible();
       await expect(button.locator("svg")).toBeVisible();
       const box = (await header.boundingBox())!;
-      const action = (await button.boundingBox())!;
+      const group = header.locator(":scope > div").last();
+      const action = (await group.count() ? await group.boundingBox() : await button.boundingBox())!;
       expect(Math.abs(box.x + box.width - action.x - action.width)).toBeLessThan(2);
       await expect(region.locator("p.muted").first()).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -87,24 +88,25 @@ for (const language of ["en", "fr"] as const) {
     if (language === "fr") await page.screenshot({ path: `../.local/inline-ui/${test.info().project.name}-quota.png` });
   });
 
-  test(`custom skill editors stay inside the selected card and close without saving in ${language}`, async ({ page }) => {
+  test(`custom skill drawers preserve edits until confirmed discard in ${language}`, async ({ page }) => {
     const writes = await setup(page, language);
     await page.goto("/admin?tab=ai-agents&section=skills");
     const first = page.getByRole("article", { name: "Skill first", exact: true });
     const second = page.getByRole("article", { name: "Skill second", exact: true });
-    const editFirst = first.getByRole("button", { name: t("Edit {name}").replace("{name}", "Skill first"), exact: true });
-    await editFirst.click();
-    await expect(editFirst).toHaveAttribute("aria-expanded", "true");
-    await expect(first.locator("[data-editor-actions]").getByRole("button")).toHaveText([t("Cancel"), t("Save")]);
-    await first.getByLabel(t("Instructions"), { exact: true }).fill("Unsaved instructions");
+    await first.getByRole("button", { name: t("Edit {name}").replace("{name}", "Skill first"), exact: true }).click();
+    const editor = page.getByRole("dialog", { name: t("Edit skill"), exact: true });
+    await expect(editor).toBeVisible();
+    await expect(first.locator("form")).toHaveCount(0);
+    await editor.getByLabel(t("Instructions"), { exact: true }).fill("Unsaved instructions");
+    page.once("dialog", dialog => dialog.dismiss());
+    await editor.press("Escape");
+    await expect(editor.getByLabel(t("Instructions"), { exact: true })).toHaveValue("Unsaved instructions");
+    page.once("dialog", dialog => dialog.accept());
+    await editor.getByRole("button", { name: t("Cancel"), exact: true }).click();
+    await expect(editor).toHaveCount(0);
     await second.getByRole("button", { name: t("Edit {name}").replace("{name}", "Skill second"), exact: true }).click();
-    await expect(first.locator("form")).toHaveCount(0);
-    await expect(second.getByLabel(t("Instructions"), { exact: true })).toHaveValue("Instructions second");
-    await editFirst.click();
-    await expect(first.getByLabel(t("Instructions"), { exact: true })).toHaveValue("Instructions first");
-    await editFirst.click();
-    await expect(first.locator("form")).toHaveCount(0);
-    await expect(editFirst).toHaveAttribute("aria-expanded", "false");
+    await expect(editor.getByLabel(t("Instructions"), { exact: true })).toHaveValue("Instructions second");
+    await editor.getByRole("button", { name: t("Cancel"), exact: true }).click();
     expect(writes).toEqual([]);
   });
 

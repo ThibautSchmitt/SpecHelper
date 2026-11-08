@@ -18,7 +18,7 @@ const proposal = {
 };
 type Draft = {
   id: string;
-  kind: "agent" | "skill";
+  kind: "skill" | "skill";
   status: string;
   revision: number;
   connection_id: number;
@@ -144,36 +144,14 @@ for (const language of ["en", "fr"] as const) {
       }),
     );
     await page.goto("/admin");
-    const mobile = info.project.name === "mobile";
-    if (mobile)
-      await page
-        .getByRole("button", { name: t("Task queue"), exact: true })
-        .click();
-    const queue = page.getByRole(mobile ? "dialog" : "complementary", {
-      name: t("Task queue"),
-      exact: true,
-    });
-    await expect(queue.getByRole("button", { name: `${t("Completed")} (2)`, exact: true })).toHaveAttribute("aria-expanded", "false");
-    await queue.getByRole("button", { name: `${t("Completed")} (2)`, exact: true }).click();
-    for (const [index, [status, operation, stage]] of scenarios.entries()) {
+    await page.getByRole("button", { name: t("Activity"), exact: true }).click();
+    const queue = page.getByRole(info.project.name === "mobile" ? "dialog" : "complementary", { name: t("Activity"), exact: true });
+    await queue.getByRole("button", { name: t("Show recent completed activity"), exact: true }).click();
+    for (const [index, [status]] of scenarios.entries()) {
       const card = queue.locator(`[data-job="${index + 91}"]`);
-      await expect(card.locator(".queue-description")).toHaveText(t(stage));
-      await expect(card.locator(".queue-role")).toHaveText(
-        t(
-          operation === "test"
-            ? "Definition sandbox test"
-            : "Definition generator",
-        ),
-      );
-      if (status !== "QUEUED")
-        await expect(card.locator(".queue-context")).toHaveText(
-          t(
-            operation === "test"
-              ? "Library sandbox test"
-              : "Library generation",
-          ),
-        );
-      if (language === "fr") expect(t(stage)).not.toBe(stage);
+      await expect(card).toHaveAttribute("data-state", status);
+      await expect(card.getByRole("link")).toHaveAttribute("href", "/admin");
+      if (status === "ERROR") await expect(card).toContainText(t("Analysis interrupted"));
     }
   });
 
@@ -204,14 +182,14 @@ for (const language of ["en", "fr"] as const) {
         url.pathname === "/api/library-assistant/drafts"
       ) {
         expect(payload).toMatchObject({
-          kind: "agent",
+          kind: "skill",
           connection_id: 1,
           language,
           description: "Review interservice dependencies.",
         });
         value = {
           id: "draft-1",
-          kind: "agent",
+          kind: "skill",
           status: "DRAFT",
           revision: 1,
           connection_id: 1,
@@ -267,7 +245,7 @@ for (const language of ["en", "fr"] as const) {
             });
             value.recommendations = [
               {
-                kind: "agent",
+                kind: "skill",
                 slug: "code",
                 name: "Source analysis",
                 reason:
@@ -386,7 +364,7 @@ for (const language of ["en", "fr"] as const) {
                   started_at: null,
                   finished_at: null,
                   error: "",
-                  href: "/admin?library_draft=draft-1&library_kind=agent",
+                  href: "/admin?library_draft=draft-1&library_kind=skill",
                 },
               ]
             : [],
@@ -398,10 +376,10 @@ for (const language of ["en", "fr"] as const) {
       .click();
     await page
       .getByRole("navigation", { name: t("AI settings"), exact: true })
-      .getByRole("button", { name: t("Agents"), exact: true })
+      .getByRole("button", { name: t("Skills"), exact: true })
       .click();
     await page
-      .getByRole("button", { name: t("Generate an agent"), exact: true })
+      .getByRole("button", { name: t("Generate with AI"), exact: true })
       .click();
     const assistant = page.getByRole("region", {
       name: t("Creation assistant"),
@@ -481,24 +459,14 @@ for (const language of ["en", "fr"] as const) {
       assistant.getByRole("status", { name: t("Assistant task") }),
     ).toContainText(t("Definition sandbox test"));
     const mobile = info.project.name === "mobile";
-    if (mobile)
-      await page
-        .getByRole("button", { name: t("Task queue"), exact: true })
-        .click();
+    page.once("dialog", dialog => dialog.accept());
+    await page.getByRole("dialog", { name: t("Generate with AI"), exact: true }).getByRole("button", { name: t("Close"), exact: true }).click();
+    await page.getByRole("button", { name: t("Activity"), exact: true }).click();
     const queue = page.getByRole(mobile ? "dialog" : "complementary", {
-      name: t("Task queue"),
+      name: t("Activity"),
       exact: true,
     });
-    await expect(queue.locator('[data-job="83"]')).toContainText(
-      t("Definition sandbox test"),
-      { timeout: 6500 },
-    );
-    await expect(
-      queue.locator('[data-job="83"] .queue-description'),
-    ).toHaveText(t("Waiting for the selected AI connection"));
-    await expect(queue.locator('[data-job="83"] .queue-model')).toHaveText(
-      "recorded-test-model",
-    );
+    await expect(queue.locator('[data-job="83"]')).toHaveAttribute("data-state", "QUEUED", { timeout: 6500 });
     await queue.locator('[data-job="83"] a').click();
     await expect(page).toHaveURL(/library_draft=draft-1/);
     if (mobile) await expect(queue).not.toBeVisible();

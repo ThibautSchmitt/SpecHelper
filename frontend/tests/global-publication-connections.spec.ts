@@ -136,7 +136,7 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/requests/${id}`, route => route.fulfill({ json: detail }));
     await page.route(`**/api/analyses/${id}`, route => route.fulfill({ json: detail }));
     await page.route(new RegExp(`/api/analyses/${id}/ticket-preparation(?:\\?.*)?$`), route => route.fulfill({ json: {
-      id:ticketId,revision:1,discussion_revision:0,source_version:1,source_verified:true,analysis_state:'complete',
+      id:ticketId,active:true,documents:[],revision:1,discussion_revision:0,source_version:1,source_verified:true,analysis_state:'complete',
       verified_scope:'Investigate date anomalies.',limitations:[],has_new_messages:true,scope_choice:'clarified',
       title:'Prepared correction',body:'Reject invalid periods.',markdown:'> Later proposals remain unverified.\n\nReject invalid periods.',
       publication_available:true,publication_allowed:true,
@@ -152,19 +152,22 @@ for (const language of ["en", "fr"] as const) {
       selectedAccounts.push(new URL(route.request().url()).pathname.split("/")[3]);
       return route.fulfill({ json: [{ id: "TEAM", name: "Accessible project" }, { id: "OTHER", name: "Another accessible project" }] });
     });
-    await page.route(`**${endpoint}/publication-draft?*`, route => route.fulfill({ json: {
-      draft_id: "draft-1", draft_revision: 1, title: "Verified change", body: "Short verified description", ticket_format: "standard",
-      template_id: "", issue_type: "", fields: [], values: {}, labels: [], assignees: [], templates: [], issue_types: [], defaults: {},
-      revision: "metadata-4", format: "markdown", publication_allowed: true, publication_blockers: [], available_attachments: [], selected_attachments: [],
-    } }));
+    await page.route(`**${endpoint}/publication-draft*`, route => {
+      const saved = route.request().method() === "PUT" ? route.request().postDataJSON() : {};
+      return route.fulfill({ json: {
+        draft_id: "draft-1", draft_revision: 1, title: "Verified change", body: "Short verified description", ticket_format: "standard",
+        template_id: "", issue_type: "", labels: [], assignees: [], templates: [], issue_types: [], defaults: {},
+        revision: "metadata-4", format: "markdown", publication_allowed: true, publication_blockers: [], available_attachments: [], selected_attachments: [], ...saved,
+        fields: [], values: saved.fields || {},
+      } });
+    });
     await page.goto(`/${prepared ? 'analyses' : 'requests'}/${id}`);
     if(prepared){
       await page.getByRole('button',{name:t('Prepare a ticket'),exact:true}).last().click();
-      const preparation=page.getByRole('dialog',{name:t('Prepare a ticket'),exact:true});
+      const preparation=page.getByRole('dialog',{name:t('Create ticket'),exact:true});
       await preparation.getByRole('button',{name:t('Resume draft'),exact:true}).click();
-      await preparation.getByRole('button',{name:t('Publish'),exact:true}).click();
     }else await page.getByRole("button", { name: t("Prepare ticket"), exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: t("Publish ticket"), exact: true });
+    const dialog = page.getByRole("dialog", { name: t(prepared ? "Create ticket" : "Publish ticket"), exact: true });
     const account = dialog.getByLabel(t("Publication connection"), { exact: true });
     await expect(account).toHaveValue("");
     await expect(account.locator('option[value="5"]')).toBeDisabled();
@@ -175,12 +178,10 @@ for (const language of ["en", "fr"] as const) {
     await expect(project.locator('option[value="OTHER"]')).toHaveText("Another accessible project");
     await expect(project).toHaveValue("");
     await project.selectOption("OTHER");
-    await expect(dialog.getByText("Short verified description", { exact: true }).first()).toBeVisible();
-    if(prepared){
-      await dialog.getByRole('button',{name:t('Use prepared draft'),exact:true}).click();
-      await expect(dialog.getByText('Prepared correction',{exact:true})).toBeVisible();
-      await expect(dialog.getByText('Reject invalid periods.',{exact:true}).first()).toBeVisible();
-    }
+    if (prepared) {
+      await expect(dialog.getByLabel(t("Title"), { exact: true })).toHaveValue("Prepared correction");
+      await expect(dialog.getByRole("region", { name: t("Description"), exact: true })).toContainText("Reject invalid periods.");
+    } else await expect(dialog.getByText("Short verified description", { exact: true }).first()).toBeVisible();
     expect(submitted).toBeUndefined();
     await dialog.getByRole("button", { name: t("Publish"), exact: true }).click();
     await dialog.getByRole("alertdialog").getByRole("button", { name: t("Confirm publication"), exact: true }).click();

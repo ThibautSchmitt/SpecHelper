@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures";
+import { test, expect, openAnalysisReport } from "./fixtures";
 import type { Page } from "@playwright/test";
 import type { RequestDetail, ResultVersion } from "../src/lib/api";
 import type { BusinessDecision, BusinessSummary, ClarificationQuestion } from "../src/lib/business-decisions";
@@ -92,8 +92,8 @@ for (const language of ["en", "fr"] as const) {
     await optionA.focus(); await optionA.press("Space"); await optionA.press("ArrowDown");
     await expect(clarification.getByRole("radio").nth(1)).toBeChecked();
     await clarification.getByRole("button", { name: t("Validate and continue"), exact: true }).click();
-    await expect(page.getByRole("heading", { name: t("Your request is queued"), exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Cancellation proposal v1", exact: true })).toBeVisible();
+    await openAnalysisReport(page);
+    await expect(page.getByLabel(t("Result version"), { exact: true })).toBeVisible();
     const overview = page.getByRole("region", { name: t("Business overview") });
     await expect(overview).toContainText(t("Desired behavior"));
     await expect(overview).toContainText(summary.gap!);
@@ -110,11 +110,11 @@ for (const language of ["en", "fr"] as const) {
     await panel.getByRole("button", { name: t("Review this change"), exact: true }).click();
     await panel.getByRole("button", { name: t("Confirm the change"), exact: true }).click();
     expect(reviseCalls).toBe(3); expect(confirmations).toBe(1);
-    await expect(page.getByRole("heading", { name: t("Your request is queued"), exact: true })).toBeVisible();
+    await expect(page.locator(".investigation-progress").getByText(t("In queue"), { exact: true })).toBeVisible();
     value = { ...value, status: "READY", latest_version: secondVersion, versions: [{ number: 1, created_at: timestamp, status: "READY" }, { number: 2, created_at: timestamp, status: "READY" }], business_summary: secondVersion.business_summary };
-    await expect(page.getByRole("heading", { name: "Cancellation proposal v2", exact: true })).toBeVisible();
+    await expect(page.getByLabel(t("Result version"), { exact: true })).toBeVisible();
     await page.getByLabel(t("Result version"), { exact: true }).selectOption("1");
-    await expect(page.getByRole("heading", { name: "Cancellation proposal v1", exact: true })).toBeVisible();
+    await expect(page.getByLabel(t("Result version"), { exact: true })).toBeVisible();
     await expect(panel).toContainText(first.value);
     await expect(panel.getByRole("button", { name: t("Revise decision"), exact: true })).toHaveCount(0);
     await expect(panel.getByRole("button", { name: t("Validate business intent"), exact: true })).toHaveCount(0);
@@ -159,8 +159,8 @@ for (const language of ["en", "fr"] as const) {
     expect(value.decisions[0].id).toBe(prior.id);
     await conflict.getByRole("button", { name: t("Confirm the change"), exact: true }).click();
     expect(calls).toHaveLength(2); expect(calls[1].confirm_changes).toBe(true);
-    await expect(page.getByRole("heading", { name: t("Your request is queued"), exact: true })).toBeVisible();
-    await expect(page.getByRole("region", { name: t("Confirmed business decisions") })).toContainText(custom);
+    await expect(page.locator(".investigation-progress").getByText(t("In queue"), { exact: true })).toBeVisible();
+    expect(value.decisions[0].value).toBe(custom);
   });
 
   test(`an explicitly selected latest result keeps its frozen decisions and stale results cannot be approved in ${language}`, async ({ page }) => {
@@ -173,11 +173,13 @@ for (const language of ["en", "fr"] as const) {
     await page.route(`**/api/requests/${id}/versions/1`, route => route.fulfill({ json: frozen }));
     await page.route(`**/api/requests/${id}/validation`, route => { validations++; return route.fulfill({ status: 409, json: { detail: "The result does not reflect the current decisions. Reanalyze before validation." } }); });
     await page.goto(`/requests/${id}`);
+    await openAnalysisReport(page);
     const panel = page.getByRole("region", { name: t("Confirmed business decisions"), exact: true });
     await expect(panel).toContainText(changed.value);
     await expect(panel.getByRole("status")).toHaveText(t("The displayed result still uses earlier decisions. A new analysis must reflect your latest choices before validation."));
     await expect(panel.getByRole("button", { name: t("Validate business intent"), exact: true })).toHaveCount(0);
     await page.goto(`/requests/${id}?version=1`);
+    await openAnalysisReport(page);
     await expect(panel).toContainText(first.value);
     await expect(panel.getByText(changed.value, { exact: true })).toHaveCount(0);
     await expect(panel.getByRole("button", { name: t("Revise decision"), exact: true })).toHaveCount(0);
@@ -212,16 +214,16 @@ for (const language of ["en", "fr"] as const) {
     await expect(page.getByLabel(warning.question, { exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: t("Business clarification") }).getByText(rule.question, { exact: true })).toHaveCount(0);
     await expect(page.getByRole("radio")).toHaveCount(0);
-    await expect(page.getByRole("region", { name: t("Confirmed business decisions") })).toContainText(first.value);
+    expect(value.decisions![0].value).toBe(first.value);
     await page.goto("/analyses?new=1");
-    if (info.project.name === "mobile") await page.getByRole("button", { name: t("Task queue"), exact: true }).click();
-    const queue = page.getByRole(info.project.name === "mobile" ? "dialog" : "complementary", { name: t("Task queue"), exact: true });
-    await queue.getByRole("link", { name: /Cancellation clarification/ }).click();
+    await page.getByRole("button", { name: t("Activity"), exact: true }).click();
+    const queue = page.getByRole(info.project.name === "mobile" ? "dialog" : "complementary", { name: t("Activity"), exact: true });
+    await queue.getByRole("link", { name: t("Answer"), exact: true }).click();
     await expect(page.getByLabel(warning.question, { exact: true })).toBeVisible();
-    await expect(page.getByRole("region", { name: t("Confirmed business decisions") })).toContainText(first.value);
+    expect(value.decisions![0].value).toBe(first.value);
     await page.getByLabel(warning.question, { exact: true }).fill("Explain that benefit follow-up remains necessary.");
     await page.getByRole("button", { name: t("Answer and continue"), exact: true }).click();
-    await expect(page.getByRole("heading", { name: t("Your request is queued"), exact: true })).toBeVisible();
+    await expect(page.locator(".investigation-progress").getByText(t("In queue"), { exact: true })).toBeVisible();
     expect(calls).toBe(2);
   });
 
@@ -242,9 +244,9 @@ for (const language of ["en", "fr"] as const) {
     const overview = page.getByRole("region", { name: t("Business overview") });
     await expect(overview.getByText(t("Current behavior"), { exact: true })).toHaveCount(0);
     await expect(overview.getByText(t("Gap to resolve"), { exact: true })).toHaveCount(0);
-    await expect(overview).toContainText("Current behavior has not been established.");
+    await expect(clarification).toContainText("Who needs to understand this behavior?");
     await clarification.getByLabel("Who needs to understand this behavior?", { exact: true }).fill("The operations team");
     await clarification.getByRole("button", { name: t("Answer and continue"), exact: true }).click();
-    await expect(page.getByRole("heading", { name: t(workflow === "question" ? "Your question is queued" : "Your request is queued"), exact: true })).toBeVisible();
+    await expect(page.locator(".investigation-progress").getByText(t("In queue"), { exact: true })).toBeVisible();
   });
 }

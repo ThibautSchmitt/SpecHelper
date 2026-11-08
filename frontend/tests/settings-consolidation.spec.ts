@@ -35,60 +35,44 @@ test("settings have one bottom access point and exactly four nonduplicated secti
   await expect(navigation.getByRole("link")).toHaveText(["Home", "Analyses", "Tickets"]);
   await expect(navigation.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
   const settings = page.locator(".sidebar-admin");
-  await expect(settings).toHaveAccessibleName("Settings");
+  await expect(settings).toHaveAccessibleName("Administration");
   await settings.focus();
   await settings.press("Enter");
   const tabs = page.getByRole("navigation", { name: "Administration", exact: true });
-  await expect(tabs.getByRole("button")).toHaveText(["AI & Agents", "Environments", "Connectors", "Appearance"]);
+  await expect(tabs.getByRole("button")).toHaveText(["AI & Agents", "Environments", "Ticket publication", "Appearance"]);
+  await tabs.getByRole("button", { name: "Appearance", exact: true }).click();
   await expect(page.getByRole("group", { name: "Theme", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Instance name", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Request activity", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "AI connections", exact: true })).toHaveCount(0);
   await tabs.getByRole("button", { name: "AI & Agents", exact: true }).click();
-  await expect(page.getByRole("navigation", { name: "AI settings", exact: true }).getByRole("button")).toHaveText(["Connections", "Roles and orchestration", "Agents", "Skills"]);
-  await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Roles and orchestration", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("navigation", { name: "AI settings", exact: true }).getByRole("button")).toHaveText(["Connections", "Orchestration", "Skills"]);
+  await expect(page.getByRole("region", { name: "Orchestration", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Orchestration", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Orchestration", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Independent counter-analysis", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Instance name", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Theme", exact: true })).toHaveCount(0);
-  await tabs.getByRole("button", { name: "Sources & environments", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Git sources", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Analysis configuration", exact: true })).toHaveCount(0);
+  await tabs.getByRole("button", { name: "Environments", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Git sources", exact: true })).toHaveCount(2);
+  await expect(page.getByRole("region", { name: "Orchestration", exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Theme", exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test("environment ticket editors fetch and save only their own connectors", async ({ page }) => {
+test("publication catalogue loads globally without per-environment credential copies", async ({ page }) => {
   await setup(page);
   const reads: string[] = [];
-  let saved: Record<string, unknown> | null = null;
-  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, async (route) => {
-    if (route.request().method() === "POST") {
-      saved = route.request().postDataJSON();
-      return route.fulfill({ status: 201, json: { id: 31, ...saved } });
-    }
-    const environmentId = new URL(route.request().url()).searchParams.get("environment_id");
-    // The shared status sidebar may read connector metadata without an environment.
-    if (environmentId) reads.push(environmentId);
-    return route.fulfill({ json: environmentId === "1" ? [{ id: 11, name: "Production GitHub", platform: "github", status: "CONNECTED", environment_id: 1 }] : [] });
+  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, route => {
+    reads.push(route.request().url());
+    return route.fulfill({ json: [{ id: 11, name: "Shared GitHub", platform: "github", enabled: true, status: "CONNECTED", environment_ids: [1,2], has_secret: true, projects: [] }] });
   });
-  await page.goto("/admin");
-  await page.getByRole("button", { name: "Connectors", exact: true }).click();
-  const production = page.locator('.environment-connectors[aria-label="Ticket connectors for Production"]');
-  const staging = page.locator('.environment-connectors[aria-label="Ticket connectors for Staging"]');
-  await expect(production.getByRole("button", { name: /Production GitHub/ })).toBeVisible();
-  await expect(staging.getByRole("button", { name: /Production GitHub/ })).toHaveCount(0);
-  await staging.getByRole("button", { name: "New connector", exact: true }).click();
-  await staging.getByLabel("Connector name", { exact: true }).fill("Staging GitHub");
-  await staging.getByLabel("Dedicated issue publication token", { exact: true }).fill("synthetic-publication-only-token");
-  await staging.getByRole("button", { name: "Save", exact: true }).click();
-  await expect.poll(() => saved).toMatchObject({ environment_id: 2, name: "Staging GitHub", platform: "github" });
-  expect(reads).toContain("1");
-  expect(reads).toContain("2");
-  expect(new Set(reads)).toEqual(new Set(["1", "2"]));
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.goto("/admin?tab=connectors");
+  await expect(page.getByRole("heading", { name: "Shared GitHub", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Shared GitHub", exact: true })).toHaveCount(1);
+  expect(reads.length).toBeGreaterThan(0);
+  expect(reads.every(url => !new URL(url).searchParams.has("environment_id"))).toBe(true);
 });
 
 test("compact AI actions expose accessible names and preserve honest quota observations", async ({ page }) => {
@@ -131,26 +115,19 @@ test("compact AI actions expose accessible names and preserve honest quota obser
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test("legacy unassigned connectors require an environment without resubmitting credentials", async ({ page }) => {
+test("existing publication connections can be edited without resubmitting secrets", async ({ page }) => {
   await setup(page);
   let payload: Record<string, unknown> | null = null;
-  const connector = { id: 70, name: "Legacy tracker", platform: "jira", base_url: "https://tracker.example.test", username: "team", api_version: "v1", projects: ["TEAM"], default_project: "TEAM", has_secret: true, environment_id: null };
-  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, (route) => route.fulfill({ json: new URL(route.request().url()).searchParams.has("environment_id") ? [] : [connector] }));
-  await page.route("**/api/ticket-connectors/70", (route) => {
-    payload = route.request().postDataJSON();
-    return route.fulfill({ json: { ...connector, ...payload } });
-  });
-  await page.goto("/admin");
-  await page.getByRole("button", { name: "Connectors", exact: true }).click();
-  const heading = page.getByRole("heading", { name: "Unassigned ticket connectors", exact: true });
-  await expect(heading).toBeVisible();
-  const section = heading.locator("..");
-  const assign = section.getByRole("button", { name: "Assign Legacy tracker", exact: true });
-  await expect(assign).toBeDisabled();
-  await section.getByLabel("Environment", { exact: true }).selectOption("2");
-  await assign.click();
-  await expect.poll(() => payload).toMatchObject({ environment_id: 2, name: "Legacy tracker", projects: ["TEAM"] });
+  const connector = { id: 70, name: "Legacy tracker", platform: "jira", base_url: "https://tracker.example.test", username: "team", enabled: true, status: "CONNECTED", api_version: "v1", projects: ["TEAM"], default_project: "TEAM", has_secret: true, environment_ids: [] };
+  await page.route(/\/api\/ticket-connectors(?:\?.*)?$/, route => route.fulfill({ json: [connector] }));
+  await page.route("**/api/ticket-connectors/70", route => { payload = route.request().postDataJSON(); return route.fulfill({ json: { ...connector, ...payload } }); });
+  await page.goto("/admin?tab=connectors");
+  await page.getByRole("button", { name: "Edit Legacy tracker", exact: true }).click();
+  await expect(page.getByLabel("Secret / API token", { exact: true })).toHaveValue("");
+  await page.getByLabel("Connection name", { exact: true }).fill("Retained tracker");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => payload).toMatchObject({ name: "Retained tracker", projects: ["TEAM"] });
   expect(payload).not.toHaveProperty("secret");
   expect(payload).not.toHaveProperty("app_token");
-  await expect(heading).toHaveCount(0);
+  expect(payload).not.toHaveProperty("environment_id");
 });

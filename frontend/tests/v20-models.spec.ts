@@ -26,7 +26,7 @@ test("model catalog preserves unknown access and restricts connection selection 
   await expect.poll(()=>refreshed).toBe(1);
   await expect(choice.locator("option")).toHaveCount(2);
   await choice.selectOption("documented-model");
-  await expect(page.getByLabel("Reasoning", {exact:true}).locator("option")).toHaveText(["Default"]);
+  await expect(page.getByLabel("Reasoning", {exact:true}).locator("option")).toHaveText(["Not reported"]);
   await page.getByRole("button",{name:"Save",exact:true}).click();
   await expect.poll(()=>body).toMatchObject({model:"documented-model",name:"Team assistant", reasoning_effort:""});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

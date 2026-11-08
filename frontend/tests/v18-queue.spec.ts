@@ -50,241 +50,79 @@ async function setup(page: Page) {
   });
 }
 async function openQueue(page: Page, mobile: boolean) {
-  if (mobile)
-    await page.getByRole("button", { name: "Task queue", exact: true }).click();
-  return page.getByRole(mobile ? "dialog" : "complementary", {
-    name: "Task queue",
-    exact: true,
-  });
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  return page.getByRole(mobile ? "dialog" : "complementary", { name: "Activity", exact: true });
 }
 
-for (const reduced of [false, true])
-  test(`queue groups real transitions and ${reduced ? "respects reduced motion" : "slides measured card positions"}`, async ({
-    page,
-  }) => {
-    await setup(page);
-    await page.emulateMedia({
-      reducedMotion: reduced ? "reduce" : "no-preference",
-    });
-    const assignment = {
-      connection_id: 2,
-      connection_name: "Team Claude",
-      agent: "claude",
-      model: "selected-model",
-      public_role: "verifier",
-    };
-    let values = [
-      job(1, "QUEUED"),
-      job(2, "RUNNING", {
-        assignments: [assignment],
-        assignment_state: "current",
-        stage: "Focused project analysis",
-      }),
-      job(3, "PAUSED", {
-        pause_reason: "A business answer is needed.",
-        stage: "Your answer is needed",
-      }),
-      job(4, "DONE", {
-        assignments: [assignment],
-        assignment_state: "previous",
-        stage: "Analysis completed",
-      }),
-      job(5, "ERROR", { error: "The Git server is unavailable." }),
-    ];
-    await page.route("**/api/queue", (r) => r.fulfill({ json: values }));
-    await page.goto("/questions");
-    const queue = await openQueue(page, test.info().project.name === "mobile");
-    await expect(queue.getByRole("button", { name: "Completed (1)", exact: true })).toHaveAttribute("aria-expanded", "false");
-    await queue.getByRole("button", { name: "Completed (1)", exact: true }).click();
-    await expect(queue.locator("[data-job]")).toHaveCount(5);
-    await expect(queue.locator("[data-job]").first()).toHaveAttribute(
-      "data-job",
-      "2",
-    );
-    await expect(
-      queue.getByRole("heading", { name: /^In progress(?:\s*\(\d+\))?$/ }),
-    ).toBeVisible();
-    await expect(
-      queue.getByRole("heading", { name: /^Needs clarification(?:\s*\(\d+\))?$/ }),
-    ).toBeVisible();
-    await expect(queue.locator('[data-job="1"]')).toContainText(
-      "AI not assigned",
-    );
-    await expect(queue.locator('[data-job="1"]')).not.toContainText(
-      "Team Claude",
-    );
-    await expect(queue.locator('[data-job="2"] .queue-assignment')).toContainText("Team Claude");
-    await expect(queue.locator('[data-job="2"] .queue-assignment')).toHaveAttribute("title", /selected-model/);
-    await expect(queue.locator('[data-job="2"] .queue-role')).toHaveText("Verifier");
-    await expect(queue.locator('[data-job="2"]')).toContainText(
-      "Focused project analysis",
-    );
-    await expect(queue.locator('[data-job="3"]')).toHaveAttribute(
-      "data-state",
-      "PAUSED",
-    );
-    await expect(queue.locator('[data-job="3"]')).toContainText(
-      "A business answer is needed.",
-    );
-    await expect(queue.locator('[data-job="4"]')).toContainText("Previous AI:");
-    await expect(queue.locator('[data-job="5"]')).toContainText(
-      "The Git server is unavailable.",
-    );
-    await expect(queue.locator('[data-job="2"]')).toContainText("#2");
-    values = [
-      job(2, "DONE", {
-        assignments: [assignment],
-        assignment_state: "previous",
-      }),
-      job(1, "RUNNING", {
-        assignments: [assignment],
-        assignment_state: "current",
-        stage: "Checking the explanation and preparing the result",
-      }),
-      ...values.slice(2),
-    ];
-    await expect(queue.locator("[data-job]").first()).toHaveAttribute(
-      "data-job",
-      "1",
-      { timeout: 7000 },
-    );
-    await expect(queue.locator('[data-job="1"]')).toContainText(
-      "Checking the explanation and preparing the result",
-    );
-    const animations = await page.evaluate(
-      () =>
-        (
-          window as Window & {
-            queueAnimations?: {
-              id: string;
-              frames: { transform: string }[];
-              timing: { duration: number };
-            }[];
-          }
-        ).queueAnimations || [],
-    );
-    if (reduced) expect(animations).toEqual([]);
-    else {
-      expect(
-        animations.some(
-          (animation) =>
-            animation.id === "1" &&
-            animation.frames[0].transform !== "translateY(0px)" &&
-            animation.timing.duration <= 300,
-        ),
-      ).toBe(true);
-    }
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-  });
-
-test("environment updates and publication use their own activity labels", async ({
-  page,
-}) => {
+for (const reduced of [false, true]) test(`activity preserves real transitions and ${reduced ? "reduced motion" : "measured movement"}`, async ({ page }, info) => {
   await setup(page);
-  await page.route("**/api/queue", (r) =>
-    r.fulfill({
-      json: [
-        job(7, "RUNNING", {
-          kind: "sync",
-          executor_name: "Git update",
-          stage: "Updating repositories",
-        }),
-        job(8, "RUNNING", {
-          kind: "publication",
-          executor_name: "Company tracker",
-          stage: "Publishing ticket",
-        }),
-      ],
-    }),
-  );
+  await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+  let values = [job(1, "QUEUED"), job(2, "RUNNING", { public_role: "verifier", stage_number: 3, stage_count: 3 }), job(3, "PAUSED"), job(4, "DONE"), job(5, "ERROR")];
+  await page.route("**/api/queue", route => route.fulfill({ json: values }));
   await page.goto("/questions");
-  await page.getByRole("button", { name: "Activity", exact: true }).click();
-  const queue = page.getByRole(test.info().project.name === "mobile" ? "dialog" : "complementary", { name: "Activity", exact: true });
-  await expect(queue.locator('[data-job="7"]')).toContainText("Updating");
-  await expect(queue.locator('[data-job="8"]')).toContainText("Publishing ticket");
-  await expect(queue).not.toContainText(/synchronis|synchroniz/i);
-  await expect(queue.getByText("AI not assigned", { exact: true })).toHaveCount(
-    0,
-  );
+  const queue = await openQueue(page, info.project.name === "mobile");
+  const completed = queue.getByRole("button", { name: "Show recent completed activity", exact: true });
+  await expect(completed).toHaveAttribute("aria-expanded", "false");
+  await expect(queue.locator("[data-job]")).toHaveCount(4);
+  await completed.click();
+  await expect(queue.locator("[data-job]")).toHaveCount(5);
+  await expect(queue.locator("[data-job]").first()).toHaveAttribute("data-job", "3");
+  await expect(queue.locator('[data-job="1"]')).toContainText("In queue");
+  await expect(queue.locator('[data-job="2"] [data-role="verifier"]')).toHaveText("Validator");
+  await expect(queue.locator('[data-job="2"]')).toContainText("Step 3 of 3");
+  await expect(queue.locator('[data-job="3"]').getByRole("link", { name: "Answer", exact: true })).toHaveAttribute("href", "/questions");
+  await expect(queue.locator('[data-job="5"]')).toContainText("Analysis interrupted");
+  await expect(queue.locator('[data-job="5"]').getByRole("link", { name: "See the problem", exact: true })).toBeVisible();
+  values = [job(1, "RUNNING", { public_role: "analyst" }), job(2, "DONE"), ...values.slice(2)];
+  await expect(queue.locator('[data-job="1"]')).toHaveAttribute("data-state", "RUNNING", { timeout: 7000 });
+  await expect(queue.locator('[data-job="1"] [data-role="analyst"]')).toHaveText("Analyst");
+  await expect(queue.locator('[data-job="2"]')).toHaveAttribute("data-state", "DONE");
+  const animations = await page.evaluate(() => (window as Window & { queueAnimations?: { id: string; timing: { duration: number } }[] }).queueAnimations || []);
+  if (reduced) expect(animations).toEqual([]);
+  else expect(animations.some(item => item.id === "1" && item.timing.duration <= 300)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test("queue loading and transient errors preserve the last observed tasks", async ({
-  page,
-}) => {
+test("environment updates have no navigation and publications retain their own labels", async ({ page }, info) => {
   await setup(page);
-  let release: (() => void) | undefined;
-  let fail = false;
-  const initial = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route("**/api/queue", async (route) => {
-    await initial;
-    if (fail)
-      return route.fulfill({
-        status: 503,
-        json: { detail: "Queue temporarily unavailable." },
-      });
-    return route.fulfill({ json: [job(21, "QUEUED")] });
-  });
+  await page.route("**/api/queue", route => route.fulfill({ json: [job(7, "RUNNING", { kind: "sync" }), job(8, "RUNNING", { kind: "publication" }), job(9, "DONE", { kind: "sync" })] }));
   await page.goto("/questions");
-  const queue = await openQueue(page, test.info().project.name === "mobile");
-  await expect(queue.getByRole("status")).toHaveText("Loading tasks…");
-  await expect(queue.getByText("No tasks yet.", { exact: true })).toHaveCount(
-    0,
-  );
-  release?.();
+  const queue = await openQueue(page, info.project.name === "mobile");
+  await expect(queue.locator('[data-job="7"]')).toContainText("Updating");
+  await expect(queue.locator('[data-job="7"]').getByRole("link")).toHaveCount(0);
+  await expect(queue.locator('[data-job="8"]')).toContainText("Publishing ticket");
+  await expect(queue.locator('[data-job="9"]')).toHaveCount(0);
+});
+
+test("activity loading and transient errors preserve the last observed tasks", async ({ page }, info) => {
+  await setup(page);
+  let release!: () => void, fail = false;
+  const initial = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/queue", async route => { await initial; return fail ? route.fulfill({ status: 503, json: { detail: "Temporary outage" } }) : route.fulfill({ json: [job(21, "QUEUED")] }); });
+  await page.goto("/questions");
+  const queue = await openQueue(page, info.project.name === "mobile");
+  await expect(queue.getByRole("status")).toHaveText("Loading activity…");
+  release();
   await expect(queue.locator('[data-job="21"]')).toBeVisible();
   fail = true;
-  await expect(queue.getByRole("alert")).toContainText(
-    "Queue temporarily unavailable.",
-    { timeout: 7000 },
-  );
-  await expect(queue.locator('[data-job="21"]')).toContainText(
-    "AI not assigned",
-  );
-  await expect(queue.getByText("No tasks yet.", { exact: true })).toHaveCount(
-    0,
-  );
+  await expect(queue.getByRole("alert")).toHaveText("Activity updates are unavailable. Previous information is retained.", { timeout: 7000 });
+  await expect(queue.locator('[data-job="21"]')).toContainText("In queue");
+  await expect(queue.getByText("No activity yet.", { exact: true })).toHaveCount(0);
 });
 
-
-for (const theme of ["light", "dark"])
-  test(`reference cards bound long text and identify the current assistant in ${theme}`, async ({ page }) => {
-    await setup(page);
-    await page.addInitScript((value) => localStorage.setItem("spechelper-theme", value), theme);
-    const title = "Review the approval workflow for archived contracts and their associated export notifications across all configured business environments";
-    const description = "Inspect the existing approval checks, identify the impacted notification handlers and verify the acceptance conditions before proposing a focused change. Preserve the complete explanation for the task detail, including all required conditions and uncertainties.";
-    await page.route("**/api/queue", (route) => route.fulfill({ json: [
-      job(42, "RUNNING", { title, stage: description, assignment_state: "current", assignments: [{ connection_id: 1, connection_name: "ChatGPT", agent: "codex", model: "recorded-model", public_role: "analyst" }] }),
-      job(43, "DONE", { assignment_state: "previous", assignments: [{ connection_id: 2, connection_name: "Claude", agent: "claude", model: "previous-model", public_role: "counter_analyst" }], stage: "Analysis completed" }),
-    ] }));
-    await page.goto("/questions");
-    const queue = await openQueue(page, test.info().project.name === "mobile");
-    const card = queue.locator('[data-job="42"]');
-    await expect(card.getByText("#42", { exact: true })).toBeVisible();
-    await expect(card.locator(".queue-card-title strong")).toHaveAttribute("title", title);
-    await expect(card.locator(".queue-description")).toHaveAttribute("title", description);
-    await expect(card.locator('[data-provider="codex"]')).toBeVisible();
-    await expect(card.locator(".queue-assignment")).toHaveText("ChatGPT");
-    await expect(card.locator(".queue-role")).toHaveText("Analyst");
-    await expect(card.locator(".queue-assignment")).toHaveAttribute("title", /recorded-model/);
-    await expect(card.locator(".queue-assignment")).toHaveAttribute("title", /^Current AI/);
-    await queue.getByRole("button", { name: "Completed (1)", exact: true }).click();
-    await expect(queue.locator('[data-job="43"] [data-provider="claude"]')).toBeVisible();
-    await expect(queue.locator('[data-job="43"] [data-assignment="previous"]')).toHaveAttribute("title", /Previous AI/);
-    const bounds = await card.evaluate((node) => {
-      const title = node.querySelector("strong")!;
-      const description = node.querySelector(".queue-description")!;
-      return { titleHeight: title.clientHeight, titleLine: parseFloat(getComputedStyle(title).lineHeight), titleClipped: title.scrollWidth > title.clientWidth, descriptionHeight: description.clientHeight, descriptionLine: parseFloat(getComputedStyle(description).lineHeight), descriptionClipped: description.scrollHeight > description.clientHeight };
-    });
-    expect(bounds.titleHeight).toBeLessThanOrEqual(bounds.titleLine + 1);
-    expect(bounds.titleClipped).toBe(true);
-    expect(bounds.descriptionHeight).toBeLessThanOrEqual(bounds.descriptionLine * 2 + 1);
-    expect(bounds.descriptionClipped).toBe(true);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await queue.screenshot({ path: test.info().outputPath("task-queue.png"), animations: "disabled" });
-  });
+for (const theme of ["light", "dark"]) test(`activity cards bound long titles and show the current role in ${theme}`, async ({ page }, info) => {
+  await setup(page);
+  await page.addInitScript(value => localStorage.setItem("spechelper-theme", value), theme);
+  const title = "Review the approval workflow for archived contracts and their associated export notifications across all configured business environments";
+  await page.route("**/api/queue", route => route.fulfill({ json: [job(42, "RUNNING", { title, public_role: "analyst" })] }));
+  await page.goto("/questions");
+  const queue = await openQueue(page, info.project.name === "mobile");
+  const card = queue.locator('[data-job="42"]');
+  await expect(card.getByRole("heading")).toHaveAttribute("title", title);
+  await expect(card.locator('[data-role="analyst"]')).toHaveText("Analyst");
+  await expect(card.getByRole("link", { name: "Open analysis", exact: true })).toHaveAttribute("href", "/questions");
+  const bounds = await card.getByRole("heading").evaluate(node => ({ height: node.clientHeight, line: parseFloat(getComputedStyle(node).lineHeight) }));
+  expect(bounds.height).toBeLessThanOrEqual(bounds.line * 2 + 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await queue.screenshot({ path: info.outputPath("activity.png"), animations: "disabled" });
+});

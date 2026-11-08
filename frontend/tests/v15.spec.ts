@@ -76,7 +76,7 @@ test("global orchestration and cumulative connection roles preserve sparse inher
   });
   await page.goto("/admin");
   await page.getByRole("button", { name: "AI & Agents", exact: true }).click();
-  await page.getByRole("button", { name: "Roles and orchestration", exact: true }).click();
+  await page.getByRole("button", { name: "Orchestration", exact: true }).click();
   await page.getByLabel("Verify compared analyses", { exact: true }).uncheck();
   await expect(page.getByLabel("Maximum AI calls per analysis")).toHaveCount(0);
   await page.getByLabel("Analysis time limit (seconds)").fill("200");
