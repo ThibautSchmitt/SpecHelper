@@ -31,6 +31,12 @@ RUN for tool in codex claude agy; do mv /usr/local/bin/$tool /usr/local/bin/$too
     && python /app/runtime/cli_tools.py --snapshot-base
 ENV PATH=/app/backend/.venv/bin:$PATH PYTHONPATH=/app/backend:/app PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 CODEX_HOME=/credentials
 WORKDIR /app
+# Ubuntu hosts can automatically attach their /usr/bin/bwrap desktop profile,
+# whose child policy denies the trusted setpriv identity drop even when this
+# container explicitly uses apparmor=unconfined. Use the same packaged binary
+# at a container-owned path; the child UID, zero capabilities and seccomp checks
+# remain mandatory. Never alter or disable the host's AppArmor profiles.
+RUN install -D -m 0755 /usr/bin/bwrap /usr/local/bin/bwrap
 
 FROM cli-base AS cli-maintenance
 COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
