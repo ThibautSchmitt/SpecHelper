@@ -2,19 +2,25 @@
 
 ## Ticket views and analysis deliverables
 
-The centered preparation modal owns title/Markdown editing and explicit AI revision
-acceptance. Publication owns destination metadata, optional file consent and explicit
-confirmation. Destination changes retain their existing validation and reconciliation
-rules. Deep analysis can be launched from preparation through the shared editable
-need dialog, after saving the draft; it does not rewrite that draft on completion.
+One centered creation modal owns title/Markdown editing, explicit AI revision
+acceptance, destination metadata and optional document choices. Its publication
+action generates selected missing/outdated documents and then requires explicit
+confirmation before an external write. Destination changes retain their validation
+and reconciliation rules. Deep analysis can be launched through the shared editable
+need dialog after saving the draft; completion does not rewrite that draft.
 
-`core/deliverables.py` produces read-only Markdown from a selected saved ticket,
+`core/deliverables.py` renders read-only Markdown from a selected saved ticket,
 immutable result or recorded interrupted-cycle findings. Report APIs scope every ID
 to its conversation and retain verification limits. Audience-specific source annexes
 reuse recorded receipts and frozen Git/document material. They never execute agents
 or business SQL. The common Markdown reader supplies view/download controls for
-business reports, technical reports and optional `goal.md`. No new storage tables
-or migrations are needed; existing artifacts and publication histories remain intact.
+business reports, technical reports and optional `goal.md`.
+`core/ticket_documents.py` separately uses the existing discussion queue to write
+selected ticket attachments from the final destination draft and bounded retained
+context. Matching documents are reused individually. This writing step starts no
+independent analysis or business query, and it does not make new requirements verified.
+Generated files, source IDs and context fingerprints remain in existing job/artifact
+records; no separate document-management architecture is introduced.
 
 Conversation records reuse `Request`; each independently frozen investigation uses
 an `AnalysisRun` and immutable `ResultVersion`. `ConversationTicket` stores each
@@ -37,7 +43,7 @@ JSON remains mirrored for compatibility, but it is not the identity of every tic
 Reading or saving a preparation does not enqueue work. Row locks and revision guards
 prevent stale saves or a delayed drafting response from overwriting another ticket.
 Tickets browsing reads individual `PublishedTicket` records only when their status is
-confirmed and an external identifier or reference exists. Its small projection excludes
+confirmed, `removed_at` is null and an external identifier or reference exists. Its small projection excludes
 bodies, drafts and operational histories. Saved URLs are rechecked against the connection
 origin and supported provider ticket routes without contacting the provider; missing or
 unsafe links are not reconstructed. Drafts and operation details remain available from
@@ -102,7 +108,8 @@ job/run states remain unchanged. A failed/cancelled operation or an orphaned act
 technical state adds a visible incident; it is never silently shown as still running.
 `archived_at` controls the active/archive filter independently of execution state.
 Archiving changes neither messages, native sessions, results nor publication evidence.
-Deletion remains soft and retains published-ticket provenance.
+Conversation deletion remains soft and retains published-ticket provenance. Deleting
+one analysis cycle follows the separate retirement path below.
 
 A new discussion selects one eligible AI connection and keeps its model and session.
 The application persists the visible history independently of native CLI storage.
@@ -172,7 +179,7 @@ verification and human-preview gates, not merely an execution-completed status.
 Admission uses short PostgreSQL transactions and row locks, including
 `select_for_update(skip_locked=True)` for task claiming. Long CLI work runs outside
 those locks. Independent conversations share configurable account and instance slots:
-by default **four per account and eight overall**. Discussion and deep-analysis calls
+by default **four per account and two overall**. Discussion and deep-analysis calls
 use the same budgets. Account aliases share reservations for the detected account.
 One conversation permits only one active operation at a time.
 AI invocations use a one-hour execution limit by default, including conversational
@@ -197,10 +204,48 @@ that attempt is known to have stopped; stale completion cannot release another j
 slot. Interrupted jobs recover from recorded state. Configuration changes and CLI
 maintenance coordinate with all active invocations, including pending stops.
 
-The reference agent container shares two CPUs, 2 GiB memory and 256 process slots.
-Raising admission limits does not add provider capacity or host resources. The HTTP
+The reference agent container shares two CPUs, 2 GiB memory and 256 task slots.
+Its execution admission is additionally capped at two invocations. Excess work
+returns BUSY to the existing scheduler. The shared sandbox UID is limited to 128
+tasks in both `runtime/relay.py` and `runtime/restrict.py`; Linux includes threads
+across invocations and PID namespaces in that UID budget. Runtime locks are released
+after execution, active controls remain until cleanup, and a still-running process
+is killed/reaped on an unexpected execution failure. Persisted native session state
+does not require keeping a CLI process resident between turns.
+
+Raising scheduler limits does not raise that runtime cap or add provider/host capacity. The HTTP
 request limiter is a different mechanism. SQLite development tests do not prove
 PostgreSQL locking or multi-process concurrency; use disposable PostgreSQL tests.
+
+## Local retirement and artifact ownership
+
+`core/local_deletion.py` handles cycle deletion and local publication removal.
+Migration `0054_local_analysis_publication_retirement` adds nullable retirement
+timestamps, visibility managers and no destructive table changes.
+
+- `DELETE /analyses/{analysis_id}/runs/{number}` requires explicit confirmation.
+  Job, conversation and cycle locks follow completion's lock order. Active current
+  executions are fenced and cancelled; runtime acknowledgement must precede final
+  cleanup. Worker maintenance retries pending stops even after the browser closes.
+  The authenticated `/sessions/release` gateway retires only validated exclusive
+  role contexts, after runtime work and file handles have finished. Shared discussion
+  sessions and contexts used by other jobs remain.
+- Analysis runs and result versions disappear through their default visibility
+  managers. Their identifiers and sequence numbers remain reserved, and new number
+  allocation uses the unfiltered managers. Unreferenced result contents, artifacts
+  and owned materialized contexts are removed; frozen evidence referenced by tickets,
+  transferred documents or derived questions remains accessible to those dependents.
+  Shared Git caches and conversation workspaces are preserved.
+- `DELETE /tickets/{ticket_id}` requires explicit confirmation and a confirmed
+  publication with no attachment transfer in flight. It hides only that publication
+  and its conversation event, clearing duplicated payloads while retaining external
+  identity, destination and idempotency data. The default publication manager remains
+  unfiltered so removed records still prevent duplicate creation. No provider delete
+  or update API is called, and sibling publications remain intact.
+
+These operations are not secure erasure. See [retention](../SECURITY.md#retention-and-backups)
+and [local administration](local-administration.md) for installation-wide cleanup,
+ownership checks and reproducible resource measurements.
 
 ## Work observations and browser updates
 

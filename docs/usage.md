@@ -348,7 +348,7 @@ recorded if an attachment fails. An uncertain write is never retried blindly. Us
 or insufficient permissions can prevent immediate reconciliation. An unstarted file
 transfer may resume against an existing issue without creating another issue.
 
-## Find history and remove an analysis
+## Find published tickets
 
 **Home** summarizes mutually exclusive work needing action, work in progress and
 available results. **Analyses** provides search, filters and the conversation history.
@@ -371,9 +371,32 @@ only for multiple pages. **Refresh** reloads local publication records, without 
 external workflow states. Preparing a ticket never launches a deep analysis automatically,
 and uncertain publications still require safe verification of the original operation.
 
-You can edit a short analysis title without replacing the original need. The history
-retains messages, need revisions, captured references and result versions.
+To hide one confirmed publication, use its **… → Remove from SpecHelper** action and
+confirm. It disappears from this list and its publication element in the conversation;
+the external ticket is neither deleted nor changed. Other publications, including
+those from the same draft or conversation, remain. Wait for any attachment transfer
+to finish before removing its publication. Failures and uncertain operations must be
+resolved through their existing conversation actions instead.
 
-**Delete analysis** requires confirmation. Cancel active work and wait for its agents
-and any publication to finish first. Deletion hides the analysis from active views;
-it preserves published-ticket audit records and linked history. It is not secure erasure.
+Minimal publication identity and duplicate-prevention references remain locally.
+Removing an entry does not authorize SpecHelper to repeat that external creation.
+
+## Delete a deep analysis or conversation
+
+Use **… → Delete deep analysis** on the relevant progress element and confirm
+**Delete this analysis and its results? This action cannot be undone.** This removes
+that cycle and its results from the conversation. The conversation, its independent
+messages, other analyses, drafts and published tickets remain.
+
+For an active current-format analysis, SpecHelper requests cancellation and waits for
+the exact runtime attempt and its exclusive role sessions to stop before completing
+cleanup. The worker continues pending cleanup if you close the window. Older analysis
+formats can require stopping the operation first. Do not treat a pending stop as
+completed deletion. Shared conversation sessions and evidence required by retained
+tickets or other dependent records are preserved.
+
+The separate **Delete conversation** action concerns the whole conversation, not one
+cycle. It requires its own confirmation and retains necessary publication provenance.
+Renaming or archiving remains available when you want to keep the history. Local
+deletion and retirement are not secure erasure; see [retention](../SECURITY.md#retention-and-backups)
+and [local administration](local-administration.md#retiring-an-analysis-or-publication).

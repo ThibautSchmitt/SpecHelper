@@ -26,6 +26,8 @@ calls the final role **Validateur**.
   the whole environment without changing earlier analyses' frozen references.
 - Optionally inspect a business PostgreSQL database through restricted read-only access.
 - Follow observed work, answer clarifications and inspect a concise result or detailed report.
+- Delete one deep-analysis cycle while preserving the conversation, other cycles
+  and tickets. Remove a publication from SpecHelper without deleting its external ticket.
 - Prepare a ticket directly in a centered modal using the conversational assistant.
   Keep one active draft per conversation and review AI updates before applying them. Reuse
   existing findings, keep later proposals explicitly unverified and choose whether
@@ -44,6 +46,9 @@ with code, Git history or authorized data when explicitly requested.
 The [stabilization review](docs/stabilization.md) distinguishes tested guarantees,
 release blockers and the real-world acceptance journey still required before a
 stable release.
+See [local operations](docs/local-administration.md) for safe stop/clean/purge commands and
+load-test methodology, and the [qualification results](docs/stabilization-final.md)
+for executed measurements and remaining limits.
 
 ## Quick start
 
@@ -87,9 +92,11 @@ keeps its own AI session, independently of the browser used to open it. Read
 [SECURITY.md](SECURITY.md) before exposing an instance or sending sensitive data.
 
 Several conversations can use one account simultaneously: the default ceilings
-are four active AI invocations per detected account and eight across the instance.
+are four active AI invocations per detected account and two across the instance.
+The reference runtime also admits two invocations; additional conversations queue.
 Each conversation keeps one active operation. Provider quotas, account restrictions
-and host resources still apply; aliases of an account share its budget.
+and host resources still apply; aliases of an account share its budget. See
+[concurrent work](docs/installation.md#concurrent-work) before changing these limits.
 
 Partial results remain visibly qualified. Publishing a draft without complete
 independent verification requires an additional explicit acknowledgement.
@@ -103,6 +110,7 @@ accuracy, cost and throughput are not certified by application tests.
 - [Usage](docs/usage.md): conversations, deep analysis, results and ticket publication
 - [Architecture](docs/architecture.md): services, isolation, sessions and concurrency
 - [Development](docs/development.md): local setup, tests and evaluation tools
+- [Local administration](docs/local-administration.md): safe stop, clean, purge and load probes
 - [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
 
 ## License

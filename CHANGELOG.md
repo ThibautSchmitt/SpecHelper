@@ -7,6 +7,34 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Local analysis and publication retirement
+
+- Delete one deep-analysis cycle after explicit confirmation, preserving its
+  conversation, independent messages, other cycles and tickets. Fence active work,
+  wait for exact-attempt shutdown and retry pending cleanup through worker maintenance.
+- Remove one confirmed publication from SpecHelper without changing or deleting
+  the external ticket. Retain minimal identity and idempotency references, preserve
+  sibling publications and reject retirement during attachment transfer.
+- Add migration 0054 for nullable retirement timestamps and filtered analysis/result
+  visibility. Preserve referenced evidence and reserve historical sequence numbers.
+
+### Runtime capacity and administration
+
+- Align the default global scheduler with the runtime's two execution slots. Return
+  excess work to the existing queue and align relay/sandbox shared-UID task budgets
+  to 128 while keeping the container's CPU, memory and task limits.
+- Release unused invocation locks, kill/reap native processes on unexpected failures
+  and clean only validated, exclusively owned retired role sessions.
+- Eager-load publication connectors when rendering links to avoid per-row queries.
+- Add inventory-driven `stop`, `clean` and `purge` administration with dry runs,
+  ownership validation and strong destructive confirmation. Preserve shared/external
+  resources, host bind mounts, the source checkout and backups.
+- Provide opt-in native conversation and resource probes plus controlled concurrent
+  publication tests. The [qualification report](docs/stabilization-final.md) separates
+  actual runs from fixtures and records remaining real-provider/endurance gaps.
+- Update the operational guides, current concurrency defaults and cycle-versus-
+  conversation deletion instructions. External-ticket modification remains deferred.
+
 ### Readable tables and expandable sources
 
 - Use shared Markdown table spacing, borders and local horizontal scrolling.

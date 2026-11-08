@@ -4,11 +4,18 @@ Review date: 6 November 2026. Inspected baseline: `c3b3b7a` and the accompanying
 stabilization changes. This is an engineering review of available evidence, not
 certification of model accuracy or deployment security.
 
+The later [7 November load and lifecycle qualification](stabilization-final.md)
+records the completed PostgreSQL suite, native conversation batches, local retirement,
+Docker lifecycle checks and remaining gaps. Use that report for the latest executed
+measurements. The baseline findings, CI failures and self-test below remain dated
+evidence; they are not a fresh assessment of today's containers or remote CI.
+Operational instructions live in [local administration](local-administration.md).
+
 **A stable-release recommendation is withheld.** Existing conversations, independent
 analyses and confirmed publication are a coherent scope. The remaining work is
 reliability and release validation, rather than additional product modules.
 
-## Acceptance checklist
+## Acceptance checklist at the review baseline
 
 | Area | Current evidence | Remaining gate |
 | --- | --- | --- |

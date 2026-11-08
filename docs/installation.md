@@ -69,17 +69,22 @@ Set these deployment variables before recreating backend and worker:
 | Variable | Default | Meaning |
 | --- | ---: | --- |
 | `SPECHELPER_AI_ACCOUNT_CONCURRENCY` | 4 | Active AI invocations shared by aliases of one detected account; range 1–32 |
-| `SPECHELPER_AI_CONCURRENCY` | 8 | Active AI invocations across the instance; range 1–64 |
+| `SPECHELPER_AI_CONCURRENCY` | 2 | Active AI invocations across the instance; range 1–64; matches the default runtime's two execution slots |
 
 Discussion turns, deep-analysis checkpoints and library assistants share the slots.
-One conversation still has one active operation. Set both values to at least ten
-if you want to allow ten simultaneous discussions on one account. Setting a ceiling
-does not establish the provider's actual capacity or increase its quota.
+One conversation still has one active operation. Five or ten submitted conversations
+can queue behind the two runtime execution slots; they do not require five or ten
+resident CLI processes. Raising scheduler limits alone does not increase runtime
+admission: excess work returns BUSY and waits through the existing queue. Increasing
+a ceiling does not establish the provider's capacity or increase its quota.
 `SPECHELPER_CONCURRENCY` separately limits HTTP requests per access actor; it does
 not configure background AI work.
 
-The default agent runtime shares two CPUs, 2 GiB RAM and a 256-process limit.
-Increasing slots does not add host resources. See [Architecture](architecture.md#parallel-work-and-cancellation).
+The default agent runtime shares two CPUs, 2 GiB RAM and a 256-task container limit.
+The shared sandbox UID is additionally limited to 128 tasks, including threads across
+invocations. Increasing slots does not add host resources. Measure before changing
+the reference deployment; see [Architecture](architecture.md#parallel-work-and-cancellation)
+and [load qualification](local-administration.md#reproducible-measurements).
 
 ## Stop, restart and upgrade
 
@@ -106,6 +111,20 @@ The migrations preserve existing analyses and configuration. `0046` adds environ
 branch-check metadata; `0047` consolidates the built-in skills, retains immutable
 revisions and remaps current references. Customized definitions are preserved for
 review rather than discarded. Historical execution snapshots are not rewritten.
+Migration `0054_local_analysis_publication_retirement` adds nullable local-retirement
+timestamps and visibility managers. It does not drop historical tables or tickets.
+See [local retirement](local-administration.md#retiring-an-analysis-or-publication)
+for the retained provenance and artifact-cleanup rules.
+
+## Cleanup and uninstallation
+
+Use the [local administration guide](local-administration.md#stop-clean-and-purge)
+for the `stop`, `clean` and `purge` commands. Start with `--dry-run` to inventory the
+exact Compose project and host mounts. `clean` preserves persistent volumes;
+`purge` requires typing `PURGE SPECHELPER` and removes only verified exclusive
+installation resources. Shared/external resources, host bind mounts, the source
+checkout, `.env` and host backups remain for separate review. Neither operation
+deletes remote tickets, remote repositories or business databases.
 
 ## Backups and recovery
 

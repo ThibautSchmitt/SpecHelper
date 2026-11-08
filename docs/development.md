@@ -1,10 +1,11 @@
 # Development
 
-Ticket preparation regressions cover opening and saving without queuing agents,
-reuse of a pinned result, unverified later proposals, concurrent edits and explicit
-analysis of an immutable draft snapshot. Frontend coverage checks the same choices
-in English and French. Existing publication tests retain the independent-check
-and human-confirmation gates.
+Ticket preparation regressions distinguish explicit AI drafting from reading or
+saving an existing draft without queuing agents. They cover pinned-result reuse,
+unverified later proposals, concurrent edits and explicit analysis of an immutable
+draft snapshot. Frontend coverage checks the same choices in English and French.
+Publication tests retain human confirmation and acknowledgement of missing independent
+verification; deep analysis is optional for conversation-ticket publication.
 
 Start with [CONTRIBUTING](../CONTRIBUTING.md) for contribution and documentation rules.
 Use fictional data and separate development storage. Never run mutating fixtures,
@@ -20,6 +21,10 @@ active scans or publication tests against a team instance.
 | `scripts/` | Documentation checks, security runners and opt-in evaluation tools |
 | `security/` | Scanner rules, applicability reviews and exact exceptions |
 | `docs/` | Current guides and a small set of dated evidence records |
+
+The [architecture guide](architecture.md#local-retirement-and-artifact-ownership)
+maps local-retirement ownership and completion fences. Administrative commands and
+load-probe options live in [local administration](local-administration.md).
 
 ## Local setup
 
@@ -80,6 +85,31 @@ point either setting at business or production data. Without these fixtures some
 PostgreSQL-specific tests skip; report those skips instead of claiming lock coverage.
 Use the test modules' fixture requirements when running a focused subset.
 
+### Lifecycle and load regressions
+
+Run the local-retirement, ownership, cleanup and query-budget checks from `backend/`:
+
+```sh
+uv run pytest -q tests/test_local_deletion.py tests/test_session_cleanup.py \
+  tests/test_cleanup_admin.py tests/test_resource_probe.py \
+  tests/test_publication_query_budget.py
+```
+
+Use disposable PostgreSQL for `tests/test_persistent_discussion_postgres.py`,
+`tests/test_v24_scheduler.py` and `tests/test_publication_load_postgres.py`. They
+exercise row locks, account reservations and concurrent publication/reconciliation
+with controlled providers. Synthetic tokens and HTTP fixtures are not evidence of
+real multi-account provider capacity. Keep each simultaneous test runner's database
+name distinct; `SPECHELPER_TEST_POSTGRES_DSN` is a separate optional SQL fixture.
+
+The [load methodology](local-administration.md#controlled-and-real-load-tests)
+provides opt-in five/ten-conversation native probes, resource sampling and limits
+on interpreting small samples. Real native inference consumes quota; external
+publication still requires explicit approval on a test destination. External-ticket
+modification remains deferred: test existing resumption and creation reconciliation,
+not an unimplemented update workflow. Exercise destructive purge only on a disposable
+installation, never on the application's own data.
+
 ## Frontend checks
 
 From `frontend/`:
@@ -101,6 +131,11 @@ fully mocked conversation/progress fixtures in another:
 ```sh
 npm run test:e2e -- persistent-discussion.spec.ts observed-progress.spec.ts --project=desktop
 ```
+
+`local-retirement.spec.ts` uses mocked APIs to cover cycle-specific deletion,
+pending-stop handling, local publication removal and desktop/mobile layouts. These
+browser checks complement backend/runtime ownership tests; they do not stop a real
+CLI process or delete a live provider ticket.
 
 Install the Chromium browser required by Playwright when necessary:
 
@@ -167,6 +202,9 @@ not enabled in production.
 
 Retained evidence is deliberately small:
 
+- [Stabilization review](stabilization.md): release criteria and the dated business self-test.
+- [Load and lifecycle qualification](stabilization-final.md): the 7 November 2026
+  measurements, executed checks, failed attempts and remaining real-provider limits.
 - [Security review](evidence/security-review.md): dated attack/re-test scope and residual limitations.
 - [Publication review](evidence/publication-review.md): licensing and privacy review scope.
 - [Qualification observations](evidence/qualification.md): failed/incomplete quality trials and indexing limits.

@@ -142,6 +142,19 @@ securely erase retained versions, linked history or published tickets. There is 
 automatic business-content purge. Access-event retention is separately configurable
 with `SPECHELPER_AUDIT_RETENTION_DAYS` (1–365, default 30).
 
+Cycle deletion waits for active runtime work to stop before removing exclusive
+sessions and unreferenced results. Evidence still required by retained tickets or
+other dependents remains. Removing a confirmed publication locally clears duplicated
+payloads but keeps minimal external identity and idempotency data; it never deletes
+the remote ticket. See [local retirement](docs/local-administration.md#retiring-an-analysis-or-publication).
+
+Installation-wide cleanup is an explicit administrative action, not an automatic
+retention policy. The [cleanup script](docs/local-administration.md#stop-clean-and-purge)
+inventories verified Compose resources, supports a dry run and requires strong
+confirmation for purge. Shared/external resources, host bind mounts, source files
+and host backups remain outside automatic deletion. Purge is not secure disk erasure
+and cannot remove copies held by external providers.
+
 Back up application PostgreSQL, persistent resource/session volumes and keys together.
 Protect and test restore procedures outside production. Source workspaces and frozen
 context deserve the same access controls as uploads. External providers and ticket
