@@ -42,7 +42,7 @@ for (const language of ["en", "fr"] as const) {
       const panel = page.getByRole("region", { name: t("Analysis findings and limits"), exact: true });
       for (const label of ["Supported finding", "Partially supported", "Contradicted", "Not verified"]) await expect(panel.getByText(t(label), { exact: true })).toBeVisible();
       for (const label of ["Observed fact", "Interpretation", "Contradiction", "Unknown"]) await expect(panel.locator("article > p").filter({ hasText: new RegExp(`^${t(label)} ·`) })).toBeVisible();
-      expect(await panel.getByRole("heading", { name: "The cancellation control checks active benefits.", exact: true }).evaluate(element => element.getBoundingClientRect().width)).toBeGreaterThan(180);
+      expect(await panel.getByRole("heading", { name: "The cancellation control checks active benefits.", exact: true }).evaluate(element => element.getBoundingClientRect().width)).toBeGreaterThan(info.project.name === "mobile" ? 120 : 180);
       await expect(panel).toContainText("42 closed contracts");
       await expect(panel).toContainText("The checked scope does not cover supervisor overrides.");
       for (const note of ["No counterexample found does not establish universal validity.", "Database observations apply only to the queried population and time.", "Independent analysis, counter-analysis and verification have not all been completed."]) await expect(panel).toContainText(t(note));

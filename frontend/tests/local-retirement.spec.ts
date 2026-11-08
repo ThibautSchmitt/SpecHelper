@@ -42,7 +42,6 @@ for(const language of ['en','fr'] as const){
   await page.route(`**/api/analyses/${id}`,r=>r.fulfill({json:value()}));
   await page.route(`**/api/analyses/${id}/runs/1`,r=>{expect(r.request().postDataJSON()).toEqual({confirmed:true});calls++;if(calls>1)deleted=true;return r.fulfill({json:{status:deleted?'DELETED':'STOPPING'}});});
   await page.goto(`/analyses/${id}`);
-  await page.locator('[data-message="progress-1"] summary').first().click();
   await page.locator('[data-message="progress-1"]').getByLabel(t('Analysis actions'),{exact:true}).click();
   await page.locator('[data-message="progress-1"]').getByRole('button',{name:t('Delete deep analysis'),exact:true}).click();
   const modal=page.getByRole('dialog',{name:t('Delete deep analysis'),exact:true});
