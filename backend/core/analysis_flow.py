@@ -1373,7 +1373,7 @@ def analyze(
         if run is None:
             run = AnalysisRun.objects.create(
                 request=request,
-                number=(request.analysis_runs.aggregate(last=Max("number"))["last"] or 0) + 1,
+                number=(AnalysisRun.all_objects.filter(request=request).aggregate(last=Max("number"))["last"] or 0) + 1,
             )
     if not run.context_snapshot and request.environment_id:
         from .environment_context import freeze_context

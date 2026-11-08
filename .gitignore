@@ -38,3 +38,5 @@ ai-sessions/
 /*.pdf
 /frontend/AGENTS.md
 /frontend/next-env.d.ts
+
+.spechelper-installation.json

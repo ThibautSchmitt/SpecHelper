@@ -375,7 +375,7 @@ def request_dict(value, full=False):
              "url": stored_publication_url(row) if row.status == "PUBLISHED" else "", "version_number": row.version.number if row.version_id else None,
              "platform":row.platform,"external_key":row.external_key or row.external_id,
              "created_at": row.finished_at or row.created_at}
-            for row in PublishedTicket.objects.filter(request=value).select_related("version").order_by("created_at", "id")
+            for row in PublishedTicket.objects.filter(request=value, removed_at__isnull=True).select_related("version", "connector").order_by("created_at", "id")
         ]
         result["conversation_tickets"] = summaries(value)
         result["active_ticket"] = next((item for item in result["conversation_tickets"] if item["active"]), None)

@@ -227,7 +227,7 @@ def snapshot():
     latest_analysis = Job.objects.filter(kind=OuterRef("kind"), target=OuterRef("target")).order_by(
         "-created_at", "-id"
     )
-    visible = Job.objects.filter(
+    visible = Job.objects.exclude(analysis_run__deleted_at__isnull=False).filter(
         pk=Subquery(latest_analysis.values("pk")[:1])
     ).exclude(kind__in=["cli_update", "discussion", "branch_check"]).exclude(kind="analysis", target__in=[
         str(pk) for pk in Request.all_objects.filter(deleted_at__isnull=False).values_list("pk", flat=True)

@@ -40,7 +40,8 @@ if __name__ == "__main__":
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     resource.setrlimit(resource.RLIMIT_FSIZE, (64 * 1024 * 1024, 64 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
-    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+    # Match restrict.py: the task budget is UID-wide, including native helpers.
+    resource.setrlimit(resource.RLIMIT_NPROC, (128, 128))
     resource.setrlimit(resource.RLIMIT_CPU, (285, 290))
     if os.getuid() != 10001 or os.getgid() != 10001:
         raise SystemExit("Analysis identity isolation unavailable")

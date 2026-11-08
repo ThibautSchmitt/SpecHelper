@@ -16,6 +16,11 @@ def text(value, maximum, secrets):
 
 def result_for(value, number=None):
     versions = value.versions.select_related("request", "run")
+    # Retained source of the active draft stays editable after local retirement.
+    if number is not None:
+        retained = value.conversation_tickets.filter(active=True, source_version__number=number, source_version__deleted_at__isnull=False).select_related("source_version").first()
+        if retained:
+            return retained.source_version
     if number is not None:
         return get_object_or_404(versions, number=number)
     return versions.filter(status__in=["READY", "PARTIAL"]).order_by("-number").first()
@@ -122,7 +127,7 @@ def summaries(value):
 
 
 def verified(version):
-    if not version or version.status != "READY" or version.evidence.get("blocking"):
+    if not version or version.deleted_at or version.status != "READY" or version.evidence.get("blocking"):
         return False
     claims = version.evidence.get("claims", [])
     if not claims or any(c.get("material", True) and c.get("status") != "supported" for c in claims):

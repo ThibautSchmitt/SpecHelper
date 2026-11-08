@@ -23,7 +23,7 @@ def publish(request_id, run, output):
             run.status, run.finished_at = existing.status, existing.created_at
             run.save(update_fields=["status", "finished_at"])
             return existing
-    number = (request.versions.aggregate(last=Max("number"))["last"] or 0) + 1
+    number = (ResultVersion.all_objects.filter(request=request).aggregate(last=Max("number"))["last"] or 0) + 1
     output = type(output).model_validate(redact(output.model_dump(), configured_secrets()))
     if output.questions:
         raise BusinessOutputError(

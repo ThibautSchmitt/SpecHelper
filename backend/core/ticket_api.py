@@ -36,6 +36,19 @@ from .ticket_publication import (
 router = Router(tags=["Ticket publication"])
 
 
+class RemovePublicationIn(Schema):
+    model_config = ConfigDict(extra="forbid")
+    confirmed: bool = Field(default=False, strict=True)
+
+
+@router.delete("/tickets/{ticket_id}")
+def remove_published_ticket(request, ticket_id: UUID, payload: RemovePublicationIn):
+    from .local_deletion import remove_publication
+    if payload.confirmed is not True:
+        raise HttpError(422, "Confirm removal of this ticket from SpecHelper.")
+    return remove_publication(ticket_id)
+
+
 @router.get("/analyses/{analysis_id}/versions/{number}/reports/{kind}")
 def analysis_report(request, analysis_id: UUID, number: int, kind: Literal["business", "technical"]):
     from .deliverables import result_report
@@ -381,7 +394,7 @@ def list_tickets(
     if status not in {"all", "DRAFT", *PublishedTicket.Status.values}:
         raise HttpError(422, "Unknown ticket publication status.")
     values = (
-        PublishedTicket.objects.filter(status="PUBLISHED")
+        PublishedTicket.objects.filter(status="PUBLISHED", removed_at__isnull=True)
         .filter(Q(external_id__regex=r"\S") | Q(external_key__regex=r"\S"))
         .select_related("connector", "version", "request__environment")
     )
@@ -455,7 +468,7 @@ def ticket_record(value):
 
 
 def preparation_dict(value):
-    publications = [publication_dict(item) for item in value.publications.all()]
+    publications = [publication_dict(item) for item in value.publications.filter(removed_at__isnull=True)]
     from .ticket_preparation import publication_state
 
     state = publication_state(list(value.publications.all()))
@@ -528,6 +541,8 @@ def ticket_detail(request, ticket_id: UUID):
         .filter(pk=ticket_id)
         .first()
     )
+    if value is not None and value.removed_at:
+        raise HttpError(404, "Publication removed from SpecHelper.")
     if value is None:
         draft = (
             TicketPublicationDraft.objects.filter(pk=ticket_id, conversation_ticket__isnull=True)
@@ -567,7 +582,7 @@ def version_publications(request, request_id: UUID, number: int, conversation_ti
         publication_ticket(version, conversation_ticket_id)
     return [
         publication_dict(value)
-        for value in PublishedTicket.objects.filter(request_id=request_id, version_id=version.pk, conversation_ticket_id=conversation_ticket_id).select_related("connector", "version", "request")
+        for value in PublishedTicket.objects.filter(request_id=request_id, version_id=version.pk, conversation_ticket_id=conversation_ticket_id, removed_at__isnull=True).select_related("connector", "version", "request")
     ]
 
 

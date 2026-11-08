@@ -35,13 +35,14 @@ type Event = {
   messageId?:number; publicationMeta?:string; publicationPlatform?:string;
 };
 
-export function AnalysisConversation({ value, result, reply, actions, controls, resultActions, ticketActions, messageActions, onSelectVersion, trackingUnavailable=false }: {
+export function AnalysisConversation({ value, result, reply, actions, controls, resultActions, ticketActions, messageActions, runActions, onSelectVersion, trackingUnavailable=false }: {
   value: RequestDetail; result?: ResultVersion | null; reply?: ReactNode;
   actions?: ReactNode; controls?: ReactNode; onSelectVersion?: (version: number) => void;
   trackingUnavailable?:boolean;
   resultActions?: (number:number)=>ReactNode;
   ticketActions?: (id:string)=>ReactNode;
   messageActions?: (id:number)=>ReactNode;
+  runActions?: (number:number)=>ReactNode;
 }) {
   const { t, dateLocale } = useI18n();
   const ticketUrl = useTicketUrlResolver();
@@ -155,6 +156,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
     <ol className="conversation-messages" ref={list}>
       {events.map(event => <li key={event.id} id={event.id} className={`conversation-message conversation-${event.speaker}`} data-message={event.id}>
         <article className="conversation-bubble">
+          {event.run && event.run.number>0 && runActions && <div className="mb-2 flex justify-end">{runActions(event.run.number)}</div>}
           {event.run && <InvestigationProgress run={event.run} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
           {event.run&&["ERROR","CANCELLED","PARTIAL","READY"].includes(event.run.status)&&event.run.role_reviews?.some(review=>review.summary||review.findings.length||review.issues.length||review.limits.length)&&!versions.some(version=>version.run_number===event.run!.number)&&<div className="mt-2 flex flex-wrap gap-2">
             <DeliverableViewer url={`/analyses/${value.id}/runs/${event.run.number}/reports/business`} title="Business report" label="View business report"/>

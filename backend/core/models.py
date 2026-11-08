@@ -430,6 +430,9 @@ class LibraryRevision(models.Model):
 
 
 class AnalysisRun(models.Model):
+    objects = VisibleRequestManager()
+    all_objects = models.Manager()
+    deleted_at = models.DateTimeField(null=True, db_index=True)
     request = models.ForeignKey(Request, related_name="analysis_runs", on_delete=models.CASCADE)
     job = models.OneToOneField(
         Job, related_name="analysis_run", null=True, on_delete=models.SET_NULL
@@ -447,12 +450,16 @@ class AnalysisRun(models.Model):
     context_usage = models.JSONField(default=list)
 
     class Meta:
+        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(fields=["request", "number"], name="unique_request_run")
         ]
 
 
 class ResultVersion(models.Model):
+    objects = VisibleRequestManager()
+    all_objects = models.Manager()
+    deleted_at = models.DateTimeField(null=True, db_index=True)
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     request = models.ForeignKey(Request, related_name="versions", on_delete=models.CASCADE)
     run = models.ForeignKey(AnalysisRun, null=True, on_delete=models.SET_NULL)
@@ -476,6 +483,7 @@ class ResultVersion(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        base_manager_name = "all_objects"
         ordering = ["number"]
         constraints = [
             models.UniqueConstraint(fields=["request", "number"], name="unique_result_version")
@@ -644,6 +652,7 @@ class PublishedTicket(models.Model):
         max_length=20, choices=Status, default=Status.PUBLISHING, db_index=True
     )
     error = models.TextField(blank=True)
+    removed_at = models.DateTimeField(null=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     finished_at = models.DateTimeField(null=True)

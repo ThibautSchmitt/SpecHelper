@@ -12,6 +12,7 @@ import { AnalysisDeleteButton } from "@/components/analysis-delete-button";
 import { AIReportDownloads } from "@/components/ai-report-downloads";
 import { ScopeAssessmentPanel } from "@/components/scope-assessment";
 import { NeedEditor } from "@/components/need-editor";
+import { LocalRetirementAction } from "@/components/local-retirement-action";
 import { AnalysisConversation, conversationAnswer } from "@/components/analysis-timeline";
 import { DiscussionComposer } from "@/components/discussion-composer";
 import { ConversationArchive } from "@/components/conversation-archive";
@@ -360,7 +361,7 @@ function RequestContent({
         <ArrowLeft size={16} />{" "}
         {t("All analyses")}
       </Link>
-      <div className="flex flex-wrap items-center gap-2"><ConversationArchive value={value} onUpdated={setValue}/><AnalysisDeleteButton id={id} title={value.title || value.need.split("\n")[0]} disabled={busy || ["IN_PROGRESS", "WAITING_AI"].includes(conversationState(value))} /></div></div>
+      <div className="flex flex-wrap items-center gap-2"><ConversationArchive value={value} onUpdated={setValue}/><AnalysisDeleteButton conversation={unified || value.discussion?.enabled} id={id} title={value.title || value.need.split("\n")[0]} disabled={busy || ["IN_PROGRESS", "WAITING_AI"].includes(conversationState(value))} /></div></div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">
@@ -397,6 +398,7 @@ function RequestContent({
         </div>
       )}
       <AnalysisConversation value={value} result={loadingVersion ? null : result} trackingUnavailable={trackingUnavailable}
+        runActions={number=><LocalRetirementAction analysis url={`/analyses/${id}/runs/${number}`} onRemoved={()=>{setSelectedNumber(null);setSelectedVersion(null);api<RequestDetail>(`${base}/${id}`).then(setValue).catch(failure=>setError(failure.message));}}/>}
         reply={conversationReply} onSelectVersion={selectConversationVersion}
         resultActions={(unified || value.discussion?.enabled) ? number=><><AnalysisDeliverables requestId={value.id} version={number}/><TicketPreparation value={value} sourceVersion={number} onUpdated={setValue}/></> : undefined}
         actions={<>

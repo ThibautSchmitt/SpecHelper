@@ -159,6 +159,8 @@ def deliver_attachments(record, provider):
     for row in record.snapshot.get("selected_attachments", []):
         with transaction.atomic():
             current = PublishedTicket.objects.select_for_update().get(pk=record.pk)
+            if current.removed_at:
+                return
             delivery = current.attachment_delivery
             if any(item["id"] == row["id"] for item in delivery):
                 continue

@@ -41,7 +41,10 @@ def install():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     resource.setrlimit(resource.RLIMIT_FSIZE, (64 * 1024 * 1024, 64 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
-    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+    # Linux counts all native/helper threads sharing UID 10001, across PID
+    # namespaces. Two Codex invocations can exceed 64 tasks. Admission remains
+    # capped at two; this UID budget stays below Compose's 256-task hard limit.
+    resource.setrlimit(resource.RLIMIT_NPROC, (128, 128))
     resource.setrlimit(resource.RLIMIT_CPU, (285, 290))
 
 

@@ -42,7 +42,8 @@ class Handler(BaseHTTPRequestHandler):
             and self.command == "POST"
         )
         cancel_run = parsed.path == "/runs/cancel" and self.command == "POST"
-        if not (health or models or versions or auth_get or auth_post or cancel_run):
+        release_sessions = parsed.path == "/sessions/release" and self.command == "POST"
+        if not (health or models or versions or auth_get or auth_post or cancel_run or release_sessions):
             self.respond(404, {"detail": "Command unavailable"})
             return
         target = parsed.path
@@ -81,6 +82,10 @@ class Handler(BaseHTTPRequestHandler):
                     if set(payload) != {"request_id", "attempt_id"}:
                         raise ValueError("Invalid cancellation")
                     payload = {key: str(uuid.UUID(value)) for key, value in payload.items()}
+                if release_sessions:
+                    if set(payload) != {"request_id", "context_ids"} or not isinstance(payload["context_ids"], list) or not 1 <= len(payload["context_ids"]) <= 256:
+                        raise ValueError("Invalid session cleanup")
+                    payload = {"request_id": str(uuid.UUID(payload["request_id"])), "context_ids": [str(uuid.UUID(item)) for item in payload["context_ids"]]}
             result = (
                 runtime_call(target, payload, timeout=25)
                 if read_quota

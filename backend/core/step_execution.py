@@ -79,7 +79,7 @@ def upgrade_pending(job):
         run = AnalysisRun.objects.create(
             request=request,
             job=job,
-            number=(request.analysis_runs.aggregate(last=Max("number"))["last"] or 0) + 1,
+            number=(AnalysisRun.all_objects.filter(request=request).aggregate(last=Max("number"))["last"] or 0) + 1,
         )
         freeze_context(request, run, reuse=request.context_snapshot or None)
     old = copy.deepcopy(run.orchestration)
@@ -494,7 +494,7 @@ def retry_analysis(request_id):
         .order_by("-id")
         .first()
     )
-    if not job or not is_incremental(job):
+    if not job or job.payload.get("delete_run_requested") or not is_incremental(job):
         raise HttpError(409, "Start a new analysis to use the current execution protocol.")
     if job.payload.get("connection_ids"):
         raise HttpError(409, "The previous execution is still stopping. Retry shortly.")

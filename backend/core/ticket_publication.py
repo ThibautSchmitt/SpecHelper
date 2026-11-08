@@ -715,6 +715,8 @@ def publish(version, connector, payload):
         # An old, definitively rejected attempt must never reactivate after a
         # later attempt has claimed or completed the same logical publication.
         existing = active
+    if existing is not None and existing.removed_at:
+        raise HttpError(409, "This publication was removed from SpecHelper. It cannot be sent again.")
     if existing is not None and existing.connector_id != connector.pk:
         raise HttpError(409, "This destination already has a publication using another connection. Use the original connection to verify that publication.")
     if existing and existing.payload_hash != digest:

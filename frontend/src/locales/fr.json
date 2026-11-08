@@ -2488,5 +2488,18 @@
   "Search {label}": "Rechercher dans {label}",
   "Search…": "Rechercher…",
   "Draft copied.": "Brouillon copié.",
-  "The draft could not be copied.": "Le brouillon n’a pas pu être copié."
+  "The draft could not be copied.": "Le brouillon n’a pas pu être copié.",
+  "Delete deep analysis": "Supprimer l’analyse",
+  "Remove from SpecHelper": "Retirer de SpecHelper",
+  "Analysis actions": "Actions de l’analyse",
+  "Ticket actions": "Actions du ticket",
+  "Delete this analysis and its results? This action cannot be undone.": "Supprimer cette analyse et ses résultats ? Cette action est irréversible.",
+  "Remove this ticket from SpecHelper? It will remain available on its external platform.": "Retirer ce ticket de SpecHelper ? Le ticket restera disponible sur sa plateforme externe.",
+  "Stopping agents and releasing their sessions…": "Arrêt des agents et libération de leurs sessions…",
+  "Only confirmed publications can be removed from this history.": "Seules les publications confirmées peuvent être retirées de cet historique.",
+  "Wait for attachment transfer to finish before removing this ticket.": "Attendez la fin du transfert des pièces jointes avant de retirer ce ticket.",
+  "Stop this historical analysis before deleting it.": "Arrêtez cette analyse historique avant de la supprimer.",
+  "This publication was removed from SpecHelper. It cannot be sent again.": "Cette publication a été retirée de SpecHelper. Elle ne peut pas être envoyée à nouveau.",
+  "Delete conversation": "Supprimer la conversation",
+  "Delete the conversation “{title}”?": "Supprimer la conversation « {title} » ?"
 }

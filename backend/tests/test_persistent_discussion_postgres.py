@@ -138,7 +138,7 @@ def test_two_browsers_cannot_transfer_the_same_pending_turn_twice(client, enviro
     assert Request.objects.get(pk=value["id"]).messages.filter(role="user").count() == 1
 
 
-@pytest.mark.parametrize("parallel", [2, 10])
+@pytest.mark.parametrize("parallel", [2, 5, 10])
 def test_browser_discussions_really_overlap_on_one_account(environment, storage, settings, monkeypatch, parallel):
     from core.models import AIConnection
     from core.providers import public

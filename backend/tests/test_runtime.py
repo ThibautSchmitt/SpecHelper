@@ -53,6 +53,29 @@ def test_runtime_auth_and_path_confinement(runtime):
     assert client.post("/query/unknown", json={"sql": "SELECT 1"}).status_code == 403
 
 
+def test_native_process_is_killed_and_reaped_when_transport_raises(runtime, monkeypatch):
+    client, payload, _ = runtime
+    killed, reaped = [], []
+    class Process:
+        returncode = None
+        pid = 987654
+        def __init__(self, *args, **kwargs):
+            pass
+        def communicate(self, *args, **kwargs):
+            raise OSError("Synthetic transport failure")
+        def poll(self):
+            return self.returncode
+        def wait(self, timeout):
+            reaped.append(self.pid)
+            self.returncode = -9
+    monkeypatch.setattr(server.subprocess, "Popen", Process)
+    monkeypatch.setattr(server.os, "killpg", lambda pid, sig: killed.append(pid))
+    with pytest.raises(OSError):
+        client.post("/run", json=payload, headers={"Authorization":"Bearer test-control-secret"})
+    assert killed == reaped == [987654]
+    assert not any(key[0] == payload["request_id"] for key in server.locks)
+
+
 def test_runtime_creates_and_resumes_explicit_session(runtime):
     client, payload, root = runtime
     session_id = str(uuid.uuid4())
@@ -106,6 +129,7 @@ def test_runtime_kills_agent_on_deadline(runtime):
 
     class Process:
         pid = 12345
+        returncode = None
         calls = 0
 
         def __init__(self, *args, **kwargs):
@@ -115,6 +139,7 @@ def test_runtime_kills_agent_on_deadline(runtime):
             self.calls += 1
             if self.calls == 1:
                 raise subprocess.TimeoutExpired("codex", 2)
+            self.returncode = -9
             return b"", None
 
     with (

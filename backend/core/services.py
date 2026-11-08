@@ -47,7 +47,7 @@ def queue_run(request, continuing=False, changed_decision_keys=None, *, scope_te
             **({"cycle_scope": cycle_scope} if cycle_scope else {}),
         },
     )
-    number = (request.analysis_runs.aggregate(last=Max("number"))["last"] or 0) + 1
+    number = (AnalysisRun.all_objects.filter(request=request).aggregate(last=Max("number"))["last"] or 0) + 1
     from .environment_context import freeze_context
 
     reuse = (

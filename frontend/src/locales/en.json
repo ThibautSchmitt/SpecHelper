@@ -2488,5 +2488,18 @@
   "Search {label}": "Search {label}",
   "Search…": "Search…",
   "Draft copied.": "Draft copied.",
-  "The draft could not be copied.": "The draft could not be copied."
+  "The draft could not be copied.": "The draft could not be copied.",
+  "Delete deep analysis": "Delete deep analysis",
+  "Remove from SpecHelper": "Remove from SpecHelper",
+  "Analysis actions": "Analysis actions",
+  "Ticket actions": "Ticket actions",
+  "Delete this analysis and its results? This action cannot be undone.": "Delete this analysis and its results? This action cannot be undone.",
+  "Remove this ticket from SpecHelper? It will remain available on its external platform.": "Remove this ticket from SpecHelper? It will remain available on its external platform.",
+  "Stopping agents and releasing their sessions…": "Stopping agents and releasing their sessions…",
+  "Only confirmed publications can be removed from this history.": "Only confirmed publications can be removed from this history.",
+  "Wait for attachment transfer to finish before removing this ticket.": "Wait for attachment transfer to finish before removing this ticket.",
+  "Stop this historical analysis before deleting it.": "Stop this historical analysis before deleting it.",
+  "This publication was removed from SpecHelper. It cannot be sent again.": "This publication was removed from SpecHelper. It cannot be sent again.",
+  "Delete conversation": "Delete conversation",
+  "Delete the conversation “{title}”?": "Delete the conversation “{title}”?"
 }

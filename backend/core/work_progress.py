@@ -158,6 +158,7 @@ def snapshot(value):
     """Small polling projection; no transcripts, evidence bundles, prompts or credentials."""
     rows = list(
         Job.objects.filter(kind__in=["analysis", "discussion"], target=str(value.pk))
+        .exclude(analysis_run__deleted_at__isnull=False)
         .order_by("-id")
         .values(
             "id",

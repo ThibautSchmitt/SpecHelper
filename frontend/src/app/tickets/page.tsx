@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LocalRetirementAction } from "@/components/local-retirement-action";
 import { ProviderLogo } from "@/components/provider-logo";
 import { useTicketUrlResolver } from "@/lib/ticket-links";
 
@@ -71,7 +72,8 @@ export default function TicketsPage() {
               <p className="mt-1 text-xs muted">{new Date(ticket.published_at).toLocaleString(dateLocale)}{ticket.connector_name&&` · ${ticket.connector_name}`}</p>
               {!ticket.analysis_deleted&&<Link className="mt-2 inline-block text-xs muted underline" href={`/analyses/${ticket.request_id}`}>{t("Source conversation")}</Link>}
             </div>
-            {url?<Button variant="outline" size="sm" asChild><a href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} aria-hidden="true"/>{t("Open")}</a></Button>:<p className="text-xs muted">{t("External link unavailable")}</p>}
+            <div className="flex items-center gap-2"><LocalRetirementAction url={`/tickets/${ticket.id}`} onRemoved={()=>setRevision(value=>value+1)}/>
+            {url?<Button variant="outline" size="sm" asChild><a href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} aria-hidden="true"/>{t("Open")}</a></Button>:<p className="text-xs muted">{t("External link unavailable")}</p>}</div>
           </div>
         </li>;
       })}</ul>

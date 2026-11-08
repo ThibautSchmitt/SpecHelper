@@ -30,6 +30,19 @@ from .need_revisions import NeedRevisionIn
 router = Router(tags=["Analyses"])
 
 
+class LocalDeleteIn(Schema):
+    model_config = ConfigDict(extra="forbid")
+    confirmed: bool = Field(default=False, strict=True)
+
+
+@router.delete("/analyses/{analysis_id}/runs/{number}")
+def delete_analysis_run(request, analysis_id: UUID, number: int, payload: LocalDeleteIn):
+    from .local_deletion import delete_run
+    if payload.confirmed is not True:
+        raise HttpError(422, "Confirm deletion of this analysis and its results.")
+    return delete_run(analysis_id, number)
+
+
 @router.get("/analyses/{analysis_id}/messages/{message_id}/sources")
 def discussion_sources(request, analysis_id: UUID, message_id: int):
     from .conversation_sources import message_sources

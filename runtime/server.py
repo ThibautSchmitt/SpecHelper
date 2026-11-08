@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import logging
 import os
 import queue
 import re
@@ -521,6 +522,31 @@ def cancel_run(payload: CancelRunIn):
     return {"stopped": True}
 
 
+class ReleaseSessionsIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: uuid.UUID
+    context_ids: list[uuid.UUID] = Field(min_length=1, max_length=256)
+
+
+@app.post("/sessions/release", dependencies=[Depends(authorize)])
+def release_sessions(payload: ReleaseSessionsIn):
+    from .session_cleanup import release
+    request_id = str(payload.request_id)
+    with guard:
+        # execute_run holds this flag until all filesystem handles are closed.
+        # A killed subprocess alone is insufficient to acknowledge cleanup.
+        if any(key[0] == request_id for key in locks) or any(
+            key[0] == request_id and (control.get("active") or (control.get("process") is not None and control["process"].poll() is None))
+            for key, control in run_controls.items()
+        ):
+            return {"released": False}
+        try:
+            release(SESSIONS, request_id, payload.context_ids)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(409, "Session cleanup unavailable") from exc
+    return {"released": True}
+
+
 @app.post("/run", dependencies=[Depends(authorize)])
 def run(payload: RunIn):
     if payload.stream_events:
@@ -617,7 +643,7 @@ def execute_run(payload: RunIn, emit=None):
         if payload.attempt_id:
             for key in list(run_controls):
                 if (
-                    run_controls[key]["process"] is None
+                    not run_controls[key].get("active") and run_controls[key]["process"] is None
                     and time.monotonic() - run_controls[key]["created"] > 1800
                 ):
                     run_controls.pop(key)
@@ -625,20 +651,26 @@ def execute_run(payload: RunIn, emit=None):
             control = run_controls.setdefault(
                 key, {"cancelled": threading.Event(), "process": None, "created": time.monotonic()}
             )
-        mutex = locks.setdefault(
-            (
+        mutex_key = (
                 request_id,
                 "job" if payload.attempt_id else str(payload.context_id or payload.request_id),
-            ),
-            threading.Lock(),
         )
-    if not mutex.acquire(blocking=False):
-        raise HTTPException(409, "Session busy")
+        # RLIMIT_NPROC is shared by the sandbox UID, including native threads.
+        # Queue excess invocations instead of letting four CLIs exhaust its
+        # bounded task budget. Container PID/CPU/RAM limits remain in force.
+        if len(locks) >= 2 and mutex_key not in locks:
+            return {"failure": {"kind": "BUSY", "retry_seconds": 5}}
+        mutex = locks.setdefault(mutex_key, threading.Lock())
+        if not mutex.acquire(blocking=False):
+            raise HTTPException(409, "Session busy")
+        if control:
+            control["active"] = True
     capability = None
     broker = None
     reads = None
     skills = None
     skill_root = None
+    process = None
     context_observation = {"context_usage": [], "context_audit": "unavailable"}
     try:
         observer = None
@@ -666,6 +698,8 @@ def execute_run(payload: RunIn, emit=None):
             observer.snapshot()
         if control and control["cancelled"].is_set():
             return {"cancelled": True, **context_observation}
+        if (SESSIONS / "contexts" / request_id / (".retired-" + str(payload.context_id or payload.request_id))).exists():
+            return {"cancelled": True, **context_observation}
         session = SESSIONS / request_id
         if payload.independent_context or (
             payload.context_id and payload.context_id != payload.request_id
@@ -687,6 +721,11 @@ def execute_run(payload: RunIn, emit=None):
         if any((session / provider).is_symlink() for provider in ("codex", "claude", "antigravity")):
             raise HTTPException(422, "Invalid session directory")
         agent_home.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if session.parent.name == request_id and session.parent.parent.name == "contexts":
+            marker = session / ".spechelper-context"
+            if marker.is_symlink():
+                raise HTTPException(422, "Invalid session marker")
+            marker.write_text(json.dumps({"context": str(payload.context_id or payload.request_id)}))
         # Real OAuth credentials never enter any analysis-readable filesystem or environment.
         root = identity_root(CREDENTIALS, payload.identity_id)
         credential_root = credential_directory(root, payload.agent)
@@ -1061,8 +1100,14 @@ def execute_run(payload: RunIn, emit=None):
         if process.returncode or not output.exists() or not session_id:
             if payload.session_id and session_unavailable(stdout, stderr):
                 return {"failure": {"kind": "SESSION_UNAVAILABLE"}, **context_observation}
+            pressure = any(marker in stderr.lower() for marker in (
+                b"resource temporarily unavailable", b"failed to spawn thread",
+                b"os error 11", b"can't start new thread",
+            ))
+            failure = {"kind": "BUSY", "retry_seconds": 5} if pressure else classify_failure(stdout)
+            logging.getLogger(__name__).warning("Native invocation failed: provider=%s exit=%s kind=%s", payload.agent, process.returncode, failure["kind"])
             return {
-                "failure": {**classify_failure(stdout), "quota_windows": quota_windows},
+                "failure": {**failure, "quota_windows": quota_windows},
                 **context_observation,
             }
         try:
@@ -1084,20 +1129,32 @@ def execute_run(payload: RunIn, emit=None):
             "quota_windows": quota_windows,
         }
     finally:
-        if skills is not None:
-            skills.__exit__(None, None, None)
-        if skill_root is not None:
-            skill_root.cleanup()
-        if control:
+        try:
+            # An exception after Popen (including a broken transport) must not
+            # leave a native CLI alive after its invocation loses ownership.
+            if process is not None and process.returncode is None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=5)
+            if skills is not None:
+                skills.__exit__(None, None, None)
+            if skill_root is not None:
+                skill_root.cleanup()
+            if reads is not None:
+                reads.close()
+            if broker is not None:
+                broker.__exit__(None, None, None)
+        finally:
+            if capability:
+                capabilities.pop(capability, None)
             with guard:
-                control["process"] = None
-        if reads is not None:
-            reads.close()
-        if broker is not None:
-            broker.__exit__(None, None, None)
-        if capability:
-            capabilities.pop(capability, None)
-        mutex.release()
+                if control:
+                    control["process"] = process if process is not None and process.returncode is None else None
+                    control["active"] = False
+                mutex.release()
+                locks.pop(mutex_key, None)
 
 
 def session_unavailable(stdout, stderr=b""):

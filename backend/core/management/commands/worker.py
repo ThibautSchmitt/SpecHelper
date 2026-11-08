@@ -23,9 +23,11 @@ class Command(BaseCommand):
             close_old_connections()
             if time.monotonic() >= next_git_check:
                 from core.branch_checks import schedule_due
+                from core.local_deletion import finish_pending
 
                 try:
                     schedule_due()
+                    finish_pending()
                 except Exception:
                     self.stderr.write("Branch check scheduling unavailable; retrying shortly.")
                 next_git_check = time.monotonic() + 30

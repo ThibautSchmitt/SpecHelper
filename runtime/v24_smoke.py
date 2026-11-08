@@ -73,10 +73,16 @@ def parallel_isolation(root):
             for slug in ("used", "unused")
         ]
         with SkillResources(definitions, root, "codex") as skills:
-            code = """import json,os,time,subprocess
+            code = """import json,os,time,subprocess,threading
 from pathlib import Path
 started=time.monotonic()
 assert os.getuid()==10001
+# Native helpers can exceed 32 threads each. Keep two such workloads alive
+# together while verifying that authorized source reads/forks still work.
+gate=threading.Event()
+threads=[threading.Thread(target=lambda:gate.wait(5)) for _ in range(35)]
+for worker in threads: worker.start()
+time.sleep(0.5)
 name=Path('/workspace/repository/private.txt').read_text()
 assert Path('/attachments/private.txt').read_text()==name
 assert 'state its limits' in Path('/skills/used/v3.md').read_text()
@@ -90,6 +96,8 @@ except OSError: pass
 else: raise AssertionError('Sources must remain read-only')
 Path('/session/own.txt').write_text(name)
 time.sleep(1)
+gate.set()
+for worker in threads: worker.join(2)
 print(json.dumps({'name':name,'start':started,'end':time.monotonic()}))
 """.replace(
                 "OTHER_SOURCE",
