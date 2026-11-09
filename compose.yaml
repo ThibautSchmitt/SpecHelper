@@ -98,6 +98,8 @@ services:
       retries: 20
   worker:
     <<: *backend
+    # Job supervisors can orphan Git helpers; reap them between invocations.
+    init: true
     environment:
       <<: *backend-env
       RUNTIME_URL: http://agent-runtime:8090

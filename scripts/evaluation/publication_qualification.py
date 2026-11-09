@@ -194,6 +194,9 @@ def run(plan, report_path, workers):
                                                   data__publication_id=str(record.pk)).count()
             if count != 1 or events != 1:
                 raise ValueError("Publication or conversation event is not unique")
+            draft.conversation_ticket.refresh_from_db()
+            if draft.conversation_ticket.active:
+                raise ValueError("The confirmed publication did not release its active draft")
             if record.connector_id != draft.connector_id or record.project != draft.project:
                 raise ValueError("The selected connection or destination was not preserved")
             if any(item["status"] != "TRANSFERRED" for item in record.attachment_delivery):
@@ -202,7 +205,8 @@ def run(plan, report_path, workers):
                 raise ValueError("Attachment delivery does not match the explicit selection")
             row.update(status="PASS", publication_id=str(record.pk), external_id=record.external_id,
                        external_key=record.external_key, url=stored_publication_url(record),
-                       seconds=time.perf_counter() - start, transferred=len(record.attachment_delivery))
+                       seconds=time.perf_counter() - start, transferred=len(record.attachment_delivery),
+                       conversation_events=events, active_draft_released=True)
         except Exception as error:
             # Provider messages can contain private URLs; retain a content-free category.
             row.update(status="FAIL", error_type=type(error).__name__)

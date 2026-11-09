@@ -76,6 +76,7 @@ python3 scripts/evaluation/resource_probe.py --project spechelper \
   --phase idle --samples 20 --interval 3 \
   --api-url http://localhost:3000/api/health --output .local/load/idle.json
 docker compose exec -T agent-runtime python < scripts/evaluation/runtime_process_probe.py
+docker compose exec -T worker python < scripts/evaluation/runtime_process_probe.py
 ```
 
 The process probe reports Linux names, RSS, threads, zombies and cgroup limits.
@@ -92,6 +93,13 @@ for slots the runtime cannot accept. Existing environment overrides remain expli
 Excess work returns BUSY to the existing scheduler instead of starting another
 process. Account and global scheduling limits still apply; native quotas and
 independent role contexts are unchanged.
+
+The worker also uses Compose's `init: true`: job supervisors can leave orphaned
+Git helpers which a Python PID 1 does not reap. Inspect both worker and runtime
+processes during endurance; zero runtime zombies alone does not establish that
+the worker is clean. Enabling `init` requires recreating the worker, not merely
+restarting its existing container. Drain active operations before recreation;
+conversation and native session state remain in their persistent volumes.
 
 ## Controlled and real load tests
 

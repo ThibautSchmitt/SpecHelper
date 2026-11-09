@@ -98,6 +98,8 @@ safe URLs, connection IDs, response-loss observations and transfer counts. It ch
 attachment delivery against the explicit selection. An uncertain upload remains
 uncertain and fails qualification; it is never blindly retransferred. Errors retain
 content-free categories rather than potentially sensitive provider response text.
+The confirmed publication must also release its active conversation draft and
+retain exactly one permanent publication event, including on later process resumption.
 
 GitLab, Jira and GLPI attachments remain subject to their existing discovered
 permissions and size limits. The supported GitHub Issues REST connector does not
