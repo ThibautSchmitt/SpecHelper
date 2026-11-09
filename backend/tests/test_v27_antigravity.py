@@ -374,6 +374,36 @@ def test_real_linux_help_on_stderr_is_supported(monkeypatch):
     assert cli_status({})["state"] == "supported"
 
 
+@pytest.mark.parametrize("version", ["1.4.12", "1.5.3"])
+def test_explicit_updated_release_retains_required_protocol_checks(monkeypatch, version):
+    monkeypatch.setattr("runtime.antigravity.shutil.which", lambda *a, **k: "/fixture/agy")
+    flags = set(REQUIRED_FLAGS)
+
+    def invoke(command, **kwargs):
+        return SimpleNamespace(returncode=0, stderr=b"", stdout=(
+            version.encode() if command[-1] == "--version" else "\n".join(flags).encode()
+        ))
+
+    monkeypatch.setattr("runtime.antigravity.subprocess.run", invoke)
+    assert cli_status({}, expected_version=version)["state"] == "supported"
+    assert cli_status({}, expected_version="1.4.7")["reason"] == "incompatible_cli"
+    for required in REQUIRED_FLAGS:
+        flags.remove(required)
+        assert cli_status({}, expected_version=version)["reason"] == "incompatible_cli"
+        flags.add(required)
+
+
+@pytest.mark.parametrize("version", ["1.4.1", "1.6.0", "2.0.0"])
+def test_explicit_update_does_not_accept_unqualified_release_lines(monkeypatch, version):
+    monkeypatch.setattr("runtime.antigravity.shutil.which", lambda *a, **k: "/fixture/agy")
+    monkeypatch.setattr("runtime.antigravity.subprocess.run", lambda command, **kwargs: SimpleNamespace(
+        returncode=0, stderr=b"", stdout=(
+            version.encode() if command[-1] == "--version" else "\n".join(REQUIRED_FLAGS).encode()
+        ),
+    ))
+    assert cli_status({}, expected_version=version)["reason"] == "incompatible_cli"
+
+
 def test_real_linux_missing_gemini_key_is_authentication_failure():
     diagnostic = (
         'modelProvider is set to "gemini" in settings.json, '

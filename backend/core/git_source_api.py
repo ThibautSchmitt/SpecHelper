@@ -1,5 +1,6 @@
 """Administration of independent, read-only source credentials."""
 
+import time
 from typing import Literal
 
 from django.db import transaction
@@ -166,16 +167,25 @@ def test(request, connection_id: int):
     return connection_dict(connection)
 
 
-def discover(connection_id, search, page, page_size, remote_id=None):
+def discover(connection_id, search, page, page_size, remote_id=None, kind="branch"):
     connection = get_object_or_404(GitConnection, pk=connection_id)
     page, page_size = max(1, page), max(1, min(100, page_size))
     try:
         provider = Provider(connection)
-        if remote_id is None:
-            items, more = provider.projects(search[:200], page, page_size)
-        else:
-            source = provider.project(remote_id)
-            items, more = provider.branches(source, search[:200], page, page_size)
+        query = search[:200].strip()
+        source = provider.project(remote_id) if remote_id is not None else None
+        started = time.monotonic()
+        # GitHub list APIs cannot filter these collections by substring. Skip a
+        # bounded group of empty remote pages and expose the actual continuation.
+        # The client can continue without mistaking a partial scan for no matches.
+        for scan in range(5):
+            if source is None:
+                items, more = provider.projects(query, page, page_size)
+            else:
+                items, more = provider.branches(source, query, page, page_size, kind=kind)
+            if items or not more or not query or scan == 4 or time.monotonic() - started >= 8:
+                break
+            page += 1
     except SourceError as exc:
         fail_connection(connection, exc)
         raise HttpError(422, str(exc)) from exc
@@ -184,7 +194,8 @@ def discover(connection_id, search, page, page_size, remote_id=None):
     ).update(
         status="CONNECTED", error="", checked_at=timezone.now()
     )
-    return {"items": items, "page": page, "page_size": page_size, "has_more": more}
+    return {"items": items, "page": page, "page_size": page_size, "has_more": more,
+            "next_page": page + 1 if more else None}
 
 
 @router.get("/git-connections/{connection_id}/projects")
@@ -200,8 +211,9 @@ def branches(
     search: str = "",
     page: int = 1,
     page_size: int = 30,
+    kind: Literal["branch", "tag"] = "branch",
 ):
-    return discover(connection_id, search, page, page_size, remote_id)
+    return discover(connection_id, search, page, page_size, remote_id, kind)
 
 
 @router.post("/git-connections/{connection_id}/auth/start")

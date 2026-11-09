@@ -246,7 +246,9 @@ class Provider:
                 {
                     **params,
                     "membership": "true",
-                    "search": search,
+                    # GitLab searches project names; namespace/name is filtered
+                    # below without making the namespace part hide valid projects.
+                    "search": search.rsplit("/", 1)[-1],
                     "order_by": "path",
                     "sort": "asc",
                 },
@@ -263,6 +265,7 @@ class Provider:
                     "",
                 )
             ).casefold()
+            or search.casefold() in str(item.get("name", "")).casefold()
         ], len(data) == page_size
 
     def project(self, remote_id):
@@ -278,16 +281,17 @@ class Provider:
             raise SourceError("The Git server returned a different project identifier.")
         return source
 
-    def branches(self, source, search="", page=1, page_size=30):
+    def branches(self, source, search="", page=1, page_size=30, kind="branch"):
+        collection = "tags" if kind == "tag" else "branches"
         params = {"per_page": page_size, "page": page}
         if self.connection.provider == "github":
             path = (
                 "/repos/"
                 + "/".join(quote(p, safe="") for p in source.path.split("/"))
-                + "/branches"
+                + "/" + collection
             )
         else:
-            path = "/projects/" + source.remote_id + "/repository/branches"
+            path = "/projects/" + source.remote_id + "/repository/" + collection
             if search:
                 params["search"] = search
         data = self.get(path, params)
@@ -298,22 +302,31 @@ class Provider:
                 "name": item["name"],
                 "sha": item.get("commit", {}).get("sha") or item.get("commit", {}).get("id", ""),
                 "protected": bool(item.get("protected")),
+                "kind": kind,
+                # ':' cannot occur in a branch name: legacy branches, including
+                # names beginning with refs/, remain unambiguous and unchanged.
+                "ref": "tag:" + item["name"] if kind == "tag" else item["name"],
             }
             for item in data
             if isinstance(item.get("name"), str) and search.casefold() in item["name"].casefold()
         ], len(data) == page_size
 
     def branch(self, source, branch):
+        tag = branch.startswith("tag:")
+        name = branch[4:] if tag else branch
         if self.connection.provider == "github":
             path = (
                 "/repos/"
                 + "/".join(quote(p, safe="") for p in source.path.split("/"))
-                + "/branches/"
+                + ("/git/ref/tags/" if tag else "/branches/")
             )
         else:
-            path = "/projects/" + source.remote_id + "/repository/branches/"
-        data = self.get(path + quote(branch, safe=""))
-        if not isinstance(data, dict) or data.get("name") != branch:
+            path = "/projects/" + source.remote_id + "/repository/" + ("tags/" if tag else "branches/")
+        data = self.get(path + quote(name, safe=""))
+        if not isinstance(data, dict):
+            raise SourceError("The selected Git branch is unavailable.")
+        observed = data.get("ref") if tag and self.connection.provider == "github" else data.get("name")
+        if observed != ("refs/tags/" + name if tag and self.connection.provider == "github" else name):
             raise SourceError("The selected Git branch is unavailable.")
         return data
 

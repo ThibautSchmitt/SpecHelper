@@ -157,14 +157,14 @@ def check_environment(environment_id):
                             timeout=min(60, remaining),
                         )
                         fetched.add(mirror)
-                    git.run("check-ref-format", "refs/heads/" + repo.branch)
+                    git.run("check-ref-format", git.selection_ref(repo.branch))
                     try:
                         remote = git.run(
                             "--git-dir",
                             mirror,
                             "rev-parse",
                             "--verify",
-                            "refs/heads/" + repo.branch + "^{commit}",
+                            git.selection_ref(repo.branch) + "^{commit}",
                         )
                     except ValueError:
                         value = observation(repo, "MISSING")

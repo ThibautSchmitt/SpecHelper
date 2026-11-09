@@ -36,6 +36,20 @@ Open **Environments → Configured environments**; the page heading is **Environ
 3. Optionally select a saved PostgreSQL connection.
 4. Update and check the recorded outcome and last update time.
 
+Repository searches trim surrounding whitespace and continue through remote pages
+that contain no matches, rather than declaring the first loaded page exhaustive.
+GitHub discovery stays within the authenticated account's owner/collaborator/
+organization repository listing. Searches remain paginated; **More projects** and
+**More versions** load subsequent matching pages. On exceptionally large lists,
+**Continue search** advances the bounded scan. Superseded searches are cancelled
+and cannot overwrite a newer result or clear an existing selection.
+
+Choose **Branch** or **Tag** before searching versions. Tags and branches with
+the same name remain distinct; an annotated tag resolves to its commit. Existing
+branches retain their stored names. Tags use an unambiguous internal `tag:` marker
+in the existing reference field, without a schema migration. Fetch and freshness
+checks include both namespaces and preserve the commits of historical analyses.
+
 Connections are reusable across environments. Repository rows retain their selected
 connection and reference. Updating an environment records Git SHAs; subsequent analysis
 uses a frozen baseline rather than a branch that can move during investigation.
@@ -187,6 +201,10 @@ download. The runtime checks the selected installed release and its required
 capabilities, including after an update; it does not require the original image's
 version forever. Failed installation and service unavailability are reported
 separately, and unsuccessful activation checks restore the previous executable.
+The Antigravity adapter accepts the 1.4 (from 1.4.2) and 1.5 release lines only
+when the executable reports the explicitly selected version and all required
+headless/structured-output options. Other release lines remain incompatible until
+their protocol has been qualified; a newer release number alone is insufficient.
 
 ### Availability and quotas
 

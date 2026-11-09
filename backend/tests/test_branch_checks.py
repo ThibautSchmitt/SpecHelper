@@ -222,6 +222,37 @@ def test_successful_check_date_is_not_reused_for_a_different_branch(environment)
     assert branch_checks.last_successful_check(repo) is None
 
 
+def test_tag_sync_and_checks_use_the_tag_commit_and_keep_the_analysis_baseline(environment, remote):
+    from types import SimpleNamespace
+
+    from core import git as source_git
+
+    source, mirror = remote
+    first = git(source, "rev-parse", "HEAD")
+    git(source, "tag", "-a", "release", "-m", "Published version")
+    branch_commit = advance(source, "new main")
+    git(source, "branch", "release")
+    repo = environment.repositories.get()
+    repo.branch = "tag:release"
+    repo.sha = ""
+    repo.save()
+    historical = Request.objects.create(environment=environment, need="Frozen tag", baseline=[{"sha": first}])
+    fake_source = SimpleNamespace(clone_url=str(source), provider="github")
+    with patch.object(source_git, "source_for", return_value=fake_source), patch.object(source_git, "mirror_path", return_value=mirror), patch.object(source_git, "source_token", return_value=""):
+        source_git.sync_environment(environment.pk)
+        repo.refresh_from_db()
+        assert repo.sha == first and repo.sha != branch_commit
+        newer = advance(source, "new tagged version")
+        git(source, "tag", "-f", "-a", "release", "-m", "New published version")
+        branch_checks.check_environment(environment.pk)
+        repo.refresh_from_db()
+    assert repo.git_status["remote_sha"] == newer
+    assert repo.sha == first
+    historical.refresh_from_db()
+    assert historical.baseline == [{"sha": first}]
+    assert source_git.selection_ref("refs/tags/a-real-branch") == "refs/heads/refs/tags/a-real-branch"
+
+
 def test_scheduler_is_persistent_deduplicated_and_reuses_one_job(environment):
     from core.queue import snapshot
 

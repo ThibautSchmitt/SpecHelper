@@ -27,6 +27,11 @@ def run(*args, env=None, timeout=90):
     return result.stdout.strip()
 
 
+def selection_ref(value):
+    """Legacy values are branches; explicit namespaces distinguish tags safely."""
+    return "refs/tags/" + value[4:] if value.startswith("tag:") else "refs/heads/" + value
+
+
 @contextlib.contextmanager
 def lock(name, blocking=True):
     # Branch selections and accounts may share one physical mirror. Serialize
@@ -130,6 +135,7 @@ def fetch(repository, timeout=600):
                 "--prune",
                 url,
                 "+refs/heads/*:refs/heads/*",
+                "+refs/tags/*:refs/tags/*",
                 env=env,
                 timeout=timeout,
             )
@@ -233,13 +239,13 @@ def sync_environment(environment_id, changed_repositories=None):
                                 "refs/spechelper/retained/" + repo.sha,
                                 repo.sha,
                             )
-                        run("check-ref-format", "refs/heads/" + repo.branch)
+                        run("check-ref-format", selection_ref(repo.branch))
                         sha = run(
                             "--git-dir",
                             mirror,
                             "rev-parse",
                             "--verify",
-                            "refs/heads/" + repo.branch + "^{commit}",
+                            selection_ref(repo.branch) + "^{commit}",
                         )
                     run("--git-dir", mirror, "update-ref", "refs/spechelper/retained/" + sha, sha)
                     destination = (

@@ -14,7 +14,20 @@ type Project = {
   is_fork: boolean;
   parent: { path: string; url: string } | null;
 };
-type Page<T> = { items: T[]; has_more: boolean };
+type Page<T> = { items: T[]; has_more: boolean; page?: number; next_page?: number | null };
+type GitRef = { name: string; ref?: string; kind?: "branch" | "tag" };
+
+async function matchingPage<T>(path: string, firstPage: number, signal?: AbortSignal): Promise<Page<T>> {
+  let page = firstPage;
+  for (let scan = 0; ; scan++) {
+    const result = await api<Page<T>>(`${path}&page=${page}&page_size=100`, { signal });
+    const current = result.page ?? page;
+    if (result.items.length || !result.has_more || scan === 19) return { ...result, page: current };
+    const next = result.next_page ?? current + 1;
+    if (next <= current) throw new Error("Invalid Git discovery pagination.");
+    page = next;
+  }
+}
 export type SourceSelection = {
   git_connection_id?: number;
   remote_id?: string;
@@ -129,7 +142,8 @@ function RepositoryRow({
 }) {
   const { t } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [branches, setBranches] = useState<{ name: string }[]>([]);
+  const [branches, setBranches] = useState<GitRef[]>([]);
+  const [refKind, setRefKind] = useState<"branch" | "tag">(value.branch.startsWith("tag:") ? "tag" : "branch");
   const [search, setSearch] = useState("");
   const [branchSearch, setBranchSearch] = useState("");
   const [projectPage, setProjectPage] = useState(1);
@@ -141,6 +155,8 @@ function RepositoryRow({
   const [error, setError] = useState("");
   const projectsVersion = useRef(0);
   const branchesVersion = useRef(0);
+  const projectsAbort = useRef<AbortController | null>(null);
+  const branchesAbort = useRef<AbortController | null>(null);
   useEffect(() => {
     const version = ++projectsVersion.current;
     setProjects([]);
@@ -148,14 +164,17 @@ function RepositoryRow({
     setMoreProjects(false);
     setLoadingProjects(false);
     if (!value.git_connection_id) return;
+    const controller = new AbortController();
+    projectsAbort.current = controller;
     setLoadingProjects(true);
     const timer = setTimeout(() => {
-      api<Page<Project>>(
-        `/git-connections/${value.git_connection_id}/projects?search=${encodeURIComponent(search)}&page=1`,
+      matchingPage<Project>(
+        `/git-connections/${value.git_connection_id}/projects?search=${encodeURIComponent(search.trim())}`, 1, controller.signal,
       )
         .then((v) => {
           if (version !== projectsVersion.current) return;
           setProjects(v.items);
+          setProjectPage(v.page ?? 1);
           setMoreProjects(v.has_more);
           setError("");
         })
@@ -165,9 +184,10 @@ function RepositoryRow({
         .finally(() => {
           if (version === projectsVersion.current) setLoadingProjects(false);
         });
-    }, 200);
+    }, 300);
     return () => {
       clearTimeout(timer);
+      controller.abort();
       projectsVersion.current++;
     };
   }, [value.git_connection_id, search]);
@@ -178,14 +198,17 @@ function RepositoryRow({
     setMoreBranches(false);
     setLoadingBranches(false);
     if (!value.git_connection_id || !value.remote_id) return;
+    const controller = new AbortController();
+    branchesAbort.current = controller;
     setLoadingBranches(true);
     const timer = setTimeout(() => {
-      api<Page<{ name: string }>>(
-        `/git-connections/${value.git_connection_id}/branches?remote_id=${encodeURIComponent(value.remote_id!)}&search=${encodeURIComponent(branchSearch)}&page=1`,
+      matchingPage<GitRef>(
+        `/git-connections/${value.git_connection_id}/branches?remote_id=${encodeURIComponent(value.remote_id!)}&search=${encodeURIComponent(branchSearch.trim())}&kind=${refKind}`, 1, controller.signal,
       )
         .then((v) => {
           if (version !== branchesVersion.current) return;
           setBranches(v.items);
+          setBranchPage(v.page ?? 1);
           setMoreBranches(v.has_more);
           setError("");
         })
@@ -195,12 +218,13 @@ function RepositoryRow({
         .finally(() => {
           if (version === branchesVersion.current) setLoadingBranches(false);
         });
-    }, 200);
+    }, 300);
     return () => {
       clearTimeout(timer);
+      controller.abort();
       branchesVersion.current++;
     };
-  }, [value.git_connection_id, value.remote_id, branchSearch]);
+  }, [value.git_connection_id, value.remote_id, branchSearch, refKind]);
   async function more(kind: "projects" | "branches") {
     const isProjects = kind === "projects";
     const version = isProjects
@@ -210,8 +234,9 @@ function RepositoryRow({
     if (isProjects) setLoadingProjects(true);
     else setLoadingBranches(true);
     try {
-      const result = await api<Page<Project & { name: string }>>(
-        `/git-connections/${value.git_connection_id}/${kind}?search=${encodeURIComponent(isProjects ? search : branchSearch)}&page=${page}${isProjects ? "" : `&remote_id=${encodeURIComponent(value.remote_id!)}`}`,
+      const result = await matchingPage<Project & GitRef>(
+        `/git-connections/${value.git_connection_id}/${kind}?search=${encodeURIComponent((isProjects ? search : branchSearch).trim())}${isProjects ? "" : `&remote_id=${encodeURIComponent(value.remote_id!)}&kind=${refKind}`}`,
+        page, (isProjects ? projectsAbort : branchesAbort).current?.signal,
       );
       if (
         version !==
@@ -219,17 +244,17 @@ function RepositoryRow({
       )
         return;
       if (isProjects) {
-        setProjects((old) => [...old, ...result.items]);
-        setProjectPage(page);
+        setProjects((old) => [...new Map([...old, ...result.items].map(p => [String(p.remote_id || p.id), p])).values()]);
+        setProjectPage(result.page ?? page);
         setMoreProjects(result.has_more);
       } else {
-        setBranches((old) => [...old, ...result.items]);
-        setBranchPage(page);
+        setBranches((old) => [...new Map([...old, ...result.items].map(b => [b.ref || b.name, b])).values()]);
+        setBranchPage(result.page ?? page);
         setMoreBranches(result.has_more);
       }
       setError("");
     } catch (e) {
-      setError((e as Error).message);
+      if (version === (isProjects ? projectsVersion.current : branchesVersion.current)) setError((e as Error).message);
     } finally {
       if (
         version ===
@@ -257,6 +282,7 @@ function RepositoryRow({
           onChange={(e) => {
             setSearch("");
             setBranchSearch("");
+            setRefKind("branch");
             setError("");
             onChange({
               git_connection_id: Number(e.target.value) || undefined,
@@ -290,7 +316,7 @@ function RepositoryRow({
             id={`${id}-search`}
             disabled={!value.git_connection_id}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { projectsVersion.current++; setSearch(e.target.value); }}
           />
           <label className="mt-3 block" htmlFor={`${id}-repository`}>
             {t("Project")} {number}
@@ -305,6 +331,7 @@ function RepositoryRow({
                 (p) => String(p.remote_id || p.id) === e.target.value,
               );
               setBranchSearch("");
+              setRefKind("branch");
               onChange({
                 ...value,
                 remote_id: project
@@ -320,7 +347,7 @@ function RepositoryRow({
             <option value="">{t("Choose a project")}</option>
             {(value.remote_id || value.repository) && !selected && (
               <option value={value.remote_id || value.repository}>
-                {value.repository}
+                {value.repository} · {t("Selected")}
               </option>
             )}
             {projects.map((p) => (
@@ -338,6 +365,7 @@ function RepositoryRow({
               {t("Loading projects…")}
             </p>
           )}
+          {search.trim() && !loadingProjects && !projects.length && !moreProjects && !error && <p role="status" className="mt-2 text-xs muted">{t("No matching projects.")}</p>}
           {moreProjects && (
             <Button
               type="button"
@@ -346,17 +374,21 @@ function RepositoryRow({
               disabled={loadingProjects}
               onClick={() => more("projects")}
             >
-              {t("More projects")}
+              {t(projects.length ? "More projects" : "Continue search")}
             </Button>
           )}
         </div>
         <div>
-          <label htmlFor={`${id}-branch-search`}>{t("Search branches")}</label>
+          <label htmlFor={`${id}-ref-kind`}>{t("Reference type")}</label>
+          <select id={`${id}-ref-kind`} disabled={!value.remote_id} value={refKind} onChange={e => { branchesVersion.current++; setRefKind(e.target.value as "branch" | "tag"); }}>
+            <option value="branch">{t("Branch")}</option><option value="tag">{t("Tag")}</option>
+          </select>
+          <label className="mt-3 block" htmlFor={`${id}-branch-search`}>{t(refKind === "tag" ? "Search tags" : "Search branches")}</label>
           <Input
             id={`${id}-branch-search`}
             disabled={!value.remote_id}
             value={branchSearch}
-            onChange={(e) => setBranchSearch(e.target.value)}
+            onChange={(e) => { branchesVersion.current++; setBranchSearch(e.target.value); }}
           />
           <label className="mt-3 block" htmlFor={`${id}-branch`}>
             {t("Version")} {number}
@@ -369,18 +401,19 @@ function RepositoryRow({
             onChange={(e) => onChange({ ...value, branch: e.target.value })}
           >
             <option value="">{t("Choose a version")}</option>
-            {value.branch && !branches.some((b) => b.name === value.branch) && (
-              <option>{value.branch}</option>
+            {value.branch && !branches.some((b) => (b.ref || b.name) === value.branch) && (
+              <option value={value.branch}>{t(value.branch.startsWith("tag:") ? "Tag" : "Branch")} · {value.branch.replace(/^tag:/, "")} · {t("Selected")}</option>
             )}
             {branches.map((b) => (
-              <option key={b.name}>{b.name}</option>
+              <option key={b.ref || b.name} value={b.ref || b.name}>{b.name}</option>
             ))}
           </select>
           {loadingBranches && (
             <p role="status" className="mt-2 text-xs muted">
-              {t("Loading branches…")}
+              {t(refKind === "tag" ? "Loading tags…" : "Loading branches…")}
             </p>
           )}
+          {branchSearch.trim() && !loadingBranches && !branches.length && !moreBranches && !error && <p role="status" className="mt-2 text-xs muted">{t(refKind === "tag" ? "No matching tags." : "No matching branches.")}</p>}
           {moreBranches && (
             <Button
               type="button"
@@ -389,7 +422,7 @@ function RepositoryRow({
               disabled={loadingBranches}
               onClick={() => more("branches")}
             >
-              {t("More versions")}
+              {t(branches.length ? "More versions" : "Continue search")}
             </Button>
           )}
         </div>

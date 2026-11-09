@@ -10,7 +10,14 @@ from django.shortcuts import get_object_or_404
 from ninja.errors import HttpError
 
 from . import github
-from .git import environment_worktrees, lock, lock_key, remove_environment_worktree, run
+from .git import (
+    environment_worktrees,
+    lock,
+    lock_key,
+    remove_environment_worktree,
+    run,
+    selection_ref,
+)
 from .git_sources import normalize_selection
 from .models import (
     DatabaseConnection,
@@ -40,7 +47,7 @@ def validate(payload, environment_id=None):
             )
         repo.repository = repo.repository.lower()
         github.validate_repository(repo.repository)
-        run("check-ref-format", "refs/heads/" + repo.branch)
+        run("check-ref-format", selection_ref(repo.branch))
     if payload.database_id:
         get_object_or_404(DatabaseConnection, pk=payload.database_id)
     connections = getattr(payload, "publication_connection_ids", None)

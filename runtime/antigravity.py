@@ -58,7 +58,7 @@ def cli_status(env, *, binary="agy", expected_version=PINNED_VERSION, timeout=10
         help_text = (results[1].stdout + results[1].stderr).decode(errors="replace")
         flags = set(re.findall(r"(?<![\w-])--[a-z][a-z-]+", help_text))
         if (
-            numbers[:2] != (1, 4) or numbers < (1, 4, 2)
+            numbers[:2] not in {(1, 4), (1, 5)} or numbers < (1, 4, 2)
             or (expected_version is not None and version != expected_version)
             or not REQUIRED_FLAGS <= flags
         ):
