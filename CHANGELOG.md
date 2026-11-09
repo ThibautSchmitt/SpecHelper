@@ -100,6 +100,12 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ### Environment updates
 
+- Search beyond the first remote page, skip empty matching pages within bounded
+  scans and retain the actual continuation cursor. Trim surrounding whitespace,
+  cancel superseded searches and preserve selected repositories and references.
+- Discover tags separately from branches, including names shared by both. Resolve
+  annotated tags to their commit during synchronization and preserve historical
+  analysis baselines without a schema migration.
 - Check remote references periodically without changing selected environment
   commits. Show observed commit lag and support updates of a single repository.
 - Use green **Up to date**, yellow **Partially up to date** and red **Update needed**
@@ -109,6 +115,9 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ### Antigravity tool updates
 
+- Accept explicitly selected releases in the 1.4 (from 1.4.2) and 1.5 lines after
+  exact-version and required-capability checks. Qualify the 1.5.3 activation and
+  two resumed discussion turns without relaxing rollback or role isolation.
 - Validate the selected installed Antigravity release instead of requiring the
   original image version after an update; retain protocol and capability checks.
 - Recheck the official rolling manifest at execution time, record refreshed update

@@ -22,6 +22,8 @@ calls the final role **Validateur**.
 - Keep the recorded AI/model history and explicitly choose another available
   connection if the selected assistant has exhausted its quota.
 - Read authorized Git repositories, attachments and environment reference documents.
+- Search repositories, branches and tags across paginated source listings, with
+  separate branch/tag choices and preservation of the current selection.
 - Check environment branches for available updates and update one repository or
   the whole environment without changing earlier analyses' frozen references.
 - Optionally inspect a business PostgreSQL database through restricted read-only access.

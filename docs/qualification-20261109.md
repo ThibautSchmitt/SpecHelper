@@ -187,6 +187,45 @@ upload support; its plan must select no attachments. Jira requires an authorized
 Cloud REST v3 test project. Neither platform is qualified by these GitLab/GLPI
 results. Generated `goal.md`/report contents were not part of this neutral-file test.
 
+## Git discovery and Antigravity update follow-up — 9 November 2026
+
+Commit `c9668353b5f3a622b69632402169af9be2bf22ad` passed
+[Checks 42600860398](https://github.com/ThibautSchmitt/SpecHelper/actions/runs/42600860398)
+and [Security campaign 42600860292](https://github.com/ThibautSchmitt/SpecHelper/actions/runs/42600860292).
+CI recorded **1,755 passing backend tests** with one existing deprecation warning
+and **260 passing browser cases per viewport** (520 total). Source, all three
+image gates and DAST passed. A separate local backend run passed 1,716 tests and
+skipped 39 cases. Skipped cases are not coverage; PostgreSQL-specific coverage
+comes from CI's disposable PostgreSQL setup.
+
+The discovery regressions verify a matching repository beyond 600 remote entries,
+bounded continuation through empty pages, namespace filtering and distinct branch
+and tag selections. Local Git operations verify annotated-tag resolution and
+preservation of an earlier commit when a tag moves. Remote discovery responses
+are fixtures. After redeployment, a separate read-only check on the configured
+GitHub source found the selected repository by its whitespace-padded path and
+retrieved four branches and one tag with the expected reference types. No
+environment selection or source content was modified by this check. It is not a
+real large-account latency or throughput benchmark.
+
+Antigravity's 1.5.3 update had previously rolled back because the adapter rejected
+the release line. After checking the actual executable's version and required
+options, the normal maintenance workflow activated 1.5.3 and completed its model
+catalogue verification. A real two-turn native smoke test completed both turns in
+the same conversation context and native session between 10:17:17 and 10:18:48 UTC.
+Its neutral prompts required no tools, deep analysis or ticket publication. The
+test conversation was archived with its evidence retained.
+
+This qualifies the update and two-turn discussion resumption only. The earlier
+Antigravity comparison-checkpoint tool error was not retested by these prompts
+and remains an explicit limitation of the deep-analysis qualification above.
+GitHub/Jira publication and larger multi-account/endurance limits are unchanged.
+Private native evidence remains in `.local/antigravity-153-smoke.json`; the
+read-only deployment check is reproducible with the local helper
+`.local/git-search-deployment-check.mjs`. Neither private helper is distributed
+as a public test command. Public regression commands are in the
+[development guide](development.md#git-discovery-and-cli-update-regressions).
+
 ## Code checks and reproducibility
 
 The six new publication-plan/write-fence tests passed locally, as did four real

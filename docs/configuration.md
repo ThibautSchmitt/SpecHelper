@@ -46,9 +46,10 @@ and cannot overwrite a newer result or clear an existing selection.
 
 Choose **Branch** or **Tag** before searching versions. Tags and branches with
 the same name remain distinct; an annotated tag resolves to its commit. Existing
-branches retain their stored names. Tags use an unambiguous internal `tag:` marker
-in the existing reference field, without a schema migration. Fetch and freshness
-checks include both namespaces and preserve the commits of historical analyses.
+branch selections remain unchanged. A missing remote tag is reported explicitly.
+Fetch and freshness checks include both reference types and preserve the commits
+of historical analyses. Implementation and regression commands are described in
+the [development guide](development.md#git-discovery-and-cli-update-regressions).
 
 Connections are reusable across environments. Repository rows retain their selected
 connection and reference. Updating an environment records Git SHAs; subsequent analysis

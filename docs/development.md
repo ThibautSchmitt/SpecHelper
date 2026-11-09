@@ -154,6 +154,45 @@ also covers responsive layouts, access controls, Markdown/XSS, editing, connecto
 reports and cancellation. Keep the actual test counts and skipped coverage in the
 change report, rather than maintaining a permanent count in these guides.
 
+## Git discovery and CLI update regressions
+
+From `backend/`, run the discovery, reference and CLI-maintenance regressions:
+
+```sh
+uv run pytest -q tests/test_git_discovery_search.py tests/test_git_sources.py \
+  tests/test_branch_checks.py tests/test_v27_antigravity.py tests/test_cli_maintenance.py
+```
+
+Discovery fixtures place a matching GitHub repository after more than 600 remote
+entries and verify continuation without skipped pages. GitLab namespace searches
+retain their full-path filter. Tags use `tag:<name>` in the existing reference
+field; ordinary stored values remain branches, including names beginning with
+`refs/`. A real local Git fixture distinguishes a branch and an annotated tag with
+the same name, checks a moved tag and retains the earlier analysis commit.
+Remote provider HTTP responses in these tests are simulated.
+
+The API scans at most five remote pages per call, stopping earlier on matches,
+exhaustion or the elapsed scan budget. The picker follows at most twenty empty API
+chunks per interaction, then offers **Continue search** if more pages remain.
+Neither boundary means that the remaining collection is empty. API responses
+expose the actual scanned `page` and `next_page`; callers must not assume that
+only their requested page was inspected.
+
+With a frontend running as described above, run from `frontend/`:
+
+```sh
+npx playwright test tests/git-discovery-search.spec.ts tests/environments.spec.ts --workers=2
+```
+
+The discovery fixtures mock APIs in both languages and viewports. They verify
+continuation, tag selection, cancellation of an obsolete request, preservation of
+the current repository and refusal to show an obsolete error as a new result.
+
+Antigravity compatibility tests cover the selected release, required headless and
+structured-output flags, rejected release lines and rollback behavior. Passing
+these fixtures alone does not establish real inference or session resumption;
+record those separately when running an authorized native smoke test.
+
 ## Runtime and security checks
 
 Use [Security testing](security-testing.md) for source/dependency/image scanners,
