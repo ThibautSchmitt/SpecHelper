@@ -178,4 +178,7 @@ Release qualification requires no mixed contexts/accounts, duplicate writes,
 corrupted drafts, persistent orphan processes or forgotten jobs. Derive numerical
 CPU/RAM/latency thresholds from the target hardware and its baseline. Current
 evidence and unverified cases are recorded in the [qualification report](stabilization-final.md)
-and its [8 November follow-up](stabilization-follow-up.md).
+and its [8 November follow-up](stabilization-follow-up.md). The
+[9 November qualification](qualification-20261109.md) records the worker init
+correction, completed real publication tests and the remaining native tool/quota
+limitations; the extended endurance protocol is not a 70/70 pass.

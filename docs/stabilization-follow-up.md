@@ -5,6 +5,10 @@ not replace their historical observations or declare the release fully qualified
 The requested order is CI repair, real qualification, then measured optimization.
 Product UI changes and external ticket editing remain deferred.
 
+Newer evidence is recorded in the [9 November qualification](qualification-20261109.md),
+including native cancellation/restart, worker process reclamation and additional
+real GitLab/GLPI publications. Its tool-error and quota limitations remain explicit.
+
 ## CI and Linux security repairs
 
 Commit `86b7692daa8e008363ed250e1dc278359cb507a8` passed both complete hosted
