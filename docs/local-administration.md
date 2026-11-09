@@ -161,6 +161,11 @@ approved provider sandboxes for real publication tests. Updating an existing
 external ticket remains deferred; test existing draft resumption and uncertain
 creation reconciliation instead.
 
+The [opt-in publication bench](publication-qualification.md) exercises reviewed
+drafts with stable operation keys, explicit attachment selections and controlled
+lost-response injection. GitHub/Jira execution remains deferred until authorized
+test connections are available; preparing the bench is not a passing provider test.
+
 Release qualification requires no mixed contexts/accounts, duplicate writes,
 corrupted drafts, persistent orphan processes or forgotten jobs. Derive numerical
 CPU/RAM/latency thresholds from the target hardware and its baseline. Current
