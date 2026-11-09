@@ -52,6 +52,6 @@ for (const language of ["en", "fr"] as const) {
     await page.locator("#git-source-name").fill("Another source");
     await token.fill("synthetic-other-token");
     await page.getByRole("button", { name: t("Add Git connection"), exact: true }).click();
-    expect(changes[1]).toMatchObject({ provider: "gitlab", base_url: "https://another.example.test" });
+    await expect.poll(() => changes[1]).toMatchObject({ provider: "gitlab", base_url: "https://another.example.test" });
   });
 }
