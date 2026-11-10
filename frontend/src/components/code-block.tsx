@@ -33,7 +33,7 @@ function renderTokens(nodes: RootContent[]): ReactNode {
   });
 }
 
-export function CodeBlock({ code, language = "" }: { code: string; language?: string }) {
+export function CodeBlock({ code, language = "", startLine }: { code: string; language?: string; startLine?: number }) {
   const { t } = useI18n();
   const normalized = language.toLowerCase();
   const tokens = useMemo(() => {
@@ -43,6 +43,6 @@ export function CodeBlock({ code, language = "" }: { code: string; language?: st
   }, [code, normalized]);
   return <div className="code-reader">
     <div className="code-reader-heading">{normalized || t("Plain text")}</div>
-    <pre tabIndex={0} aria-label={t("Code excerpt")}><code className={normalized ? `language-${normalized}` : undefined}>{tokens}</code></pre>
+    <pre tabIndex={0} aria-label={t("Code excerpt")} className={startLine ? "numbered-code" : undefined}>{startLine && <span aria-hidden="true" className="code-line-numbers">{code.split("\n").map((_, index) => startLine + index).join("\n")}</span>}<code className={normalized ? `language-${normalized}` : undefined}>{tokens}</code></pre>
   </div>;
 }

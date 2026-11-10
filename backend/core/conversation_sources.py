@@ -36,13 +36,49 @@ def code_excerpt(source, baseline):
         if "\x00" in content:
             raise ValueError("Binary source")
         lines = content.splitlines()
-        start = max(1, int(source.get("line_start") or 1))
-        end = min(int(source.get("line_end") or start + 59), start + 99, len(lines))
-        if start > end:
+        start = int(source["line_start"]) if source.get("line_start") is not None else 1
+        requested_end = int(source["line_end"]) if source.get("line_end") is not None else (start if source.get("line_start") else 12)
+        end = min(requested_end, start + 99, len(lines))
+        if start < 1 or start > end:
             return "", "The cited line range is unavailable."
-        return "\n".join(lines[start-1:end])[:12000], "" if source.get("line_start") else "Preview from the beginning of the cited file; no precise line range was recorded."
+        excerpt = "\n".join(lines[start-1:end])
+        note = "" if source.get("line_start") else "Preview from the beginning of the cited file; no precise line range was recorded."
+        if source.get("line_start") and (requested_end > end or len(excerpt) > 12000):
+            note = "Only part of the cited range is shown."
+        return excerpt[:12000], note
     except (OSError, ValueError, UnicodeError, subprocess.SubprocessError):
         return "", "The frozen source excerpt is unavailable."
+
+
+def inline_git_sources(content, baseline):
+    """Recognize explicit locations only; never infer lines from answer keywords."""
+    location = r"L?(\d+)(?:\s*[-–]\s*L?(\d+))?"
+    references = re.finditer(
+        r"`([^`\n]+\.[A-Za-z0-9]{1,12})(?:(?::|#)" + location + r")?`", content
+    )
+    for index, match in enumerate(references):
+        if index >= 40:
+            break
+        path, start, end = match.groups()
+        ranges = [(start, end or start)] if start else []
+        if not ranges:
+            suffix = content[match.end():match.end()+300]
+            external = re.match(r"\s*(?::|#)" + location, suffix)
+            parenthesis = re.match(
+                r"\s*\(\s*(?:lines?|lignes?)\s+(" + location
+                + r"(?:\s*(?:,|et|and)\s*" + location + r"){0,5})\s*\)", suffix, re.I
+            )
+            if external:
+                ranges = [(external[1], external[2] or external[1])]
+            elif parenthesis:
+                ranges = [(a, b or a) for a, b in re.findall(location, parenthesis[1])]
+        if "/" not in path and not ranges:
+            continue
+        for row in baseline:
+            relative = path.removeprefix(row["repository"] + "/")
+            for first, last in ranges or [(None, None)]:
+                yield {"repository":row["repository"], "commit":row["sha"], "path":relative,
+                       "line_start":int(first) if first else None, "line_end":int(last) if last else None}
 
 
 def collect(value, content, observations, frozen, evidence=None):
@@ -83,15 +119,12 @@ def collect(value, content, observations, frozen, evidence=None):
     git_sources = [source for source in sources if source.get("kind") == "git"]
     # Inline citations can be resolved against this turn's frozen repositories.
     # They stay cited sources, not independently verified interpretations.
-    for match in re.finditer(r"`([^`\n]+\.[A-Za-z0-9]{1,12})(?::(\d+)(?:[-–](\d+))?)?`", content):
-        path, start, end = match.groups()
-        if "/" not in path and not start:
+    git_sources.extend(inline_git_sources(content, baseline))
+    precise_files = set()
+    for source in sorted(git_sources, key=lambda item: not item.get("line_start"))[:20]:
+        file_key = tuple(source.get(k) for k in ("repository", "commit", "path"))
+        if not source.get("line_start") and file_key in precise_files:
             continue
-        for row in baseline:
-            relative = path.removeprefix(row["repository"] + "/")
-            git_sources.append({"repository":row["repository"], "commit":row["sha"], "path":relative,
-                                "line_start":int(start) if start else None, "line_end":int(end or start) if start else None})
-    for source in git_sources[:20]:
         key = "git:" + ":".join(str(source.get(k) or "") for k in ("repository", "commit", "path", "line_start", "line_end"))
         if key in seen:
             continue
@@ -99,8 +132,13 @@ def collect(value, content, observations, frozen, evidence=None):
         # Do not add guesses for another repository when only an unqualified path was cited.
         if not excerpt and source not in sources:
             continue
+        preview_start = source.get("line_start") or 1
+        if excerpt and source.get("line_start"):
+            precise_files.add(file_key)
         add({"kind":"git", "id":key, "title":source.get("path", ""), "repository":source.get("repository", ""),
              "commit":source.get("commit", ""), "line_start":source.get("line_start"), "line_end":source.get("line_end"),
+             "preview_line_start":preview_start if excerpt else None,
+             "preview_line_end":preview_start + len(excerpt.split("\n")) - 1 if excerpt else None,
              "excerpt":excerpt, "note":note})
     used = {item if isinstance(item, str) else item.get("version_id")
             for item in observations.get("context_usage", [])

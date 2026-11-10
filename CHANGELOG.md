@@ -51,6 +51,12 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ### Readable tables and expandable sources
 
+- Resolve explicit inline Git line ranges, including French/English parenthetical
+  citations and separate passages. Suppress redundant file-start previews when
+  precise lines exist; keep unresolved ranges and bounded-preview limits honest.
+- Number source-code excerpts using their frozen-file positions. Show 12 lines
+  initially and reveal the remaining retained excerpt only on request; source
+  inspection never starts another AI investigation or changes stored evidence.
 - Share AI-connection role badge styling with role mentions in conversation text,
   including discussion replies, clarification questions and result summaries.
 - Group standalone bibliographic paragraphs under **Sources and checks** while

@@ -501,6 +501,8 @@ dialog::backdrop {
 .code-reader > pre[tabindex] { max-width: 100%; margin: 0; padding: 14px 16px; border: 0; border-radius: 0; background: transparent; color: var(--foreground); overflow-x: auto; font-size: 12px; line-height: 1.7; white-space: pre; overflow-wrap: normal; }
 .code-reader > pre:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .code-reader > pre > code { padding: 0; border: 0; background: transparent; color: inherit; font-size: inherit; white-space: pre; overflow-wrap: normal; }
+.code-reader > pre.numbered-code { display: flex; gap: 16px; }
+.code-line-numbers { flex-shrink: 0; color: var(--muted-foreground); text-align: right; user-select: none; border-right: 1px solid var(--border); padding-right: 12px; }
 .code-reader :is(.hljs-keyword,.hljs-selector-tag,.hljs-type,.hljs-meta) { color: var(--code-keyword); }
 .code-reader :is(.hljs-string,.hljs-regexp,.hljs-addition) { color: var(--code-string); }
 .code-reader :is(.hljs-number,.hljs-literal,.hljs-symbol) { color: var(--code-number); }

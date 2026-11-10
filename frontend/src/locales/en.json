@@ -2514,5 +2514,8 @@
   "Stop this historical analysis before deleting it.": "Stop this historical analysis before deleting it.",
   "This publication was removed from SpecHelper. It cannot be sent again.": "This publication was removed from SpecHelper. It cannot be sent again.",
   "Delete conversation": "Delete conversation",
-  "Delete the conversation “{title}”?": "Delete the conversation “{title}”?"
+  "Delete the conversation “{title}”?": "Delete the conversation “{title}”?",
+  "Show less": "Show less",
+  "Show the full excerpt ({count} lines)": "Show the full excerpt ({count} lines)",
+  "Only part of the cited range is shown.": "Only part of the cited range is shown."
 }

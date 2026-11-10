@@ -128,3 +128,35 @@ for (const theme of ['light', 'dark']) {
     await page.screenshot({ path: `${info.outputDir}/source-reader-${theme}.png` });
   });
 }
+
+for (const language of ['en', 'fr'] as const) {
+  test(`Git source excerpts show real line numbers and expand only on request in ${language}`, async ({ page }, info) => {
+    const fixture = await setup(page, language, language === 'fr' ? 'light' : 'dark');
+    const sourceLines = Array.from({length:30},(_,index)=>`const value${120+index} = ${120+index};`);
+    await page.route(`**/api/analyses/${id}/messages/2/sources`, r => r.fulfill({json:{sources:[{
+      id:'targeted-code',kind:'git',title:'src/calculation.ts',repository:'example/project',commit:'b'.repeat(40),
+      line_start:120,line_end:149,preview_line_start:120,preview_line_end:149,excerpt:sourceLines.join('\n'),
+    }]}}));
+    await page.goto(`/analyses/${id}`);
+    const sources = page.locator('.source-details');
+    await sources.locator(':scope > summary').click();
+    const source = sources.locator('.source-record').filter({hasText:'src/calculation.ts'});
+    await source.locator(':scope > summary').click();
+    await expect(source.getByText(language === 'fr' ? 'Lignes 120–131' : 'Lines 120–131',{exact:true})).toBeVisible();
+    expect(await source.locator('pre code').textContent()).toBe(sourceLines.slice(0,12).join('\n'));
+    await expect(source.locator('.code-line-numbers')).toHaveAttribute('aria-hidden','true');
+    expect(await source.locator('.code-line-numbers').textContent()).toBe(Array.from({length:12},(_,i)=>120+i).join('\n'));
+    const expand = source.getByRole('button',{name:language === 'fr' ? 'Afficher tout l’extrait (30 lignes)' : 'Show the full excerpt (30 lines)',exact:true});
+    await expect(expand).toHaveAttribute('aria-expanded','false');
+    await expand.click();
+    expect(await source.locator('pre code').textContent()).toBe(sourceLines.join('\n'));
+    await expect(source.getByText(language === 'fr' ? 'Lignes 120–149' : 'Lines 120–149',{exact:true})).toBeVisible();
+    const collapse = source.getByRole('button',{name:language === 'fr' ? 'Réduire' : 'Show less',exact:true});
+    await expect(collapse).toHaveAttribute('aria-expanded','true');
+    await collapse.click();
+    expect(await source.locator('pre code').textContent()).toBe(sourceLines.slice(0,12).join('\n'));
+    expect(fixture.writes).toHaveLength(0);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:`${info.outputDir}/targeted-source-${language}.png`});
+  });
+}

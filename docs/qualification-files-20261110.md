@@ -98,7 +98,10 @@ passes and one failure in an existing Git-baseline test. That assertion selected
 the final list item as the fork, although database updates do not guarantee that
 ordering. The test now deliberately puts the fork first and checks retained SHAs
 by repository identity. This is a test correction, not a change to Git synchronization;
-the next hosted run must establish the corrected suite result.
+the two local Git tests passed after this correction. Hosted verification of
+`d974046` then passed every job in
+[Checks](https://github.com/ThibautSchmitt/SpecHelper/actions/runs/42765863086)
+and the [Security campaign](https://github.com/ThibautSchmitt/SpecHelper/actions/runs/42765862972).
 
 The allowlist is intentional. Read-only access protects source integrity but does
 not eliminate parser vulnerabilities or prompt injection. No antivirus service,

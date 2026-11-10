@@ -48,7 +48,8 @@ def frozen_code(tmp_path, monkeypatch):
     git("config","user.email","fixture@example.org")
     git("config","user.name","Fixture")
     (root / "rules.py").write_text("\nFIRST = 1\nCHECKED = True\n")
-    git("add","rules.py")
+    (root / "module.py").write_text("\n".join(f"VALUE_{n} = {n}" for n in range(1,221))+"\n")
+    git("add","rules.py","module.py")
     git("commit","-m","Fixture frozen source")
     sha = git("rev-parse","HEAD")
     (root / "rules.py").write_text("LATER_UNVERIFIED_CHANGE = True\n")
@@ -92,6 +93,57 @@ def test_cited_code_resolves_against_the_discussion_jobs_frozen_manifest(client,
     job.save()
     records = client.get(url(value,message)).json()["sources"]
     assert next(source for source in records if source["kind"] == "git")["excerpt"] == "FIRST = 1\nCHECKED = True"
+
+
+@pytest.mark.parametrize("citation,ranges", [
+    ("`module.py:110-114`", [(110,114)]),
+    ("`module.py:L110-L114`", [(110,114)]),
+    ("`module.py#L110-L114`", [(110,114)]),
+    ("`module.py`:110–114", [(110,114)]),
+    ("`module.py` (lignes 110–114 et 150–152)", [(110,114),(150,152)]),
+    ("`module.py` (lines 110-114, 150-152)", [(110,114),(150,152)]),
+    ("`module.py:110`", [(110,110)]),
+])
+def test_explicit_inline_ranges_do_not_expand_to_unrelated_code(client, source_message, frozen_code, citation, ranges):
+    value, message, _ = source_message
+    _, sha = frozen_code
+    message.content = "See " + citation
+    message.save()
+    job = Job.objects.get(target=str(value.pk))
+    job.payload["snapshot"] = {"dossier":{"baseline":[{"repository":"fixture/project","sha":sha}]}}
+    job.save()
+    records = [item for item in client.get(url(value,message)).json()["sources"] if item["kind"] == "git"]
+    assert [(item["line_start"],item["line_end"]) for item in records] == ranges
+    for item, (first,last) in zip(records,ranges,strict=True):
+        assert item["excerpt"] == "\n".join(f"VALUE_{n} = {n}" for n in range(first,last+1))
+        assert (item["preview_line_start"],item["preview_line_end"]) == (first,last)
+        assert not item["note"]
+
+
+def test_precise_ranges_replace_generic_file_previews_without_mutating_evidence(source_message, frozen_code):
+    from core.conversation_sources import collect
+
+    value, _, _ = source_message
+    _, sha = frozen_code
+    frozen = {"dossier":{"baseline":[{"repository":"fixture/project","sha":sha}]}}
+    content = "In `fixture/project/module.py`, see `fixture/project/module.py:110-114`."
+    records = collect(value,content,{},frozen)["sources"]
+    assert len(records) == 1 and records[0]["line_start"] == 110
+    assert "VALUE_1 =" not in records[0]["excerpt"]
+
+
+def test_generic_preview_is_short_honest_and_large_citations_keep_actual_display_bounds(frozen_code):
+    _, sha = frozen_code
+    baseline = [{"repository":"fixture/project","sha":sha}]
+    source = {"repository":"fixture/project","commit":sha,"path":"module.py"}
+    excerpt, note = code_excerpt(source,baseline)
+    assert len(excerpt.splitlines()) == 12 and "no precise line range" in note
+    excerpt, note = code_excerpt({**source,"line_start":110,"line_end":219},baseline)
+    assert excerpt.splitlines()[0] == "VALUE_110 = 110"
+    assert excerpt.splitlines()[-1] == "VALUE_209 = 209" and len(excerpt.splitlines()) == 100
+    assert note == "Only part of the cited range is shown."
+    assert not code_excerpt({**source,"line_start":0,"line_end":2},baseline)[0]
+    assert not code_excerpt({**source,"line_start":230,"line_end":240},baseline)[0]
 
 
 def test_document_preview_uses_the_read_version_not_a_later_replacement(client, source_message, environment, storage):
