@@ -206,13 +206,18 @@ rerunning an agent or a database query. Short **SQL check** references open the
 corresponding executed SQL, row count and result-limit notice.
 Git excerpts use explicit recorded line ranges, including citations written as
 `path:120-135`, `path:L120-L135` or a path followed by `(lines 120–135)`.
-Separate ranges stay separate; a precise passage suppresses a redundant preview of
-the same file's beginning. Actual displayed line numbers accompany the code.
+Separate ranges stay separate. A filename without an explicit start and end line
+does not become a Git source card or a file-start preview. Actual displayed line
+numbers accompany the code.
 Long excerpts initially show 12 lines; **Show the full excerpt** reveals the rest
 of the bounded retained passage, without another AI call. Very large ranges may
-still be limited, with an explicit notice. When no precise range was recorded,
-only a short file-start preview is shown and identified as such; no line location
-or independent verification is invented. These passages come from the frozen Git
+still be limited, with an explicit notice. The assistant must cite only inspected
+passages directly supporting its statements, not every file explored. If the
+supporting passage is missing, the conclusion remains explicitly unverified;
+component names and proposed change targets are not evidence. Historical answers
+and stored provenance remain intact, but filename-only references are omitted from
+source excerpts and newly exported source lists. No line location or independent
+verification is invented. These passages come from the frozen Git
 commit, not the environment's latest synchronized copy.
 Standalone source-reference paragraphs are grouped in this same collapsed
 disclosure instead of repeating file lists in the answer. Subsequent explanatory

@@ -11,10 +11,17 @@ from .models import ContextResourceVersion, Job, Request, RequestMessage, Result
 from .sensitive_data import configured_secrets, redact
 
 
+def has_line_range(source):
+    first, last = source.get("line_start"), source.get("line_end")
+    return type(first) is int and type(last) is int and 1 <= first <= last
+
+
 def code_excerpt(source, baseline):
     """Read the immutable blob, never rematerialize an active agent workspace."""
     from .git import mirror_path, run
 
+    if not has_line_range(source):
+        return "", "No precise source passage was recorded."
     row = next((row for row in baseline if row.get("repository") == source.get("repository")), None)
     path, commit = source.get("path", ""), source.get("commit", "")
     parts = PurePosixPath(path).parts
@@ -36,14 +43,15 @@ def code_excerpt(source, baseline):
         if "\x00" in content:
             raise ValueError("Binary source")
         lines = content.splitlines()
-        start = int(source["line_start"]) if source.get("line_start") is not None else 1
-        requested_end = int(source["line_end"]) if source.get("line_end") is not None else (start if source.get("line_start") else 12)
+        start, requested_end = source["line_start"], source["line_end"]
+        if requested_end > len(lines):
+            return "", "The cited line range is unavailable."
         end = min(requested_end, start + 99, len(lines))
         if start < 1 or start > end:
             return "", "The cited line range is unavailable."
         excerpt = "\n".join(lines[start-1:end])
-        note = "" if source.get("line_start") else "Preview from the beginning of the cited file; no precise line range was recorded."
-        if source.get("line_start") and (requested_end > end or len(excerpt) > 12000):
+        note = ""
+        if requested_end > end or len(excerpt) > 12000:
             note = "Only part of the cited range is shown."
         return excerpt[:12000], note
     except (OSError, ValueError, UnicodeError, subprocess.SubprocessError):
@@ -72,13 +80,13 @@ def inline_git_sources(content, baseline):
                 ranges = [(external[1], external[2] or external[1])]
             elif parenthesis:
                 ranges = [(a, b or a) for a, b in re.findall(location, parenthesis[1])]
-        if "/" not in path and not ranges:
+        if not ranges:
             continue
         for row in baseline:
             relative = path.removeprefix(row["repository"] + "/")
-            for first, last in ranges or [(None, None)]:
+            for first, last in ranges:
                 yield {"repository":row["repository"], "commit":row["sha"], "path":relative,
-                       "line_start":int(first) if first else None, "line_end":int(last) if last else None}
+                       "line_start":int(first), "line_end":int(last)}
 
 
 def collect(value, content, observations, frozen, evidence=None):
@@ -120,11 +128,7 @@ def collect(value, content, observations, frozen, evidence=None):
     # Inline citations can be resolved against this turn's frozen repositories.
     # They stay cited sources, not independently verified interpretations.
     git_sources.extend(inline_git_sources(content, baseline))
-    precise_files = set()
-    for source in sorted(git_sources, key=lambda item: not item.get("line_start"))[:20]:
-        file_key = tuple(source.get(k) for k in ("repository", "commit", "path"))
-        if not source.get("line_start") and file_key in precise_files:
-            continue
+    for source in [item for item in git_sources if has_line_range(item)][:20]:
         key = "git:" + ":".join(str(source.get(k) or "") for k in ("repository", "commit", "path", "line_start", "line_end"))
         if key in seen:
             continue
@@ -132,9 +136,7 @@ def collect(value, content, observations, frozen, evidence=None):
         # Do not add guesses for another repository when only an unqualified path was cited.
         if not excerpt and source not in sources:
             continue
-        preview_start = source.get("line_start") or 1
-        if excerpt and source.get("line_start"):
-            precise_files.add(file_key)
+        preview_start = source["line_start"]
         add({"kind":"git", "id":key, "title":source.get("path", ""), "repository":source.get("repository", ""),
              "commit":source.get("commit", ""), "line_start":source.get("line_start"), "line_end":source.get("line_end"),
              "preview_line_start":preview_start if excerpt else None,
@@ -196,18 +198,22 @@ def version_records(version):
     frozen = {**version.context_snapshot, "dossier":{**version.context_snapshot.get("dossier", {})}}
     frozen["dossier"].setdefault("baseline", version.baseline)
     evidence = {**version.evidence}
-    # Older consolidated answers can have file citations without structured claims.
+    # Historical file references are retained, but only explicit locations may
+    # become source excerpts. A filename alone is not supporting evidence.
     baseline = frozen["dossier"]["baseline"]
     references = []
     cited = {(source.get("repository"), source.get("path"))
              for claim in evidence.get("claims", []) for source in claim.get("sources", [])
              if source.get("kind") == "git"}
     for reference in version.explanation.get("references", []):
+        if not has_line_range(reference):
+            continue
         if (reference.get("repository"), reference.get("path")) in cited:
             continue
         row = next((row for row in baseline if row.get("repository") == reference.get("repository")), None)
         if row:
-            references.append({"kind":"git", "repository":row["repository"], "commit":row["sha"], "path":reference["path"]})
+            references.append({"kind":"git", "repository":row["repository"], "commit":row["sha"], "path":reference["path"],
+                               "line_start":reference["line_start"], "line_end":reference["line_end"]})
     evidence["claims"] = [*evidence.get("claims", []), {"sources":references}]
     content = "\n".join(value for value in version.explanation.values() if isinstance(value, str))
     return collect(version.request, content, {"context_usage":version.context_usage}, frozen, evidence)

@@ -48,10 +48,12 @@ async function setup(page: Page, language: 'en' | 'fr', theme: string) {
     return r.fulfill({ json: { sources: [
       { id: queryId, kind: 'sql', sql, status: 'checked', row_count: 1 },
       { id: 'code', kind: 'git', title: 'benefits/calculate.py', repository: 'example/project', commit: 'a'.repeat(40),
+        line_start:120,line_end:122,
         excerpt: 'def calculate(amount):\n    return amount + 42\n# <script>window.readerInjected=true</script>' },
       { id: 'document', kind: 'document', title: 'procedure.md', version: 1, excerpt: documentMarkdown },
       { id: 'web', kind: 'web', title: 'Documentation publique', url: 'https://example.org/reference', excerpt: documentMarkdown },
-      { id: 'unknown', kind: 'git', title: 'sample.unknown', excerpt: '<script>window.readerInjected=true</script>' },
+      { id: 'unknown', kind: 'git', title: 'sample.unknown', line_start:8,line_end:8,excerpt: '<script>window.readerInjected=true</script>' },
+      { id: 'unlocated', kind: 'git', title: 'irrelevant.py', excerpt: 'NO_FILE_START_PREVIEW' },
     ] } });
   });
   return { writes, remote, get reads() { return reads; } };
@@ -98,6 +100,8 @@ for (const theme of ['light', 'dark']) {
     expect(fixture.reads).toBe(0);
     const sources = page.locator('.source-details');
     await sources.locator(':scope > summary').click();
+    await expect(sources.locator('.source-record').filter({hasText:'irrelevant.py'})).toHaveCount(0);
+    await expect(sources).not.toContainText('NO_FILE_START_PREVIEW');
     const query = sources.locator('.source-record').filter({ hasText: 'SQL check 1' });
     await query.locator(':scope > summary').click();
     await expect(query.locator('.hljs-keyword').first()).toHaveText('SELECT');

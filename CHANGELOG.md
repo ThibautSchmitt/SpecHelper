@@ -52,8 +52,11 @@ retains superseded implementation reports. This changelog alone retains release 
 ### Readable tables and expandable sources
 
 - Resolve explicit inline Git line ranges, including French/English parenthetical
-  citations and separate passages. Suppress redundant file-start previews when
-  precise lines exist; keep unresolved ranges and bounded-preview limits honest.
+  citations and separate passages. Require an explicit start/end location before
+  displaying a Git source; never substitute the file's first lines for missing proof.
+  Preserve historical records while omitting filename-only source cards and exports.
+  Require assistant citations to support a specific statement, with uncertainty
+  disclosed when the supporting passage cannot be located.
 - Number source-code excerpts using their frozen-file positions. Show 12 lines
   initially and reveal the remaining retained excerpt only on request; source
   inspection never starts another AI investigation or changes stored evidence.

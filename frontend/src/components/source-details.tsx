@@ -56,7 +56,12 @@ export function SourceDetails({url,checks,referenceIds,selected,onSelect,childre
     return()=>{alive=false;};
   },[open,loaded,url,attempt]);
   const unsuccessful=new Set([...sources.filter(source=>source.kind==='sql'&&(source.status==='rejected'||source.status==='unavailable')).map(source=>source.id),...checks.filter(check=>check.status==='rejected'||check.status==='unavailable').map(check=>check.query_id)]);
-  const records=sources.filter(source=>!unsuccessful.has(source.id));
+  const records=sources.filter(source=>{
+    if(unsuccessful.has(source.id))return false;
+    if(source.kind!=='git')return true;
+    const first=source.line_start??0,last=source.line_end??0;
+    return Number.isInteger(first)&&Number.isInteger(last)&&first>0&&last>=first;
+  });
   for(const check of checks)if(!unsuccessful.has(check.query_id)&&!records.some(source=>source.id===check.query_id))records.push({...check,id:check.query_id,kind:"sql"});
   for(const id of referenceIds)if(!unsuccessful.has(id)&&!records.some(source=>source.id===id))records.push({id,kind:"sql",note:"The database-check record is unavailable."});
   function safeLink(value?:string){return value&&(/^https:\/\//i.test(value)||value.startsWith("/api/")&&!value.startsWith("//"))?value:undefined;}

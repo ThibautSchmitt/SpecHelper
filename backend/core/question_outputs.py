@@ -192,6 +192,10 @@ TECHNICAL_SECTIONS = (
 def _render(answer, baseline, kind, language, sources=None):
     answer = QuestionAnswer.model_validate(answer)
     references = _references(answer, baseline)
+    if sources is not None:
+        # New exports receive resolved source passages separately. Do not also
+        # promote the legacy filename-only navigation list to supporting proof.
+        references = []
     sections = {
         "business": BUSINESS_SECTIONS,
         "technical": TECHNICAL_SECTIONS,
@@ -207,7 +211,7 @@ def _render(answer, baseline, kind, language, sources=None):
     for key, label in sections[kind] + COMMON_SECTIONS:
         if values[key]:
             lines += section(label, values[key], language)
-    if kind != "business":
+    if kind != "business" and (references or sources is None):
         lines += section("Source references", references, language)
     if answer.evidence:
         from .evidence_rendering import render_evidence

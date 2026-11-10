@@ -47,6 +47,16 @@ def baseline():
     return [{"repository": "team/contracts", "branch": "release/2", "sha": "b" * 40}]
 
 
+def test_resolved_document_sources_do_not_promote_filename_only_references(explanation, baseline):
+    import copy
+
+    original = copy.deepcopy(explanation)
+    document = render_document(explanation, baseline, "technical", sources=[])
+    assert "## Source references" not in document
+    assert "No source references were verified for this explanation." in document
+    assert explanation == original
+
+
 def test_consolidated_answer_preserves_evidence_limits_and_frozen_references(explanation, baseline):
     value = render_answer(explanation, baseline)
     assert "Inactive contracts are excluded" in value

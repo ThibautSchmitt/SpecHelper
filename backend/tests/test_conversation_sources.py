@@ -132,18 +132,51 @@ def test_precise_ranges_replace_generic_file_previews_without_mutating_evidence(
     assert "VALUE_1 =" not in records[0]["excerpt"]
 
 
-def test_generic_preview_is_short_honest_and_large_citations_keep_actual_display_bounds(frozen_code):
+def test_generic_preview_is_not_evidence_and_large_citations_keep_actual_display_bounds(frozen_code):
     _, sha = frozen_code
     baseline = [{"repository":"fixture/project","sha":sha}]
     source = {"repository":"fixture/project","commit":sha,"path":"module.py"}
     excerpt, note = code_excerpt(source,baseline)
-    assert len(excerpt.splitlines()) == 12 and "no precise line range" in note
+    assert not excerpt and note == "No precise source passage was recorded."
     excerpt, note = code_excerpt({**source,"line_start":110,"line_end":219},baseline)
     assert excerpt.splitlines()[0] == "VALUE_110 = 110"
     assert excerpt.splitlines()[-1] == "VALUE_209 = 209" and len(excerpt.splitlines()) == 100
     assert note == "Only part of the cited range is shown."
     assert not code_excerpt({**source,"line_start":0,"line_end":2},baseline)[0]
     assert not code_excerpt({**source,"line_start":230,"line_end":240},baseline)[0]
+    assert not code_excerpt({**source,"line_start":210,"line_end":240},baseline)[0]
+
+
+@pytest.mark.parametrize("location", [{}, {"line_start":2}, {"line_end":3}, {"line_start":True,"line_end":3}])
+def test_missing_locations_never_read_a_file_start(frozen_code, monkeypatch, location):
+    _, sha = frozen_code
+    monkeypatch.setattr("core.git.mirror_path",lambda *a:pytest.fail("No file access without a precise location"))
+    source = {"repository":"fixture/project","commit":sha,"path":"rules.py",**location}
+    assert code_excerpt(source,[{"repository":"fixture/project","sha":sha}]) == ("","No precise source passage was recorded.")
+
+
+def test_filename_only_references_are_omitted_without_rewriting_saved_history(client, source_message, frozen_code, monkeypatch):
+    value, message, _ = source_message
+    _, sha = frozen_code
+    baseline = [{"repository":"fixture/project","sha":sha}]
+    message.content = "The component is `fixture/project/rules.py`. This is a navigation reference."
+    message.save()
+    job = Job.objects.get(target=str(value.pk))
+    job.payload["snapshot"] = {"dossier":{"baseline":baseline}}
+    job.save()
+    explanation = {"summary":message.content,"references":[{"repository":"fixture/project","path":"rules.py"}]}
+    evidence = {"claims":[{"sources":[{"kind":"git","repository":"fixture/project","commit":sha,"path":"module.py"}]}]}
+    version = ResultVersion.objects.create(request=value,number=1,baseline=baseline,explanation=explanation,evidence=evidence)
+    monkeypatch.setattr("core.git.mirror_path",lambda *a:pytest.fail("No fabricated range or preview"))
+    for endpoint in [url(value,message),f"/api/analyses/{value.pk}/versions/1/sources"]:
+        response = client.get(endpoint)
+        assert response.status_code == 200
+        assert not any(row["kind"] == "git" for row in response.json()["sources"])
+        assert "FIRST =" not in response.content.decode()
+    message.refresh_from_db()
+    version.refresh_from_db()
+    assert message.content == explanation["summary"]
+    assert version.explanation == explanation and version.evidence == evidence
 
 
 def test_document_preview_uses_the_read_version_not_a_later_replacement(client, source_message, environment, storage):

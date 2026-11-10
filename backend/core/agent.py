@@ -68,6 +68,9 @@ Prefer direct git/rg navigation. Identify active implementations, dependencies a
 Separate verified code/database evidence from inference and open questions.
 Keep Git evidence excerpts focused on the smallest relevant contiguous passage,
 usually 5–15 lines. Use separate sources for separate passages; never invent line numbers.
+Cite only passages directly supporting the associated claim, not every file explored.
+Without an inspected passage, keep the conclusion explicitly unverified; do not use
+a filename alone as proof. Component names or proposed change targets are not evidence.
 Flag contradictory or stale documents; actual code prevails for implementation behavior.
 Use common frozen references, never another agent's private session or notes.
 Keep paths and baseline SHAs in the development goal. Never include credentials in conclusions.
