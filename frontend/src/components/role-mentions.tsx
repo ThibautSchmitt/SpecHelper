@@ -11,6 +11,6 @@ export function RoleMentions({children}:{children:string}) {
   const {t}=useI18n();
   return children.split(mentions).map((text,index)=>{
     const role=names[text.toLowerCase().replace(/ /g,"-")];
-    return role ? <span key={index} className="badge conversation-role-mention" data-role={role}>{t(roleLabels[role])}</span> : text;
+    return role ? <span key={index} className="badge connection-tag connection-role-tag conversation-role-mention" data-role={role}>{t(roleLabels[role])}</span> : text;
   });
 }

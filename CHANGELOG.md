@@ -37,6 +37,11 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ### Readable tables and expandable sources
 
+- Share AI-connection role badge styling with role mentions in conversation text,
+  including discussion replies, clarification questions and result summaries.
+- Group standalone bibliographic paragraphs under **Sources and checks** while
+  keeping following explanations and verification limits visible. Preserve code
+  examples, embedded references and the original stored response.
 - Use shared Markdown table spacing, borders and local horizontal scrolling.
 - Replace opaque inline SQL receipt references with short expandable labels.
   Show saved SQL, frozen code, retained web text and versioned document previews

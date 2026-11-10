@@ -204,6 +204,11 @@ the source result and its original scope.
 In a response, **Sources and checks** expands the recorded evidence without
 rerunning an agent or a database query. Short **SQL check** references open the
 corresponding executed SQL, row count and result-limit notice.
+Standalone source-reference paragraphs are grouped in this same collapsed
+disclosure instead of repeating file lists in the answer. Subsequent explanatory
+sentences and verification limits remain in the response. Inline code references
+within an explanation and literal code examples are preserved. Explicit role
+mentions use the same role colors and badges as **AI & Agents → Connections**.
 Rejected or unavailable SQL attempts stay in diagnostics rather than the source
 disclosure. Consultation dates and internal technical receipt IDs are not shown there.
 Code references use the frozen Git blob and cited lines, never the latest branch

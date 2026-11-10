@@ -92,9 +92,7 @@
 .source-record { min-width: 0; border-left: 2px solid var(--border); padding-left: 10px; }
 .source-record-content { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .source-record-content pre { max-width: 100%; overflow-x: auto; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--muted); font-size: 12px; line-height: 1.6; }
-.analysis-conversation .conversation-role-mention[data-role] { --role-ink: var(--connection-analyst); padding: 1px 7px; border: 0; font-size: .8em; line-height: 1.6; vertical-align: baseline; color: var(--role-ink); background: color-mix(in srgb, var(--role-ink) 12%, var(--card)); }
-.analysis-conversation .conversation-role-mention[data-role="counter_analyst"] { --role-ink: var(--connection-counter); }
-.analysis-conversation .conversation-role-mention[data-role="verifier"] { --role-ink: var(--connection-verifier); }
+.conversation-role-mention[data-role] { vertical-align: baseline; }
 .conversation-progress, .conversation-review { margin-top: 16px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--card) 65%, transparent); }
 .conversation-reply { margin-top: 16px; }
 .analysis-conversation .conversation-clarification { padding: 0; border: 0; box-shadow: none; background: transparent; }

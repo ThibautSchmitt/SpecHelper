@@ -62,7 +62,7 @@ for (const theme of ['light', 'dark']) {
     const fixture = await setup(page, 'fr', theme);
     await page.goto(`/analyses/${id}`);
     await page.getByRole('button', { name: 'Brouillon', exact: true }).click();
-    const modal = page.getByRole('dialog', { name: 'Préparer un ticket', exact: true });
+    const modal = page.getByRole('dialog', { name: 'Créer un ticket', exact: true });
     const reader = modal.getByRole('region', { name: 'Description', exact: true });
     await expect(modal.getByRole('button', { name: 'Aperçu', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(reader.getByRole('heading', { name: 'Besoin', exact: true })).toBeVisible();

@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useState,type Dispatch,type SetStateAction} from "react";
+import {Children,useEffect,useState,type Dispatch,type SetStateAction,type ReactNode} from "react";
 import {ChevronDown,LoaderCircle} from "lucide-react";
 import {api} from "@/lib/api";
 import {useI18n} from "@/lib/i18n";
@@ -27,7 +27,7 @@ function SourceExcerpt({source}:{source:Source}) {
   </div>;
 }
 
-export function SourceDetails({url,checks,referenceIds,selected,onSelect}:{url?:string;checks:SQLReceipt[];referenceIds:string[];selected:string[];onSelect:Dispatch<SetStateAction<string[]>>}){
+export function SourceDetails({url,checks,referenceIds,selected,onSelect,children}:{url?:string;checks:SQLReceipt[];referenceIds:string[];selected:string[];onSelect:Dispatch<SetStateAction<string[]>>;children?:ReactNode}){
   const {t}=useI18n();
   const [open,setOpen]=useState(false);
   const [attempt,setAttempt]=useState(0);
@@ -53,7 +53,8 @@ export function SourceDetails({url,checks,referenceIds,selected,onSelect}:{url?:
     {open&&<div className="source-details-content">
       {loading&&<p role="status" className="flex items-center gap-2 text-xs muted"><LoaderCircle size={14} className="animate-spin" aria-hidden="true"/>{t("Loading…")}</p>}
       {error&&<p role="alert" className="text-xs">{t(error)} <button type="button" className="underline" onClick={()=>setAttempt(current=>current+1)}>{t("Retry")}</button></p>}
-      {!loading&&!error&&!records.length&&<p className="text-xs muted">{t("No source details were recorded for this answer.")}</p>}
+      {Children.count(children)>0&&<div className="conversation-answer text-sm" data-source-notes>{children}</div>}
+      {!loading&&!error&&!records.length&&!Children.count(children)&&<p className="text-xs muted">{t("No source details were recorded for this answer.")}</p>}
       {records.map((source,index)=><details className="source-record" key={source.id} open={selected.includes(source.id)} onToggle={event=>{
         if(event.target!==event.currentTarget)return;
         if(event.currentTarget.open)onSelect(current=>current.includes(source.id)?current:[...current,source.id]);
