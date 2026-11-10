@@ -51,7 +51,7 @@ type Presentation = {
 type TransferFile = { id: string; name: string; size: number; mime: string; kind: "original" | "goal" | "diagrams"; transferable: boolean; reason?: string; };
 const defaultPresentation: Presentation = { ticket_format: "", include_business_analysis: false, include_technical_analysis: false, include_attachments: false, attachment_ids: [], include_goal: false, include_diagrams: false };
 type Preview = Partial<Presentation> & {
-  document_attachment_policy?:{enabled:boolean;max_bytes:number};
+  document_attachment_policy?:{enabled:boolean;max_bytes:number;extensions?:string[]};
   draft_id?: string;
   draft_revision?: number;
   template_id?: string;
@@ -411,7 +411,7 @@ export function PublishTicket({
     .replace(/^\s*spechelper:[0-9a-f-]{36}\s*$/gmi, "").trim();
   const shortPreview = renderedBody.split(/\n\s*\n/).slice(0,2).join("\n\n").slice(0,360);
   const publicationIssues = preview ? [
-    ...(selectedDocuments.length && preview.document_attachment_policy?.enabled === false ? [t("This destination cannot receive generated documents. Deselect them to publish without files.")] : []),
+    ...(selectedDocuments.length && (preview.document_attachment_policy?.enabled === false || preview.document_attachment_policy?.extensions && !preview.document_attachment_policy.extensions.includes("md")) ? [t("This destination cannot receive generated documents. Deselect them to publish without files.")] : []),
     ...(preview.publication_allowed === false
       ? (preview.publication_blockers?.length ? preview.publication_blockers : ["Required independent checks are incomplete. Publication is blocked."]).map(reason => t(reason))
       : []),

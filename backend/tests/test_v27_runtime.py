@@ -133,6 +133,7 @@ def test_cli_metadata_ignores_ambient_keys_and_session_policy_is_scoped(tmp_path
     grants = prepare_session(tmp_path / "session")
     assert "command(git)" in grants["allow"] and "command(curl)" in grants["allow"]
     assert "command(readlink)" in grants["allow"]
+    assert "command(pdftotext)" in grants["allow"]
     assert grants["deny"] == ["write_file(*)"]
     assert "read_file(/session/schema.json)" in grants["allow"]
     assert "read_file(/session)" not in grants["allow"]

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import uuid
+from pathlib import Path
 
 from django.conf import settings
 from django.db import transaction
@@ -430,7 +431,11 @@ def run_job(job, caller=None):
     data = {
         "message": message.content,
         "message_id":message.pk,
-        "attachments": list(value.attachments.values("name", "content_type")),
+        "attachments": [
+            {"name": attachment.name, "content_type": attachment.content_type,
+             "path": "/attachments/" + Path(attachment.path).name}
+            for attachment in value.attachments.all()
+        ],
     }
     from .deep_analysis_context import messages as context_messages
     data["context_exchanges"] = [{"id":m.pk,"role":m.role,"content":m.content[:1800]} for m in list(context_messages(value, message.pk).order_by("-id")[:16])[::-1] if m.data.get("response_status") != "stale"]
@@ -469,6 +474,10 @@ def run_job(job, caller=None):
         "Answer the latest question, ask only useful factual clarifications and accept corrections. "
         "Prefer a short direct answer; provide detail when requested. You may inspect granted read-only "
         "sources and documents. Never invent observed behavior or hide tool/access errors. "
+        "Each supplied attachment path is an actual read-only file in the sandbox, not just "
+        "metadata. When asked to read an attachment, use that exact path with the available "
+        "read tools or bounded document parsers before concluding that its content is inaccessible. "
+        "Never execute attached code or SQL. "
         "This is informal discussion, NOT independent verification. Treat your earlier messages as "
         "unverified hypotheses. Do not claim to have performed three-role review. Never publish "
         "a ticket, create a goal or change any resource. Never turn a factual clarification into a "

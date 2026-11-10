@@ -789,6 +789,15 @@ def test_discussion_attachments_remain_read_only_and_freeze_during_turn(
     from pathlib import Path
 
     assert Path(attachment.path).stat().st_mode & 0o222 == 0
+    current = client.get(f"/api/analyses/{value['id']}").json()
+    assert turn(client, current, current["discussion"]["revision"]).status_code == 200
+    finish()
+    payload = native[-1]
+    sandbox_path = "/attachments/" + Path(attachment.path).name
+    assert json.dumps(sandbox_path) in payload["prompt"]
+    assert str(Path(attachment.path).parent) not in payload["prompt"]
+    assert '"name": "notes.md"' in payload["prompt"]
+    assert "actual read-only file in the sandbox" in payload["prompt"]
 
 
 def test_malformed_identifier_is_not_an_internal_error(client):

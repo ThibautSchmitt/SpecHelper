@@ -230,7 +230,7 @@ def prepare_session(session, token=None, auth_mode=MODE):
     if any(path.is_symlink() for path in (settings, *settings.parents)):
         raise ValueError("Invalid Antigravity session.")
     settings.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    commands = ("git", "rg", "ls", "cat", "sed", "head", "tail", "find", "readlink", "wc", "python3", "curl")
+    commands = ("git", "rg", "ls", "cat", "sed", "head", "tail", "find", "readlink", "wc", "python3", "pdftotext", "curl")
     config = {
         "historySize": 0,
         "trustedWorkspaces": ["/workspace"],

@@ -144,6 +144,13 @@ def test_unsupported_destination_and_stale_draft_do_not_spend_tokens(client,docu
     assert not Job.objects.exists() and not provider.create.called
 
 
+def test_destination_rejecting_markdown_does_not_generate_documents(client, documents):
+    _, _, provider, _, _ = documents
+    provider.attachment_policy.return_value = {"enabled": True, "max_bytes": 25000000, "extensions": ["xlsx", "txt"]}
+    assert start(client, documents, ["goal", "business", "technical"]).status_code == 422
+    assert not Job.objects.exists() and not provider.create.called
+
+
 def test_failed_generation_preserves_draft_and_allows_retry(client,documents):
     value,ticket,provider,_,_=documents
     original=copy.deepcopy(ticket.draft)

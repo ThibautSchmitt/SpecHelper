@@ -805,6 +805,15 @@ class JiraProvider(Provider):
 
 
 class GLPIProvider(Provider):
+    def attachment_policy(self, project):
+        types = self.items("DocumentType", optional=(403, 404))
+        extensions = sorted({
+            item["ext"].lower() for item in (types or [])
+            if str(item.get("is_uploadable")) in {"1", "True"}
+            and isinstance(item.get("ext"), str) and re.fullmatch(r"[A-Za-z0-9]{1,12}", item["ext"])
+        })
+        return {"enabled": bool(extensions), "max_bytes": 25 * 1024 * 1024, "extensions": extensions}
+
     def __init__(self, connector):
         super().__init__(connector)
         if connector.api_version not in ("v1", "1", "legacy"):
@@ -1047,6 +1056,12 @@ class GLPIProvider(Provider):
             files={"filename[0]": (metadata["name"], content, metadata["mime"])},
         )
         identifier = positive_id(result.get("id"))
+        stored = self.request("GET", "/Document/" + identifier)
+        # GLPI can create a document record without storing the rejected upload.
+        # An identifier alone must never count as a confirmed attachment transfer.
+        if (not isinstance(stored, dict) or not stored.get("filename") or not stored.get("filepath")
+            or stored.get("sha1sum") and str(stored["sha1sum"]).lower() != hashlib.sha1(content).hexdigest()):
+            raise NetworkUncertain("The document upload could not be confirmed")
         linked = self.request(
             "POST",
             "/Document_Item",

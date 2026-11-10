@@ -102,7 +102,26 @@ The confirmed publication must also release its active conversation draft and
 retain exactly one permanent publication event, including on later process resumption.
 
 GitLab, Jira and GLPI attachments remain subject to their existing discovered
-permissions and size limits. The supported GitHub Issues REST connector does not
+permissions and size limits. GLPI additionally exposes its allowed upload extensions
+through `DocumentType`. SpecHelper fails closed when this catalogue is unavailable,
+rejects unsupported selected originals, and rejects Markdown document generation
+before spending AI quota when Markdown cannot be uploaded. It does not enable new
+types on the remote instance. After upload, a GLPI `Document` ID alone is insufficient:
+the read-back must confirm a filename/path and any returned SHA-1 must match the
+submitted bytes before linking the document. A missing file remains an uncertain
+transfer, without retrying the upload or creating another ticket.
+Replays of a claimed operation compare its immutable file selection and complete
+digest, so a later native policy change cannot force a replacement create. Current
+policy is rechecked before sending any previously unstarted file. A changed payload
+still requires review and cannot reuse a claimed key.
+
+After a real run, independently download the attachments through the provider's
+supported API and compare them with the selected originals. A publication-engine
+`PASS` is not proof that every remote binary is downloadable or byte-identical.
+If a platform rewrites an image's metadata, retain the hash mismatch and compare
+decoded pixels separately; do not report an exact binary match.
+
+The supported GitHub Issues REST connector does not
 upload those files: its plan must select no attachments. The bench does not invent
 an upload endpoint, create a gist or push files into a repository as a workaround.
 

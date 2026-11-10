@@ -338,6 +338,15 @@ Destination-specific behavior matters:
 documents use the separate **Documents to attach** choices and do not require an
 analysis. A destination's upload capability is checked before generation and sending;
 unsupported destinations require deselecting documents, rather than promising an upload.
+The original-file picker accepts XLSX workbooks and UTF-8 SQL documents in addition
+to the supported PDFs, DOCX, images and text formats. SQL is read, never executed;
+workbook macros and external-data containers are rejected. Legacy DOC/XLS is unsupported.
+Accepted by SpecHelper does not mean accepted by the destination: GLPI's native
+uploadable document-type catalogue determines which extensions can be transferred.
+Unsupported files remain in the conversation but cannot be selected for that
+destination. A GLPI instance that disallows Markdown also cannot receive generated
+`goal.md` or reports; deselect these before publication or have its administrator
+review its native document policy. SpecHelper never changes that policy automatically.
 A detailed diagram annex is separately selectable
 for supported standard-format publications. Up to 20 selected files and 50 MB total
 are accepted; each original file must also meet the 25 MB safety limit. Preview hashes,
@@ -348,7 +357,10 @@ has no equivalent upload operation here, so file transfer is unavailable there.
 Reports and individual role downloads remain optional; they are not implicitly attached.
 
 Issue creation and file delivery have separate outcomes. A successful issue remains
-recorded if an attachment fails. An uncertain write is never retried blindly. Use
+recorded if an attachment fails. An uncertain write is never retried blindly.
+Check the per-file delivery result as well as the ticket's publication status. For GLPI,
+the document must have a stored filename/path and, when returned, a matching checksum
+before SpecHelper links it to the ticket and confirms delivery. Use
 **Verify existing publication** and inspect the target when necessary: delayed search
 or insufficient permissions can prevent immediate reconciliation. An unstarted file
 transfer may resume against an existing issue without creating another issue.

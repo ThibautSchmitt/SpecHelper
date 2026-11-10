@@ -84,7 +84,7 @@ def reusable(value, key, kinds):
 @transaction.atomic
 def generate(analysis_id, ticket_id, payload, browser_actor):
     from .discussion import MessageIn, enqueue, pin_environment
-    from .ticket_attachments import attachment_policy
+    from .ticket_attachments import attachment_policy, extension_allowed
     from .ticket_publication import checked_access
 
     value = get_object_or_404(Request.objects.select_for_update(), pk=analysis_id, deleted_at__isnull=True)
@@ -96,7 +96,7 @@ def generate(analysis_id, ticket_id, payload, browser_actor):
         raise HttpError(409, "Verify the existing publication before generating documents.")
     checked_access(draft.connector, draft.project)
     policy = attachment_policy(draft.connector, draft.project)
-    if draft.connector.platform == "github" or not policy or not policy.get("enabled"):
+    if draft.connector.platform == "github" or not policy or not policy.get("enabled") or not extension_allowed("goal.md", policy):
         raise HttpError(422, "This destination cannot receive generated documents. Deselect them to publish without files.")
     if not value.discussion_state.get("snapshot"):
         value.discussion_state = {**value.discussion_state, "snapshot": pin_environment(value)}
@@ -157,12 +157,13 @@ def result(analysis_id, generation_id):
 
 def attachment_rows(version, payload, connector, policy):
     """Recheck ticket/context provenance before the first external write."""
+    from .ticket_attachments import extension_allowed
     from .ticket_preparation import publication_ticket
 
     generations = payload.get("document_generations") or {}
     if not generations:
         return []
-    if connector.platform == "github" or not policy or not policy.get("enabled"):
+    if connector.platform == "github" or not policy or not policy.get("enabled") or not extension_allowed("goal.md", policy):
         raise HttpError(422, "This destination cannot receive generated documents. Deselect them to publish without files.")
     ticket = publication_ticket(version, payload.get("conversation_ticket_id"))
     if ticket is None:

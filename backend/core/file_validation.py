@@ -7,18 +7,19 @@ from pathlib import Path, PurePosixPath
 
 from ninja.errors import HttpError
 
-TEXT = {".txt", ".md", ".csv", ".json", ".log"}
+TEXT = {".txt", ".md", ".csv", ".json", ".log", ".sql"}
 TYPES = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
     ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     **{extension: "text/plain" for extension in TEXT},
 }
 MAX_BYTES = 25 * 1024 * 1024
 
 
 def inspect_file(path, name):
-    """Identify signatures, reject archives/macros and bound DOCX's compressed container."""
+    """Identify signatures and bound supported Office containers without executing content."""
     suffix = Path(name).suffix.lower()
     if suffix not in TYPES:
         raise HttpError(422, "File format not allowed")
@@ -50,8 +51,8 @@ def inspect_file(path, name):
             valid = 0 < width * height <= 40000000
     elif suffix == ".webp":
         valid = header[:4] == b"RIFF" and header[8:12] == b"WEBP"
-    elif suffix == ".docx":
-        valid = inspect_docx(path)
+    elif suffix in {".docx", ".xlsx"}:
+        valid = inspect_office(path, suffix)
     if valid:
         from .sensitive_data import configured_secrets
 
@@ -63,12 +64,13 @@ def inspect_file(path, name):
     return TYPES[suffix]
 
 
-def inspect_docx(path):
+def inspect_office(path, suffix):
     try:
         with zipfile.ZipFile(path) as archive:
             items = archive.infolist()
             names = {item.filename for item in items}
-            if len(items) > 500 or not {"[Content_Types].xml", "word/document.xml"} <= names:
+            required = {"[Content_Types].xml", "xl/workbook.xml" if suffix == ".xlsx" else "word/document.xml"}
+            if len(items) > 500 or not required <= names:
                 return False
             expanded = 0
             for item in items:
@@ -76,14 +78,22 @@ def inspect_docx(path):
                 if (item.flag_bits & 1 or not parts or item.filename.startswith("/") or ".." in parts
                     or "\\" in item.filename or len(parts) > 12
                     or stat.S_ISLNK(item.external_attr >> 16)
-                    or any(value in item.filename.lower() for value in ("vbaproject", "embeddings/", "activex/"))):
+                    or any(value in item.filename.lower() for value in ("vbaproject", "embeddings/", "activex/"))
+                    or suffix == ".xlsx" and any(value in item.filename.lower() for value in ("externallinks/", "macrosheets/", "dialogsheets/", "connections.xml"))):
                     return False
                 expanded += item.file_size
                 if expanded > 50 * 1024 * 1024 or item.file_size > 10 * 1024 * 1024 or item.file_size > max(1024 * 1024, item.compress_size * 100):
                     return False
-            # Never extract files or parse XML in the application process.
+            # Inspect the bounded content-type declaration as inert bytes, never
+            # parse Office XML or execute macros, formulas or external links here.
+            if suffix == ".xlsx":
+                if archive.getinfo("[Content_Types].xml").file_size > 1024 * 1024:
+                    return False
+                types = archive.read("[Content_Types].xml").lower()
+                if any(value in types for value in (b"macroenabled", b"vbaproject", b"macrosheet")):
+                    return False
             return len(names) == len(items)
-    except (zipfile.BadZipFile, OSError, ValueError):
+    except (zipfile.BadZipFile, OSError, ValueError, RuntimeError, NotImplementedError):
         return False
 
 

@@ -466,7 +466,7 @@ export function WorkItemForm({
                 type="file"
                 multiple
                 disabled={busy || !!draftId}
-                accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.docx,.txt,.md,.csv,.json,.log"
+                accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.docx,.xlsx,.txt,.md,.csv,.json,.log,.sql"
                 aria-describedby="attachment-limits attachment-feedback"
                 onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = ""; }}
               />

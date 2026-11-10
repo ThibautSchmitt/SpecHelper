@@ -818,7 +818,7 @@ def execute_run(payload: RunIn, emit=None):
                 "request attachments through /attachments. These are read-only scoped mounts. "
                 "CLI tool availability is not permission to write or access another job. "
                 "Prefer native file reads or simple individual commands using the granted "
-                "git, rg, ls, cat, sed, head, tail, find, readlink, wc, python3 and curl tools. "
+                "git, rg, ls, cat, sed, head, tail, find, readlink, wc, python3, pdftotext and curl tools. "
                 "Avoid find -exec/-delete, command substitutions and compound shell "
                 "expressions that require additional permission. Do not use for/while/until "
                 "loops, cd, pipes, conditionals, semicolons, && or ||. Invoke one granted "

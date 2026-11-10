@@ -103,8 +103,14 @@ or automatically verified facts.
 Context text is limited to 4,000 characters. **Add a document** opens the file picker;
 document details, previews and replacement remain available on demand. Up to 20
 documents of 25 MB each can be
-provided in supported image, PDF, DOCX, text, Markdown, CSV, JSON or LOG formats.
-Unsupported archives, executable content and unsafe DOCX containers are rejected.
+provided in supported image, PDF, DOCX, XLSX, SQL, text, Markdown, CSV, JSON or LOG formats.
+SQL files are UTF-8 reference text, never scripts to execute. XLSX inspection bounds
+ZIP expansion and rejects macros, embedded objects and external-data containers;
+formulas are not executed or recalculated. Legacy DOC/XLS and macro-enabled Office
+formats remain unsupported. Unsupported archives and executable content are rejected.
+Read-only storage, bounded validation and isolated parsing reduce risk; they do not
+constitute antivirus scanning or guarantee that a document is harmless. Document
+instructions remain untrusted input, including instructions hidden in images.
 Up to 12 public HTTPS reference links can include optional applicability notes.
 Use **Add a link** or the link's edit action, then **Save** to persist text and links.
 In an existing environment, document operations save separately and preserve unsaved

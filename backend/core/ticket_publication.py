@@ -667,8 +667,17 @@ def publish(version, connector, payload):
         # absent. Previously published snapshots must remain reconcilable.
         snapshot.update({key: payload.get(key) for key in PRESENTATION_KEYS
                          if key != "include_diagrams" or payload.get(key)})
-        snapshot["selected_attachments"] = selected_attachments(
-            version, connector, payload, project
+        # A replay validates against the immutable operation, not today's remote
+        # upload policy or source availability. The complete digest below still
+        # rejects changed content, file selections, connection and destination.
+        recoverable = PublishedTicket.objects.filter(
+            **logical_scope, destination=destination,
+            status__in={PublishedTicket.Status.PUBLISHED, PublishedTicket.Status.PUBLISHING,
+                        PublishedTicket.Status.UNCERTAIN},
+        ).first()
+        snapshot["selected_attachments"] = (
+            recoverable.snapshot.get("selected_attachments", []) if recoverable
+            else selected_attachments(version, connector, payload, project)
         )
         snapshot["baseline"] = version.baseline
         snapshot["environment_name"] = version.environment_name

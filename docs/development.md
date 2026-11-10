@@ -253,6 +253,8 @@ Retained evidence is deliberately small:
 - [Security review](evidence/security-review.md): dated attack/re-test scope and residual limitations.
 - [Publication review](evidence/publication-review.md): licensing and privacy review scope.
 - [Qualification observations](evidence/qualification.md): failed/incomplete quality trials and indexing limits.
+- [File qualification](qualification-files-20261110.md): real uploads, native AI reads,
+  remote downloads and format-specific publication limits observed on 10 November 2026.
 
 These are historical observations, not current installation instructions or certification.
 Git retains superseded specifications and implementation reports.

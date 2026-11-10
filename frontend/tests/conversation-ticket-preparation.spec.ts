@@ -325,6 +325,24 @@ test('unsupported destinations require deselecting documents and use no AI',asyn
  expect(fixture.documentRequests).toHaveLength(0);expect(fixture.posts).toHaveLength(1);
 });
 
+test('a destination permitting XLSX but refusing Markdown blocks generated documents without spending AI',async({page})=>{
+ const fixture=await setup(page,'en',true);
+ fixture.options({document_attachment_policy:{enabled:true,max_bytes:25000000,extensions:['xlsx','txt']}});
+ await page.goto(`/analyses/${id}`);await page.getByRole('button',{name:'Draft',exact:true}).click();
+ const modal=page.getByRole('dialog',{name:'Create ticket',exact:true});
+ await modal.getByLabel('Publication connection',{exact:true}).selectOption('4');
+ await modal.getByLabel('Project / repository',{exact:true}).selectOption('TEAM');
+ await expect(modal.getByRole('button',{name:'Publish',exact:true})).toBeDisabled();
+ await expect(modal).toContainText('This destination cannot receive generated documents.');
+ expect(fixture.documentRequests).toHaveLength(0);expect(fixture.posts).toHaveLength(0);
+ await modal.getByLabel('goal.md',{exact:true}).uncheck();
+ await expect(modal.getByRole('button',{name:'Publish',exact:true})).toBeEnabled();
+ await modal.getByRole('button',{name:'Publish',exact:true}).click();
+ await modal.getByRole('button',{name:'Publish anyway',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(fixture.documentRequests).toHaveLength(0);expect(fixture.posts).toHaveLength(1);expect(fixture.deep).toBe(0);
+});
+
 test('closing while documents are generated never starts an external publication',async({page})=>{
  const fixture=await setup(page,'en',true);let started=false;
  await page.route(`**/api/analyses/${id}/tickets/${ticket}/documents/generate`,r=>{started=true;return r.fulfill({json:{generation_id:55,status:'QUEUED',documents:{}}});});

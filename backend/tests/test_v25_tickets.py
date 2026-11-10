@@ -368,11 +368,12 @@ def test_native_attachment_protocols_use_only_explicit_bytes(monkeypatch):
     assert jira.attach("42", "APP-7", metadata, b"proof")["id"] == "99"
     assert jira.request.call_args.kwargs["extra_headers"] == {"X-Atlassian-Token": "no-check"}
     glpi = GLPIProvider.__new__(GLPIProvider)
-    glpi.request = Mock(side_effect=[{"id": 5}, {"id": 6}])
+    glpi.request = Mock(side_effect=[{"id": 5}, {"filename": "proof.txt", "filepath": "TXT/proof.txt"}, {"id": 6}])
     assert glpi.attach("42", "7", metadata, b"proof")["id"] == "5"
     manifest = json.loads(glpi.request.call_args_list[0].kwargs["data"]["uploadManifest"])
     assert manifest["input"]["_filename"] == ["proof.txt"]
-    assert glpi.request.call_args_list[1].kwargs["data"]["input"] == {
+    assert glpi.request.call_args_list[1].args == ("GET", "/Document/5")
+    assert glpi.request.call_args_list[2].kwargs["data"]["input"] == {
         "documents_id": 5,
         "itemtype": "Ticket",
         "items_id": 7,

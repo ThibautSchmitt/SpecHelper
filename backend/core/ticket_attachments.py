@@ -1,6 +1,7 @@
 """Explicit, bounded publication of selected immutable attachment bytes."""
 
 import hashlib
+from pathlib import Path
 
 from django.db import transaction
 from django.utils import timezone
@@ -8,6 +9,13 @@ from ninja.errors import HttpError
 
 from .file_validation import MAX_BYTES, attachment_path, inspect_file
 from .models import PublishedTicket
+
+
+def extension_allowed(name, policy):
+    return not policy or "extensions" not in policy or (
+        isinstance(policy["extensions"], list)
+        and Path(name).suffix.lower().lstrip(".") in policy["extensions"]
+    )
 
 
 def available_attachments(version, connector, policy=None, *, allow_diagrams=True):
@@ -85,6 +93,8 @@ def available_attachments(version, connector, policy=None, *, allow_diagrams=Tru
                     transferable=False,
                     reason="Attachment upload is disabled or the connector's upload permission could not be verified.",
                 )
+            elif not extension_allowed(row["name"], policy):
+                row.update(transferable=False, reason="This destination does not allow this file format.")
     return rows
 
 
@@ -156,6 +166,7 @@ def selected_bytes(record, row):
 
 def deliver_attachments(record, provider):
     """Claim each transfer before writing; uncertain transfers are never blindly repeated."""
+    policy = None
     for row in record.snapshot.get("selected_attachments", []):
         with transaction.atomic():
             current = PublishedTicket.objects.select_for_update().get(pk=record.pk)
@@ -170,6 +181,13 @@ def deliver_attachments(record, provider):
                 attachment_delivery=delivery, updated_at=timezone.now()
             )
         try:
+            if policy is None:
+                policy = provider.attachment_policy(record.project)
+            if isinstance(policy, dict) and (
+                not policy.get("enabled") or row["size"] > policy.get("max_bytes", MAX_BYTES)
+                or not extension_allowed(row["name"], policy)
+            ):
+                raise HttpError(422, "A selected attachment cannot be transferred to this destination.")
             content = selected_bytes(record, row)
             result = provider.attach(
                 record.project, record.external_key or record.external_id, row, content

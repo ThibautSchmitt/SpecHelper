@@ -20,7 +20,7 @@ MAX_FILES = 20
 MAX_FILE_SIZE = 25 * 1024 * 1024
 MAX_INSTRUCTIONS = 4000
 PREVIEW_LIMIT = 6000
-TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".log"}
+TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".log", ".sql"}
 
 
 def reject_credentials(text):
@@ -64,7 +64,7 @@ def version_dict(version, resource, preview=False, source=None):
         "created_at": resource.created_at.isoformat(),
         "updated_at": resource.updated_at.isoformat(),
         "agent_readable": suffix
-        in TEXT_EXTENSIONS | {".pdf", ".docx", ".png", ".jpg", ".jpeg", ".gif", ".webp"},
+        in TEXT_EXTENSIONS | {".pdf", ".docx", ".xlsx", ".png", ".jpg", ".jpeg", ".gif", ".webp"},
     }
     if preview:
         value.update(preview=None, preview_truncated=False)

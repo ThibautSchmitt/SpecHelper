@@ -7,6 +7,20 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Bounded document uploads and publication checks
+
+- Accept XLSX and UTF-8 SQL documents in conversations and environment knowledge,
+  retaining upload limits, bounded Office validation and read-only runtime access.
+  Reject macro/external-data workbook containers; never execute attached SQL.
+- Provide the scoped attachment path to the conversational AI and allow the existing
+  isolated Antigravity command tool to use `pdftotext` for actual PDF reading.
+- Respect GLPI's native uploadable extensions before transfer or generated Markdown
+  preparation. Read back document storage metadata/checksum before confirming and
+  linking an uploaded file; preserve uncertain delivery without automatic retry.
+- Record real file-reading and publication-download observations in the
+  [file qualification report](docs/qualification-files-20261110.md), including failures
+  and remaining security limits.
+
 ### Local analysis and publication retirement
 
 - Delete one deep-analysis cycle after explicit confirmation, preserving its
