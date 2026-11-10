@@ -117,10 +117,18 @@ counts and permitted non-sensitive details remain available. This is conservativ
 name-based protection, not semantic detection of every personal fact. Restrict the
 reader's database grants and views to the data the instance may disclose.
 
-Uploads are bounded by type, signature and size, including DOCX container inspection.
+Uploads use an explicit allowlist and are bounded by type, signature and size,
+including DOCX/XLSX container inspection. SQL files must be UTF-8 text and are
+reference documents, never permission to execute SQL. XLSX checks bound archive
+expansion and reject macro, embedded-object and external-data containers. Legacy
+DOC/XLS and macro-enabled Office formats remain unsupported. Parsing stays inside
+the isolated runtime; spreadsheet formulas must not be recalculated.
 Supported originals are limited to 25 MB each; environment context accepts at most
 20 documents. Executables and arbitrary archives are not accepted. A valid document
-can still contain sensitive data or malicious instructions.
+can still contain sensitive data or malicious instructions. Read-only access protects
+the original data but does not make parsers immune to vulnerabilities or prevent
+prompt injection. These checks are not antivirus scanning and cannot establish
+that every accepted file is harmless.
 
 Ticket publication uses encrypted, separate connector credentials and explicit human
 confirmation of an allowed destination. Connections are shared instance configuration;
@@ -132,6 +140,17 @@ credentials. Agents cannot publish through their analysis tools. Verify the prev
 required fields and optional files; a successful connection test does not prove write
 permission. Uncertain external writes must be reconciled before another creation
 attempt. See [Usage](docs/usage.md#prepare-and-publish-a-ticket).
+
+An accepted local file is not automatically transferable to every destination.
+GLPI's native uploadable extension catalogue is checked before sending or generating
+selected Markdown documents; SpecHelper never changes that remote policy. The GLPI
+adapter reads back the uploaded document's filename/path and any returned checksum
+before confirming delivery. A document ID without a stored file is insufficient.
+Failed or uncertain attachment delivery does not erase a confirmed external ticket
+or authorize a blind resend. Historical operation replays retain their immutable
+selection and idempotency identity. See the dated
+[file qualification evidence](docs/qualification-files-20261110.md) for actual
+downloads, encountered failures and test limitations.
 
 ## Retention and backups
 

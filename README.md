@@ -21,7 +21,10 @@ calls the final role **Validateur**.
   when the provider can resume them; recover explicitly when a session is lost.
 - Keep the recorded AI/model history and explicitly choose another available
   connection if the selected assistant has exhausted its quota.
-- Read authorized Git repositories, attachments and environment reference documents.
+- Read authorized Git repositories, attachments and environment reference documents,
+  including PDF, DOCX, XLSX, supported images, Markdown, UTF-8 SQL and text files.
+  SQL attachments are reference documents, not scripts to execute. Supported formats
+  and file-safety limits are detailed in [Configuration](docs/configuration.md#git-sources-and-environments).
 - Search repositories, branches and tags across paginated source listings, with
   separate branch/tag choices and preservation of the current selection.
 - Check environment branches for available updates and update one repository or
@@ -49,8 +52,11 @@ The [stabilization review](docs/stabilization.md) distinguishes tested guarantee
 release blockers and the real-world acceptance journey still required before a
 stable release.
 See [local operations](docs/local-administration.md) for safe stop/clean/purge commands and
-load-test methodology, and the [latest qualification results](docs/stabilization-follow-up.md)
-for executed measurements and remaining limits.
+load-test methodology, the [stabilization results](docs/stabilization-follow-up.md)
+for executed measurements and remaining limits, and the
+[file qualification](docs/qualification-files-20261110.md) for real AI reads and
+GitLab/GLPI attachment-download tests. A confirmed ticket and a confirmed file
+transfer are separate results; destination restrictions still apply.
 
 ## Quick start
 

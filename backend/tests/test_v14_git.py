@@ -90,11 +90,14 @@ def test_three_mixed_sources_fork_and_shared_account_mirror_keep_old_shas(storag
     request = Request.objects.create(
         environment=env,
         need="Mixed sources",
-        baseline=[repository_snapshot(repo) for repo in env.repositories.all()],
+        # PostgreSQL does not promise insertion order after repository updates.
+        # Deliberately put the fork first so preservation cannot depend on [-1].
+        baseline=[repository_snapshot(repo) for repo in env.repositories.order_by("-id")],
     )
     assert {item["provider"] for item in request.baseline} == {"github", "gitlab"}
     fork = next(item for item in request.baseline if item["is_fork"])
     assert fork["remote_id"] == "303" and fork["path"] == "user/fork"
+    frozen_shas = {item["repository"]: item["sha"] for item in request.baseline}
     frozen = request_workspace(request)
     for item in request.baseline:
         assert (frozen / item["repository"] / "source.txt").read_text() == item["branch"]
@@ -110,7 +113,8 @@ def test_three_mixed_sources_fork_and_shared_account_mirror_keep_old_shas(storag
     with patch("core.git.fetch", side_effect=mirror_path):
         sync_environment(env.pk)
     request.refresh_from_db()
-    assert request.baseline[-1]["sha"] == shas["fork-feature"]
+    assert {item["repository"]: item["sha"] for item in request.baseline} == frozen_shas
+    assert next(item for item in request.baseline if item["is_fork"])["sha"] == shas["fork-feature"]
     assert (
         request_workspace(request) / fork["repository"] / "source.txt"
     ).read_text() == "fork-feature"

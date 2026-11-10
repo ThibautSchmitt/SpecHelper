@@ -90,6 +90,16 @@ Starlette deprecation warning. It started before the final replay adjustment; th
 publication/replay subset was rerun after that adjustment. These counts overlap
 and must not be added together.
 
+Hosted verification of source commit `864a0d9` completed the
+[Security campaign](https://github.com/ThibautSchmitt/SpecHelper/actions/runs/42748420225)
+successfully. In [Checks](https://github.com/ThibautSchmitt/SpecHelper/actions/runs/42748420103),
+both desktop/mobile frontend jobs passed; the PostgreSQL backend recorded 1,785
+passes and one failure in an existing Git-baseline test. That assertion selected
+the final list item as the fork, although database updates do not guarantee that
+ordering. The test now deliberately puts the fork first and checks retained SHAs
+by repository identity. This is a test correction, not a change to Git synchronization;
+the next hosted run must establish the corrected suite result.
+
 The allowlist is intentional. Read-only access protects source integrity but does
 not eliminate parser vulnerabilities or prompt injection. No antivirus service,
 universal malicious-file scanner or guarantee of harmless content was added.
