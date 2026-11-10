@@ -14,6 +14,10 @@ for(const language of ['en','fr'] as const){
   await page.route(/\/api\/tickets(?:\?.*)?$/,r=>r.fulfill({json:{items:removed?[row(2)]:[row(1),row(2)],total:removed?1:2,page:1,page_size:25,environments:['Staging']}}));
   await page.route('**/api/tickets/1',r=>{expect(r.request().method()).toBe('DELETE');expect(r.request().postDataJSON()).toEqual({confirmed:true});writes++;removed=true;return r.fulfill({json:{status:'REMOVED'}});});
   await page.goto('/tickets');
+  const open=page.locator('[data-ticket="1"]').getByRole('link',{name:language==='fr'?'Ouvrir':'Open',exact:true});
+  await expect(open).toBeVisible();
+  await expect(open).toHaveAttribute('href','https://gitlab.example/team/test/-/issues/1');
+  await expect(open).toHaveAttribute('target','_blank');
   await page.locator('[data-ticket="1"] summary').click();
   await page.getByRole('button',{name:t('Remove from SpecHelper'),exact:true}).click();
   const modal=page.getByRole('dialog',{name:t('Remove from SpecHelper'),exact:true});
