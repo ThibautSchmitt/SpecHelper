@@ -254,8 +254,10 @@ def perform_job(job, attempt_id=None):
         logger.warning("Job %s failed (%s)", job.pk, type(exc).__name__)
         if job.kind == "discussion":
             from .discussion import fail
+            from .ticket_preparation import TicketReferenceError
 
-            fail(job, "The discussion response failed. Your messages are preserved; retry with a new session.")
+            fail(job, TicketReferenceError.user_message if isinstance(exc, TicketReferenceError)
+                 else "The discussion response failed. Your messages are preserved; retry with a new session.")
             return
         if job.kind == "cli_update":
             from .cli_maintenance import UpdateUncertain

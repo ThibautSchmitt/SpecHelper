@@ -77,6 +77,16 @@ Antigravity results without a completion for the current turn. A text-identical
 answer is not rejected when the new turn genuinely completed. Keep invalid-response
 fixtures out of recovered context while retaining their original records for audit.
 
+Ticket provenance uses exact context IDs supplied to the native response schema,
+not arbitrary filenames, URLs or source quotations. The current explicit ticket
+request is an authorized anchor and source, as are the scoped prior exchanges.
+Regressions independently exercise backend rejection of foreign, invented and
+not-yet-included references even when a mocked runtime bypasses that schema. Such
+failures preserve manual draft edits and report context validation rather than a
+generic interrupted response. These fixtures do not establish behavior on a remote
+installation or with a live provider; they never start an independent analysis or
+publish a ticket.
+
 Concurrency and read-only database probes need disposable PostgreSQL. The primary test
 application database must also be PostgreSQL for real row-lock tests; the optional
 `SPECHELPER_TEST_POSTGRES_DSN` points to the separate disposable SQL fixture database.

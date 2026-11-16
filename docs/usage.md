@@ -258,6 +258,10 @@ This is one drafting turn in the existing native session, not an independent dee
 analysis. If essential information is missing, the assistant asks a short question
 instead of inventing a requested change.
 
+The current ticket request can itself be a context reference; an earlier assistant
+reply is not required. If the assistant cites an unavailable context reference,
+SpecHelper reports that validation error and preserves the existing draft and messages.
+
 Each conversation has at most **one active unpublished draft**. Its discreet **Draft**
 action reopens it without regeneration. Saved corrections remain intact. If you want
 a ticket for another need while a draft exists, choose **Resume draft**, **Replace

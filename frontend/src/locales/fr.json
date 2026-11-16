@@ -2517,5 +2517,6 @@
   "Delete the conversation “{title}”?": "Supprimer la conversation « {title} » ?",
   "Show less": "Réduire",
   "Show the full excerpt ({count} lines)": "Afficher tout l’extrait ({count} lignes)",
-  "Only part of the cited range is shown.": "Seule une partie de la plage citée est affichée."
+  "Only part of the cited range is shown.": "Seule une partie de la plage citée est affichée.",
+  "The ticket draft cites an unavailable context reference. Your existing draft and messages are preserved.": "Le brouillon cite une référence de contexte indisponible. Votre brouillon existant et vos messages sont conservés."
 }

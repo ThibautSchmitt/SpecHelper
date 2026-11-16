@@ -457,6 +457,8 @@ def run_job(job, caller=None):
         else:
             ticket_messages = list(value.messages.filter(id__lt=message.pk).exclude(kind__in=["error","decision_revision","ticket_preparation"]).order_by("-id")[:12])[::-1]
         ticket_messages = [item for item in ticket_messages if item.data.get("response_status") != "stale"]
+        # The explicit current request is valid context too, not only old replies.
+        ticket_messages.append(message)
         data["ticket_context"] = [{"id":item.pk,"role":item.role,"text":item.content[:1800]} for item in ticket_messages]
         data["pending_ticket_clarification"] = bool(pending_ticket)
         from .ticket_preparation import active_ticket
@@ -499,7 +501,9 @@ def run_job(job, caller=None):
         "need, preserving manual corrections; set replace_existing=true ONLY for an explicitly different need. "
         "No proposal may silently replace the current draft. Set "
         "anchor_message_id to the specific answer or user message being turned into a ticket, and sources "
-        "to message:<id> or supplied analysis:<number> references actually used. Set source_version only for "
+        "to the exact ticket_source_ids supplied below. The current user request is a valid source "
+        "and anchor; an earlier assistant answer is not required. These are provenance IDs, not "
+        "filenames, URLs or free-text descriptions. Set source_version only for "
         "an actually relevant analysis and cite its analysis:<number> reference. Do not mix unrelated topics. Write a short business need, "
         "expected behavior and justified acceptance criteria; include technical details only when requested "
         "or necessary and established. Do not invent a desired change from a question of understanding. "
@@ -539,7 +543,8 @@ def run_job(job, caller=None):
             "An older result may concern a different scope: check its relevance, do not merge unrelated subjects. "
             "State missing evidence honestly. Do not invent behavior, files, authors, commits or queries. "
             "Never reproduce unnecessary personal data, secrets or private reasoning. Sources must list only "
-            "the exact supplied observation IDs actually used. Set source_version only for a relevant supplied "
+            "the exact source_ids supplied below and actually used. These are provenance IDs, not "
+            "filenames, URLs or free-text descriptions. Set source_version only for a relevant supplied "
             "analysis you actually used and cite analysis:<number> in sources; do not attach the latest result by default. "
             "Return title, body and sources matching the schema."
         )
@@ -554,6 +559,23 @@ def run_job(job, caller=None):
             GoalReply = TicketDocumentsReply
         data, instructions, reply_schema = goal_generation["inputs"], INSTRUCTIONS, GoalReply
         data["available_reference_files"] = resources
+    response_schema = reply_schema.model_json_schema()
+    if preparation:
+        data["source_ids"] = sorted({item["id"] for item in preparation["inputs"]["observations"]})
+        source_schema = response_schema["properties"]["sources"]
+        source_ids = data["source_ids"]
+    elif reply_schema is Reply:
+        data["ticket_source_ids"] = sorted({f"message:{item.pk}" for item in ticket_messages}
+                                          | {item["id"] for item in data.get("ticket_analyses", [])})
+        source_schema = response_schema["$defs"]["ConversationTicketReply"]["properties"]["sources"]
+        source_ids = data["ticket_source_ids"]
+    else:
+        source_schema, source_ids = None, []
+    if source_schema is not None:
+        if source_ids:
+            source_schema["items"]["enum"] = source_ids
+        else:
+            source_schema["maxItems"] = 0
     db = frozen.get("dossier", {}).get("database", {})
     database = parameters(DatabaseConnection.objects.get(pk=db["id"])) if db.get("id") and not goal_generation else None
     skills = catalog(session.connection, has_database=bool(database), available_capabilities={
@@ -619,7 +641,7 @@ def run_job(job, caller=None):
                     "database": None if goal_generation else database,
                     "skill_definitions": redact(skills.get("definitions", []), secrets),
                     "prompt": prompt,
-                    "schema": reply_schema.model_json_schema(),
+                    "schema": response_schema,
                     "timeout": timeout,
                 },
                 timeout=timeout + 15,

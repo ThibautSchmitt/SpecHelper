@@ -235,6 +235,8 @@ def test_single_assistant_drafts_from_scoped_sources_and_resumes_its_session(cli
         assert "persistent conversation" in payload["prompt"]
         inputs = json.loads(payload["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
         assert "contracts.py:42" in str(inputs["observations"])
+        assert inputs["source_ids"] == sorted({item["id"] for item in inputs["observations"]})
+        assert payload["schema"]["properties"]["sources"]["items"]["enum"] == inputs["source_ids"]
         assert "title" in payload["schema"]["properties"]
         return {"session_id": payload["session_id"], "output": {"title": "Investigate inconsistent contract dates", "body": "## Findings\nThe recorded discussion found a missing date check (`contracts.py:42`). Independent verification is incomplete.", "sources": [f"message:{reply.pk}"]}}
     run_job(job, runtime)

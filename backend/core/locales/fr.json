@@ -929,5 +929,6 @@
   "The selected document is not ready.": "Le document sélectionné n’est pas prêt.",
   "The generated document exceeds this destination's upload limit.": "Le document généré dépasse la taille autorisée pour cette destination.",
   "AI-written document. Only explicitly cited findings have the verification level of their source; new requirements remain unverified.": "Document rédigé par une IA. Seuls les constats explicitement sourcés ont le niveau de vérification de leur source ; les nouvelles exigences restent non vérifiées.",
-  "Only part of the cited range is shown.": "Seule une partie de la plage citée est affichée."
+  "Only part of the cited range is shown.": "Seule une partie de la plage citée est affichée.",
+  "The ticket draft cites an unavailable context reference. Your existing draft and messages are preserved.": "Le brouillon cite une référence de contexte indisponible. Votre brouillon existant et vos messages sont conservés."
 }

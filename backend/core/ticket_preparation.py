@@ -10,6 +10,10 @@ from .question_actions import source_need
 from .sensitive_data import configured_secrets, redact
 
 
+class TicketReferenceError(ValueError):
+    user_message = "The ticket draft cites an unavailable context reference. Your existing draft and messages are preserved."
+
+
 def text(value, maximum, secrets):
     return redact(str(value or ""), secrets)[:maximum]
 
@@ -355,7 +359,7 @@ def source_from_output(value, output, allowed):
     number = getattr(output, "source_version", None)
     if number is not None:
         if f"analysis:{number}" not in allowed or f"analysis:{number}" not in output.sources:
-            raise ValueError("The proposed source analysis was not consulted")
+            raise TicketReferenceError("The proposed source analysis was not consulted")
         return result_for(value, number)
     return None
 
@@ -431,7 +435,7 @@ def complete_generation(value, job, output):
     preparation = job.payload["ticket_preparation"]
     allowed = {item["id"] for item in preparation["inputs"]["observations"]}
     if not set(output.sources) <= allowed:
-        raise ValueError("The draft cited an unknown conversation source")
+        raise TicketReferenceError("The draft cited an unknown conversation source")
     ticket, previous = selected(value, preparation.get("conversation_ticket_id"))
     if (not ticket or not ticket.active or previous.get("revision", 0) != preparation["expected_draft_revision"]
             or ticket.publications.exclude(status="ERROR").exists()):
@@ -503,10 +507,10 @@ def create_conversational_draft(value, trigger, proposal, allowed_messages, anal
     import uuid
     allowed = {item.pk for item in allowed_messages}
     if proposal.anchor_message_id is not None and proposal.anchor_message_id not in allowed:
-        raise ValueError("The proposed ticket has no authorized conversation anchor")
+        raise TicketReferenceError("The proposed ticket has no authorized conversation anchor")
     allowed_sources = {f"message:{identifier}" for identifier in allowed} | {item["id"] for item in analyses}
     if not set(proposal.sources) <= allowed_sources:
-        raise ValueError("The proposed ticket cites an unavailable source")
+        raise TicketReferenceError("The proposed ticket cites an unavailable source")
     ticket = active_ticket(value)
     previous = ticket.draft if ticket else {}
     if proposal.unchanged:

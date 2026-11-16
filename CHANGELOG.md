@@ -7,6 +7,15 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Ticket draft context validation
+
+- Accept the current explicit ticket request as an anchor and source, alongside
+  the authorized prior exchanges. Previously, referencing that request could
+  interrupt an otherwise valid drafting response on every retry.
+- Supply exact allowed provenance IDs in the native response schema. Continue
+  rejecting invented, foreign and unavailable references, preserving existing
+  manual drafts and displaying a specific context-validation error.
+
 ### Bounded document uploads and publication checks
 
 - Accept XLSX and UTF-8 SQL documents in conversations and environment knowledge,

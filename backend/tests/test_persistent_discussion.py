@@ -914,6 +914,80 @@ def test_natural_ticket_request_creates_a_scoped_draft_without_deep_analysis(
     assert not AnalysisRun.objects.exists() and not PublishedTicket.objects.exists()
 
 
+@pytest.mark.parametrize("current_reference", ["anchor", "source", "both"])
+def test_ticket_can_reference_the_current_explicit_request(client, environment, native, monkeypatch, current_reference):
+    from core.models import ConversationTicket, PublishedTicket
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    row = Request.objects.get(pk=value["id"])
+    previous = row.messages.filter(role="assistant", kind="discussion_reply").latest("id")
+    native_id = AISession.objects.get(request=row).runtime_id
+
+    def run(path, payload=None, **kwargs):
+        if path == "/runs/cancel":
+            return {"stopped": True}
+        inputs = json.loads(payload["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
+        current_id = inputs["message_id"]
+        assert any(item["id"] == current_id for item in inputs["ticket_context"])
+        assert f"message:{current_id}" in inputs["ticket_source_ids"]
+        assert payload["schema"]["$defs"]["ConversationTicketReply"]["properties"]["sources"]["items"]["enum"] == inputs["ticket_source_ids"]
+        assert payload["agent"] == "codex"
+        return {"session_id":payload["session_id"],"output":{
+            "message":"Draft prepared from the requested change.",
+            "ticket":{"anchor_message_id":current_id if current_reference in {"anchor","both"} else previous.pk,
+                      "title":"Reject invalid periods", "body":"Reject reversed contract dates.",
+                      "sources":[f"message:{current_id if current_reference in {'source','both'} else previous.pk}"]}}}
+
+    monkeypatch.setattr(discussion,"runtime_call",run)
+    assert turn(client,value,row.discussion_state["revision"],message="Prépare un ticket : refuser les périodes dont la fin précède le début.").status_code == 200
+    job = finish()
+    current_id = job.payload["message_id"]
+    ticket = ConversationTicket.objects.get(request=row)
+    assert ticket.draft["anchor_message_id"] == (current_id if current_reference in {"anchor","both"} else previous.pk)
+    assert ticket.draft["sources"] == [f"message:{current_id if current_reference in {'source','both'} else previous.pk}"]
+    assert AISession.objects.count() == 1 and AISession.objects.get(request=row).runtime_id == native_id
+    assert not AnalysisRun.objects.exists() and not PublishedTicket.objects.exists()
+
+
+@pytest.mark.parametrize("invalid_reference", ["foreign_anchor", "foreign_source", "invented_source", "future_source"])
+def test_invalid_ticket_reference_preserves_manual_draft_and_reports_context_error(client, environment, native, monkeypatch, invalid_reference):
+    from core.models import ConversationTicket, PublishedTicket
+    from core.ticket_preparation import TicketReferenceError
+
+    value = create(client, environment)
+    launch(client, value)
+    finish()
+    row = Request.objects.get(pk=value["id"])
+    original = {"title":"Human correction","body":"Keep this manually written specification.","revision":1,"source_version":None}
+    ticket = ConversationTicket.objects.create(request=row,draft=original)
+    other = Request.objects.create(environment=environment,need="Other conversation")
+    foreign = RequestMessage.objects.create(request=other,role="user",kind="discussion",content="Foreign private need")
+
+    def run(path, payload=None, **kwargs):
+        if path == "/runs/cancel":
+            return {"stopped":True}
+        current_id = json.loads(payload["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])["message_id"]
+        future = RequestMessage.objects.create(request=row,role="user",kind="discussion",content="Later message") if invalid_reference == "future_source" else None
+        source = f"message:{foreign.pk}" if invalid_reference == "foreign_source" else f"message:{future.pk}" if future else "message:99999999" if invalid_reference == "invented_source" else f"message:{current_id}"
+        return {"session_id":payload["session_id"],"output":{"message":"Proposed draft.","ticket":{
+            "title":"Invalid proposal","body":"This must never overwrite the draft.",
+            "anchor_message_id":foreign.pk if invalid_reference == "foreign_anchor" else current_id,"sources":[source]}}}
+
+    monkeypatch.setattr(discussion,"runtime_call",run)
+    assert turn(client,value,row.discussion_state["revision"],message="Actualise le ticket avec cette précision.").status_code == 200
+    job = claim_job()
+    perform_job(job)
+    job.refresh_from_db()
+    ticket.refresh_from_db()
+    row.refresh_from_db()
+    assert job.status == "ERROR" and job.error == row.error == TicketReferenceError.user_message
+    assert ticket.draft == original and ticket.active
+    assert ConversationTicket.objects.filter(request=row).count() == 1
+    assert not AnalysisRun.objects.exists() and not PublishedTicket.objects.exists()
+
+
 def test_ambiguous_ticket_request_asks_one_question_and_waits_for_its_answer(
     client, environment, native, monkeypatch
 ):

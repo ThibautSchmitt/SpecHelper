@@ -2517,5 +2517,6 @@
   "Delete the conversation “{title}”?": "Delete the conversation “{title}”?",
   "Show less": "Show less",
   "Show the full excerpt ({count} lines)": "Show the full excerpt ({count} lines)",
-  "Only part of the cited range is shown.": "Only part of the cited range is shown."
+  "Only part of the cited range is shown.": "Only part of the cited range is shown.",
+  "The ticket draft cites an unavailable context reference. Your existing draft and messages are preserved.": "The ticket draft cites an unavailable context reference. Your existing draft and messages are preserved."
 }
