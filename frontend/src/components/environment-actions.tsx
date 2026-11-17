@@ -2,7 +2,7 @@
 import { useI18n } from "@/lib/i18n";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowDownToLine, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowDownToLine, Copy, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, send, type Environment } from "@/lib/api";
@@ -35,7 +35,7 @@ export function EnvironmentActions({
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [mode, setMode] = useState<"edit" | "delete" | null>(null);
+  const [mode, setMode] = useState<"edit" | "duplicate" | "delete" | null>(null);
   const [original, setOriginal] = useState(value);
   const [name, setName] = useState("");
   const [database, setDatabase] = useState("");
@@ -48,9 +48,9 @@ export function EnvironmentActions({
     if (mode === "delete" && !dialog.current?.open) dialog.current?.showModal();
     if (mode !== "delete" && dialog.current?.open) dialog.current.close();
   }, [mode]);
-  function open(next: "edit" | "delete") {
+  function open(next: "edit" | "duplicate" | "delete") {
     setOriginal(structuredClone(value));
-    setName(value.name);
+    setName(next === "duplicate" ? t("{name} (copy)", { name: value.name.slice(0, 85) }) : value.name);
     setPublicationConnections([...(value.publication_connection_ids || [])]);
     setDatabase(value.database_id ? String(value.database_id) : "");
     setSelection(
@@ -80,15 +80,15 @@ export function EnvironmentActions({
   }
   async function save() {
     const saved = await send<Environment>(
-      `/environments/${original.id}`,
+      mode === "duplicate" ? "/environments" : `/environments/${original.id}`,
       {
         name,
         repositories: selection.map(sourcePayload),
         database_id: database ? Number(database) : null,
-        expected_revision: original.revision,
+        ...(mode === "duplicate" ? { copy_from_environment_id: original.id, expected_source_revision: original.revision } : { expected_revision: original.revision }),
         publication_connection_ids: publicationConnections,
       },
-      "PATCH",
+      mode === "duplicate" ? "POST" : "PATCH",
     );
     setMode(null);
     await onChanged(t(saved.status === "PENDING" ? "Changes saved. Preparing the environment." : "Changes saved."));
@@ -106,7 +106,7 @@ export function EnvironmentActions({
   }
   const panel = (<>
         <h2 id={`environment-dialog-${value.id}`}>
-          {t(mode === "delete" ? "Delete environment" : "Edit environment")}
+          {t(mode === "delete" ? "Delete environment" : mode === "duplicate" ? "Duplicate environment" : "Edit environment")}
         </h2>
         {error && (
           <p role="alert" className="mt-4 text-sm text-red-700">
@@ -153,7 +153,7 @@ export function EnvironmentActions({
             </div>
           </form>
         ) : (
-          mode === "edit" && (
+          (mode === "edit" || mode === "duplicate") && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -168,6 +168,7 @@ export function EnvironmentActions({
                 void task(save);
               }}
             >
+              {mode === "duplicate" && <p className="mt-3 text-sm muted">{t("Adapt the name, sources and connections before creating the copy. Application knowledge is copied; conversations and analyses are kept in the original environment.")}</p>}
               <div className="field">
                 <label htmlFor={`edit-name-${value.id}`}>
                   {t("Environment name")}
@@ -214,7 +215,7 @@ export function EnvironmentActions({
                 >
                   {t("Cancel")}
                 </Button>
-                <Button disabled={busy || disabled}>{t("Save")}</Button>
+                <Button disabled={busy || disabled}>{t(mode === "duplicate" ? "Create copy" : "Save")}</Button>
               </div>
             </form>
           )
@@ -254,6 +255,9 @@ export function EnvironmentActions({
             }
           }
         }}>
+          <Button type="button" variant="ghost" size="sm" disabled={disabled || busy} onClick={() => open("duplicate")} aria-label={t("Duplicate {name}", { name: value.name })}>
+            <Copy size={16} aria-hidden="true" />{t("Duplicate")}
+          </Button>
           <Button type="button" variant="ghost" size="sm" disabled={disabled || busy || value.git_check_running} onClick={onCheckUpdates} title={t("Check the remote repositories without changing the local code.")}>
             <RefreshCw size={16} aria-hidden="true" />{t("Check for updates")}
           </Button>
@@ -274,7 +278,7 @@ export function EnvironmentActions({
         </div>
       </details>
       </>)}
-      {mode === "edit" && <section
+      {(mode === "edit" || mode === "duplicate") && <section
         id={`environment-editor-${value.id}`}
         aria-labelledby={`environment-dialog-${value.id}`}
         className="mt-4 min-w-0 border-t pt-4"

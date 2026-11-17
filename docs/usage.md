@@ -4,6 +4,24 @@ The main navigation contains **Home**, **Analyses** and **Tickets**.
 **Administration**, at the bottom left, opens configuration. Your conversation is
 with SpecHelper or the name configured for the instance, not separate provider speakers.
 
+## Reuse environment sources
+
+In **Administration → Environments**, use the star below the selected project or
+version to add or remove a favorite. Favorites appear first in the project and
+branch/tag selectors, including when remote discovery has not reached their page.
+Search also filters these saved choices. Branches and tags with the same name stay
+distinct, and favorites belong to their Git connection. They are shared by the
+instance, not private to a browser. Selecting one still requires normal source
+access and validation when saving the environment.
+
+Choose **⋯ → Duplicate** on an environment to open a prefilled, editable copy.
+Adjust its name, repositories, branches/tags, PostgreSQL connection and publication
+connections, then choose **Create copy**. Cancelling creates nothing. Application
+knowledge, links and current document versions are copied with independent editable
+resource identities; their immutable stored file bytes are reused. Conversations,
+analyses, publications, synchronization history and local Git workspaces are not
+copied. The new environment synchronizes its selected references independently.
+
 ## Start a discussion
 
 1. Open **Analyses → New analysis** and select an up-to-date environment.

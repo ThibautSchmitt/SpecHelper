@@ -7,6 +7,17 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Git favorites and editable environment copies
+
+- Save instance-wide project and branch/tag favorites per Git connection and show
+  them first in source selectors without changing remote search pagination or
+  bypassing source permissions. Preserve favorites across discovery refreshes.
+- Add **Duplicate** to environment actions. Review the prefilled configuration
+  before creation; copy application knowledge and current document identities,
+  reuse immutable file bytes and synchronize fresh Git workspaces. Preserve the
+  original environment and its conversations, analyses and publications.
+- Add non-destructive migration 0055 with favorite metadata on existing Git repositories.
+
 ### Ticket draft context validation
 
 - Accept the current explicit ticket request as an anchor and source, alongside

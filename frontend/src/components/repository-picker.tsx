@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, send } from "@/lib/api";
+import { Star } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ type Project = {
 };
 type Page<T> = { items: T[]; has_more: boolean; page?: number; next_page?: number | null };
 type GitRef = { name: string; ref?: string; kind?: "branch" | "tag" };
+type Favorite = Project & { git_connection_id: number; favorite: boolean; favorite_refs: string[] };
 
 async function matchingPage<T>(path: string, firstPage: number, signal?: AbortSignal): Promise<Page<T>> {
   let page = firstPage;
@@ -65,6 +67,9 @@ export function RepositoryPicker({
 }) {
   const { t } = useI18n();
   const [connections, setConnections] = useState<GitConnection[]>([]);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(true);
+  const [savingFavorite, setSavingFavorite] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     let alive = true;
@@ -75,12 +80,25 @@ export function RepositoryPicker({
       .catch((e) => {
         if (alive) setError(e.message);
       });
+    api<Favorite[]>("/git-favorites")
+      .then(value => { if (alive) setFavorites(value); })
+      .catch(e => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setFavoritesLoading(false); });
     return () => {
       alive = false;
     };
   }, []);
   function update(index: number, value: SourceSelection) {
     onChange(values.map((row, i) => (i === index ? value : row)));
+  }
+  async function favorite(value: SourceSelection, reference: string, enabled: boolean) {
+    setSavingFavorite(true);
+    setError("");
+    try {
+      const saved = await send<Favorite>(`/git-connections/${value.git_connection_id}/favorites`, { remote_id: value.remote_id, reference, favorite: enabled }, "PUT");
+      setFavorites(previous => [...previous.filter(item => !(item.git_connection_id === saved.git_connection_id && item.remote_id === saved.remote_id)), saved]);
+    } catch (e) { setError((e as Error).message); }
+    finally { setSavingFavorite(false); }
   }
   return (
     <div className="mt-5 space-y-4">
@@ -95,6 +113,9 @@ export function RepositoryPicker({
           key={`${prefix}-${index}`}
           value={value}
           connections={connections}
+          favorites={favorites}
+          onFavorite={favorite}
+          savingFavorite={savingFavorite || favoritesLoading}
           onChange={(v) => update(index, v)}
           disabled={disabled}
           id={`${prefix}-${index}`}
@@ -126,6 +147,9 @@ export function RepositoryPicker({
 function RepositoryRow({
   value,
   connections,
+  favorites,
+  onFavorite,
+  savingFavorite,
   onChange,
   disabled,
   id,
@@ -134,6 +158,9 @@ function RepositoryRow({
 }: {
   value: SourceSelection;
   connections: GitConnection[];
+  favorites: Favorite[];
+  onFavorite: (value: SourceSelection, reference: string, enabled: boolean) => Promise<void>;
+  savingFavorite: boolean;
   onChange: (value: SourceSelection) => void;
   disabled?: boolean;
   id: string;
@@ -265,7 +292,13 @@ function RepositoryRow({
       }
     }
   }
-  const selected = projects.find(
+  const stored = favorites.find(item => item.git_connection_id === value.git_connection_id && item.remote_id === value.remote_id);
+  const favoriteProjects = favorites.filter(item => item.git_connection_id === value.git_connection_id && (item.favorite || item.favorite_refs.length) && item.path.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).sort((a, b) => a.path.localeCompare(b.path));
+  const otherProjects = projects.filter(item => !favoriteProjects.some(favorite => favorite.remote_id === String(item.remote_id || item.id)));
+  const availableProjects = [...favoriteProjects, ...otherProjects];
+  const favoriteBranches: GitRef[] = (stored?.favorite_refs || []).filter(ref => ref.startsWith("tag:") === (refKind === "tag") && ref.replace(/^tag:/, "").toLocaleLowerCase().includes(branchSearch.trim().toLocaleLowerCase())).map(ref => ({ name: ref.replace(/^tag:/, ""), ref }));
+  const otherBranches = branches.filter(branch => !favoriteBranches.some(favorite => favorite.ref === (branch.ref || branch.name)));
+  const selected = availableProjects.find(
     (p) => String(p.remote_id || p.id) === value.remote_id,
   );
   return (
@@ -327,7 +360,7 @@ function RepositoryRow({
             disabled={!value.git_connection_id && !value.repository}
             value={value.remote_id || value.repository}
             onChange={(e) => {
-              const project = projects.find(
+              const project = availableProjects.find(
                 (p) => String(p.remote_id || p.id) === e.target.value,
               );
               setBranchSearch("");
@@ -350,7 +383,9 @@ function RepositoryRow({
                 {value.repository} · {t("Selected")}
               </option>
             )}
-            {projects.map((p) => (
+            {!!favoriteProjects.length && <optgroup label={t("Favorites")}>{favoriteProjects.map(p => <option key={p.remote_id} value={p.remote_id}>★ {p.path}</option>)}</optgroup>}
+            <optgroup label={t("Projects")}>
+            {otherProjects.map((p) => (
               <option
                 key={String(p.remote_id || p.id)}
                 value={String(p.remote_id || p.id)}
@@ -359,13 +394,17 @@ function RepositoryRow({
                 {p.is_fork ? ` · ${t("Fork")}` : ""}
               </option>
             ))}
+            </optgroup>
           </select>
+          <Button type="button" variant="ghost" size="sm" className="mt-1" disabled={savingFavorite || !value.git_connection_id || !value.remote_id} aria-pressed={!!stored?.favorite} aria-label={t(stored?.favorite ? "Remove project from favorites" : "Add project to favorites")} onClick={() => void onFavorite(value, "", !stored?.favorite)}>
+            <Star size={15} aria-hidden="true" fill={stored?.favorite ? "currentColor" : "none"} />{t(stored?.favorite ? "Favorite project" : "Add to favorites")}
+          </Button>
           {loadingProjects && (
             <p role="status" className="mt-2 text-xs muted">
               {t("Loading projects…")}
             </p>
           )}
-          {search.trim() && !loadingProjects && !projects.length && !moreProjects && !error && <p role="status" className="mt-2 text-xs muted">{t("No matching projects.")}</p>}
+          {search.trim() && !loadingProjects && !availableProjects.length && !moreProjects && !error && <p role="status" className="mt-2 text-xs muted">{t("No matching projects.")}</p>}
           {moreProjects && (
             <Button
               type="button"
@@ -401,19 +440,25 @@ function RepositoryRow({
             onChange={(e) => onChange({ ...value, branch: e.target.value })}
           >
             <option value="">{t("Choose a version")}</option>
-            {value.branch && !branches.some((b) => (b.ref || b.name) === value.branch) && (
+            {value.branch && ![...favoriteBranches, ...otherBranches].some((b) => (b.ref || b.name) === value.branch) && (
               <option value={value.branch}>{t(value.branch.startsWith("tag:") ? "Tag" : "Branch")} · {value.branch.replace(/^tag:/, "")} · {t("Selected")}</option>
             )}
-            {branches.map((b) => (
+            {!!favoriteBranches.length && <optgroup label={t("Favorites")}>{favoriteBranches.map(b => <option key={b.ref} value={b.ref}>★ {b.name}</option>)}</optgroup>}
+            <optgroup label={t(refKind === "tag" ? "Tags" : "Branches")}>
+            {otherBranches.map((b) => (
               <option key={b.ref || b.name} value={b.ref || b.name}>{b.name}</option>
             ))}
+            </optgroup>
           </select>
+          <Button type="button" variant="ghost" size="sm" className="mt-1" disabled={savingFavorite || !value.git_connection_id || !value.remote_id || !value.branch} aria-pressed={!!stored?.favorite_refs.includes(value.branch)} aria-label={t(stored?.favorite_refs.includes(value.branch) ? "Remove version from favorites" : "Add version to favorites")} onClick={() => void onFavorite(value, value.branch, !stored?.favorite_refs.includes(value.branch))}>
+            <Star size={15} aria-hidden="true" fill={stored?.favorite_refs.includes(value.branch) ? "currentColor" : "none"} />{t(stored?.favorite_refs.includes(value.branch) ? "Favorite version" : "Add to favorites")}
+          </Button>
           {loadingBranches && (
             <p role="status" className="mt-2 text-xs muted">
               {t(refKind === "tag" ? "Loading tags…" : "Loading branches…")}
             </p>
           )}
-          {branchSearch.trim() && !loadingBranches && !branches.length && !moreBranches && !error && <p role="status" className="mt-2 text-xs muted">{t(refKind === "tag" ? "No matching tags." : "No matching branches.")}</p>}
+          {branchSearch.trim() && !loadingBranches && !favoriteBranches.length && !branches.length && !moreBranches && !error && <p role="status" className="mt-2 text-xs muted">{t(refKind === "tag" ? "No matching tags." : "No matching branches.")}</p>}
           {moreBranches && (
             <Button
               type="button"

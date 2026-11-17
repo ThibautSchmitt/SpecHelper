@@ -106,6 +106,8 @@ class EnvironmentIn(Schema):
 class EnvironmentCreateIn(EnvironmentIn):
     context_instructions: str = Field(default="", max_length=4000)
     official_references: list[dict] = Field(default_factory=list, max_length=12)
+    copy_from_environment_id: int | None = Field(default=None, gt=0)
+    expected_source_revision: int | None = Field(default=None, ge=1)
 
 
 class EnvironmentEditIn(EnvironmentIn):
@@ -707,8 +709,15 @@ def environments(request):
 @transaction.atomic
 def create_environment(request, payload: EnvironmentCreateIn):
     from .environment_context import update_instructions
+    source = None
+    if payload.copy_from_environment_id:
+        source = get_object_or_404(Environment.objects.select_for_update(), pk=payload.copy_from_environment_id)
+        if payload.expected_source_revision != source.revision:
+            raise HttpError(409, "The environment has changed. Refresh the page before confirming.")
     environment_actions.validate(payload)
     environment = Environment.objects.create(name=payload.name, database_id=payload.database_id)
+    if source:
+        environment_actions.copy_knowledge(source, environment)
     if payload.context_instructions or payload.official_references:
         update_instructions(environment.pk, payload.context_instructions, True,
                             environment.context_revision, payload.official_references)

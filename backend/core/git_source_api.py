@@ -4,6 +4,7 @@ import time
 from typing import Literal
 
 from django.db import transaction
+from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -17,11 +18,69 @@ from .models import (
     EnvironmentRepository,
     GitConnection,
     GitHubConnection,
+    GitRepository,
     Request,
 )
 from .secrets import encrypt
 
 router = Router(tags=["Git sources"])
+
+
+class FavoriteIn(Schema):
+    model_config = ConfigDict(extra="forbid")
+    remote_id: str = Field(pattern=r"^[1-9][0-9]{0,31}$")
+    reference: str = Field(default="", max_length=255)
+    favorite: bool
+
+
+def favorite_dict(source):
+    return {"id": source.pk, "git_connection_id": source.connection_id,
+            "remote_id": source.remote_id, "path": source.path,
+            "default_branch": source.default_branch, "is_fork": source.is_fork,
+            "parent": source.parent, "favorite": source.favorite,
+            "favorite_refs": source.favorite_refs}
+
+
+@router.get("/git-favorites")
+def favorites(request):
+    return [favorite_dict(source) for source in GitRepository.objects.filter(
+        Q(favorite=True) | ~Q(favorite_refs=[])
+    ).order_by("path", "pk")]
+
+
+@router.put("/git-connections/{connection_id}/favorites")
+def set_favorite(request, connection_id: int, payload: FavoriteIn):
+    connection = get_object_or_404(GitConnection, pk=connection_id)
+    if payload.favorite:
+        # Add only sources actually accessible through this connection. Creation
+        # still revalidates access; a saved favorite grants no new permission.
+        try:
+            provider = Provider(connection)
+            source = provider.project(payload.remote_id)
+            if payload.reference:
+                provider.branch(source, payload.reference)
+        except SourceError as exc:
+            raise HttpError(422, str(exc)) from exc
+    with transaction.atomic():
+        # Serialize single-item mutations; simultaneous stars must not replace
+        # another browser's branch/tag favorites.
+        current = get_object_or_404(GitConnection.objects.select_for_update(), pk=connection_id)
+        if (current.base_url, current.provider, current.secret, current.enabled) != (connection.base_url, connection.provider, connection.secret, connection.enabled):
+            raise HttpError(409, "The Git connection changed. Refresh before editing favorites.")
+        source = get_object_or_404(GitRepository.objects.select_for_update(), connection=current, remote_id=payload.remote_id)
+        if payload.reference:
+            refs = set(source.favorite_refs)
+            if payload.favorite:
+                if payload.reference not in refs and len(refs) >= 100:
+                    raise HttpError(422, "Keep at most 100 favorite versions per project.")
+                refs.add(payload.reference)
+            else:
+                refs.discard(payload.reference)
+            source.favorite_refs = sorted(refs)
+        else:
+            source.favorite = payload.favorite
+        source.save(update_fields=["favorite", "favorite_refs"])
+        return favorite_dict(source)
 
 
 class ConnectionIn(Schema):

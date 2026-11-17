@@ -1,6 +1,7 @@
 """Administrative mutations; historical request workspaces are never changed here."""
 
 import contextlib
+import copy
 import re
 import shutil
 
@@ -20,6 +21,8 @@ from .git import (
 )
 from .git_sources import normalize_selection
 from .models import (
+    ContextResource,
+    ContextResourceVersion,
     DatabaseConnection,
     Environment,
     EnvironmentRepository,
@@ -27,6 +30,24 @@ from .models import (
     Request,
     TicketConnector,
 )
+
+
+def copy_knowledge(source, destination):
+    # Copy configuration and current documents, never conversations, workspaces,
+    # synchronization state or analysis evidence. Immutable file bytes can be
+    # shared; each environment gets independent editable resource identities.
+    for field in ("context_instructions", "instructions_enabled", "official_references", "library_selection"):
+        setattr(destination, field, copy.deepcopy(getattr(source, field)))
+    destination.save(update_fields=["context_instructions", "instructions_enabled", "official_references", "library_selection"])
+    for resource in source.context_resources.filter(removed=False).prefetch_related("versions"):
+        latest = max(resource.versions.all(), key=lambda version: version.version, default=None)
+        if latest is None:
+            continue
+        new_resource = ContextResource.objects.create(environment=destination, name=resource.name, enabled=resource.enabled)
+        ContextResourceVersion.objects.create(
+            resource=new_resource, version=1, filename=latest.filename,
+            content_type=latest.content_type, size=latest.size, sha256=latest.sha256, path=latest.path,
+        )
 
 
 def validate(payload, environment_id=None):

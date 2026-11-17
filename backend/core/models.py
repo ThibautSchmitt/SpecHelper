@@ -65,6 +65,8 @@ class GitRepository(models.Model):
     default_branch = models.CharField(max_length=255, blank=True)
     is_fork = models.BooleanField(default=False)
     parent = models.JSONField(default=dict)
+    favorite = models.BooleanField(default=False)
+    favorite_refs = models.JSONField(default=list)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
