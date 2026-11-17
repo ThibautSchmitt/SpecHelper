@@ -132,7 +132,7 @@ def pin_environment(value, *, reuse=None, conversation=False):
     from .environment_context import freeze_context
     from .git_sources import repository_snapshot
 
-    environment = Environment.objects.select_for_update().select_related("database").filter(pk=value.environment_id).first()
+    environment = Environment.objects.select_for_update(of=("self",)).select_related("database").filter(pk=value.environment_id).first()
     if environment is None or environment.status != "READY":
         raise HttpError(409, "The environment must be updated")
     value.environment = environment
