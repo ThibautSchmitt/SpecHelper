@@ -151,6 +151,7 @@ ALLOWED_EXTENSIONS = {
     ".json",
     ".log",
     ".sql",
+    ".xml",
 }
 
 
@@ -294,7 +295,7 @@ def add_attachment(request_id, upload):
 
             content_type = inspect_file(path, name)
             reject_credentials(name)
-            if path.suffix in {".txt", ".md", ".csv", ".json", ".log", ".sql"}:
+            if path.suffix.lower() in {".txt", ".md", ".csv", ".json", ".log", ".sql", ".xml"}:
                 reject_credentials(path.read_text(encoding="utf-8-sig"))
             path.chmod(0o444)
             return RequestAttachment.objects.create(

@@ -82,8 +82,22 @@ def inline_git_sources(content, baseline):
                 ranges = [(a, b or a) for a, b in re.findall(location, parenthesis[1])]
         if not ranges:
             continue
-        for row in baseline:
-            relative = path.removeprefix(row["repository"] + "/")
+        # Citations may use a readable provider path while the frozen workspace
+        # is keyed by a connection-specific internal repository identifier.
+        qualified = [(len(alias), row, path[len(alias)+1:]) for row in baseline
+                     for alias in {row.get("repository"), row.get("path")}
+                     if alias and path.startswith(alias + "/")]
+        if qualified:
+            longest = max(length for length, _, _ in qualified)
+            matches = {row["repository"]:(row, relative) for length, row, relative in qualified if length == longest}
+            # The same readable name can exist on different Git servers. Do
+            # not silently choose an account or mix their evidence.
+            if len(matches) != 1:
+                continue
+            candidates = matches.values()
+        else:
+            candidates = [(row, path) for row in baseline]
+        for row, relative in candidates:
             for first, last in ranges:
                 yield {"repository":row["repository"], "commit":row["sha"], "path":relative,
                        "line_start":int(first), "line_end":int(last)}
@@ -138,6 +152,7 @@ def collect(value, content, observations, frozen, evidence=None):
             continue
         preview_start = source["line_start"]
         add({"kind":"git", "id":key, "title":source.get("path", ""), "repository":source.get("repository", ""),
+             "repository_label":next((row.get("path") or row["repository"] for row in baseline if row["repository"] == source.get("repository")), source.get("repository", "")),
              "commit":source.get("commit", ""), "line_start":source.get("line_start"), "line_end":source.get("line_end"),
              "preview_line_start":preview_start if excerpt else None,
              "preview_line_end":preview_start + len(excerpt.split("\n")) - 1 if excerpt else None,

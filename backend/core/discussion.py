@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .agent import RULES, ProviderUnavailable, output_language_instruction, runtime_call
 from .deep_analysis_context import ContextSelection, NeedHint, checked_hint
 from .discussion_access import actor
-from .models import AIConnection, AISession, Job, Request, RequestMessage
+from .models import AIConnection, AISession, Environment, Job, Request, RequestMessage
 from .sensitive_data import configured_secrets, redact
 
 router = Router(tags=["Conversation"])
@@ -125,17 +125,18 @@ def idle(value):
         raise HttpError(409, "Answer the pending clarification before continuing.")
 
 
-def pin_environment(value):
+def pin_environment(value, *, reuse=None, conversation=False):
     """Use the existing frozen repository/context machinery for a read-only turn."""
     import re
 
     from .environment_context import freeze_context
     from .git_sources import repository_snapshot
 
-    environment = value.environment
+    environment = Environment.objects.select_for_update().select_related("database").filter(pk=value.environment_id).first()
     if environment is None or environment.status != "READY":
         raise HttpError(409, "The environment must be updated")
-    repos = list(environment.repositories.all())
+    value.environment = environment
+    repos = list(environment.repositories.select_related("git_repository__connection").order_by("pk"))
     if not repos or any(not re.fullmatch(r"[a-f0-9]{40}", r.sha) for r in repos):
         raise HttpError(409, "The environment baseline is incomplete")
     value.baseline = [repository_snapshot(r) for r in repos]
@@ -146,11 +147,29 @@ def pin_environment(value):
     )
     value.environment_name_snapshot = environment.name
     value.save(update_fields=["baseline", "database_snapshot", "environment_name_snapshot"])
-    return freeze_context(value)
+    # Reuse unchanged immutable document manifests, but rebuild the live turn's
+    # dossier with current Git, database, attachments and conversation metadata.
+    if (reuse and reuse.get("environment", {}).get("id") == environment.pk
+            and reuse.get("environment", {}).get("revision") == environment.context_revision
+            and reuse.get("library", {}).get("environment_revision") == environment.library_revision):
+        reuse = copy.deepcopy(reuse)
+        reuse["environment"]["name"] = environment.name
+    else:
+        reuse = None
+    snapshot = freeze_context(value, reuse=reuse)
+    if conversation:
+        snapshot["dossier"]["user_messages"] = list(value.messages.filter(role="user").exclude(
+            kind__in=["ticket_preparation","analysis_preparation","goal_generation"]
+        ).order_by("-id").values("id", "kind", "content")[:24])[::-1]
+        snapshot.pop("sha256", None)
+        snapshot["sha256"] = hashlib.sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        value.context_snapshot = snapshot
+        value.save(update_fields=["context_snapshot"])
+    return snapshot
 
 
 @transaction.atomic
-def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None, analysis_preparation=None, goal_generation=None):
+def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None, analysis_preparation=None, goal_generation=None, frozen_turn=None):
     from .library_assistant import connection_snapshot, safe_text
     from .providers import bind_session, candidates
 
@@ -226,11 +245,20 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
     separate_goal_writer = bool(goal_generation and payload.connection_id)
     if not state.get("snapshot"):
         latest = value.versions.order_by("-number").first()
-        state["snapshot"] = (
-            copy.deepcopy(latest.context_snapshot)
-            if latest and latest.context_snapshot
-            else pin_environment(value)
-        )
+        if latest and latest.context_snapshot:
+            state["snapshot"] = copy.deepcopy(latest.context_snapshot)
+    if frozen_turn is not None:
+        # An explicit account transfer continues the SAME queued operation.
+        # Its context does not drift while waiting for a provider.
+        state["snapshot"] = copy.deepcopy(frozen_turn)
+        value.baseline = copy.deepcopy(frozen_turn["dossier"]["baseline"])
+        value.database_snapshot = copy.deepcopy(frozen_turn["dossier"]["database"])
+        value.context_snapshot = copy.deepcopy(frozen_turn)
+        value.save(update_fields=["baseline", "database_snapshot", "context_snapshot"])
+    elif value.environment_id and not analysis_preparation:
+        state["snapshot"] = pin_environment(value, reuse=state.get("snapshot"), conversation=True)
+    elif not state.get("snapshot"):
+        state["snapshot"] = pin_environment(value)
     from .providers import identity_for
 
     changed = previous and (
@@ -278,13 +306,11 @@ def enqueue(value_id, payload, browser_actor, *, initial=False, preparation=None
     value.save(update_fields=["discussion_state", "status", "error", "updated_at"])
     assignment = connection_snapshot(connection, "discussion")
     assignment["public_role"] = "discussion"
-    turn_snapshot = analysis_preparation["snapshot"] if analysis_preparation else state["snapshot"]
+    turn_snapshot = copy.deepcopy(analysis_preparation["snapshot"] if analysis_preparation else state["snapshot"])
     if goal_generation or analysis_preparation or preparation or "ticket" in text.lower() or "issue" in text.lower() or state.get("pending_ticket_clarification"):
-        from .environment_context import freeze_context
-        # New documents are available for this drafting turn without moving
-        # the conversation's pinned Git baseline or resetting its native session.
+        # The caller's selected analysis scope remains frozen. Other turns
+        # already refreshed their live environment configuration above.
         if not analysis_preparation:
-            turn_snapshot = freeze_context(value)
             turn_snapshot["dossier"]["user_messages"] = list(value.messages.filter(role="user").exclude(kind__in=["ticket_preparation","analysis_preparation","goal_generation"]).order_by("-id").values("id", "kind", "content")[:24])[::-1]
         turn_snapshot.pop("sha256", None)
         turn_snapshot["sha256"] = hashlib.sha256(json.dumps(turn_snapshot, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
@@ -476,7 +502,15 @@ def run_job(job, caller=None):
         "Answer the latest question, ask only useful factual clarifications and accept corrections. "
         "Prefer a short direct answer; provide detail when requested. You may inspect granted read-only "
         "sources and documents. Never invent observed behavior or hide tool/access errors. "
-        "When citing inspected code, use `repository/path:line_start-line_end` with the smallest "
+        "For a functional or understanding question, answer in plain business language. "
+        "Do not show code blocks, SQL, implementation snippets, file/line citations or Git SHAs "
+        "in the main explanation by default. Show code or queries there only when the user "
+        "asks for them or a genuinely technical question requires them. "
+        "Put inspected passages, verification details, source paths/lines and commit references "
+        "together in a final Markdown section titled Sources and checks (Sources et vérifications "
+        "in French). The interface folds this section. Keep important uncertainties and "
+        "business limitations visible in the main answer. Do not duplicate the evidence list there. "
+        "In that source section, cite inspected code using `repository/path:line_start-line_end` with the smallest "
         "relevant contiguous passage (usually 5–15 lines). Cite separate ranges for separate facts. "
         "Use only line numbers actually observed at the frozen commit; never invent a location. "
         "Cite a file only when its exact inspected passage directly supports a statement in the answer. "
@@ -578,6 +612,33 @@ def run_job(job, caller=None):
             source_schema["maxItems"] = 0
     db = frozen.get("dossier", {}).get("database", {})
     database = parameters(DatabaseConnection.objects.get(pk=db["id"])) if db.get("id") and not goal_generation else None
+    manifest = {
+        "environment": frozen.get("environment", {}),
+        "instructions": frozen.get("instructions", {}),
+        "official_references": frozen.get("official_references", []),
+        "repositories": frozen.get("dossier", {}).get("baseline", []),
+        "documents": [{"version_id": item["version_id"], "filename": item.get("filename") or item.get("name", ""),
+                       "path": "/context/" + item["relative_path"], "sha256": item["sha256"]}
+                      for item in context.get("resources", [])],
+        "attachments": data.get("attachments", []),
+        "database": {"available": bool(database), "name": db.get("name", ""), "requires_current_queries": True},
+    }
+    # Detect configuration changes, not changes in business rows. Every current
+    # data/schema claim still needs a new bounded read-only observation.
+    signature = hashlib.sha256(json.dumps({"manifest":manifest, "database_configuration":{
+        key:database.get(key) for key in ("host", "port", "dbname", "user", "sslmode")
+    } if database else None}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    instructions += (
+        " The current_environment_context is authoritative for THIS turn and supersedes older "
+        "environment definitions, repository revisions and document lists in your native memory. "
+        "Only the listed document versions are currently available; read their exact /context paths "
+        "when relevant. A listed file has not automatically been read or independently verified. "
+        "Prior analysis conclusions apply only to their recorded frozen references. Database schema "
+        "and rows can change even when configuration is unchanged: for a present-state database "
+        "claim, run a new relevant bounded read-only query in this turn. Do not reuse an earlier "
+        "SQL result or schema description as current evidence. If no fresh check was made, identify "
+        "the observation as historical or unverified now; never invent a change or inspect everything."
+    )
     skills = catalog(session.connection, has_database=bool(database), available_capabilities={
         "read_sources", "read_attachments", "read_web", "structured_output",
         *({"read_database"} if database else set()),
@@ -587,6 +648,12 @@ def run_job(job, caller=None):
         if not live(job):
             return
         turn = copy.deepcopy(data)
+        turn["current_environment_context"] = {
+            **(manifest if native and session.usage.get("environment_context_signature") != signature else {}),
+            "snapshot_id": frozen.get("snapshot_id"),
+            "database": manifest["database"],
+            **({"supersedes_previous_context":True} if native and session.usage.get("environment_context_signature") != signature else {"unchanged":True}),
+        }
         if not native:
             recovery = recovery_messages(value, message.pk) if not analysis_preparation else {
                 "messages": data["exchanges"],
@@ -684,6 +751,7 @@ def run_job(job, caller=None):
             session.usage = {
                 **result.get("usage", {}),
                 "last_result": latest.number if latest else None,
+                "environment_context_signature": signature,
             }
             session.save(update_fields=["runtime_id", "usage"])
             if native and native_result != native:

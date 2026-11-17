@@ -10,7 +10,7 @@ import {MarkdownReader} from "@/components/markdown-reader";
 
 type Source = Partial<SQLReceipt> & {
   id:string;kind:"sql"|"git"|"web"|"document";number?:number;title?:string;url?:string;
-  excerpt?:string;note?:string;repository?:string;commit?:string;line_start?:number;line_end?:number;version?:number;
+  excerpt?:string;note?:string;repository?:string;repository_label?:string;commit?:string;line_start?:number;line_end?:number;version?:number;
   preview_line_start?:number;preview_line_end?:number;
 };
 const labels={sql:"Database check",git:"Source code",web:"Web reference",document:"Document"};
@@ -30,6 +30,7 @@ function SourceExcerpt({source}:{source:Source}) {
     </>;
   }
   if(source.kind==="sql")return <CodeBlock code={source.sql||""} language="sql"/>;
+  if(source.kind==="document"&&/\.xml$/i.test(source.title||""))return <CodeBlock code={source.excerpt||""} language="xml"/>;
   return <div className="source-reader">
     <div className="reader-view-switch" role="group" aria-label={t("Source display")}>
       <button type="button" aria-pressed={!raw} onClick={()=>setRaw(false)}>{t("Read")}</button>
@@ -79,7 +80,7 @@ export function SourceDetails({url,checks,referenceIds,selected,onSelect,childre
       }}>
         <summary><ChevronDown size={14} aria-hidden="true"/><span>{source.kind==='sql'?t("SQL check {number}",{number:referenceIds.includes(source.id)?referenceIds.indexOf(source.id)+1:source.number||index+1}):t(labels[source.kind])}{source.title?` · ${source.title}`:""}</span></summary>
         <div className="source-record-content">
-          {source.repository&&<p className="text-xs break-all">{source.repository} · {source.commit}</p>}
+          {source.repository&&<p className="text-xs break-all">{source.repository_label||source.repository} · {source.commit}</p>}
           {source.kind==='git'&&!source.excerpt&&source.line_start&&<p className="text-xs muted">{t("Lines {start}–{end}",{start:source.line_start,end:source.line_end||source.line_start})}</p>}
           {source.version&&<p className="text-xs muted">{t("Version")} {source.version}</p>}
           {safeLink(source.url)&&<a className="text-xs underline break-all" href={safeLink(source.url)} rel="noopener noreferrer" referrerPolicy="no-referrer">{source.kind==='document'?t("Download source document"):source.url}</a>}

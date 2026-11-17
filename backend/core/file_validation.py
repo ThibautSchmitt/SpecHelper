@@ -1,5 +1,6 @@
 """Bounded upload inspection; document parsers run only inside the isolated runtime."""
 
+import re
 import stat
 import struct
 import zipfile
@@ -7,7 +8,7 @@ from pathlib import Path, PurePosixPath
 
 from ninja.errors import HttpError
 
-TEXT = {".txt", ".md", ".csv", ".json", ".log", ".sql"}
+TEXT = {".txt", ".md", ".csv", ".json", ".log", ".sql", ".xml"}
 TYPES = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
     ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf",
@@ -33,6 +34,10 @@ def inspect_file(path, name):
         try:
             text = path.read_text(encoding="utf-8-sig")
             valid = "\x00" not in text and not header.startswith((b"MZ", b"\x7fELF", b"PK\x03\x04", b"\x1f\x8b"))
+            if suffix == ".xml":
+                # Treat XML as inert UTF-8 text; never invoke an XML processor,
+                # resolve external resources or expand document entities.
+                valid = valid and text.lstrip().startswith("<") and not re.search(r"<!\s*(?:DOCTYPE|ENTITY)\b", text, re.I)
         except UnicodeError:
             pass
     elif suffix == ".pdf":

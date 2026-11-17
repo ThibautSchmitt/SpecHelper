@@ -14,6 +14,44 @@ function dossier(){return {
 
 for(const language of ['en','fr'] as const){
  const t=(key:string)=>translate(key,language);
+ test(`native file chooser keeps the discussion and draft after XML selection and cancellation in ${language}`,async({page})=>{
+  let value:any=dossier();let uploads=0,turns=0;
+  const errors:string[]=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.route('**/api/**',route=>route.fulfill({json:[]}));
+  await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
+  await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
+  await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
+  await page.route(`**/api/analyses/${id}/attachments`,route=>{
+   uploads++;expect(route.request().postDataBuffer()?.toString()).toContain('rules.xml');
+   return route.fulfill({status:201,json:{id:'attachment',name:'rules.xml'}});
+  });
+  await page.route(`**/api/analyses/${id}/discussion`,route=>{
+   turns++;expect(route.request().postDataJSON().message).toBe('Read the XML rules.');
+   return route.fulfill({json:value});
+  });
+  await page.goto(`/analyses/${id}`);
+  const input=page.getByLabel(t('Your message'),{exact:true});
+  await input.fill('Read the XML rules.');
+  const chooser=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:t('Add files'),exact:true}).click();
+  await (await chooser).setFiles({name:'rules.xml',mimeType:'application/xml',buffer:Buffer.from('<rules><mode>review</mode></rules>')});
+  await expect(page).toHaveURL(new RegExp(`/analyses/${id}$`));
+  await expect(input).toHaveValue('Read the XML rules.');
+  await expect(page.locator('.analysis-conversation')).toContainText('A discussion answer.');
+  await expect(page.getByText('rules.xml',{exact:true})).toBeVisible();
+  // Cancelling the next chooser must not clear files or the unsent message.
+  const cancelled=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:t('Add files'),exact:true}).click();
+  await (await cancelled).setFiles([]);
+  await expect(page.getByText('rules.xml',{exact:true})).toBeVisible();
+  await expect(input).toHaveValue('Read the XML rules.');
+  expect(uploads).toBe(0);expect(turns).toBe(0);expect(errors).toEqual([]);
+  await page.getByRole('button',{name:t('Send message'),exact:true}).click();
+  await expect.poll(()=>uploads).toBe(1);await expect.poll(()=>turns).toBe(1);
+  await expect(input).toHaveValue('');
+  expect(errors).toEqual([]);
+ });
  test(`scope clarification returns to single-assistant start in ${language}`,async({page})=>{
   const source=dossier();let starts=0;
   let value:any={...source,status:'DRAFT',scope_revision:1,scope_assessment:{status:'NEEDS_CLARIFICATION',operation:'analyze',message:'Relate this to your project',question:'How does this relate to the selected project or its business context?'},messages:[source.messages[0]],discussion:{...source.discussion,revision:0,job:null}};

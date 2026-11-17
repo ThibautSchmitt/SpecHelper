@@ -1,5 +1,6 @@
 """Conversation turns preserve native sessions without granting verification or publication."""
 
+import copy
 import json
 from uuid import uuid4
 
@@ -101,6 +102,139 @@ def test_first_turn_uses_one_assistant_without_a_verified_cycle(client, environm
     assert AISession.objects.count() == 1
     assert row.messages.filter(kind="discussion_reply").get().data["verified"] is False
     assert not row.business_decisions.exists()
+
+
+@pytest.mark.parametrize("provider", ["codex", "claude", "antigravity"])
+def test_resumed_turn_receives_new_environment_context_without_rewriting_history(client, environment, native, provider):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from core.environment_context import update_instructions, upload_resource
+
+    AIConnection.objects.filter(pk=1).update(agent=provider)
+    value = create(client, environment)
+    launch(client, value)
+    original = finish()
+    original_snapshot = copy.deepcopy(original.payload["snapshot"])
+    row = Request.objects.get(pk=value["id"])
+    session = AISession.objects.get(request=row)
+    native_id = session.runtime_id
+    historical = ResultVersion.objects.create(request=row,number=1,baseline=row.baseline,context_snapshot=original_snapshot)
+    update_instructions(environment.pk,"The robot now handles supplemental claims.",True,1,[{"url":"https://example.org/new-rule","note":"New reference"}])
+    upload_resource(environment.pk,SimpleUploadedFile("new-rule.md",b"# Supplemental claims"),2)
+    assert turn(client,value,row.discussion_state["revision"],message="Explain the updated environment documentation.").status_code == 200
+    current = finish()
+    assert current.payload["snapshot"]["instructions"]["text"] == "The robot now handles supplemental claims."
+    assert len(current.payload["snapshot"]["resources"]) == 1
+    inputs = json.loads(native[-1]["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
+    manifest = inputs["current_environment_context"]
+    assert manifest["supersedes_previous_context"] is True
+    assert manifest["instructions"]["text"] == "The robot now handles supplemental claims."
+    assert manifest["official_references"][0]["url"] == "https://example.org/new-rule"
+    assert manifest["documents"][0]["filename"] == "new-rule.md"
+    assert manifest["documents"][0]["path"] == "/context/" + native[-1]["context_resources"][0]["path"]
+    assert native[-1]["agent"] == provider and native[-1]["session_id"] == native_id
+    assert AISession.objects.count() == 1 and not AnalysisRun.objects.exists()
+    original.refresh_from_db()
+    historical.refresh_from_db()
+    assert original.payload["snapshot"] == historical.context_snapshot == original_snapshot
+    # An unchanged continuation keeps the compact manifest and the same session.
+    row.refresh_from_db()
+    assert turn(client,value,row.discussion_state["revision"]).status_code == 200
+    finish()
+    inputs = json.loads(native[-1]["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
+    assert inputs["current_environment_context"]["unchanged"] is True
+    assert native[-1]["session_id"] == native_id
+
+
+def test_next_turn_uses_current_git_and_database_configuration_with_fresh_observation_policy(client, environment, native):
+    from core.models import DatabaseConnection
+    from core.secrets import encrypt
+
+    value = create(client, environment)
+    launch(client, value)
+    original = finish()
+    frozen = copy.deepcopy(original.payload["snapshot"])
+    row = Request.objects.get(pk=value["id"])
+    native_id = AISession.objects.get(request=row).runtime_id
+    database = DatabaseConnection.objects.create(name="Business reader",host="db-v1.example.test",database="business",username="readonly",secret=encrypt("fixture-db-secret"))
+    environment.database = database
+    environment.name = "Renamed environment"
+    environment.save()
+    environment.repositories.update(sha="b"*40,branch="release/current")
+    assert turn(client,value,row.discussion_state["revision"]).status_code == 200
+    current = finish()
+    assert current.payload["snapshot"]["dossier"]["baseline"][0]["sha"] == "b"*40
+    assert current.payload["snapshot"]["dossier"]["database"]["id"] == database.pk
+    assert native[-1]["database"]["host"] == "db-v1.example.test"
+    assert "fixture-db-secret" not in native[-1]["prompt"]
+    inputs = json.loads(native[-1]["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
+    assert inputs["current_environment_context"]["database"]["requires_current_queries"] is True
+    assert inputs["current_environment_context"]["environment"]["name"] == "Renamed environment"
+    database.host = "db-v2.example.test"
+    database.save()
+    row.refresh_from_db()
+    assert turn(client,value,row.discussion_state["revision"]).status_code == 200
+    finish()
+    inputs = json.loads(native[-1]["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
+    assert inputs["current_environment_context"]["supersedes_previous_context"] is True
+    assert native[-1]["database"]["host"] == "db-v2.example.test" and native[-1]["session_id"] == native_id
+    environment.database = None
+    environment.save()
+    row.refresh_from_db()
+    assert turn(client,value,row.discussion_state["revision"]).status_code == 200
+    finish()
+    assert native[-1]["database"] is None
+    inputs = json.loads(native[-1]["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
+    assert inputs["current_environment_context"]["database"]["available"] is False
+    original.refresh_from_db()
+    assert original.payload["snapshot"] == frozen
+
+
+@pytest.mark.parametrize("remove", [False, True])
+def test_disabled_or_removed_documents_leave_the_next_turn_allowlist(client, environment, native, remove):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from core.environment_context import edit_resource, upload_resource
+
+    upload_resource(environment.pk,SimpleUploadedFile("rules.md",b"# Old rules"),1)
+    value = create(client, environment)
+    launch(client, value)
+    original = finish()
+    resource = environment.context_resources.get()
+    edit_resource(environment.pk,resource.pk,2,enabled=False,remove=remove)
+    row = Request.objects.get(pk=value["id"])
+    assert turn(client,value,row.discussion_state["revision"]).status_code == 200
+    current = finish()
+    assert current.payload["snapshot"]["resources"] == []
+    assert native[-1]["context_resources"] == [] and native[-1]["context_dir"] is None
+    inputs = json.loads(native[-1]["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
+    assert inputs["current_environment_context"]["documents"] == []
+    original.refresh_from_db()
+    assert len(original.payload["snapshot"]["resources"]) == 1
+
+
+def test_context_update_during_a_queued_turn_applies_only_to_the_next_turn(client, environment, native):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from core.environment_context import update_instructions, upload_resource
+
+    upload_resource(environment.pk,SimpleUploadedFile("rules.md",b"# Original rules"),1)
+    value = create(client, environment)
+    launch(client, value)
+    original = Job.objects.get(kind="discussion")
+    frozen = copy.deepcopy(original.payload["snapshot"])
+    update_instructions(environment.pk,"Updated context",True,2)
+    resource = environment.context_resources.get()
+    upload_resource(environment.pk,SimpleUploadedFile("rules.md",b"# New version"),3,resource.pk)
+    finish()
+    assert native[0]["context_resources"][0]["version_id"] == frozen["resources"][0]["version_id"]
+    row = Request.objects.get(pk=value["id"])
+    assert turn(client,value,row.discussion_state["revision"]).status_code == 200
+    current = finish()
+    assert current.payload["snapshot"]["instructions"]["text"] == "Updated context"
+    assert native[-1]["context_resources"][0]["version_id"] != native[0]["context_resources"][0]["version_id"]
+    original.refresh_from_db()
+    assert original.payload["snapshot"] == frozen
 
 
 def test_supervisor_restart_recovers_a_completed_jobs_residual_slot(client, environment):

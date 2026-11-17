@@ -13,6 +13,8 @@ for(const language of ["en","fr"] as const)for(const theme of ["light","dark"]){
       language==="fr"?"L’Analyste examine le besoin, le Contre-analyste le réexamine et le Validateur vérifie les conclusions.":"The Analyst examines the need, the Counter-analyst reviews it and the Verifier checks the conclusions.",
       "The calculation uses `rules.py`; this explanation remains visible.",
       paragraph,
+      language==="fr"?"Éléments vérifiés dans `team/app`, à la version `"+"b".repeat(40)+"` :":"Verified evidence in `team/app`, at `"+"b".repeat(40)+"`:",
+      "- Controls: `team/app/rules.py:12-18`.\n- Button: `team/app/view.xml:35-40`.",
       "Important conclusion after the references.",
       "Sources : les revenus déclarés restent à préciser.",
       "```text\nSources: `literal.py`\nAnalyst\n```",
@@ -57,10 +59,14 @@ for(const language of ["en","fr"] as const)for(const theme of ["light","dark"]){
     await expect(sources).toHaveCount(1);
     await expect(sources).not.toHaveAttribute("open");
     await expect(answer.getByText("abc123",{exact:false})).toHaveCount(0);
+    await expect(answer.getByText("b".repeat(40),{exact:false})).toHaveCount(0);
+    await expect(answer.getByText("Controls:",{exact:false})).toHaveCount(0);
     await expect(answer).toContainText(language==="fr"?"La configuration n’a pas été consultée.":"The configuration was not inspected.");
     expect(reads).toBe(0);
     await sources.locator(":scope > summary").click();
     await expect(sources.locator("[data-source-notes]")).toContainText("abc123");
+    await expect(sources.locator("[data-source-notes]")).toContainText("b".repeat(40));
+    await expect(sources.locator("[data-source-notes]")).toContainText("team/app/view.xml:35-40");
     await expect(sources.locator("[data-source-notes]")).not.toContainText(language==="fr"?"La configuration n’a pas été consultée.":"The configuration was not inspected.");
     await sources.locator(".source-record > summary").click();
     await expect(sources.locator("pre")).toContainText("verified = True");
@@ -74,6 +80,33 @@ for(const language of ["en","fr"] as const)for(const theme of ["light","dark"]){
 }
 
 for(const language of ["en","fr"] as const){
+  test(`labelled verification sections fold proof code while keeping business limits in ${language}`,async({page})=>{
+    const t=(key:string)=>translate(key,language);
+    const section=language==="fr"?"Sources et vérifications":"Sources and checks";
+    const response="The robot calculates and schedules benefits.\n\n## "+section+"\n\n- Checked behavior: `team/app/robot.py:12-18`.\n\n```python\nverified = True\n```\n\nIts actual execution frequency was not checked.\n\n## Next question\nWhat would you like to clarify?";
+    const value={id,need:"What does the robot do?",workflow:"question",status:"DISCUSSING",created_at:at,
+      baseline:[],database:{},attachments:[],progress:[],questions:[],conversation:[],versions:[],analysis_runs:[],
+      messages:[{id:2,role:"assistant",kind:"discussion_reply",content:response,created_at:at}]};
+    await page.route("**/api/**",route=>route.fulfill({json:[]}));
+    await page.route("**/api/access/session",route=>route.fulfill({json:{mode:"local",authenticated:true}}));
+    await page.route("**/api/settings",route=>route.fulfill({json:{name:"SpecHelper",language}}));
+    await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
+    await page.route(`**/api/analyses/${id}/messages/2/sources`,route=>route.fulfill({json:{sources:[]}}));
+    await page.goto(`/analyses/${id}`);
+    const answer=page.locator('[data-message="message-2"]');
+    const sources=answer.locator(".source-details");
+    await expect(sources).toHaveCount(1);
+    await expect(sources).not.toHaveAttribute("open");
+    await expect(answer).toContainText("The robot calculates and schedules benefits.");
+    await expect(answer).toContainText("Its actual execution frequency was not checked.");
+    await expect(answer.getByRole("heading",{name:"Next question",exact:true})).toBeVisible();
+    await expect(answer.locator("pre")).toHaveCount(0);
+    await sources.getByText(t("Sources and checks"),{exact:true}).click();
+    await expect(sources.locator("[data-source-notes]")).toContainText("team/app/robot.py:12-18");
+    await expect(sources.locator("pre")).toContainText("verified = True");
+    await expect(sources).not.toContainText("Its actual execution frequency was not checked.");
+  });
+
   test(`reference notes remain available when source loading fails in ${language}`,async({page})=>{
     const t=(key:string)=>translate(key,language);
     const value={id,title:"Unavailable source",need:"Explain the rule.",workflow:"question",status:"DISCUSSING",created_at:at,

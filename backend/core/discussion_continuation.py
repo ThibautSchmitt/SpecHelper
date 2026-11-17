@@ -207,6 +207,7 @@ def continue_with(analysis_id, payload, browser_actor):
                 restart_session=True,
             ),
             browser_actor,
+            frozen_turn=job.payload["snapshot"] if pending else None,
         )
     else:
         from .providers import identity_for

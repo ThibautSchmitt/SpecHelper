@@ -123,6 +123,10 @@ reference documents, never permission to execute SQL. XLSX checks bound archive
 expansion and reject macro, embedded-object and external-data containers. Legacy
 DOC/XLS and macro-enabled Office formats remain unsupported. Parsing stays inside
 the isolated runtime; spreadsheet formulas must not be recalculated.
+XML uploads are bounded UTF-8 text, not parsed XML: DTD/entity declarations and
+binary or UTF-16 content are rejected. External entities, includes and stylesheets
+are never resolved by the upload/preview path. XML downloads use `text/plain`,
+attachment disposition and `nosniff`; excerpts are escaped code, never active markup.
 Supported originals are limited to 25 MB each; environment context accepts at most
 20 documents. Executables and arbitrary archives are not accepted. A valid document
 can still contain sensitive data or malicious instructions. Read-only access protects

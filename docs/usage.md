@@ -46,6 +46,14 @@ new session is shared across authorized browsers and recorded in the conversatio
 existing sessions and answers remain intact. No response is generated just by opening
 the page, and selecting a different connection remains an explicit choice.
 
+Each new turn uses the environment's current instructions, links, enabled document
+versions, Git references and PostgreSQL connection. These updates do not require
+starting another conversation or discarding a valid native session. Already queued
+or running turns and completed analyses retain their original frozen references.
+Changes to database rows or schemas are not monitored automatically: the assistant
+must make a fresh, relevant read-only query before presenting a database observation
+as current. Otherwise, it must identify earlier observations as historical or unverified.
+
 If a turn fails, use **Retry** after checking the reported cause. This explicitly
 starts a new native session with saved, bounded context; it does not change the selected
 connection on its own. With an empty composer, your pending message is reused rather
@@ -241,10 +249,15 @@ and stored provenance remain intact, but filename-only references are omitted fr
 source excerpts and newly exported source lists. No line location or independent
 verification is invented. These passages come from the frozen Git
 commit, not the environment's latest synchronized copy.
-Standalone source-reference paragraphs are grouped in this same collapsed
-disclosure instead of repeating file lists in the answer. Subsequent explanatory
+Labelled source-reference paragraphs, verification lists and source sections are
+grouped in this same collapsed disclosure, including **Verified evidence** and
+**Sources and checks**. Commits and file/line details stay with the evidence.
+Readable provider repository names resolve only against that turn's frozen Git
+identities; an ambiguous name never selects an account arbitrarily. Subsequent explanatory
 sentences and verification limits remain in the response. Inline code references
-within an explanation and literal code examples are preserved. Explicit role
+within historical explanations and literal code examples are preserved. New
+functional answers use plain business language, with code or SQL in the main
+explanation only when requested or required by a genuinely technical question. Explicit role
 mentions use the same role colors and badges as **AI & Agents → Connections**.
 Rejected or unavailable SQL attempts stay in diagnostics rather than the source
 disclosure. Consultation dates and internal technical receipt IDs are not shown there.
@@ -379,9 +392,14 @@ Destination-specific behavior matters:
 documents use the separate **Documents to attach** choices and do not require an
 analysis. A destination's upload capability is checked before generation and sending;
 unsupported destinations require deselecting documents, rather than promising an upload.
-The original-file picker accepts XLSX workbooks and UTF-8 SQL documents in addition
+The original-file picker accepts XLSX workbooks and UTF-8 SQL/XML documents in addition
 to the supported PDFs, DOCX, images and text formats. SQL is read, never executed;
 workbook macros and external-data containers are rejected. Legacy DOC/XLS is unsupported.
+XML is handled as inert UTF-8 text, with no XML parser, external entity resolution
+or stylesheet execution. DTD/entity declarations, binary files and UTF-16 XML are
+rejected. Downloads use a plain-text attachment, and source excerpts display as code.
+The conversation's attachment button opens the native file chooser without leaving
+the discussion; cancelling preserves the message and previously selected files.
 Accepted by SpecHelper does not mean accepted by the destination: GLPI's native
 uploadable document-type catalogue determines which extensions can be transferred.
 Unsupported files remain in the conversation but cannot be selected for that

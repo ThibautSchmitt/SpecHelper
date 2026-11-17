@@ -7,6 +7,29 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Current conversation context and document uploads
+
+- Refresh environment instructions, enabled document versions, links, Git references
+  and PostgreSQL configuration on each new conversation turn, while preserving valid
+  native sessions and the frozen context of existing jobs and results. Require fresh
+  read-only database observations for claims about current rows or schemas.
+- Use an explicit attachment button and hidden native file input. Keep the discussion,
+  unsent message and selected files intact when choosing or cancelling a file.
+- Accept XML as bounded, inert UTF-8 text in conversations and environment knowledge.
+  Reject DTD/entity declarations; render excerpts as escaped code and serve downloads
+  as plain-text attachments. Destination upload policies still apply.
+
+### Focused explanations and retained source evidence
+
+- Fold labelled verification lists and source sections into **Sources and checks**,
+  including their commit references, without rewriting saved messages or hiding
+  subsequent business limitations and requested code examples.
+- Resolve readable Git repository prefixes against the exact frozen source identity.
+  Retain recorded commits and line ranges; reject ambiguous aliases across connections.
+- Ask the conversational assistant and analysis writers for business explanations by
+  default, reserving code and SQL in the main answer for requested or genuinely
+  technical detail. Keep important uncertainties visible.
+
 ### Git favorites and editable environment copies
 
 - Collapse environment cards behind a right-hand chevron, preserving visible

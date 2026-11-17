@@ -20,7 +20,7 @@ MAX_FILES = 20
 MAX_FILE_SIZE = 25 * 1024 * 1024
 MAX_INSTRUCTIONS = 4000
 PREVIEW_LIMIT = 6000
-TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".log", ".sql"}
+TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".log", ".sql", ".xml"}
 
 
 def reject_credentials(text):

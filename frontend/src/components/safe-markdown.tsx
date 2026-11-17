@@ -1,7 +1,7 @@
 "use client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Root, Paragraph, PhrasingContent } from "mdast";
+import type { Root, Paragraph, PhrasingContent, BlockContent, Content } from "mdast";
 import { Children, createContext, useContext, useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {ChevronDown} from "lucide-react";
 import { RoleMentions } from "@/components/role-mentions";
@@ -35,19 +35,44 @@ export function SafeMarkdown({ children, roleMentions=false, compactSqlReference
   const [selected,setSelected]=useState<string[]>([]);
   useLayoutEffect(()=>{if(focus.current&&document.activeElement===document.body)document.getElementById(focus.current)?.focus({preventScroll:true});},[selected]);
   const references=sqlReferences(children);
-  // Move explicit bibliographic paragraphs only. Code blocks, ordinary source
-  // discussions and citations embedded in explanations remain in their place.
+  // Fold explicitly labelled evidence, without guessing which ordinary business
+  // statements or code examples should disappear from the answer.
   function sourceNotes(){
     return (tree:Root)=>{
       if(!roleMentions&&!compactSqlReferences&&!sourcesUrl)return;
-      const notes:Paragraph[]=[];
+      const notes:BlockContent[]=[];
       const plain=(nodes:PhrasingContent[]):string=>nodes.map(node=>"value" in node?node.value:"children" in node?plain(node.children):"").join("");
       const isReference=(node:PhrasingContent)=>node.type==="link"||node.type==="inlineCode"&&(/[/\\]|\.[a-z0-9]{1,8}(?::\d+)?$/i.test(node.value)||/^[a-f\d]{7,40}$/i.test(node.value));
-      tree.children=tree.children.flatMap<Root["children"][number]>(node=>{
+      const hasReference=(node:Content):boolean=>node.type==="inlineCode"||node.type==="link"?isReference(node):"children" in node&&node.children.some(hasReference);
+      const labelled=(label:string)=>/^(?:sources?(?: (?:et|and|&) (?:verifications?|checks?))?|sources? (?:consultees?|consulted)|references(?: techniques?)?|elements? verifies?|verified (?:elements?|findings|evidence)|verifications?(?: effectuees?| realisees?| details)?|checks? performed)(?=$|\s*[:：]|\s+(?:dans|in|a|at|on)\b)/i.test(label.normalize("NFD").replace(/\p{M}/gu,"").trim());
+      let skipUntil=0;
+      tree.children=tree.children.flatMap<Root["children"][number]>((node,index,nodes)=>{
+        if(index<skipUntil)return [];
+        if(node.type==="heading"&&labelled(plain(node.children))){
+          let end=index+1;
+          let found=hasReference(node);
+          while(end<nodes.length){
+            const next=nodes[end];
+            if(next.type==="heading"&&next.depth<=node.depth)break;
+            if(found&&next.type==="paragraph"&&!hasReference(next))break;
+            found=found||hasReference(next);end++;
+          }
+          const section=nodes.slice(index,end);
+          if(!section.some(hasReference))return [node];
+          // The disclosure already supplies the generic source-section title.
+          notes.push(...section.slice(hasReference(node)?0:1).filter((part):part is BlockContent=>part.type!=="definition"));
+          skipUntil=end;return [];
+        }
         if(node.type!=="paragraph")return [node];
         const label=plain(node.children).trim();
         const last=node.children.findLastIndex(isReference);
-        if(!/^(?:sources?(?: consulted)?|r[eé]f[eé]rences|references)\s*:/iu.test(label)||last<0)return [node];
+        const next=nodes[index+1];
+        const sourceList=next?.type==="list"&&hasReference(next)?next:null;
+        if(!labelled(label)||(last<0&&!sourceList))return [node];
+        const archive=(paragraph:Paragraph)=>{
+          notes.push(paragraph);
+          if(sourceList){notes.push(sourceList);skipUntil=index+2;}
+        };
         // Keep any following sentence (including verification limits) in the
         // answer, even when the model put it in the bibliography paragraph.
         for(let index=last+1;index<node.children.length;index++){
@@ -56,10 +81,10 @@ export function SafeMarkdown({ children, roleMentions=false, compactSqlReference
           const boundary=child.value.match(/[.!?]\s+(?=\p{Lu})/u);
           if(!boundary)continue;
           const end=boundary.index!+boundary[0].length;
-          notes.push({...node,children:[...node.children.slice(0,index),{...child,value:child.value.slice(0,end).trimEnd()}]});
+          archive({...node,children:[...node.children.slice(0,index),{...child,value:child.value.slice(0,end).trimEnd()}]});
           return [{...node,children:[{...child,value:child.value.slice(end)},...node.children.slice(index+1)]}];
         }
-        notes.push(node);return [];
+        archive(node);return [];
       });
       if(sourcesUrl||notes.length||compactSqlReferences&&(references.length||sqlChecks.length))tree.children.push({
         type:"blockquote",children:notes,

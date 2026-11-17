@@ -95,6 +95,38 @@ def test_cited_code_resolves_against_the_discussion_jobs_frozen_manifest(client,
     assert next(source for source in records if source["kind"] == "git")["excerpt"] == "FIRST = 1\nCHECKED = True"
 
 
+@pytest.mark.parametrize("prefix", ["QwitusERP/robot", "git-github-fixture/17-branch"])
+def test_display_repository_paths_resolve_to_their_frozen_identity(client, source_message, frozen_code, prefix):
+    value, message, _ = source_message
+    _, sha = frozen_code
+    message.content = f"Éléments vérifiés : `{prefix}/rules.py:2-3`."
+    message.save()
+    job = Job.objects.get(target=str(value.pk))
+    job.payload["snapshot"] = {"dossier":{"baseline":[
+        {"repository":"git-github-fixture/17-branch", "path":"QwitusERP/robot", "sha":sha},
+        {"repository":"git-gitlab-fixture/18-branch", "path":"Other/project", "sha":sha},
+    ]}}
+    job.save()
+    records = [source for source in client.get(url(value,message)).json()["sources"] if source["kind"] == "git"]
+    assert len(records) == 1
+    assert records[0]["repository"] == "git-github-fixture/17-branch" and records[0]["commit"] == sha
+    assert records[0]["title"] == "rules.py" and records[0]["excerpt"] == "FIRST = 1\nCHECKED = True"
+    message.refresh_from_db()
+    assert message.content == f"Éléments vérifiés : `{prefix}/rules.py:2-3`."
+
+
+def test_ambiguous_display_repository_names_do_not_choose_a_connection(source_message, frozen_code):
+    from core.conversation_sources import collect
+
+    value, _, _ = source_message
+    _, sha = frozen_code
+    frozen = {"dossier":{"baseline":[
+        {"repository":"git-github-fixture/17-branch", "path":"Team/robot", "sha":sha},
+        {"repository":"git-gitlab-fixture/18-branch", "path":"Team/robot", "sha":sha},
+    ]}}
+    assert collect(value, "See `Team/robot/rules.py:2-3`.", {}, frozen)["sources"] == []
+
+
 @pytest.mark.parametrize("citation,ranges", [
     ("`module.py:110-114`", [(110,114)]),
     ("`module.py:L110-L114`", [(110,114)]),

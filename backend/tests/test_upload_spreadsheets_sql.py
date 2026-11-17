@@ -43,6 +43,7 @@ def workbook(extra=None, types=None):
             b"\xef\xbb\xbf-- Notes fictives\nCREATE TABLE must_not_execute(id integer);\nSELECT 42;\n",
             "text/plain",
         ),
+        ("rules.XML", b'<?xml version="1.0" encoding="UTF-8"?><robot><mode>review</mode></robot>', "text/plain"),
     ],
 )
 def test_supported_formats_round_trip_in_conversations(
@@ -67,6 +68,7 @@ def test_supported_formats_round_trip_in_conversations(
     download = client.get(f"/api/questions/{value['id']}/attachments/{attachment.pk}")
     assert b"".join(download.streaming_content) == data
     assert download["X-Content-Type-Options"] == "nosniff"
+    assert download["Content-Disposition"].startswith("attachment;")
     assert not Job.objects.filter(target=value["id"]).exists()
     from django.db import connection
 
@@ -74,7 +76,7 @@ def test_supported_formats_round_trip_in_conversations(
 
 
 @pytest.mark.parametrize(
-    "name,data", [("facts.xlsx", workbook()), ("notes.sql", b"-- specification\nSELECT 42;\n")]
+    "name,data", [("facts.xlsx", workbook()), ("notes.sql", b"-- specification\nSELECT 42;\n"), ("rules.xml", b"<robot><mode>review</mode></robot>")]
 )
 def test_supported_environment_documents_are_versioned_and_readable(
     environment, storage, name, data
@@ -84,7 +86,7 @@ def test_supported_environment_documents_are_versioned_and_readable(
     )
     resource = result["resources"][0]
     assert resource["agent_readable"] is True
-    if name.endswith(".sql"):
+    if name.endswith((".sql", ".xml")):
         version = environment.context_resources.get().versions.get()
         assert (
             environment_context.version_dict(version, version.resource, preview=True)["preview"]
@@ -92,6 +94,22 @@ def test_supported_environment_documents_are_versioned_and_readable(
         )
     frozen = environment_context.snapshot_environment(environment)
     assert frozen["resources"][0]["filename"] == name
+
+
+@pytest.mark.parametrize("data", [
+    b'<!DOCTYPE rules SYSTEM "file:///etc/passwd"><rules/>',
+    b'<!DOCTYPE rules [<!ENTITY external SYSTEM "https://example.invalid/private">]><rules>&external;</rules>',
+    b'<!ENTITY expanded "payload"><rules/>',
+    b"not XML", b"<rules>\x00</rules>", b"\x7fELFfake", b"\xff\xfe<\x00r\x00/\x00>\x00",
+])
+def test_xml_declarations_and_binary_content_are_rejected_without_parsing(environment, storage, data):
+    value = Request.objects.create(environment=environment, need="Read reference")
+    with pytest.raises(HttpError):
+        add_attachment(value.pk, SimpleUploadedFile("unsafe.xml", data))
+    with pytest.raises(HttpError):
+        environment_context.upload_resource(environment.pk, SimpleUploadedFile("unsafe.xml", data), environment.context_revision)
+    assert not value.attachments.exists() and not environment.context_resources.exists()
+    assert not list(storage.rglob("*.xml"))
 
 
 @pytest.mark.parametrize(

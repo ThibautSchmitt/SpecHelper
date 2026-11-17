@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Send, Square, Sparkles, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +17,7 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
   const [error,setError]=useState("");
   useEffect(()=>{setError("");},[value.discussion?.connection_id]);
   const [files,setFiles]=useState<File[]>([]);
+  const upload=useRef<HTMLInputElement>(null);
   const [uploaded,setUploaded]=useState(0);
   const [scopeOpen,setScopeOpen]=useState(false);
   const activeOperation=["IN_PROGRESS","WAITING_AI"].includes(conversationState(value));
@@ -61,7 +62,15 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
     </div>}
     {value.discussion?.mode === "discussion" && value.discussion.job?.waiting_reason && <p className="text-xs muted">{t(value.discussion.job.waiting_reason)}</p>}
     <form className="conversation-composer conversation-compose-form" onSubmit={event=>{event.preventDefault();if(text.trim())void action("message");}}>
-      <label className="cursor-pointer p-2" title={t("Attach files")}><Paperclip size={19} aria-hidden="true"/><span className="sr-only">{t("Attach files")}</span><input className="sr-only" type="file" multiple disabled={busy||working||uploaded>0} onChange={event=>setFiles(Array.from(event.target.files||[]))}/></label>
+      <Button type="button" variant="ghost" className="shrink-0 p-2" title={t("Add files")} aria-label={t("Add files")}
+        disabled={busy||working||uploaded>0} onClick={()=>upload.current?.click()}><Paperclip size={19} aria-hidden="true"/></Button>
+      <input ref={upload} hidden data-discussion-upload type="file" multiple
+        accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.docx,.xlsx,.txt,.md,.csv,.json,.log,.sql,.xml"
+        disabled={busy||working||uploaded>0} onChange={event=>{
+          const chosen=Array.from(event.currentTarget.files||[]);
+          event.currentTarget.value="";
+          if(chosen.length)setFiles(chosen);
+        }}/>
       <div className="field"><label className="sr-only" htmlFor="discussion-message">{t("Your message")}</label>
       <Textarea id="discussion-message" rows={2} maxLength={30000} value={text} onChange={event=>setText(event.target.value)}
         placeholder={t(working ? "The assistant is working…" : "Write your message…")} disabled={busy || working}
