@@ -42,6 +42,8 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
       return route.fulfill({ json: current });
     });
     await page.goto("/admin?tab=environments");
+    const toggle = page.locator(".environment-card [data-environment-toggle]");
+    await toggle.click();
     const panel = page.locator(".application-knowledge");
     await expect(panel).not.toHaveAttribute("open", "");
     await expect(panel.locator("summary").first()).toContainText(t("Business context provided"));
@@ -62,6 +64,10 @@ for (const language of ["en", "fr"] as const) for (const theme of ["light", "dar
     await panel.getByRole("button", { name: t("Add a document"), exact: true }).click();
     await (await chooser).setFiles({ name: "procedure.md", mimeType: "text/markdown", buffer: Buffer.from("Fixture procedure") });
     await expect(panel.getByRole("link", { name: "procedure.md", exact: true })).toBeVisible();
+    await expect(presentation).toHaveValue("Unsaved vocabulary");
+    await toggle.click();
+    await expect(presentation).toBeHidden();
+    await toggle.click();
     await expect(presentation).toHaveValue("Unsaved vocabulary");
     await expect(panel.getByRole("link", { name: "https://example.org/new", exact: true })).toBeVisible();
     await expect(panel.getByRole("status")).toContainText(t("Text and link changes still need saving."));

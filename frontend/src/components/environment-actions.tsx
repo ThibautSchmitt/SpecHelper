@@ -23,6 +23,8 @@ export function EnvironmentActions({
   onChanged,
   onSynchronize,
   onCheckUpdates,
+  expanded,
+  onExpand,
   children,
 }: {
   children: (actions: ReactNode) => ReactNode;
@@ -32,6 +34,8 @@ export function EnvironmentActions({
   onChanged: (message: string) => Promise<void>;
   onSynchronize: () => void;
   onCheckUpdates: () => void;
+  expanded: boolean;
+  onExpand: () => void;
 }) {
   const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -49,6 +53,7 @@ export function EnvironmentActions({
     if (mode !== "delete" && dialog.current?.open) dialog.current.close();
   }, [mode]);
   function open(next: "edit" | "duplicate" | "delete") {
+    if (next !== "delete") onExpand();
     setOriginal(structuredClone(value));
     setName(next === "duplicate" ? t("{name} (copy)", { name: value.name.slice(0, 85) }) : value.name);
     setPublicationConnections([...(value.publication_connection_ids || [])]);
@@ -228,10 +233,11 @@ export function EnvironmentActions({
         variant="outline"
         size="sm"
         disabled={disabled || busy}
-        aria-expanded={mode === "edit"}
+        aria-expanded={mode === "edit" && expanded}
         aria-controls={`environment-editor-${value.id}`}
         onClick={() => {
-          if (mode === "edit") { setMode(null); setError(""); }
+          if (mode === "edit" && !expanded) onExpand();
+          else if (mode === "edit") { setMode(null); setError(""); }
           else open("edit");
         }}
         aria-label={t("Edit {name}", { name: value.name })}
@@ -279,6 +285,7 @@ export function EnvironmentActions({
       </details>
       </>)}
       {(mode === "edit" || mode === "duplicate") && <section
+        hidden={!expanded}
         id={`environment-editor-${value.id}`}
         aria-labelledby={`environment-dialog-${value.id}`}
         className="mt-4 min-w-0 border-t pt-4"

@@ -9,6 +9,8 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ### Git favorites and editable environment copies
 
+- Collapse environment cards behind a right-hand chevron, preserving visible
+  titles, status and actions, keyboard access and unsaved edits when folding.
 - Save instance-wide project and branch/tag favorites per Git connection and show
   them first in source selectors without changing remote search pagination or
   bypassing source permissions. Preserve favorites across discovery refreshes.

@@ -40,6 +40,7 @@ test("environment instructions and durable documents can be changed independentl
   });
   await page.goto("/admin");
   await page.getByRole("button", { name: "Environments", exact: true }).click();
+  await page.locator(".environment-card [data-environment-toggle]").click();
   await page.getByText("Application knowledge", { exact: true }).click();
   await expect(page.getByLabel("Business presentation and vocabulary")).toHaveValue("Review the active implementation");
   await page.getByLabel("Business presentation and vocabulary").fill("Check Java and Python source references.");
@@ -80,6 +81,7 @@ test("French context form shows unreadable files and recovers from stale revisio
   });
   await page.goto("/admin");
   await page.getByRole("button", { name: "Environnements", exact: true }).click();
+  await page.locator(".environment-card [data-environment-toggle]").click();
   await page.getByText("Connaissances de l’application", { exact: true }).click();
   await expect(page.getByText("Document illisible. Remplacez-le par un fichier pris en charge.", { exact: true })).toBeVisible();
   const instructions = page.getByLabel("Présentation et vocabulaire métier");

@@ -2536,5 +2536,7 @@
   "The Git connection changed. Refresh before editing favorites.": "La connexion Git a changé. Actualisez avant de modifier les favoris.",
   "Keep at most 100 favorite versions per project.": "Conservez au maximum 100 versions favorites par dépôt.",
   "Branches": "Branches",
-  "Tags": "Tags"
+  "Tags": "Tags",
+  "Expand {name}": "Déplier {name}",
+  "Collapse {name}": "Replier {name}"
 }

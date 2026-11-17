@@ -2,7 +2,7 @@
 import { useI18n } from "@/lib/i18n";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { GitBranch, Plug, Paintbrush, Settings, Database, Plus } from "lucide-react";
+import { ChevronDown, GitBranch, Plug, Paintbrush, Settings, Database, Plus } from "lucide-react";
 import { ThemeControl } from "@/components/theme-control";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -61,6 +61,7 @@ function AdminPanel() {
   const [guidanceReview, setGuidanceReview] = useState(false);
   const [connections, setConnections] = useState<Connections | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [expandedEnvironments, setExpandedEnvironments] = useState<Set<number>>(() => new Set());
   const [settings, setSettings] = useState({
     name: "SpecHelper",
     primary_color: "#2563eb",
@@ -215,11 +216,14 @@ function AdminPanel() {
             <div className="mt-5 space-y-4">
           {environments.map((e) => {
             const database=connections?.databases.find(database=>database.id === e.database_id);
+            const expanded = expandedEnvironments.has(e.id);
             return (
             <Card key={e.id} className="environment-card">
                   <EnvironmentActions
                     value={e}
                     databases={connections?.databases || []}
+                    expanded={expanded}
+                    onExpand={() => setExpandedEnvironments(previous => new Set(previous).add(e.id))}
                     disabled={busy || ["PENDING", "SYNCING"].includes(e.status)}
                     onSynchronize={() => action(
                       () => send(`/environments/${e.id}/sync`),
@@ -241,8 +245,19 @@ function AdminPanel() {
                 </div>
                 <div className="ml-auto flex flex-wrap items-center justify-end gap-2" data-environment-actions>
                   {actions}
+                  <Button type="button" variant="ghost" size="sm" className="w-9 shrink-0 px-0" data-environment-toggle
+                    aria-label={t(expanded ? "Collapse {name}" : "Expand {name}", { name: e.name })}
+                    aria-expanded={expanded} aria-controls={`environment-details-${e.id}`}
+                    onClick={() => setExpandedEnvironments(previous => {
+                      const next = new Set(previous);
+                      if (next.has(e.id)) next.delete(e.id); else next.add(e.id);
+                      return next;
+                    })}>
+                    <ChevronDown size={18} aria-hidden="true" className={expanded ? "rotate-180" : ""} />
+                  </Button>
                 </div>
               </div>
+              <div id={`environment-details-${e.id}`} hidden={!expanded}>
               {e.synced_at && <p className="mt-2 text-xs muted">{t("Last successful environment update")}: {new Date(e.synced_at).toLocaleString(dateLocale)}</p>}
               <section className="mt-5 border-t pt-4" aria-label={t("Git sources")}>
                 <h3 className="text-sm font-medium">{t("Git sources")}</h3>
@@ -301,6 +316,7 @@ function AdminPanel() {
               <PublicationConnectionsSummary values={e.publication_connections || []} />
               <EnvironmentContext environmentId={e.id} summary={e.knowledge_summary} />
               {protocol !== "2.4" && <EnvironmentLibrary environmentId={e.id} />}
+              </div>
                     </>}
                   </EnvironmentActions>
             </Card>

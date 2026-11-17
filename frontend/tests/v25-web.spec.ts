@@ -26,6 +26,7 @@ function configuration(revision = 1, references: { url: string; note: string }[]
 async function contextPanel(page: Page, language: "en" | "fr") {
   const t = (key: string) => dictionary(language, key);
   await page.goto("/admin?tab=environments");
+  await page.locator(".environment-card [data-environment-toggle]").click();
   await page.getByText(t("Application knowledge"), { exact: true }).click();
   return page.locator(".application-knowledge");
 }

@@ -34,6 +34,7 @@ for (const language of ["en", "fr"] as const) {
     });
     await page.goto("/admin?tab=environments");
     const card = page.locator(".environment-card");
+    await card.locator("[data-environment-toggle]").click();
     const tag = card.locator(".title-tags .badge");
     await expect(tag).toHaveText(t("Partially up to date"));
     await expect(tag).toHaveAttribute("data-state", "PARTIAL");

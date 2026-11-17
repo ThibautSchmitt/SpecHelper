@@ -63,10 +63,22 @@ test("environment: changes, conflict and confirmed deletion", async ({
   await page.goto("/admin");
   await page.getByRole("button", { name: "Environments", exact: true }).click();
   const menu = page.locator(".environment-card details.action-menu");
+  const toggle = page.locator(".environment-card [data-environment-toggle]");
+  const details = page.locator("#environment-details-998");
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(details).toBeHidden();
+  await toggle.press("Enter");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(details).toBeVisible();
+  await toggle.press("Space");
+  await expect(details).toBeHidden();
+  expect(writes).toBe(0);
   await page.getByLabel("More actions for Interface validation", { exact: true }).click();
   await menu.getByRole("button", { name: "Update", exact: true }).click();
   await expect.poll(() => synchronizations).toBe(1);
   await expect(menu).not.toHaveAttribute("open", "");
+  await expect(details).toBeHidden();
   expect(writes).toBe(0);
   await page
     .getByRole("button", { name: "Edit Interface validation", exact: true })
@@ -75,6 +87,10 @@ test("environment: changes, conflict and confirmed deletion", async ({
   await editor
     .getByLabel("Environment name", { exact: true })
     .fill("Renamed validation");
+  await toggle.click();
+  await expect(editor).toBeHidden();
+  await toggle.click();
+  await expect(editor.getByLabel("Environment name", { exact: true })).toHaveValue("Renamed validation");
   expect(writes).toBe(0);
   await expect(editor.locator("[data-editor-actions]").getByRole("button")).toHaveText(["Cancel", "Save"]);
   await editor.getByRole("button", { name: "Save", exact: true }).click();

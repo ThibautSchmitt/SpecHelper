@@ -6,6 +6,10 @@ with SpecHelper or the name configured for the instance, not separate provider s
 
 ## Reuse environment sources
 
+Environment cards start collapsed. Use the chevron on the right to show or hide
+their sources, connections and application knowledge. Their name, status and actions
+remain visible. Folding a card preserves unsaved edits and does not start any operation.
+
 In **Administration → Environments**, use the star below the selected project or
 version to add or remove a favorite. Favorites appear first in the project and
 branch/tag selectors, including when remote discovery has not reached their page.

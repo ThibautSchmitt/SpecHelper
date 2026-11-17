@@ -93,11 +93,12 @@ for (const language of ["en", "fr"] as const) {
     const card = page.locator(".environment-card");
     await expect(page.getByRole("region", { name: t("Environments"), exact: true }).getByRole("heading", { name: t("Environments"), exact: true })).toBeVisible();
     const actions = card.locator("[data-environment-actions]");
-    await expect(actions.getByRole("button")).toHaveText([t("Edit")]);
+    await expect(actions.getByRole("button", { name: t("Edit {name}").replace("{name}", "Staging"), exact: true })).toBeVisible();
+    await actions.locator("[data-environment-toggle]").click();
     const menu = actions.locator("details.action-menu");
     const more = actions.getByLabel(t("More actions for {name}").replace("{name}", "Staging"), { exact: true });
     await more.click();
-    await expect(menu.getByRole("button")).toHaveText([t("Check for updates"), t("Update"), t("Delete")]);
+    await expect(menu.getByRole("button")).toHaveText([t("Duplicate"), t("Check for updates"), t("Update"), t("Delete")]);
     await menu.getByRole("button", { name: t("Update"), exact: true }).focus();
     await page.keyboard.press("Escape");
     await expect(menu).not.toHaveAttribute("open", "");
