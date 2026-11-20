@@ -607,6 +607,62 @@ def test_independent_omission_is_carried_to_final_scoped_outputs(
     assert value.analysis_runs.get().orchestration["coverage"]["concerns"][0]["kind"] == "omission"
 
 
+@pytest.mark.django_db
+def test_verifier_can_finish_after_five_minutes_with_a_preserved_legacy_checkpoint(
+    environment, storage, committed_source, bundle
+):
+    from core.models import InstanceSettings
+    from core.step_supervisor import process_timeout
+
+    InstanceSettings.objects.update_or_create(pk=1, defaults={"orchestration": {"tool_timeout_seconds": 3600}})
+    value = Request.objects.create(environment=environment, analysis_protocol="2.4", need="Explain cancellation boundaries.", language="en")
+    enqueue_analysis(value.pk)
+    values = [
+        {"status": "READY_TO_ANALYZE", "understanding": value.need, "questions": [], "ticket": None, "complexity": "simple"},
+        report(committed_source), report(committed_source, exception=True),
+        {"status": "APPROVED", "summary": "Review the migration exception.", "issues": [], "verification": None},
+        verification(committed_source), bundle.model_dump(),
+    ]
+    verifier_calls = []
+    frozen = copy.deepcopy(value.analysis_runs.get().context_snapshot)
+    original_outputs = None
+
+    def invoke(path, payload, **kwargs):
+        if payload["profile"] == "synthesis":
+            verifier_calls.append(payload)
+            # Simulate a provider that needs ten minutes, without waiting or
+            # making any external call. The old 300-second snapshot would fail.
+            simulated_seconds = 600
+            if payload["timeout"] <= simulated_seconds:
+                return {"timed_out": True, "session_id": str(uuid.uuid4())}
+            assert kwargs["timeout"] > payload["timeout"] == 3600
+        return {"output": values.pop(0), "session_id": payload["session_id"] or str(uuid.uuid4())}
+
+    with patch("core.worker.request_workspace", return_value=storage), patch("core.worker.runtime_call", side_effect=invoke):
+        for _ in range(10):
+            queued = value.analysis_runs.get().job
+            if queued.status == "QUEUED" and queued.payload.get("next_checkpoint") == "verifier":
+                run = value.analysis_runs.get()
+                original_outputs = copy.deepcopy(run.orchestration["outputs"])
+                run.orchestration["config"]["tool_timeout_seconds"] = 300
+                run.save(update_fields=["orchestration"])
+            job = claim_job()
+            if job is None:
+                break
+            if job.payload.get("next_checkpoint") == "verifier":
+                assert process_timeout(job) == 3660
+            perform_job(job)
+            value.refresh_from_db()
+            if value.status in {"READY", "PARTIAL", "ERROR"}:
+                break
+    assert value.status == "READY", value.error
+    assert len(verifier_calls) == 1 and not values
+    run = value.analysis_runs.get()
+    assert original_outputs and run.context_snapshot == frozen
+    assert all(run.orchestration["outputs"][key] == item for key, item in original_outputs.items())
+    assert run.orchestration["execution_policy_history"][-1]["reason"] == "legacy_timeout_before_step"
+
+
 def migration_question():
     options = []
     for key, label, behavior in (

@@ -191,8 +191,11 @@ An execution timeout is reported explicitly; it never becomes successful verific
 The process supervisor follows the invocation's configured budget, with a sixty-second
 margin for transport and checkpoint persistence. Stale conversational/library jobs are
 not recovered before that budget and a further fifteen-second recovery margin expire.
-Persisted installation settings retain their selected budget; the schema default does
-not silently replace a previously saved value.
+Migration 0056 upgrades a saved five-minute invocation budget to one hour. Other
+custom budgets remain unchanged. A pending analysis that still holds the old
+five-minute snapshot adopts the current invocation budget before its next checkpoint,
+with the change recorded in its execution policy history. Running attempts and
+completed results keep their original records; no checkpoint or evidence is discarded.
 
 The roles inside an analysis remain sequential while other conversations run alongside
 it. Actual provider throttling, quota, authentication and backoff still constrain work.

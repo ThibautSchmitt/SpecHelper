@@ -621,6 +621,8 @@ class Orchestrator:
                     )
             # At most one repair for artifact format or an already answered business question.
             for attempt in range(2):
+                # Each incremental role, including verifier/synthesis, receives
+                # the full invocation budget; role budgets only apply to legacy runs.
                 remaining = (
                     self.config.get("tool_timeout_seconds", 3600)
                     if self.incremental

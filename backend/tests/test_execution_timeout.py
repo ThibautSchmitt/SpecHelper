@@ -1,10 +1,15 @@
 """Hour-long invocations remain bounded and explicit retries retain checkpoints."""
 
+import copy
+import importlib
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from django.apps import apps
+from django.db import connection
 from django.utils import timezone
 from pydantic import ValidationError
 
@@ -32,6 +37,87 @@ def test_runtime_and_antigravity_accept_one_hour_but_keep_a_finite_ceiling():
     assert GlobalOrchestrationIn().tool_timeout_seconds == 3600
     with pytest.raises(ValidationError):
         GlobalOrchestrationIn(tool_timeout_seconds=3601)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("checkpoint,role", [("analyst", "analyst"), ("verifier", "verifier")])
+@pytest.mark.parametrize("saved_timeout", [300, 600])
+def test_pending_checkpoint_upgrades_only_the_old_five_minute_budget(
+    environment, checkpoint, role, saved_timeout
+):
+    from core.step_supervisor import process_timeout
+
+    InstanceSettings.objects.update_or_create(
+        pk=1, defaults={"orchestration": {"tool_timeout_seconds": 3600}}
+    )
+    value = Request.objects.create(environment=environment, analysis_protocol="2.4", need="Explain contract dates.")
+    enqueue_analysis(value.pk)
+    run = value.analysis_runs.get()
+    run.orchestration["config"]["tool_timeout_seconds"] = saved_timeout
+    run.orchestration["config"]["timeout_seconds"] = saved_timeout
+    run.orchestration["outputs"]["requirement"] = {"retained": "completed observation"}
+    run.save(update_fields=["orchestration"])
+    frozen, original_outputs = copy.deepcopy(run.context_snapshot), copy.deepcopy(run.orchestration["outputs"])
+    job = run.job
+    job.payload.update(next_checkpoint=checkpoint, current_role=role)
+    job.save(update_fields=["payload"])
+    job = claim_job()
+    assert job is not None
+    run.refresh_from_db()
+    expected = 3600 if saved_timeout == 300 else saved_timeout
+    assert run.orchestration["config"]["tool_timeout_seconds"] == expected
+    assert process_timeout(job) == expected + 60
+    assert run.orchestration["outputs"] == original_outputs
+    assert run.context_snapshot == frozen
+    assert job.executions.get(status="RUNNING").checkpoint == checkpoint
+    if saved_timeout == 300:
+        assert run.orchestration["execution_policy_history"][-1]["previous_timeout_seconds"] == 300
+    else:
+        assert not run.orchestration.get("execution_policy_history")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("saved_timeout", [300, 600, 3600, None])
+def test_timeout_migration_preserves_custom_settings_and_completed_analysis_history(saved_timeout):
+    config = {"global_instructions": "Keep this policy.", "v24_legacy_configuration": {"tool_timeout_seconds": 300}}
+    if saved_timeout is not None:
+        config["tool_timeout_seconds"] = saved_timeout
+    settings, _ = InstanceSettings.objects.update_or_create(pk=1, defaults={"orchestration": config})
+    value = Request.objects.create(need="Historical analysis.")
+    historical = AnalysisRun.objects.create(
+        request=value, number=1, status="DONE",
+        orchestration={"config": {"tool_timeout_seconds": 300}, "outputs": {"verifier": {"retained": True}}},
+        steps=[{"public_role": "verifier", "status": "DONE", "timeout_seconds": 300}],
+    )
+    original = copy.deepcopy(historical.orchestration), copy.deepcopy(historical.steps)
+    migrate = importlib.import_module("core.migrations.0056_hour_long_ai_invocations").upgrade_timeout
+    migrate(apps, SimpleNamespace(connection=connection))
+    migrate(apps, SimpleNamespace(connection=connection))
+    settings.refresh_from_db()
+    expected = {**config, "tool_timeout_seconds": 3600} if saved_timeout == 300 else config
+    assert settings.orchestration == expected
+    from core.orchestration_settings import get_config
+
+    assert get_config("2.4")["tool_timeout_seconds"] == (3600 if saved_timeout in {None, 300} else saved_timeout)
+    historical.refresh_from_db()
+    assert (historical.orchestration, historical.steps) == original
+
+
+@pytest.mark.django_db
+def test_legacy_timeout_refresh_never_changes_an_active_attempt(environment):
+    from core.step_execution import reserve_step
+
+    InstanceSettings.objects.update_or_create(pk=1, defaults={"orchestration": {"tool_timeout_seconds": 3600}})
+    value = Request.objects.create(environment=environment, analysis_protocol="2.4", need="Explain contract dates.")
+    enqueue_analysis(value.pk)
+    run = value.analysis_runs.get()
+    run.orchestration["config"]["tool_timeout_seconds"] = 300
+    run.save(update_fields=["orchestration"])
+    StepExecution.objects.create(job=run.job, checkpoint="verifier", public_role="verifier", status="RUNNING")
+    assert reserve_step(run.job) is False
+    run.refresh_from_db()
+    assert run.orchestration["config"]["tool_timeout_seconds"] == 300
+    assert not run.orchestration.get("execution_policy_history")
 
 
 @pytest.mark.django_db

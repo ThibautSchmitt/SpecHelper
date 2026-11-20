@@ -207,6 +207,23 @@ def save_run(run, update_fields):
         run.save(update_fields=update_fields)
 
 
+def refresh_execution_timeout(run, *, reason):
+    """Change future invocation budgets without replacing retained observations."""
+    from .orchestration_settings import get_config
+
+    timeout = get_config("2.4")["tool_timeout_seconds"]
+    previous_timeout = run.orchestration.get("config", {}).get("tool_timeout_seconds", 300)
+    if timeout != previous_timeout:
+        run.orchestration.setdefault("execution_policy_history", []).append({
+            "changed_at": timezone.now().isoformat(), "reason": reason,
+            "previous_timeout_seconds": previous_timeout, "timeout_seconds": timeout,
+        })
+        run.orchestration.setdefault("config", {})["tool_timeout_seconds"] = timeout
+        if "timeout_seconds" in run.orchestration["config"]:
+            run.orchestration["config"]["timeout_seconds"] = timeout
+        run.save(update_fields=["orchestration"])
+
+
 @transaction.atomic
 def reserve_step(job):
     """Called with the job locked. Reserve only its next checkpoint and quota group."""
@@ -226,6 +243,10 @@ def reserve_step(job):
     role = job.payload.get("current_role", "analyst")
     if StepExecution.objects.filter(job=job, status="RUNNING").exists():
         return False
+    # Older installations froze the five-minute default in each analysis.
+    # Refresh it only before a new invocation, never during a running attempt.
+    if state.get("config", {}).get("tool_timeout_seconds", 300) == 300:
+        refresh_execution_timeout(run, reason="legacy_timeout_before_step")
     step, _ = StepExecution.objects.get_or_create(
         job=job, checkpoint=checkpoint, defaults={"public_role": role}
     )
@@ -499,19 +520,7 @@ def retry_analysis(request_id):
     if job.payload.get("connection_ids"):
         raise HttpError(409, "The previous execution is still stopping. Retry shortly.")
     run = AnalysisRun.objects.get(job=job)
-    from .orchestration_settings import get_config
-
-    timeout = get_config("2.4")["tool_timeout_seconds"]
-    previous_timeout = run.orchestration.get("config", {}).get("tool_timeout_seconds", 300)
-    if timeout != previous_timeout:
-        run.orchestration.setdefault("execution_policy_history", []).append({
-            "changed_at": timezone.now().isoformat(), "reason": "explicit_retry",
-            "previous_timeout_seconds": previous_timeout, "timeout_seconds": timeout,
-        })
-        run.orchestration.setdefault("config", {})["tool_timeout_seconds"] = timeout
-        if "timeout_seconds" in run.orchestration["config"]:
-            run.orchestration["config"]["timeout_seconds"] = timeout
-        run.save(update_fields=["orchestration"])
+    refresh_execution_timeout(run, reason="explicit_retry")
     invalidate_superseded_steps(job, run.orchestration.get("outputs", {}))
     job.status, job.error, job.finished_at = "QUEUED", "", None
     job.payload["waiting_reason"] = ""

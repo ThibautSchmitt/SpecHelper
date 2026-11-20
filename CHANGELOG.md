@@ -7,6 +7,15 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Invocation limits on existing installations
+
+- Upgrade the saved five-minute AI invocation limit to one hour with migration
+  0056; preserve other custom limits and historical configuration snapshots.
+- Refresh an analysis's old five-minute budget before reserving its next checkpoint,
+  including the verifier. Keep runtime and process-supervisor limits aligned, record
+  the policy change, and retain completed checkpoints, sessions and frozen evidence.
+  Do not change an active attempt or turn execution limits into unbounded calls.
+
 ### Current conversation context and document uploads
 
 - Refresh environment instructions, enabled document versions, links, Git references
