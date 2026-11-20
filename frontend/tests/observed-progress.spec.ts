@@ -16,6 +16,23 @@ function job(){return {id:1,kind:'discussion',status:'QUEUED',revision:2,created
 
 for(const language of ['en','fr'] as const){
  const t=(key:string)=>translate(key,language);
+ test(`an interrupted older cycle is historical after a later completed analysis in ${language}`,async({page})=>{
+  const stages=['analyst','counter_analyst','verifier'].map(role=>({role,status:'done'}));
+  const value:any={...dossier(),status:'READY',analysis_runs:[
+   {number:1,status:'ERROR',started_at:at,finished_at:'2026-10-30T10:01:00Z',steps:[]},
+   {number:2,status:'READY',started_at:'2026-10-30T10:02:00Z',finished_at:'2026-10-30T10:03:00Z',steps:[],execution:{status:'READY',current_role:'verifier',checkpoint:'writer',waiting_reason:'',waiting_causes:[],all_stages_done:true,stages}},
+  ]};
+  await page.route('**/api/**',route=>route.fulfill({json:[]}));
+  await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
+  await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
+  await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
+  await page.goto(`/analyses/${id}`);
+  const previous=page.locator('[data-message="progress-1"]');
+  await expect(previous.locator('.investigation-progress > summary')).toContainText(t('Previous analysis interrupted'));
+  await expect(previous.locator('.investigation-attention')).toHaveCount(0);
+  await expect(previous).toContainText(t('A later analysis is available. This interrupted cycle is retained in history.'));
+  await expect(page.locator('[data-message="progress-2"] .investigation-progress > summary')).toContainText(t('Investigation finished'));
+ });
  test(`interrupted analysis stays before later discussion turns and after its clarification in ${language}`,async({page})=>{
   const oldJob={...job(),kind:'analysis',run_number:1,status:'ERROR',started_at:at,finished_at:null};
   let value:any={...dossier(),discussion:{...dossier().discussion,revision:1},messages:[

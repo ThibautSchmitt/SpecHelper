@@ -229,6 +229,21 @@ for(const outcome of ['ERROR','UNCERTAIN'])test(`a ${outcome} write keeps the dr
  expect(fixture.deep).toBe(0);
 });
 
+for(const language of ['en','fr'] as const)test(`report viewer controls and download are translated in ${language}`,async({page})=>{
+ const t=(key:string)=>translate(key,language);
+ const fixture=await setup(page,language,true);fixture.finishAnalysis();
+ await page.goto(`/analyses/${id}`);
+ await page.getByRole('button',{name:t('View business report'),exact:true}).click();
+ const business=page.getByRole('dialog',{name:t('Business report'),exact:true});
+ const download=page.waitForEvent('download');
+ await business.getByRole('button',{name:`${t('Download')} · .md`,exact:true}).click();
+ expect((await download).suggestedFilename()).toBe('analysis-1-business.md');
+ if(language==='fr')await expect(business.getByRole('button',{name:/Download/})).toHaveCount(0);
+ await business.getByRole('button',{name:t('Close'),exact:true}).click();
+ await page.getByRole('button',{name:t('View technical report'),exact:true}).click();
+ await expect(page.getByRole('dialog',{name:t('Technical report'),exact:true})).toBeVisible();
+});
+
 test('saved draft survives explicit deep analysis, reports and a reviewed update',async({page})=>{
  const fixture=await setup(page,'en',true);await page.goto(`/analyses/${id}`);
  await page.getByRole('button',{name:'Draft',exact:true}).click();

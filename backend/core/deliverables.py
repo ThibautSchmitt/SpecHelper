@@ -81,7 +81,8 @@ def result_report(analysis_id, number, kind):
         if version.evidence:
             lines += [
                 render_evidence(
-                    version.evidence, language, include_source_details=kind == "technical"
+                    version.evidence, language, include_source_details=kind == "technical",
+                    summary_only=kind == "business",
                 )
             ]
         lines += [render_sources(sources, kind, language)]
@@ -128,7 +129,35 @@ def interrupted_report(analysis_id, number, kind):
     if subject:
         lines += section("Need", subject, language)
     roles = {"analyst": "Analyst", "counter_analyst": "Counter-analyst", "verifier": "Verifier"}
+    if kind == "business":
+        seen = set()
+        for owner in run.orchestration.get("outputs", {}).values():
+            if not isinstance(owner, dict):
+                continue
+            for content in (owner, owner.get("analysis", {})):
+                if not isinstance(content, dict):
+                    continue
+                summary = content.get("business_summary")
+                if summary and str(summary) not in seen:
+                    lines += [summary_markdown(summary, language)]
+                    seen.add(str(summary))
+                for key, label in (("business_explanation", "Business explanation"), ("current_behavior", "Current behavior"), ("observed_behavior", "Current behavior"), ("rules", "Business rules"), ("steps", "Process steps"), ("examples", "Examples and special cases")):
+                    item = content.get(key)
+                    identity = str(item)
+                    if item and identity not in seen:
+                        lines += section(label, item, language)
+                        seen.add(identity)
+        if not seen:
+            lines += [translate("No functional synthesis was recorded. The available technical findings remain in the technical report.", language), ""]
+        limits = list(dict.fromkeys(item for review in reviews for item in review["limits"]))
+        if limits:
+            lines += section("Important limits and pending checks", limits, language)
+        issues = list(dict.fromkeys(item for review in reviews for item in review["issues"]))
+        if issues:
+            lines += section("Review disagreements", issues, language)
     for review in reviews:
+        if kind == "business":
+            continue
         lines += [
             "## " + translate(roles[review["public_role"]], language),
             "",

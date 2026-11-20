@@ -2538,5 +2538,17 @@
   "Branches": "Branches",
   "Tags": "Tags",
   "Expand {name}": "Expand {name}",
-  "Collapse {name}": "Collapse {name}"
+  "Collapse {name}": "Collapse {name}",
+  "Download": "Download",
+  "Publication": "Publication",
+  "No source references were verified for this explanation.": "No source references were verified for this explanation.",
+  "Technical summary": "Technical summary",
+  "No technical synthesis was recorded. Use only the recorded evidence below; missing architecture and impacts still require investigation.": "No technical synthesis was recorded. Use only the recorded evidence below; missing architecture and impacts still require investigation.",
+  "No functional synthesis was recorded. The available technical findings remain in the technical report.": "No functional synthesis was recorded. The available technical findings remain in the technical report.",
+  "{count} conclusion(s): {status}": "{count} conclusion(s): {status}",
+  "Ticket documents not found.": "Ticket documents not found.",
+  "Generated documents require their conversation ticket.": "Generated documents require their conversation ticket.",
+  "Previous analysis interrupted": "Previous analysis interrupted",
+  "A later analysis is available. This interrupted cycle is retained in history.": "A later analysis is available. This interrupted cycle is retained in history.",
+  "Previous attempt interrupted": "Previous attempt interrupted"
 }

@@ -157,7 +157,7 @@ export function AnalysisConversation({ value, result, reply, actions, controls, 
       {events.map(event => <li key={event.id} id={event.id} className={`conversation-message conversation-${event.speaker}`} data-message={event.id}>
         <article className="conversation-bubble">
           {event.run && event.run.number>0 && runActions && <div className="mb-2 flex justify-end">{runActions(event.run.number)}</div>}
-          {event.run && <InvestigationProgress run={event.run} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
+          {event.run && <InvestigationProgress run={event.run} historical={runs.some(run=>run.number>event.run!.number && ["READY","PARTIAL"].includes(run.status))} work={value.work_progress?.find(job=>job.kind==="analysis"&&job.run_number===event.run!.number)} unavailable={trackingUnavailable}/>}
           {event.run&&["ERROR","CANCELLED","PARTIAL","READY"].includes(event.run.status)&&event.run.role_reviews?.some(review=>review.summary||review.findings.length||review.issues.length||review.limits.length)&&!versions.some(version=>version.run_number===event.run!.number)&&<div className="mt-2 flex flex-wrap gap-2">
             <DeliverableViewer url={`/analyses/${value.id}/runs/${event.run.number}/reports/business`} title="Business report" label="View business report"/>
             <DeliverableViewer url={`/analyses/${value.id}/runs/${event.run.number}/reports/technical`} title="Technical report" label="View technical report"/>
@@ -200,7 +200,7 @@ export function conversationAnswer(result:ResultVersion) {
 const stageLabels:Record<string,string>={done:"Completed",running:"In progress",waiting:"Upcoming",not_started:"Not started",blocked:"AI unavailable",clarification:"Clarification requested",error:"Technical failure",cancelled:"Analysis cancelled",unknown:"Stage completion not recorded"};
 const causeLabels:Record<string,string>={quota:"Quota limit reported",busy:"Assistant busy",connection_missing:"No authenticated connection",model_unavailable:"Model unavailable",unavailable:"Unavailable"};
 
-function InvestigationProgress({run,work,unavailable=false}:{run:Run;work?:WorkExecution;unavailable?:boolean}) {
+function InvestigationProgress({run,work,unavailable=false,historical=false}:{run:Run;work?:WorkExecution;unavailable?:boolean;historical?:boolean}) {
   const {t}=useI18n();
   const snapshot=run.execution;
   const status=snapshot?.status || run.status;
@@ -216,9 +216,10 @@ function InvestigationProgress({run,work,unavailable=false}:{run:Run;work?:WorkE
   const clarification=status === "NEEDS_CLARIFICATION";
   const subtitle=drafting && waiting ? "The three stages have finished. The final response will be drafted when an assistant is available." : drafting && active ? "The three stages have finished. The final response is being prepared." : clarification ? "A business clarification is needed before continuing." : waiting ? current === "counter_analyst" ? "The counter-analysis will resume when an assistant is available." : current === "verifier" ? "Verification will resume when an assistant is available." : "The analysis will resume when an assistant is available." : active ? current === "counter_analyst" ? "Counter-analysis in progress…" : current === "verifier" ? "Verification in progress…" : "Investigation in progress…" : terminal && allDone ? "All three stages have finished." : "";
   const headline=status === "NEEDS_CLARIFICATION" ? "Needs clarification" : status === "ERROR" ? "Analysis interrupted" : status === "CANCELLED" ? "Analysis cancelled" : terminal ? allDone ? "Investigation finished" : "Investigation finished · verification incomplete" : status === "QUEUED" ? snapshot?.waiting_reason ? "Waiting for an AI resource" : "In queue" : current === "counter_analyst" ? "Counter-analysis in progress…" : current === "verifier" ? "Verification in progress…" : "Analysis in progress";
+  const historicalFailure=historical && status === "ERROR";
   const observed=work?.phases || [];
-  return <><ProgressDisclosure className="investigation-progress" cycle={run.number || "pending"} active={active} complete={terminal&&allDone} attention={waiting||clarification||status==="ERROR"} partial={status==="PARTIAL"} subtitle={subtitle} clock={work?.analysis_clock} startedAt={work?.started_at} unavailable={unavailable&&active}
-    label={drafting&&waiting ? "Final response awaiting an assistant" : drafting&&active ? "Preparing final response…" : active&&observed.some(phase=>phase.active) ? activityLabel(observed) : active ? "Analysis in progress" : waiting ? "Waiting for an available assistant" : headline}>
+  return <><ProgressDisclosure className="investigation-progress" cycle={run.number || "pending"} active={active} complete={terminal&&allDone} attention={waiting||clarification||status==="ERROR"&&!historicalFailure} partial={status==="PARTIAL"} subtitle={historicalFailure ? "A later analysis is available. This interrupted cycle is retained in history." : subtitle} clock={work?.analysis_clock} startedAt={work?.started_at} unavailable={unavailable&&active}
+    label={historicalFailure ? "Previous analysis interrupted" : drafting&&waiting ? "Final response awaiting an assistant" : drafting&&active ? "Preparing final response…" : active&&observed.some(phase=>phase.active) ? activityLabel(observed) : active ? "Analysis in progress" : waiting ? "Waiting for an available assistant" : headline}>
       <ol className="investigation-stages" aria-label={t("Investigation stages")}>{stages.map(stage=>{
         const causes = !drafting && stage.role === current && stage.status === "blocked" ? snapshot?.waiting_causes || [] : [];
         const label = causes.length === 1 ? causeLabels[causes[0]] || "Unavailable" : stageLabels[stage.status] || "Unknown";

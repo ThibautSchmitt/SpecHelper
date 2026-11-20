@@ -75,6 +75,57 @@ def test_waiting_for_ai_resources_keeps_the_cycle_open(environment):
     assert step.finished_at is not None
 
 
+def test_successful_retry_clears_conversation_and_activity_failure_without_erasing_history(
+    client, environment, monkeypatch
+):
+    from core.models import AnalysisRun
+    from core.question_outputs import QuestionOutput
+    from core.results import publish
+    from core.step_execution import wait_or_retry
+    from core.worker import perform_job
+
+    value = Request.objects.create(environment=environment, analysis_protocol="2.4", workflow="question", need="Explain rounding.", discussion_state={"enabled":True,"mode":"analysis","revision":1})
+    enqueue_analysis(value.pk)
+    run = value.analysis_runs.get()
+    run.orchestration["outputs"] = {key: {"questions": [], "retained": True} for key in ("requirement", "analyst", "comparison")}
+    run.steps = [{"public_role":role,"roles":["code" if role=="analyst" else "reviewer_writer"],"status":"DONE"} for role in ("analyst","counter_analyst")]
+    run.save(update_fields=["orchestration","steps"])
+    job = run.job
+    job.payload.update(next_checkpoint="verifier",current_role="verifier")
+    job.save(update_fields=["payload"])
+    job = claim_job()
+    failed = job.executions.get(status="RUNNING")
+    run.refresh_from_db()
+    run.steps.append({"public_role":"verifier","roles":["synthesis"],"status":"ERROR","diagnostic":"Previous timeout"})
+    run.save(update_fields=["steps"])
+    frozen = copy.deepcopy(run.context_snapshot)
+    wait_or_retry(job, failed.attempt_id, "Previous timeout", failed=True)
+    assert any(item["queue_state"] == "ERROR" for item in client.get("/api/queue").json())
+    assert client.post(f"/api/questions/{value.pk}/retry").status_code == 200
+
+    def completed(request_id, run_id, **kwargs):
+        resumed = AnalysisRun.objects.get(pk=run_id)
+        resumed.orchestration["outputs"]["verifier"] = {"questions": [], "report": {"blocking": False}}
+        resumed.steps.append({"public_role":"verifier","roles":["synthesis"],"status":"DONE"})
+        resumed.save(update_fields=["orchestration","steps"])
+        publish(request_id, resumed, QuestionOutput(status="READY", answer={"title":"Rounding", "summary":"The recorded rounding rule applies."}))
+
+    monkeypatch.setattr("core.worker.analyze", completed)
+    perform_job(claim_job())
+    run.refresh_from_db()
+    job.refresh_from_db()
+    # No source evidence was fabricated by this fixture: completion remains partial,
+    # while the technical incident has been resolved by the explicit retry.
+    assert run.status == "PARTIAL" and job.status == "DONE" and job.error == "", (run.error, job.error)
+    assert run.context_snapshot == frozen and value.analysis_runs.count() == 1
+    assert any(step.get("diagnostic") == "Previous timeout" for step in run.steps)
+    details = client.get(f"/api/analyses/{value.pk}").json()
+    assert details["analysis_runs"][0]["execution"]["status"] == "PARTIAL"
+    assert details["analysis_runs"][0]["execution"]["all_stages_done"]
+    card = next(item for item in client.get("/api/queue").json() if item["id"] == job.pk)
+    assert card["queue_state"] == "DONE" and not card["requires_attention"]
+
+
 def mark_pending():
     importlib.import_module("core.migrations.0031_mark_pending_steps").mark_pending(apps, None)
 

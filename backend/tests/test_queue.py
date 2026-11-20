@@ -78,6 +78,23 @@ def test_deleted_queue_targets_and_tied_timestamps_are_safe(client):
     assert all(v["request_id"] is None for v in values)
 
 
+def test_completed_later_cycle_replaces_old_failure_in_activity_without_hiding_other_failures(client, environment):
+    value = Request.objects.create(environment=environment, need="Explain rounding.", status="READY")
+    old = Job.objects.create(kind="analysis", target=str(value.pk), status="ERROR", error="Old interruption", finished_at=timezone.now())
+    AnalysisRun.objects.create(request=value, number=1, job=old, status="ERROR", error="Old interruption")
+    completed = Job.objects.create(kind="analysis", target=str(value.pk), status="DONE", finished_at=timezone.now())
+    AnalysisRun.objects.create(request=value, number=2, job=completed, status="READY")
+    unrelated = Request.objects.create(environment=environment, need="An unrelated unresolved problem.", status="ERROR")
+    failure = Job.objects.create(kind="analysis", target=str(unrelated.pk), status="ERROR", error="Still unresolved", finished_at=timezone.now())
+    AnalysisRun.objects.create(request=unrelated, number=1, job=failure, status="ERROR")
+    cards = client.get("/api/queue").json()
+    assert old.pk not in {card["id"] for card in cards}
+    assert next(card for card in cards if card["id"] == completed.pk)["queue_state"] == "DONE"
+    assert next(card for card in cards if card["id"] == failure.pk)["requires_attention"]
+    old.refresh_from_db()
+    assert old.status == "ERROR" and old.error == "Old interruption"
+
+
 def test_waiting_ai_cards_are_active_and_never_truncated_by_completed_history(client, environment):
     waiting = []
     for index in range(20):

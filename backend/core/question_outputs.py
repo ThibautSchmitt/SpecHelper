@@ -88,8 +88,8 @@ class QuestionAnswer(StrictModel):
         "all requested aspects of mixed questions and essential limitations. Keep additional "
         "unrequested technical evidence in the report fields. Never invent or hide access failures."
     ))
-    business_explanation: str = Field(default="", max_length=12000)
-    technical_explanation: str = Field(default="", max_length=16000)
+    business_explanation: str = Field(default="", max_length=12000, description="For business users: actors, functional behavior, business rules, scenarios, exceptions and functional impacts. Do not copy code, SQL, paths, commit hashes or implementation details here.")
+    technical_explanation: str = Field(default="", max_length=16000, description="For developers: observed architecture, components, dependencies, data flows, technical impacts, tests and missing investigations. Do not repeat the functional explanation. Leave empty if no technical synthesis is supported by inspected sources.")
     verified_facts: Items = Field(default_factory=list)
     rules: Items = Field(default_factory=list)
     steps: Items = Field(default_factory=list)
@@ -192,6 +192,7 @@ TECHNICAL_SECTIONS = (
 def _render(answer, baseline, kind, language, sources=None):
     answer = QuestionAnswer.model_validate(answer)
     references = _references(answer, baseline)
+    referenced_repositories = {item.repository for item in answer.references}
     if sources is not None:
         # New exports receive resolved source passages separately. Do not also
         # promote the legacy filename-only navigation list to supporting proof.
@@ -204,24 +205,34 @@ def _render(answer, baseline, kind, language, sources=None):
     if kind not in sections:
         raise ValueError("Unsupported documentation format")
     values = answer.model_dump()
-    introduction = answer.summary if kind == "business" else answer.response or answer.summary
+    introduction = answer.summary if kind == "business" else "" if kind == "technical" else answer.response or answer.summary
     lines = ["# " + answer.title, "", introduction, ""]
-    if answer.business_summary:
+    if answer.business_summary and kind != "technical":
         lines += [summary_markdown(answer.business_summary.model_dump(), language)]
-    for key, label in sections[kind] + COMMON_SECTIONS:
+    common = tuple(item for item in COMMON_SECTIONS if item[0] in {"confirmed_decisions", "uncertainties"}) if kind == "business" else COMMON_SECTIONS
+    for key, label in sections[kind] + common:
         if values[key]:
             lines += section(label, values[key], language)
+    if kind == "technical" and not any(values[key] for key, _ in TECHNICAL_SECTIONS):
+        lines += [translate("No technical synthesis was recorded. Use only the recorded evidence below; missing architecture and impacts still require investigation.", language), ""]
     if kind != "business" and (references or sources is None):
         lines += section("Source references", references, language)
     if answer.evidence:
         from .evidence_rendering import render_evidence
 
         lines += [render_evidence(answer.evidence.model_dump(), language,
-                                 include_source_details=kind != "business")]
+                                 include_source_details=kind != "business", summary_only=kind == "business")]
     if sources is not None:
-        from .report_sources import render_sources
+        from .report_sources import _text, render_sources
 
         lines += [render_sources(sources, kind, language)]
+        if kind != "business" and not sources and referenced_repositories:
+            # Retain the frozen revision as context, without promoting an old
+            # filename-only reference to a verified source passage.
+            lines += section("Frozen repository versions (not verified passages)", [
+                _text(f"{item['repository']} · {item.get('branch', '')} · {item['sha']}")
+                for item in baseline if item["repository"] in referenced_repositories
+            ], language)
     if not references and not sources:
         lines += [
             translate("No source references were verified for this explanation.", language),

@@ -79,6 +79,10 @@ function stateOf(job: QueueJob) {
   return job.queue_state || (job.request_status === "NEEDS_CLARIFICATION" && job.status === "DONE" ? "PAUSED" : job.status);
 }
 
+function historicalError(job: QueueJob) {
+  return stateOf(job) === "ERROR" && job.requires_attention === false;
+}
+
 function queueCards(jobs: QueueJob[]) {
   const latest = new Map<string, QueueJob>();
   for (const job of jobs) {
@@ -177,9 +181,9 @@ export function TaskQueue() {
   }, [jobs]);
   const cards = queueCards(jobs);
   const order = ["PAUSED", "ERROR", "RUNNING", "WAITING_AI", "QUEUED", "CANCELLED", "DONE"];
-  const completed = cards.filter(job => ["DONE", "CANCELLED"].includes(stateOf(job)))
+  const completed = cards.filter(job => ["DONE", "CANCELLED"].includes(stateOf(job)) || historicalError(job))
     .sort((a, b) => Date.parse(b.finished_at || b.created_at) - Date.parse(a.finished_at || a.created_at)).slice(0, 5);
-  const visible = cards.filter(job => !["DONE", "CANCELLED"].includes(stateOf(job)) || (showCompleted && completed.includes(job)))
+  const visible = cards.filter(job => !(["DONE", "CANCELLED"].includes(stateOf(job)) || historicalError(job)) || (showCompleted && completed.includes(job)))
     .sort((a, b) => order.indexOf(stateOf(a)) - order.indexOf(stateOf(b)));
   return <div className="task-queue">
     {error && <p role="alert" className="mt-4 text-sm">{t("Activity updates are unavailable. Previous information is retained.")}</p>}
@@ -188,9 +192,10 @@ export function TaskQueue() {
     <ol ref={list} className="mt-4 space-y-3" aria-label={t("Activity items")}>
       {visible.map(job => {
         const state = stateOf(job);
+        const historical = historicalError(job);
         const clarification = state === "PAUSED";
         const resultState = job.result_status || (job.request_status === "PARTIAL" ? "partial" : "pending");
-        const status = job.publication_status === "UNCERTAIN" ? "Publication uncertain"
+        const status = historical ? "Previous attempt interrupted" : job.publication_status === "UNCERTAIN" ? "Publication uncertain"
           : job.analysis_state === "scope_rejected" ? "Outside project scope" : clarification ? "Needs clarification" : state === "ERROR" ? "Technical failure"
           : state === "WAITING_AI" ? "Waiting for an AI resource" : state === "QUEUED" ? "In queue"
           : job.kind === "publication" && state === "DONE" ? "Ticket published"
@@ -205,7 +210,7 @@ export function TaskQueue() {
         const timing = clarification && waiting ? t("Waiting for your answer for {duration}", { duration: waiting })
           : waiting ? t("In queue for {duration}", { duration: waiting })
           : state === "RUNNING" && typeof active === "number" ? t(job.kind === "analysis" ? "Active AI: {minutes}m {seconds}s" : "Elapsed: {minutes}m {seconds}s", { minutes: Math.floor(active / 60), seconds: active % 60 }) : "";
-        const action = job.analysis_state === "scope_rejected" ? "Revise analysis" : clarification ? "Answer" : state === "ERROR" ? "See the problem" : "Open analysis";
+        const action = job.analysis_state === "scope_rejected" ? "Revise analysis" : clarification ? "Answer" : state === "ERROR" && !historical ? "See the problem" : "Open analysis";
         return <li key={job.id} data-job={String(job.id)} className="queue-card" data-state={state} data-result-status={resultState}>
           <div className="p-3">
             <div className="title-tags">
@@ -213,7 +218,7 @@ export function TaskQueue() {
               <span className="badge" data-state={state === "WAITING_AI" ? "QUEUED" : state === "PAUSED" ? "NEEDS_CLARIFICATION" : state === "DONE" && resultState === "partial" ? "PARTIAL" : state}>{t(status)}</span>
               {job.kind === "analysis" && job.public_role && roleLabels[job.public_role] && <span className="badge connection-tag connection-role-tag" data-role={job.public_role}>{t(roleLabels[job.public_role])}</span>}
             </div>
-            {state === "ERROR" && <p className="mt-1 text-xs muted">{t("Analysis interrupted")}</p>}
+            {state === "ERROR" && !historical && job.kind === "analysis" && <p className="mt-1 text-xs muted">{t("Analysis interrupted")}</p>}
             {state === "RUNNING" && job.stage_number && job.stage_count ? <p className="mt-1 text-xs muted">{t("Step {step} of {total}", { step: job.stage_number, total: job.stage_count })}</p> : null}
             {timing && <p className="mt-1 text-xs muted">{timing}</p>}
             {job.kind !== "sync" && <Link href={job.href || "/analyses"} className="mt-3 inline-block rounded text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-primary">{t(action)}</Link>}

@@ -40,7 +40,12 @@ def test_interrupted_run_exports_only_public_findings(client, environment):
     assert response.status_code == 200, response.content
     content = response.json()["content"]
     assert not response.json()["verified"] and "Livrable partiel" in content
-    assert "Frozen old subject." in content and "preliminary observation" in content
+    assert "Frozen old subject." in content and "Recorded functional behavior." in content
+    assert "preliminary observation" not in content
+    technical = client.get(f"/api/analyses/{value.pk}/runs/{run.number}/reports/technical").json()["content"]
+    assert "preliminary observation" in technical
+    assert "Constats enregistrés" in technical
+    assert "Limites importantes et vérifications en attente" in content
     assert "NEVER_INCLUDE_PRIVATE_REASONING" not in content and "today's subject" not in content
     assert not ResultVersion.objects.exists() and not Job.objects.exists()
 
@@ -207,6 +212,40 @@ def test_question_reports_reuse_structured_explanation(client, conversation):
         "One exception remains unknown." in business
         and "One exception remains unknown." in technical
     )
+
+
+def test_report_audiences_do_not_repeat_the_conversation_or_each_others_synthesis(client, conversation):
+    version = report(conversation, ticket={}, explanation={
+        "title": "Contribution calculation", "summary": "FUNCTIONAL_SUMMARY",
+        "response": "CONVERSATION_TEXT_REPEATING_THE_WHOLE_ANSWER",
+        "business_explanation": "BUSINESS_RULE_WITH_USER_SCENARIOS",
+        "business_summary": {"current":"BUSINESS_CURRENT", "desired":"BUSINESS_EXPECTED", "gap":"BUSINESS_GAP", "impacts":[], "uncertainties":[]},
+        "technical_explanation": "TECHNICAL_COMPONENTS_AND_DATA_FLOW",
+        "verified_facts": ["TECHNICAL_OBSERVATION"],
+        "uncertainties": ["SHARED_IMPORTANT_LIMIT"],
+    })
+    base = f"/api/analyses/{conversation.pk}/versions/{version.number}/reports/"
+    business = client.get(base+"business").json()["content"]
+    technical = client.get(base+"technical").json()["content"]
+    assert "BUSINESS_RULE_WITH_USER_SCENARIOS" in business and "BUSINESS_CURRENT" in business
+    assert "TECHNICAL_COMPONENTS_AND_DATA_FLOW" in technical and "TECHNICAL_OBSERVATION" in technical
+    assert all(text not in technical for text in ("BUSINESS_CURRENT", "BUSINESS_RULE_WITH_USER_SCENARIOS", "CONVERSATION_TEXT_REPEATING_THE_WHOLE_ANSWER"))
+    assert "TECHNICAL_OBSERVATION" not in business
+    assert "SHARED_IMPORTANT_LIMIT" in business and "SHARED_IMPORTANT_LIMIT" in technical
+
+
+def test_missing_technical_material_is_disclosed_instead_of_copying_the_business_report(client, conversation):
+    version = report(conversation, ticket={}, explanation={"title":"Contribution rules", "summary":"Functional-only summary.", "business_explanation":"The rule applies to active contracts."})
+    technical = client.get(f"/api/analyses/{conversation.pk}/versions/{version.number}/reports/technical").json()["content"]
+    assert "No technical synthesis was recorded." in technical
+    assert "The rule applies to active contracts." not in technical
+
+
+def test_french_report_headings_are_translated_without_rewriting_saved_findings(client, conversation):
+    version = report(conversation, language="fr")
+    technical = client.get(f"/api/analyses/{conversation.pk}/versions/{version.number}/reports/technical").json()["content"]
+    assert "## Synthèse technique" in technical and "## Technical summary" not in technical
+    assert version.technical_summary in technical
 
 
 def test_goal_retains_existing_artifact_and_new_draft_edits_stay_unverified(client, conversation):

@@ -10,7 +10,7 @@ STATUS = {
 }
 
 
-def render_evidence(report, language="en", *, include_diagrams=True, include_source_details=True):
+def render_evidence(report, language="en", *, include_diagrams=True, include_source_details=True, summary_only=False):
     if not report:
         return ""
     lines = ["## " + translate("Checked conclusions and limits", language), ""]
@@ -22,7 +22,26 @@ def render_evidence(report, language="en", *, include_diagrams=True, include_sou
         "checked": "Database observations apply only to the queried population and time.",
     }
     lines += [translate(state.get(database.get("status"), state["not_checked"]), language), ""]
-    for claim in report.get("claims", []):
+    claims = report.get("claims", [])
+    if summary_only:
+        for status, label in STATUS.items():
+            count = sum(claim.get("status") == status for claim in claims)
+            if count:
+                lines += [translate("{count} conclusion(s): {status}", language,
+                                    count=count, status=translate(label, language)), ""]
+        # Condense the proof ledger, never its applicability limits or exceptions.
+        notes = []
+        for claim in claims:
+            for key, label in (("environment", "Environment"), ("conditions", "Conditions"),
+                               ("period", "Observation period"), ("population", "Checked population"),
+                               ("sample_limits", "Observation limits")):
+                value = claim.get("scope", {}).get(key)
+                if value:
+                    notes.append(translate(label, language) + ": " + ("; ".join(value) if isinstance(value, list) else value))
+            notes.extend(translate(line, language) for line in claim.get("verification_notes", "").splitlines() if line)
+            notes.extend(translate("Observed exception", language) + ": " + item["description"] for item in claim.get("counterexamples", []))
+        lines += [item for note in dict.fromkeys(notes) for item in (note, "")]
+    for claim in ([] if summary_only else claims):
         lines += ["### " + claim["statement"], "", translate(STATUS[claim["status"]], language), ""]
         scope = claim["scope"]
         for key, label in (
@@ -105,5 +124,7 @@ def render_evidence(report, language="en", *, include_diagrams=True, include_sou
     if include_diagrams and report.get("diagrams"):
         from .diagrams import diagram_markdown
 
-        lines += ["", diagram_markdown(report["diagrams"], language)]
+        diagrams = [item for item in report["diagrams"] if item.get("audience") == "business"] if summary_only else report["diagrams"]
+        if diagrams:
+            lines += ["", diagram_markdown(diagrams, language)]
     return "\n".join(lines).rstrip() + "\n"

@@ -7,6 +7,19 @@ retains superseded implementation reports. This changelog alone retains release 
 
 ## Unreleased
 
+### Distinct reports and reliable analysis retries
+
+- Separate functional reports from technical syntheses and detailed evidence. Do not
+  repeat the conversation or business synthesis in technical exports; disclose missing
+  technical observations explicitly. Retain shared material uncertainties and sources.
+- Give lazy ticket-document generation distinct business/technical audiences and
+  outlines. Invalidate the previous writer cache while preserving saved documents.
+- Route **Retry** to the interrupted deep-analysis checkpoint when context preparation
+  already finished. Retain completed steps and remove the resolved failure from current
+  Activity. Distinguish failed older cycles from the current completed analysis.
+- Translate missing report headings, download controls and document errors in French;
+  avoid labelling unrelated failed activities as interrupted analyses.
+
 ### Invocation limits on existing installations
 
 - Upgrade the saved five-minute AI invocation limit to one hour with migration

@@ -94,6 +94,31 @@ test("environment updates have no navigation and publications retain their own l
   await expect(queue.locator('[data-job="9"]')).toHaveCount(0);
 });
 
+test("resolved errors are historical while unresolved and uncertain activities stay visible", async ({ page }, info) => {
+  await setup(page);
+  await page.route("**/api/queue", route => route.fulfill({json:[
+    job(1,"ERROR",{requires_attention:false,request_status:"READY"}),
+    job(2,"ERROR",{requires_attention:true,request_status:"ERROR"}),
+    job(3,"ERROR",{kind:"publication",publication_status:"UNCERTAIN",requires_attention:true}),
+  ]}));
+  await page.goto("/questions");
+  const queue=await openQueue(page,info.project.name==="mobile");
+  await expect(queue.locator('[data-job="1"]')).toHaveCount(0);
+  await expect(queue.locator('[data-job="2"]')).toContainText("Analysis interrupted");
+  await expect(queue.locator('[data-job="3"]')).toContainText("Publication uncertain");
+  await queue.getByRole("button",{name:"Show recent completed activity",exact:true}).click();
+  await expect(queue.locator('[data-job="1"]')).toContainText("Previous attempt interrupted");
+  await expect(queue.locator('[data-job="1"]')).not.toContainText("Analysis interrupted");
+  await page.reload();
+  await expect(page.getByText("2 actions need attention",{exact:true})).toBeVisible();
+  const trigger=page.getByRole("button",{name:"Activity",exact:true});
+  if(await trigger.getAttribute("aria-expanded")!=="true")await trigger.click();
+  const panel=page.getByRole(info.project.name==="mobile"?"dialog":"complementary",{name:"Activity",exact:true});
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('[data-job="1"]')).toHaveCount(0);
+  await expect(panel.locator('[data-job="3"]')).toContainText("Publication uncertain");
+});
+
 test("activity loading and transient errors preserve the last observed tasks", async ({ page }, info) => {
   await setup(page);
   let release!: () => void, fail = false;

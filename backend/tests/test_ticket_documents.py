@@ -54,11 +54,18 @@ def finish(value, kinds):
         assert payload["database"] is None
         data=json.loads(payload["prompt"].split("UNTRUSTED CONVERSATION DATA:\n")[1])
         assert data["requested_document_kinds"]==sorted(kinds)
+        assert sorted(data["document_profiles"])==sorted(kinds)
+        assert len({profile["audience"] for profile in data["document_profiles"].values()})==len(kinds)
+        assert data["writer_schema_version"]=="ticket-documents-2"
         assert data["final_publication_content"]["body"]=="Conserver les corrections manuelles. Fréquence non définie."
         assert data["final_publication_content"]["fields"]["detail"]=="Preserve this final destination-field edit."
         assert payload["schema"]["title"]=="TicketDocumentsReply"
         return {"session_id":payload["session_id"] or str(uuid4()),"output":{"documents":[{
-            "kind":kind,"content":"# Objectif\n\nRespecter le ticket.\n\n## Périmètre\n\nArrondir après agrégation.\n\n## Informations manquantes\n\nNe pas inventer la fréquence.\n\n## Impacts possibles\n\nÀ investiguer.\n\n## Tests\n\nVérifier les arrondis.","sources":[]
+            "kind":kind,"content":{
+                "goal":"# Objectif\n\nRespecter le ticket.\n\n## Périmètre\n\nArrondir après agrégation.\n\n## Plan prudent\n\nVérifier les entrées avant modification.\n\n## Incertitudes\n\nFréquence à préciser.\n\n## Tests\n\nVérifier les arrondis.",
+                "business":"# Contexte fonctionnel\n\nCalcul des cotisations.\n\n## Acteurs\n\nLes gestionnaires.\n\n## Règles métier\n\nArrondir après agrégation.\n\n## Scénarios et impacts\n\nConserver les corrections manuelles.\n\n## Décisions ouvertes\n\nLa fréquence reste à préciser.",
+                "technical":"# Périmètre technique\n\nLe calcul des arrondis.\n\n## Architecture observée\n\nAucune architecture vérifiée.\n\n## Dépendances\n\nÀ examiner.\n\n## Risques techniques\n\nExaminer les frontières d’agrégation.\n\n## Tests recommandés\n\nContrôler les cas limites sans inventer de chemin de fichier.",
+            }[kind],"sources":[]
         } for kind in kinds]}}
     discussion.run_job(job,native)
     job.refresh_from_db()
@@ -87,6 +94,27 @@ def test_selected_documents_are_one_lazy_call_and_cached_individually(client,doc
     assert Job.objects.count()==2 and not AnalysisRun.objects.exists()
     ticket.refresh_from_db()
     assert ticket.draft==original
+
+
+def test_report_profiles_are_distinct_and_old_cached_reports_do_not_mask_the_new_writer(client,documents):
+    import hashlib
+
+    from core.ticket_documents import context
+
+    value,ticket,_,endpoint,payload=documents
+    content={"title":payload["title"],"body":payload["body"],"fields":payload["fields"]}
+    inputs,_=context(value,ticket,content,None)
+    inputs["writer_schema_version"]="ticket-documents-1"
+    old_key=hashlib.sha256(json.dumps(inputs,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    old=Job.objects.create(kind="discussion",target=str(value.pk),status="DONE",payload={"goal_generation":{"context_key":old_key,"documents":{"business":{"content":"Identical old report"},"technical":{"content":"Identical old report"}}}})
+    assert start(client,documents,["business","technical"]).json()["status"]=="QUEUED"
+    completed=finish(value,["business","technical"])
+    docs=client.get(endpoint+f"/documents/{completed.pk}").json()["documents"]
+    assert "Règles métier" in docs["business"]["content"] and "Risques techniques" in docs["technical"]["content"]
+    assert "Risques techniques" not in docs["business"]["content"] and "Règles métier" not in docs["technical"]["content"]
+    old.refresh_from_db()
+    assert old.payload["goal_generation"]["documents"]["business"]["content"]=="Identical old report"
+    assert not AnalysisRun.objects.exists()
 
 
 def test_documents_must_finish_and_match_sources_before_external_creation(client,documents):

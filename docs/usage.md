@@ -197,6 +197,10 @@ Technical source/database access failures remain technical problems, not busines
 Cancellation preserves messages and completed observations. Retrying an interrupted
 step reuses accepted checkpoints where applicable and must wait for the old runtime
 attempt to stop. It does not skip mandatory checks to obtain a result.
+**Retry** resumes that interrupted analysis rather than starting context preparation
+and creating another cycle. After completion, its Activity entry reflects the accepted
+result. A failed older cycle followed by a completed later analysis is labelled as
+historical; its recorded diagnostics remain available.
 
 ## Read the result and its limits
 
@@ -211,8 +215,12 @@ Each result also offers **View business report** and **View technical report** b
 **Prepare a ticket**. These retained analysis results open in the same
 safe Markdown reader and can be downloaded separately. Each belongs to that exact
 cycle/version, including when later conversation topics have changed. Business
-reports emphasize functional conclusions; technical reports include retained source
-excerpts and executed SQL. Reports read saved evidence without new AI calls or
+reports cover actors, rules, scenarios and functional impacts, with a concise summary
+of verification limits. Technical reports cover observed components, dependencies,
+data flows, technical risks, retained source excerpts and executed SQL. They do not
+reproduce the conversation or the business synthesis. Missing technical material is
+stated explicitly rather than replaced with the functional explanation. Reports read
+saved evidence without new AI calls or
 business queries. Formal ticket documents are generated separately at publication.
 An interrupted cycle with recorded findings can expose partial
 reports; its findings remain explicitly without complete independent verification.
@@ -341,6 +349,10 @@ The final saved title, description and destination fields, relevant exchanges,
 reference documents and associated analysis results provide their context. No new
 independent investigation or business query is launched. Missing facts, hypotheses,
 potential impacts, investigations and open decisions stay explicitly identified.
+The business and technical documents use separate audience-specific outlines. The
+technical document identifies missing observations instead of filling gaps with copied
+business prose. Documents cached under the previous writing profile remain preserved
+but are not reused for a newly requested generation under the revised profile.
 The files must be ready and match the ticket and its sources before external creation
 begins. On failure, retry or deselect affected files before confirming again. Closing
 the preparation stops the browser's publication sequence; a running writing job can

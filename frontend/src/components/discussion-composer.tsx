@@ -30,7 +30,7 @@ export function DiscussionComposer({value,onUpdated}:{value:RequestDetail;onUpda
   async function action(operation:"message"|"cancel"|"retry"|"start") {
     setBusy(true);setError("");
     try {
-      if(operation === "retry" && value.discussion?.job?.operation === "analysis_preparation"){
+      if(operation === "retry" && value.discussion?.mode === "discussion" && value.discussion.job?.operation === "analysis_preparation" && ["ERROR","CANCELLED"].includes(value.discussion.job.status)){
         onUpdated(await send<RequestDetail>(`/analyses/${value.id}/deep-analyze`,{expected_revision:value.discussion.revision,intent:"auto",subject:value.deep_analysis_need||""}));
         window.dispatchEvent(new Event("queue-updated"));
         return;

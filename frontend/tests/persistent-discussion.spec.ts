@@ -14,6 +14,35 @@ function dossier(){return {
 
 for(const language of ['en','fr'] as const){
  const t=(key:string)=>translate(key,language);
+ test(`retry resumes the interrupted deep analysis after completed context preparation in ${language}`,async({page},info)=>{
+  let retries=0,preparations=0;
+  const run={number:1,status:'ERROR',started_at:at,finished_at:later,steps:[{public_role:'verifier',status:'ERROR'}],execution:{status:'ERROR',current_role:'verifier',checkpoint:'verifier',waiting_reason:'',waiting_causes:[],all_stages_done:false,stages:[{role:'analyst',status:'done'},{role:'counter_analyst',status:'done'},{role:'verifier',status:'error'}]}};
+  let value:any={...dossier(),status:'ERROR',error:'Technical failure',analysis_runs:[run],discussion:{...dossier().discussion,mode:'analysis',job:{id:1,status:'DONE',operation:'analysis_preparation',created_at:at}}};
+  const queue=()=>[{id:4,kind:'analysis',activity_key:`analysis:${id}`,status:value.status==='READY'?'DONE':'ERROR',queue_state:value.status==='READY'?'DONE':'ERROR',request_status:value.status,requires_attention:value.status!=='READY',title:'Benefit behavior',environment_name:'Staging',operation:'Deep analysis',created_at:at,finished_at:later,assignments:[],queue_position:null,request_id:id,href:`/analyses/${id}`,error:value.error,result_status:value.status==='READY'?'complete':'unusable'}];
+  await page.route('**/api/**',route=>route.fulfill({json:[]}));
+  await page.route('**/api/access/session',route=>route.fulfill({json:{authenticated:true,mode:'local'}}));
+  await page.route('**/api/settings',route=>route.fulfill({json:{name:'Team Assistant',language}}));
+  await page.route('**/api/queue',route=>route.fulfill({json:queue()}));
+  await page.route(`**/api/analyses/${id}`,route=>route.fulfill({json:value}));
+  await page.route(`**/api/analyses/${id}/deep-analyze`,route=>{preparations++;return route.fulfill({json:value});});
+  await page.route(`**/api/questions/${id}/retry`,route=>{
+   retries++;value={...value,status:'READY',error:'',analysis_runs:[{...run,status:'READY',execution:{...run.execution,status:'READY',all_stages_done:true,stages:run.execution.stages.map(stage=>({...stage,status:'done'}))}}]};
+   return route.fulfill({json:value});
+  });
+  await page.goto(`/analyses/${id}`);
+  await expect(page.locator('.investigation-progress > summary')).toContainText(t('Analysis interrupted'));
+  await page.getByRole('button',{name:t('Retry'),exact:true}).click();
+  await expect(page.locator('.investigation-progress > summary')).toContainText(t('Investigation finished'));
+  expect(retries).toBe(1);expect(preparations).toBe(0);
+  await page.reload();
+  await expect(page.locator('.investigation-progress > summary')).toContainText(t('Investigation finished'));
+  await expect(page.getByRole('button',{name:t('Retry'),exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:t('Activity'),exact:true}).click();
+  const activity=page.getByRole(info.project.name==='mobile'?'dialog':'complementary',{name:t('Activity'),exact:true});
+  await expect(activity.locator('[data-state="ERROR"]')).toHaveCount(0);
+  await activity.getByRole('button',{name:t('Show recent completed activity'),exact:true}).click();
+  await expect(activity.locator('[data-job="4"]')).toHaveAttribute('data-state','DONE');
+ });
  test(`native file chooser keeps the discussion and draft after XML selection and cancellation in ${language}`,async({page})=>{
   let value:any=dossier();let uploads=0,turns=0;
   const errors:string[]=[];
